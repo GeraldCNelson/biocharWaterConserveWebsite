@@ -207,7 +207,19 @@ def plot_raw_route():
     fig.update_layout(title=f'Raw Data Plot: {selected_variable} at Depth {depth_labels[selected_depth]} in {selected_strip}',
                       xaxis_title='Date',
                       yaxis_title=y_axis_label(selected_variable),
-                      template='plotly_white')
+                      template='plotly_white',
+                      annotations=[
+                          dict(
+                              text="Use the mouse to zoom in on a shorter period.",
+                              xref="paper",
+                              yref="paper",
+                              x=0.5,
+                              y=1.1,
+                              showarrow=False,
+                              font=dict(size=12)
+                          )
+                      ]
+    )
 
     # Convert the figure to HTML
     graph_html = pyo.plot(fig, output_type='div')
@@ -268,7 +280,19 @@ def plot_ratio_route():
     fig.update_layout(title=f'Biochar Ratios: {selected_variable} at depth {depth_labels[selected_depth]} for {logger_locations[selected_logger_location]}s',
                       xaxis_title='Date',
                       yaxis_title=y_axis_label(selected_variable),
-                      template='plotly_white')
+                      template='plotly_white',
+                      annotations=[
+                          dict(
+                              text="Use the mouse to zoom in on a shorter period.",
+                              xref="paper",
+                              yref="paper",
+                              x=0.5,
+                              y=1.1,
+                              showarrow=False,
+                              font=dict(size=12)
+                          )
+                      ]
+    )
 
     # Convert the figure to HTML
     graph_html = pyo.plot(fig, output_type='div')
