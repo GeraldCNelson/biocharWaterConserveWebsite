@@ -93,6 +93,19 @@
                     }
                 });
             });
+            function syncPlots() {
+            const graph1 = document.getElementById('graph-raw');  // Ensure each plot div has an id
+            const graph2 = document.getElementById('graph-ratio');
+
+            if (graph1 && graph2) {
+                graph1.on('plotly_relayout', function(eventdata) {
+                    Plotly.relayout(graph2, eventdata);
+                });
+                graph2.on('plotly_relayout', function(eventdata) {
+                    Plotly.relayout(graph1, eventdata);
+                });
+            }
+        }
         });
     </script>
 </head>
@@ -133,6 +146,12 @@
             </select>
             <br>
             <input type="submit" value="Plot Raw Data">
+                    <!-- Note field for adding explanatory text -->
+        <div style="margin-top: 20px;">
+            <label for="explanatory-note">Add Explanatory Note:</label><br>
+            <textarea id="explanatory-note" style="width: 100%; height: 80px;" placeholder="Add any explanations or notes here..."></textarea>
+        </div>
+
         </form>
 
         <h2>Biochar Ratios</h2>

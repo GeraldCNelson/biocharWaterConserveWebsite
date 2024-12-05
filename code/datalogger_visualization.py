@@ -204,21 +204,29 @@ def plot_raw_route():
                                  connectgaps=True))
 
     # Update layout for raw data plot
-    fig.update_layout(title=f'Raw Data Plot: {selected_variable} at Depth {depth_labels[selected_depth]} in {selected_strip}',
-                      xaxis_title='Date',
-                      yaxis_title=y_axis_label(selected_variable),
-                      template='plotly_white',
-                      annotations=[
-                          dict(
-                              text="Use the mouse to zoom in on a shorter period.",
-                              xref="paper",
-                              yref="paper",
-                              x=0.5,
-                              y=1.1,
-                              showarrow=False,
-                              font=dict(size=12)
-                          )
-                      ]
+    fig.update_layout(
+        title=dict(
+            text=f'Raw Data Plot: {selected_variable} at Depth {depth_labels[selected_depth]} in {selected_strip}',
+            x=0.5,
+            y=1.05,
+            xanchor='center',
+            yanchor='bottom',
+            font=dict(size=16)  # Reduce size to fit both title and annotation
+        ),
+        xaxis_title='Date',
+        yaxis_title=y_axis_label(selected_variable),
+        template='plotly_white',
+        annotations=[
+            dict(
+                text="Use the mouse to zoom in on a shorter period.",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=1.02,
+                showarrow=False,
+                font=dict(size=12)
+            )
+        ]
     )
 
     # Convert the figure to HTML
@@ -284,10 +292,10 @@ def plot_ratio_route():
                       annotations=[
                           dict(
                               text="Use the mouse to zoom in on a shorter period.",
+                              x=0.1,
+                              y=1.1,
                               xref="paper",
                               yref="paper",
-                              x=0.5,
-                              y=1.1,
                               showarrow=False,
                               font=dict(size=12)
                           )
