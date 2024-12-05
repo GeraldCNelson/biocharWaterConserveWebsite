@@ -13,19 +13,19 @@
             font-family: 'Times New Roman', Times, serif;
         }
         .control-panel {
-            width: 15%;
-            padding: 10px;
+            width: 25%;
+            padding: 20px;
             background-color: #f7f7f7;
             border-right: 1px solid #ccc;
-            font-size: 12px;
+            font-size: 16px;
             display: inline-block;
             vertical-align: top;
         }
         .control-panel input[type="submit"],
         .control-panel input[type="reset"],
         .control-panel select {
-            font-size: 12px;
-            padding: 4px;
+            font-size: 16px;
+            padding: 8px;
             margin-bottom: 15px;
             width: auto;
         }
@@ -47,10 +47,9 @@
             box-shadow: 3px 3px 7px rgba(0, 0, 0, 0.3);
         }
         h2 {
-            font-size: 16px;
+            font-size: 20px;
             margin-top: 0;
             margin-bottom: 15px;
-            font-weight: bold;
         }
         .plot-panel {
             width: 70%;
@@ -67,6 +66,12 @@
         }
         .graph-bottom {
             height: 50%;
+        }
+        .note-box {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
         }
     </style>
     <script>
@@ -87,31 +92,33 @@
                         } else if (actionUrl === '/plot_ratio') {
                             $('.graph-bottom').html(response);
                         }
+                        syncPlots();
                     },
                     error: function() {
                         console.error('Error occurred while processing the request.');
                     }
                 });
             });
-            function syncPlots() {
-            const graph1 = document.getElementById('graph-raw');  // Ensure each plot div has an id
-            const graph2 = document.getElementById('graph-ratio');
+        });
 
-            if (graph1 && graph2) {
-                graph1.on('plotly_relayout', function(eventdata) {
-                    Plotly.relayout(graph2, eventdata);
+        function syncPlots() {
+            const rawPlot = document.getElementById('raw-plot');
+            const ratioPlot = document.getElementById('ratio-plot');
+
+            if (rawPlot && ratioPlot) {
+                rawPlot.on('plotly_relayout', function(eventdata) {
+                    Plotly.relayout(ratioPlot, eventdata);
                 });
-                graph2.on('plotly_relayout', function(eventdata) {
-                    Plotly.relayout(graph1, eventdata);
+                ratioPlot.on('plotly_relayout', function(eventdata) {
+                    Plotly.relayout(rawPlot, eventdata);
                 });
             }
         }
-        });
     </script>
 </head>
 <body>
 <div style="display: flex;">
-    <div class="control-panel" style="background-color: #f7f7f7; border-right: 1px solid #ccc;">
+    <div class="control-panel">
         <!-- Control Panel Content -->
         <h2>Raw Data Values</h2>
         <form action="/plot_raw" method="post">
@@ -144,14 +151,8 @@
                 <option value="{{ depth }}" {% if depth == selected_depth|int %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
-            <br>
-            <input type="submit" value="Plot Raw Data">
-                    <!-- Note field for adding explanatory text -->
-        <div style="margin-top: 20px;">
-            <label for="explanatory-note">Add Explanatory Note:</label><br>
-            <textarea id="explanatory-note" style="width: 100%; height: 80px;" placeholder="Add any explanations or notes here..."></textarea>
-        </div>
 
+            <input type="submit" value="Plot Raw Data">
         </form>
 
         <h2>Biochar Ratios</h2>
@@ -177,7 +178,7 @@
                 <option value="{{ variable }}" {% if variable == selected_variable %}selected{% endif %}>{{ variable }}</option>
                 {% endfor %}
             </select>
-            <br>
+
             <input type="submit" value="Plot Biochar Ratios">
         </form>
 
@@ -186,11 +187,14 @@
 
     <div class="plot-panel">
         <!-- Plot Content -->
-        <div class="graph-container graph-top">
+        <div class="graph-container graph-top" id="raw-plot">
             {{ graph_raw_html|safe }}
         </div>
-        <div class="graph-container graph-bottom">
+        <div class="graph-container graph-bottom" id="ratio-plot">
             {{ graph_ratio_html|safe }}
+        </div>
+        <div class="note-box">
+            <p>Note: Use the mouse to zoom in on a shorter period. The zoom action will be applied to both plots.</p>
         </div>
     </div>
 </div>

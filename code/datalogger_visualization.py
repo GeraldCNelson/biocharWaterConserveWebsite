@@ -205,14 +205,7 @@ def plot_raw_route():
 
     # Update layout for raw data plot
     fig.update_layout(
-        title=dict(
-            text=f'Raw Data Plot: {selected_variable} at Depth {depth_labels[selected_depth]} in {selected_strip}',
-            x=0.5,
-            y=1.05,
-            xanchor='center',
-            yanchor='bottom',
-            font=dict(size=16)  # Reduce size to fit both title and annotation
-        ),
+        title=f'Raw Data Plot: {selected_variable} at Depth {depth_labels[selected_depth]} in {selected_strip}',
         xaxis_title='Date',
         yaxis_title=y_axis_label(selected_variable),
         template='plotly_white',
@@ -222,7 +215,7 @@ def plot_raw_route():
                 xref="paper",
                 yref="paper",
                 x=0.5,
-                y=1.02,
+                y=1.15,  # Increased the y-value to place it above the title
                 showarrow=False,
                 font=dict(size=12)
             )
