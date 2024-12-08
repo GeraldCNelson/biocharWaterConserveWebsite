@@ -3,200 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biochar Water Conservation Data Visualization</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <title>Biochar Water Conservation Visualization</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
-    <style>
-        body {
-            font-family: 'Times New Roman', Times, serif;
-        }
-        .control-panel {
-            width: 25%;
-            padding: 20px;
-            background-color: #f7f7f7;
-            border-right: 1px solid #ccc;
-            font-size: 16px;
-            display: inline-block;
-            vertical-align: top;
-        }
-        .control-panel input[type="submit"],
-        .control-panel input[type="reset"],
-        .control-panel select {
-            font-size: 16px;
-            padding: 8px;
-            margin-bottom: 15px;
-            width: auto;
-        }
-        .control-panel input[type="submit"],
-        .control-panel input[type="reset"] {
-            background-color: lightgray;
-            color: black;
-            border: 2px solid #ccc;
-            border-radius: 4px;
-            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-            cursor: pointer;
-            text-align: center;
-            vertical-align: middle;
-            transition: background-color 0.3s, box-shadow 0.3s;
-        }
-        .control-panel input[type="submit"]:hover,
-        .control-panel input[type="reset"]:hover {
-            background-color: darkgray;
-            box-shadow: 3px 3px 7px rgba(0, 0, 0, 0.3);
-        }
-        h2 {
-            font-size: 20px;
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        .plot-panel {
-            width: 70%;
-            padding: 20px;
-            display: inline-block;
-            vertical-align: top;
-        }
-        .graph-container {
-            height: 400px;
-        }
-        .graph-top {
-            height: 50%;
-            margin-bottom: 20px;
-        }
-        .graph-bottom {
-            height: 50%;
-        }
-        .note-box {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border: 1px solid #ccc;
-        }
-    </style>
-    <script>
-        $(document).ready(function() {
-            $('form').submit(function(event) {
-                event.preventDefault();
-                const form = $(this);
-                const actionUrl = form.attr('action');
-                const formData = form.serialize();
-
-                $.ajax({
-                    type: 'POST',
-                    url: actionUrl,
-                    data: formData,
-                    success: function(response) {
-                        if (actionUrl === '/plot_raw') {
-                            $('.graph-top').html(response);
-                        } else if (actionUrl === '/plot_ratio') {
-                            $('.graph-bottom').html(response);
-                        }
-                        syncPlots();
-                    },
-                    error: function() {
-                        console.error('Error occurred while processing the request.');
-                    }
-                });
-            });
-        });
-
-        function syncPlots() {
-            const rawPlot = document.getElementById('raw-plot');
-            const ratioPlot = document.getElementById('ratio-plot');
-
-            if (rawPlot && ratioPlot) {
-                rawPlot.on('plotly_relayout', function(eventdata) {
-                    Plotly.relayout(ratioPlot, eventdata);
-                });
-                ratioPlot.on('plotly_relayout', function(eventdata) {
-                    Plotly.relayout(rawPlot, eventdata);
-                });
-            }
-        }
-    </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-<div style="display: flex;">
-    <div class="control-panel">
-        <!-- Control Panel Content -->
-        <h2>Raw Data Values</h2>
-        <form action="/plot_raw" method="post">
+    <div style="display: flex;">
+        <!-- Control Panel on the Left -->
+        <div class="control-panel" style="width: 25%; padding: 20px; background-color: #f0f0f0;">
+            <h2>Control Panel</h2>
+            <form id="raw-data-form" action="/plot_raw" method="post">
+                <label for="strip">Select Strip:</label><br>
+                <select name="strip" id="strip">
+                    {% for strip in strips %}
+                    <option value="{{ strip }}" {% if strip == selected_strip %}selected{% endif %}>{{ strip }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-            <!-- Raw Data Values Section -->
-            <label for="strip">Select Strip:</label>
-            <select name="strip" id="strip">
-                {% for strip in strips %}
-                <option value="{{ strip }}" {% if strip == selected_strip %}selected{% endif %}>{{ strip }}</option>
-                {% endfor %}
-            </select>
+                <label for="variable">Select Variable:</label><br>
+                <select name="variable" id="variable">
+                    {% for variable in variables %}
+                    <option value="{{ variable }}" {% if variable == selected_variable %}selected{% endif %}>{{ variable }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-            <label for="variable">Select Variable:</label>
-            <select name="variable" id="variable">
-                {% for variable in variables %}
-                <option value="{{ variable }}" {% if variable == selected_variable %}selected{% endif %}>{{ variable }}</option>
-                {% endfor %}
-            </select>
+                <label for="comparison_type">Select Comparison Type:</label><br>
+                <select name="comparison_type" id="comparison_type">
+                    {% for comparison in comparison_types %}
+                    <option value="{{ comparison }}" {% if comparison == selected_comparison_type %}selected{% endif %}>{{ comparison }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-            <label for="comparison_type">Select Comparison Type:</label>
-            <select name="comparison_type" id="comparison_type">
-                {% for comparison in comparison_types %}
-                <option value="{{ comparison }}" {% if comparison == selected_comparison_type %}selected{% endif %}>{{ comparison }}</option>
-                {% endfor %}
-            </select>
+                <label for="depth">Select Depth:</label><br>
+                <select name="depth" id="depth">
+                    {% for depth, label in depth_labels.items() %}
+                    <option value="{{ depth }}" {% if depth == selected_depth|int %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-            <label for="depth">Select Depth:</label>
-            <select name="depth" id="depth">
-                {% for depth, label in depth_labels.items() %}
-                <option value="{{ depth }}" {% if depth == selected_depth|int %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+                <input type="submit" value="Plot Raw Data" class="button-primary">
+            </form>
 
-            <input type="submit" value="Plot Raw Data">
-        </form>
+            <h2>Biochar Ratios</h2>
+            <form id="ratio-data-form" action="/plot_ratio" method="post">
+                <label for="depth_ratio">Select Depth:</label><br>
+                <select name="depth" id="depth_ratio">
+                    {% for depth, label in depth_labels.items() %}
+                    <option value="{{ depth }}" {% if depth == selected_depth|int %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-        <h2>Biochar Ratios</h2>
-        <form action="/plot_ratio" method="post">
-            <!-- Biochar Ratios Section -->
-            <label for="depth_value">Select Depth:</label>
-            <select name="depth" id="depth_value">
-                {% for depth, label in depth_labels.items() %}
-                <option value="{{ depth }}" {% if depth == selected_depth|int %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+                <label for="variable_ratio">Select Variable:</label><br>
+                <select name="variable" id="variable_ratio">
+                    {% for variable in variables %}
+                    <option value="{{ variable }}" {% if variable == selected_variable %}selected{% endif %}>{{ variable }}</option>
+                    {% endfor %}
+                </select><br><br>
 
-            <label for="logger_locations">Select Logger:</label>
-            <select name="logger_location" id="logger_locations">
-                {% for logger, label in logger_locations.items() %}
-                <option value="{{ logger }}" {% if logger == selected_logger_location %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+                <input type="submit" value="Plot Biochar Ratios" class="button-primary"><br><br>
+            </form>
 
-            <label for="variable">Select Variable:</label>
-            <select name="variable" id="variable_ratio">
-                {% for variable in variables %}
-                <option value="{{ variable }}" {% if variable == selected_variable %}selected{% endif %}>{{ variable }}</option>
-                {% endfor %}
-            </select>
-
-            <input type="submit" value="Plot Biochar Ratios">
-        </form>
-
-        <input type="reset" value="Reset" onclick="window.location.href='/'">
-    </div>
-
-    <div class="plot-panel">
-        <!-- Plot Content -->
-        <div class="graph-container graph-top" id="raw-plot">
-            {{ graph_raw_html|safe }}
+            <input type="reset" value="Reset" onclick="window.location.href='/'">
         </div>
-        <div class="graph-container graph-bottom" id="ratio-plot">
-            {{ graph_ratio_html|safe }}
-        </div>
-        <div class="note-box">
-            <p>Note: Use the mouse to zoom in on a shorter period. The zoom action will be applied to both plots.</p>
+
+        <!-- Plot Panel on the Right -->
+        <div class="plot-panel" style="width: 70%; padding: 20px;">
+            <div class="graph-container graph-top">
+                {{ graph_raw_html|safe }}
+            </div>
+            <div class="graph-container graph-bottom">
+                {% if graph_ratio_html %}
+                {{ graph_ratio_html|safe }}
+                {% endif %}
+            </div>
+            <!-- Note field below the graphs -->
+            <div class="note-section" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;">
+                <p>Note: Use the mouse to zoom in on a specific period in one plot, and both plots will zoom in to the same period for better comparison.</p>
+            </div>
         </div>
     </div>
-</div>
+
+    <script>
+        // AJAX form submission for linked zoom functionality
+        $('form').submit(function(event) {
+            event.preventDefault();
+            const form = $(this);
+            const actionUrl = form.attr('action');
+            const formData = form.serialize();
+            $.ajax({
+                type: 'POST',
+                url: actionUrl,
+                data: formData,
+                success: function(response) {
+                    if (actionUrl === '/plot_raw') {
+                        $('.graph-top').html(response);
+                    } else if (actionUrl === '/plot_ratio') {
+                        $('.graph-bottom').html(response);
+                    }
+                },
+                error: function() {
+                    console.error('Error occurred while processing the request.');
+                }
+            });
+        });
+    </script>
 </body>
 </html>
