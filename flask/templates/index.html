@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biochar Water Conservation Data</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/marked.min.js') }}"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="intro">Introduction</button>
+        <button class="tab-button" data-tab="data">Main Data Display</button>
+    </div>
+    <div id="intro" class="tab-content active">
+        <h2>Introduction</h2>
+        <div id="intro-content">
+            <div class="markdown-content">
+                {{ intro_content | safe }}
+            </div>
+        </div>
+    </div>
+    <div id="data" class="tab-content">
+        <div class="control-panel">
+            <h2>Date Range Selection</h2>
+            <label for="year">Year:</label><br>
+            <select id="year" name="year">
+                <option value="2023" {% if DEFAULT_YEAR == 2023 %}selected{% endif %}>2023</option>
+                <option value="2024" {% if DEFAULT_YEAR == 2024 %}selected{% endif %}>2024</option>
+            </select><br><br>
+
+            <label for="start-date">Start Date:</label><br>
+            <input type="date" id="start-date" name="start-date"><br><br>
+
+            <label for="end-date">End Date:</label><br>
+            <input type="date" id="end-date" name="end-date"><br><br>
+            <label for="strip">Strip:</label><br>
+            <select id="strip" name="strip">
+                <option value="S1">S1</option>
+                <option value="S2">S2</option>
+                <option value="S3">S3</option>
+                <option value="S4">S4</option>
+            </select><br><br>
+
+            <label for="variable">Variable:</label><br>
+            <select id="variable" name="variable">
+                <option value="VWC">Soil Moisture (VWC)</option>
+                <option value="T">Soil Temperature (T)</option>
+                <option value="EC">Electrical Conductivity (EC)</option>
+            </select><br><br>
+
+            <label for="depth">Depth:</label><br>
+            <select id="depth" name="depth">
+                <option value="1">6"</option>
+                <option value="2">12"</option>
+                <option value="3">18"</option>
+            </select><br><br>
+            <button id="update-plots">Update Plots</button>
+        </div>
+        <div class="plot-panel">
+            <div class="graph-container graph-top" id="graph-top">
+                <!-- Placeholder for raw data plot -->
+            </div>
+            <div class="graph-container graph-bottom" id="graph-bottom">
+                <!-- Placeholder for ratio plot -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            const DEFAULT_YEAR = '{{ DEFAULT_YEAR }}';
+            $('#year').val(DEFAULT_YEAR);  // Set the default year in the dropdown
+            setDefaultDates(DEFAULT_YEAR);
+            const DEFAULT_VARIABLE = '{{ DEFAULT_VARIABLE }}';
+            const DEFAULT_DEPTH = '{{ DEFAULT_DEPTH }}';
+            const DEFAULT_START_DATE = '{{ DEFAULT_START_DATE }}';
+            const DEFAULT_END_DATE = '{{ DEFAULT_END_DATE }}';
+            // Set default dates
+            $('#start-date').val(DEFAULT_START_DATE);
+            $('#end-date').val(DEFAULT_END_DATE);
+
+            let selectedYear = $('#year').val() || DEFAULT_YEAR;
+            let selectedVariable = $('#variable').val() || DEFAULT_VARIABLE;
+            let selectedDepth = $('#depth').val() || DEFAULT_DEPTH;
+            let selectedStartDate = $('#start-date').val() || DEFAULT_START_DATE;
+            let selectedEndDate = $('#end-date').val() || DEFAULT_END_DATE;
+
+            function setDefaultDates(year) {
+                $('#start-date').val(`${year}-01-01`);
+                $('#end-date').val(`${year}-12-31`);
+            }
+
+            setDefaultDates(selectedYear);
+
+            $('#year').change(function () {
+                selectedYear = $(this).val();
+                setDefaultDates(selectedYear);
+            });
+
+            $('#update-plots').click(function () {
+                const selectedStartDate = $('#start-date').val() || DEFAULT_START_DATE;
+                const selectedEndDate = $('#end-date').val() || DEFAULT_END_DATE;
+                const selectedStrip = $('#strip').val() || 'S1';
+                const selectedVariable = $('#variable').val() || DEFAULT_VARIABLE;
+                const selectedDepth = $('#depth').val() || DEFAULT_DEPTH;
+                const selectedYear = $('#year').val() || DEFAULT_YEAR;
+
+                console.log('Updating plots with:', {
+                selectedStartDate,
+                selectedEndDate,
+                selectedStrip,
+                selectedVariable,
+                selectedDepth,
+                selectedYear
+            });
+
+            updatePlots(selectedStartDate, selectedEndDate, selectedStrip, selectedVariable, selectedDepth, selectedYear);
+});
+
+            $('.tab-button').click(function () {
+                $('.tab-button').removeClass('active');
+                $('.tab-content').removeClass('active');
+                $(this).addClass('active');
+                $('#' + $(this).data('tab')).addClass('active');
+            });
+        });
+
+        function updatePlots(startDate, endDate, strip, variable, depth, year) {
+            $.post('/plot_raw', {
+                start_date: startDate,
+                end_date: endDate,
+                strip: strip,
+                variable: variable,
+                depth: depth,
+                year: year
+            }, function (response) {
+                console.log('Response received for /plot_raw:', response);
+                Plotly.newPlot('graph-top', JSON.parse(response));
+            }).fail(function (xhr, status, error) {
+                console.error('Error occurred while processing /plot_raw:', status, error);
+            });
+
+            $.post('/plot_ratio', {
+                start_date: startDate,
+                end_date: endDate,
+                strip: strip,
+                variable: variable,
+                depth: depth,
+                year: year
+            }, function (response) {
+                console.log('Response received for /plot_ratio:', response);
+                Plotly.newPlot('graph-bottom', JSON.parse(response));
+            }).fail(function (xhr, status, error) {
+                console.error('Error occurred while processing /plot_ratio:', status, error);
+            });
+        }
+    </script>
+</body>
+</html>
