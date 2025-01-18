@@ -1,316 +1,450 @@
-from flask import Blueprint, render_template, request, jsonify, make_response, send_from_directory
-from flask import current_app as app
-import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime
-
+# revised routes.py Jan 1
+from flask import Blueprint, jsonify, request, send_from_directory, render_template
 import os
+import pandas as pd
 import markdown
 import zipfile
+import plotly.graph_objects as go
+from datetime import datetime
+import numpy as np
+import logging
 
-# Create a blueprint
 main = Blueprint("main", __name__)
 
-# Define available selections
-strips = ['S1', 'S2', 'S3', 'S4']
-variables = ['VWC', 'T', 'EC']
-sensor_depths = [1, 2, 3]
-logger_locations = {
-    "T": "Top Logger",
-    "M": "Mid Logger",
-    "B": "Bottom Logger"
-}
-depth_labels = {1: '6"', 2: '12"', 3: '18"'}
-years = {'2023', '2024'}
+def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
+    """
+    Parses filenames in the specified directory to extract date ranges.
 
-# default variables
+    Parameters:
+    - data_dir: Directory to search for files.
+    - prefix: Filename prefix to filter (default: "dataloggerData_").
+    - suffix: Filename suffix to filter (default: ".zip").
+
+    Returns:
+    - List of tuples (start_date, end_date, filename).
+    """
+    filenames = [f for f in os.listdir(data_dir) if f.startswith(prefix) and f.endswith(suffix)]
+    parsed_files = []
+
+    for filename in filenames:
+        try:
+            parts = filename.split("_")
+            start_date = parts[1]
+            end_date = parts[2].split(".")[0]
+            parsed_files.append((start_date, end_date, filename))
+        except (IndexError, ValueError):
+            continue  # Skip files with unexpected naming patterns
+
+    return parsed_files
+
+# Default configurations
+
+def get_default_end_date():
+    """
+    Determines the DEFAULT_END_DATE by parsing filenames in the data-raw directory.
+
+    Returns:
+    - A string representing the default end date in 'YYYY-MM-DD' format.
+    """
+    data_dir = os.path.join(os.getcwd(), "flask", "data-raw")
+    parsed_files = parse_filenames(data_dir)
+
+    if not parsed_files:
+        return DEFAULT_END_DATE  # Fallback to hardcoded date if no valid files found
+
+    # Find the latest end date
+    latest_end_date = max(parsed_files, key=lambda x: x[1])[1]
+    return latest_end_date
+
 DEFAULT_YEAR = 2024
-DEFAULT_VARIABLE = 'VWC'
-DEFAULT_DEPTH = '1'
-DEFAULT_LOGGER = 'T'
-DEFAULT_START_DATE = f'{DEFAULT_YEAR}-01-01'
-DEFAULT_END_DATE = f'{DEFAULT_YEAR}-12-31'
-print(f"Defaults: Year={DEFAULT_YEAR}, Start={DEFAULT_START_DATE}, End={DEFAULT_END_DATE}")
+DEFAULT_START_DATE = f"{DEFAULT_YEAR}-01-01"
+DEFAULT_END_DATE = get_default_end_date()
+DEFAULT_VARIABLE = "VWC"
+DEFAULT_DEPTH = "1"
+DEFAULT_STRIP = "S1"
+DEFAULT_LOGGER = "T"
+DEFAULT_GRANULARITY = "daily"  # Can be 'daily' or '15min'
 
-# Load dataset function
-def load_dataset(year, granularity="daily"):
-    """Load precomputed dataset for the given year and granularity."""
-    file_type = "daily" if granularity == "daily" else "15min"
-    zip_path = os.path.join("data", "processed", f"dataloggerData_{year}_{file_type}.zip")
-    with zipfile.ZipFile(zip_path, 'r') as z:
-        csv_file = [f for f in z.namelist() if f.endswith(".csv")][0]
-        with z.open(csv_file) as file:
-            df = pd.read_csv(file)
+# Additional configurations
+strips = ["S1", "S2", "S3", "S4"]
+variables = ["VWC", "T", "EC", "SWC"]
+sensor_depths = [1, 2, 3]
+loggers = ["T", "M", "B"]
+
+# Depth mapping
+sensor_depth_mapping = {
+    1: "6 inches",
+    2: "12 inches",
+    3: "18 inches"
+}
+
+def load_dataset(file_path):
+    """
+    Loads a dataset from a ZIP file containing a CSV.
+
+    Parameters:
+    - file_path: The path to the ZIP file containing the dataset.
+
+    Returns:
+    - DataFrame: The loaded dataset as a Pandas DataFrame, or None if loading fails.
+    """
+    try:
+        # Open the ZIP file and read the CSV inside
+        with zipfile.ZipFile(file_path, 'r') as z:
+            # Assumes the ZIP contains exactly one file
+            csv_filename = z.namelist()[0]
+            with z.open(csv_filename) as f:
+                # Read the CSV into a DataFrame
+                df = pd.read_csv(f, parse_dates=['datetime'])
+                return df
+    except Exception as e:
+        # Log and return None if an error occurs
+        logging.error(f"Error loading dataset from {file_path}: {e}")
+        return None
+
+
+# Data cache to store loaded datasets for 15min and daily granularities
+data_cache = {"15min": {}, "daily": {}}  # A dictionary to store cached datasets
+
+def get_data(year, granularity):
+    """
+    Retrieve a DataFrame from cache or load it if not already cached.
+
+    Parameters:
+    - year: The year of the dataset (e.g., 2024).
+    - granularity: The granularity of the dataset ('15min' or 'daily').
+
+    Returns:
+    - DataFrame: The loaded or cached dataset.
+    """
+    # Check if the dataset is already cached
+    if year in data_cache[granularity]:
+        return data_cache[granularity][year]
+
+    # Construct the file path
+    data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
+    parsed_files = parse_filenames(data_dir, suffix=f"_{granularity}.zip")
+    matching_files = [f for start, end, f in parsed_files if start.startswith(f"{year}-01-01")]
+
+    if not matching_files:
+        raise FileNotFoundError(f"No dataset found for year {year} with granularity {granularity}")
+
+    file_path = os.path.join(data_dir, matching_files[0])
+
+    # Load the dataset
+    df = load_dataset(file_path)
+    if df is None:
+        raise FileNotFoundError(f"Dataset could not be loaded from {file_path}")
+
+    # Cache the dataset for future use
+    data_cache[granularity][year] = df
     return df
 
-
-# Function to determine y-axis label based on variable
-def y_axis_label(var_name):
-    if var_name == 'VWC':
-        return 'Soil Moisture (%)'
-    elif var_name == 'T':
-        return 'Soil Temperature (°C)'
-    elif var_name == 'EC':
-        return 'Electrical Conductivity (dS/m)'
-    return var_name
+# Helper Function to Log Debug Info
+def log_debug_info(data, route_name):
+    depth = data.get("depth", DEFAULT_DEPTH)
+    depth_display = sensor_depth_mapping.get(depth, f"{depth} inches")
+    print(f"--- Debug Info for {route_name} ---")
+    print(f"Incoming request data: {data}")
+    print(f"Translated depth: {depth_display}")
+    print("----------------------------")
 
 
-@main.route('/default_dates', methods=['GET'])
-def default_dates():
-    selected_year = request.form.get("year", DEFAULT_YEAR)  # Retrieve year from request or use default
-    df = load_dataset(selected_year)
-    # Ensure the 'timestamp' column is present and valid
-    if 'timestamp' in df.columns:
-        start_date = df['timestamp'].dropna().min().strftime('%Y-%m-%d')
-        end_date = df['timestamp'].dropna().max().strftime('%Y-%m-%d')
-        return jsonify(start_date=start_date, end_date=end_date)
+def convert_ndarray(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def ensure_serializable(obj):
+    """Recursively convert all ndarray objects in a dictionary to lists."""
+    if isinstance(obj, dict):
+        return {key: ensure_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [ensure_serializable(item) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def y_axis_label(variable):
+    """Returns appropriate y-axis label based on the selected variable."""
+    if variable == "VWC":
+        return "Volumetric Water Content (%)"
+    elif variable == "T":
+        return "Temperature (°C)"
+    elif variable == "EC":
+        return "Electrical Conductivity (dS/m)"
+    elif variable == "SWC":
+        return "Soil Water Content (Volume)"
     else:
-        return jsonify(start_date='2024-01-01', end_date='2024-12-17')
+        return variable  # Default to the variable name if no match is found
 
 
+
+@main.route("/get_defaults_and_options")
+def get_defaults_and_options():
+    response_data = {
+        "defaults": {
+            "year": DEFAULT_YEAR,
+            "startDate": DEFAULT_START_DATE,
+            "endDate": DEFAULT_END_DATE,
+            "variable": DEFAULT_VARIABLE,
+            "depth": str(DEFAULT_DEPTH),  # Ensure depth is string if dropdown uses strings
+            "strip": DEFAULT_STRIP,
+        },
+        "years": [2024, 2023],  # Example; adjust as needed
+        "strips": strips,
+        "variables": variables,
+        "depths": [{"value": str(depth), "label": sensor_depth_mapping[depth]} for depth in sensor_depths],  # Use sensor_depths
+    }
+    print("Returning defaults and options:", response_data)
+    return jsonify(response_data)
+
+@main.route('/favicon.ico')
+def favicon():
+    return send_from_directory(
+        os.path.join(main.root_path, 'static', 'images'),
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon'
+    )
+
+
+@main.route("/markdown/<path:filename>")
+def serve_markdown(filename):
+    """Serve markdown files from the markdown directory."""
+    markdown_path = os.path.join(os.getcwd(), "flask", "markdown")
+    print(f"Requested file: {filename}")
+    print(f"Looking for file at: {markdown_path}")
+    try:
+        return send_from_directory(markdown_path, filename)
+    except Exception as e:
+        print(f"Error: {e}")
+        return f"Error serving markdown file: {e}", 404
+
+
+# Home route
 @main.route("/")
 def home():
-    # Load markdown for the introduction
-    md_file_path = os.path.join(os.getcwd(), 'flask', 'markdown', 'intro.md')
-    if not os.path.exists(md_file_path):
-        return f"Markdown file not found at {md_file_path}", 404
-
-    with open(md_file_path, 'r') as file:
-        md_content = file.read()
-
-    # Convert Markdown to HTML
-    intro_html = markdown.markdown(md_content)
-
+    """Serve the home page."""
     return render_template(
         "index.html",
-        intro_content=intro_html,
         strips=strips,
         variables=variables,
-        depths=sensor_depths,
-        logger_locations=logger_locations,
+        depths=[{"value": key, "label": label} for key, label in sensor_depth_mapping.items()],
+        loggers=loggers,
         DEFAULT_YEAR=DEFAULT_YEAR,
         DEFAULT_START_DATE=DEFAULT_START_DATE,
-        DEFAULT_END_DATE=DEFAULT_END_DATE
+        DEFAULT_END_DATE=DEFAULT_END_DATE,
+        DEFAULT_VARIABLE=DEFAULT_VARIABLE,
+        DEFAULT_DEPTH=DEFAULT_DEPTH,
+        DEFAULT_STRIP=DEFAULT_STRIP,
+        DEFAULT_LOGGER=DEFAULT_LOGGER,
     )
 
 
-@main.route('/intro')
-def intro():
-    # Construct the path to the markdown file relative to app.py
-    md_file_path = os.path.join(os.getcwd(), 'flask', 'markdown', 'intro.md')
-    print(f"md_file_path: {md_file_path}")
-    if not os.path.exists(md_file_path):
-        return f"Markdown file not found at {md_file_path}", 404
-
-    with open(md_file_path, 'r') as file:
-        md_content = file.read()
-
-    # Convert Markdown to HTML
-    html_content = markdown.markdown(md_content)
-
-    return render_template('index.html', intro_content=html_content)
+# Route to get available years
+@main.route("/available-years")
+def available_years():
+    """Return a list of available years based on data files."""
+    data_dir = os.path.join(os.getcwd(), "flask", "data-raw")
+    years = []
+    for filename in os.listdir(data_dir):
+        if filename.startswith("dataloggerData_") and filename.endswith(".zip"):
+            year_part = filename.split("_")[1]
+            year = year_part.split("-")[0]
+            if year.isdigit():
+                years.append(int(year))
+    return jsonify(sorted(set(years)))
 
 
-@main.route("/download_raw_data", methods=["GET"])
-def download_raw_data():
-    filename = request.args.get("filename", "raw_data.csv")
-    selected_year = request.args.get("year", DEFAULT_YEAR)
-    granularity = request.args.get("granularity", "daily")  # Default to daily data
+# Helper function to filter dataset by date
+def filter_loaded_dataset(year, granularity, start_date, end_date):
+    """
+    Loads and filters a dataset by date range and ensures datetime formatting.
 
-    # Load dataset
-    df = load_dataset(selected_year, granularity)
+    Parameters:
+    - year: The year of the dataset (e.g., 2024).
+    - granularity: The granularity of the dataset ('15min' or 'daily').
+    - start_date: The start date for filtering (string in "YYYY-MM-DD" format).
+    - end_date: The end date for filtering (string in "YYYY-MM-DD" format).
 
-    # Include ratios in the download
-    data_to_download = df[["timestamp"] + [col for col in df.columns if "Ratio" in col]]
+    Returns:
+    - filtered_df: The filtered DataFrame.
+    - datetime_column: The formatted datetime column from the original DataFrame.
+    - start_date: The start date used for filtering (unchanged, for reference).
+    - end_date: The end date used for filtering (unchanged, for reference).
+    """
+    # Load dataset using get_data
+    df = get_data(year, granularity)
+    if df is None:
+        raise FileNotFoundError(f"Dataset could not be loaded for year {year} and granularity {granularity}")
 
-    # Send CSV file
-    response = make_response(data_to_download.to_csv(index=False))
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    response.headers["Content-Type"] = "text/csv"
-    return response
+    # Format datetime and filter by date range
+    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%S")
+    filtered_df = df[(df["datetime"] >= start_date) & (df["datetime"] <= end_date)]
+    filtered_df = filtered_df.where(pd.notnull(filtered_df), None)  # Replace NaN with None for JSON compliance
 
-
-@main.route("/download_ratio_data", methods=["GET"])
-def download_ratio_data():
-    filename = request.args.get("filename", "ratio_data.csv")
-
-    # Default values for user selections
-    selected_variable = request.args.get("variable", "VWC")
-    selected_depth = request.args.get("depth", "1")
-    selected_logger = request.args.get("logger", "T")
-    selected_year = request.args.get("year", None)  # Retrieve the year
-
-    # Construct the columns for ratio calculation
-    col_s1 = f"{selected_variable}_{selected_depth}_Avg_S1{selected_logger}"
-    col_s2 = f"{selected_variable}_{selected_depth}_Avg_S2{selected_logger}"
-    col_s3 = f"{selected_variable}_{selected_depth}_Avg_S3{selected_logger}"
-    col_s4 = f"{selected_variable}_{selected_depth}_Avg_S4{selected_logger}"
-
-    # Load dataset
-    selected_year = request.form.get("year", DEFAULT_YEAR)  # Retrieve year from request or use default
-    df = load_dataset(selected_year)
-
-    # Filter data by year if specified
-    if selected_year:
-        df = df[df["timestamp"].dt.year == int(selected_year)]
-
-    # Check if the columns exist
-    missing_columns = [col for col in [col_s1, col_s2, col_s3, col_s4] if col not in df.columns]
-    if missing_columns:
-        return f"Error: Missing columns {missing_columns} in the data.", 400
-
-    # Calculate ratios
-    df["S2_S1_Ratio"] = df[col_s2] / df[col_s1]
-    df["S4_S3_Ratio"] = df[col_s4] / df[col_s3]
-
-    # Select relevant columns
-    data_to_download = df[["timestamp", "S2_S1_Ratio", "S4_S3_Ratio"]]
-
-    # Send CSV file
-    response = make_response(data_to_download.to_csv(index=False))
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    response.headers["Content-Type"] = "text/csv"
-    return response
+    # Return filtered dataset, datetime column, and date range
+    return filtered_df, df["datetime"], start_date, end_date
 
 
-def load_and_filter_data():
-    # Get parameters from the request
-    selected_strip = request.form.get("strip", "S1")
-    selected_variable = request.form.get("variable", "VWC")
-    selected_depth = request.form.get("depth", "1")
-    selected_logger = request.form.get("logger", "T")
-    selected_start_date = request.form.get("start_date")
-    selected_end_date = request.form.get("end_date")
-    # selected_year = request.form.get("year")
-    print("selected_variable in load and filter:", selected_variable)
-    print("selected_depth in load and filter", selected_depth)
-
-    print("selected_start_date in load and filter:", selected_start_date)
-    print("selected_end_date in load and filter", selected_end_date)
-
-    # Construct dynamic column names
-    col_s1 = f"{selected_variable}_{selected_depth}_Avg_S1{selected_logger}"
-    col_s2 = f"{selected_variable}_{selected_depth}_Avg_S2{selected_logger}"
-    col_s3 = f"{selected_variable}_{selected_depth}_Avg_S3{selected_logger}"
-    col_s4 = f"{selected_variable}_{selected_depth}_Avg_S4{selected_logger}"
-    print("col_s1 in depth and filter:", col_s1)
-
-    column_name = f"{selected_variable}_{selected_depth}_Avg_{selected_strip}{selected_logger}"
-
-    # Load dataset
-    data_dir = os.path.join(os.getcwd(), "data", "processed")
-    csv_files = [f for f in os.listdir(data_dir) if f.startswith("dataloggerData_daily") and f.endswith(".csv")]
-
-    if not csv_files:
-        raise FileNotFoundError("No daily averaged CSV files found in the processed data directory.")
-
-    latest_csv = max(csv_files, key=lambda f: os.path.getmtime(os.path.join(data_dir, f)))
-    csv_path = os.path.join(data_dir, latest_csv)
-    df = pd.read_csv(csv_path)
-    print('df.columns:', df.columns)
-    # Ensure 'timestamp' is in datetime format
-    df["timestamp"] = pd.to_datetime(df["datetime"], errors='coerce')
-    print("Original Timestamps:", df["timestamp"])
-    print(f"Min Timestamp: {df['timestamp'].min()}, Max Timestamp: {df['timestamp'].max()}")
-    # Filter by date range
-    # Temporarily comment out the date filtering
-    # if selected_start_date:
-    #     df = df[df["timestamp"] >= datetime.strptime(selected_start_date, "%Y-%m-%d")]
-    # if selected_end_date:
-    #     df = df[df["timestamp"] <= datetime.strptime(selected_end_date, "%Y-%m-%d")]
-    print(f"Data Without Filtering: {df[['timestamp']].head()}")
-    return df, column_name, col_s1, col_s2, col_s3, col_s4
+# Route to fetch default dates
+@main.route("/default_dates")
+def default_dates():
+    """Return default start and end dates."""
+    return jsonify({
+        "start_date": DEFAULT_START_DATE,
+        "end_date": DEFAULT_END_DATE,
+        "depths": [{"value": key, "label": label} for key, label in sensor_depth_mapping.items()]
+    })
 
 
-# Route for raw data plot
+def sanitize_json(data):
+    """Recursively replace NaN with null and handle ndarray in a JSON object."""
+    if isinstance(data, dict):
+        return {k: sanitize_json(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_json(i) for i in data]
+    elif isinstance(data, (float, int)) and np.isnan(data):
+        return None  # JSON libraries automatically convert None to null
+    elif isinstance(data, np.ndarray):
+        return [sanitize_json(item) for item in data.tolist()]  # Recursively sanitize ndarray elements
+    return data
+
+# Plot Raw Data
 @main.route("/plot_raw", methods=["POST"])
 def plot_raw():
-    df, column_name, _, _, _, _ = load_and_filter_data()
-    selected_year = request.form.get("year", DEFAULT_YEAR)
-    selected_variable = request.form.get("variable", DEFAULT_VARIABLE)
-    granularity = request.form.get("granularity", "daily")  # Default to daily data
-    df = load_dataset(selected_year, granularity)
-    print(f"Selected variable in plot_raw: {selected_variable}")  # Debugging
-    # Create Plotly figure
-    fig = go.Figure()
-    fig.update_layout(
-        title="Raw Data Plot",
-        xaxis_title="Date",
-        yaxis_title=y_axis_label(selected_variable),
-        template="plotly_white",
-        legend = dict(
-            x=1,  # Right edge of the plot
-            y=1,  # Top edge of the plot
-            xanchor="right",
-            yanchor="top",
-            bgcolor="rgba(255, 255, 255, 0.8)",  # Semi-transparent background
-            bordercolor="black",
-            borderwidth=1
-         ),
-        margin = dict(l=60, r=20, t=50, b=50)  # Consistent margins
+    data = request.json
+    print("Raw Plot Params:", data)
+    log_debug_info(data, "plot_raw")
 
-    )
-    fig.add_trace(go.Scatter(
-        x=df["timestamp"],
-        y=df[column_name],
-        mode="lines+markers",
-        name=f"Raw Data: {column_name}",
-        showlegend=True  # Force legend display
-    ))
+    year = data.get("year", DEFAULT_YEAR)
+    start_date = data.get("startDate", DEFAULT_START_DATE)
+    end_date = data.get("endDate", DEFAULT_END_DATE)
+    strip = data.get("strip", DEFAULT_STRIP)
+    variable = data.get("variable", DEFAULT_VARIABLE)
+    depth = data.get("depth", DEFAULT_DEPTH)
+    depth_display = sensor_depth_mapping.get(depth, f"{depth} inches")
 
-    return fig.to_json()
+    try:
+        granularity = "15min" if (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days <= 30 else "daily"
+        print(f"Determined granularity: {granularity}")
 
+        # Get the dataset from the global cache
+        df = get_data(year, granularity)
+        if df is None:
+            raise FileNotFoundError(f"No cached data found for year {year} and granularity {granularity}")
+
+        # Convert NaN to None for JSON compliance
+        df = df.where(pd.notnull(df), None)
+
+        # Filter the dataset
+        filtered_df, _, _, _ = filter_loaded_dataset(year, granularity, start_date, end_date)
+        filtered_df = filtered_df.where(pd.notnull(filtered_df), None)
+
+        # Extract raw data columns
+        variable_columns = [
+            f"{variable}_{depth}_raw_{strip}_{logger}_{granularity}"
+            for logger in loggers
+        ]
+        available_columns = [col for col in variable_columns if col in filtered_df.columns]
+
+        if not available_columns:
+            return jsonify({"error": f"No matching columns found in dataset: {variable_columns}"}), 400
+
+        # Generate Plotly figure
+        fig = go.Figure()
+        for col in available_columns:
+            fig.add_trace(go.Scatter(
+                x=filtered_df["datetime"],
+                y=filtered_df[col],
+                mode="lines",
+                name=col.replace(f"{variable}_{depth}_raw_{strip}", "").strip("_")
+            ))
+
+        fig.update_layout(
+            title=f"Raw Data Plot for {variable} at {depth_display} in {strip}",
+            xaxis_title="Date",
+            yaxis_title="Value",
+            template="plotly_white"
+        )
+
+        # Sanitize the figure JSON to replace NaN with None
+        print("Filtered DataFrame for raw plot:", filtered_df)
+        sanitized_json = sanitize_json(fig.to_plotly_json())
+        print("Sanitized JSON for raw plot:", sanitized_json)
+
+        # Return the sanitized JSON
+        return jsonify(sanitized_json)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return jsonify({"error": "Error generating raw plot."}), 500
+
+
+# Plot Ratio Data
 @main.route("/plot_ratio", methods=["POST"])
 def plot_ratio():
-    # Retrieve user selections
-    selected_year = request.form.get("year", DEFAULT_YEAR)
-    selected_variable = request.form.get("variable", DEFAULT_VARIABLE)
-    selected_depth = request.form.get("depth", DEFAULT_DEPTH)
+    data = request.json
+    print("Ratio Plot Params:", data)
+    log_debug_info(data, "plot_ratio")
 
-    # Load precomputed dataset
-    df = load_dataset(selected_year, "daily")
+    year = data.get("year", DEFAULT_YEAR)
+    start_date = data.get("startDate", DEFAULT_START_DATE)
+    end_date = data.get("endDate", DEFAULT_END_DATE)
+    strip = data.get("strip", DEFAULT_STRIP)
+    variable = data.get("variable", DEFAULT_VARIABLE)
+    depth = data.get("depth", DEFAULT_DEPTH)
+    depth_display = sensor_depth_mapping.get(depth, f"{depth} inches")
 
-    # Construct column names for precomputed ratios, including depth
-    ratio_col_s2_s1 = f"S2_S1_Ratio_{selected_variable}_{selected_depth}"
-    ratio_col_s4_s3 = f"S4_S3_Ratio_{selected_variable}_{selected_depth}"
+    try:
+        granularity = "15min" if (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days <= 30 else "daily"
 
-    # Check if the ratio columns exist
-    missing_columns = [col for col in [ratio_col_s2_s1, ratio_col_s4_s3] if col not in df.columns]
-    if missing_columns:
-        return jsonify(error=f"Missing columns: {missing_columns}"), 400
+        # Get the dataset from the global cache
+        df = get_data(year, granularity)
+        if df is None:
+            raise FileNotFoundError(f"No cached data found for year {year} and granularity {granularity}")
 
-    # Create Plotly figure using precomputed ratios
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["timestamp"],
-        y=df[ratio_col_s2_s1],
-        mode="lines+markers",
-        name=f"S2/S1 Ratio: {selected_variable} (Depth: {selected_depth})"
-    ))
-    fig.add_trace(go.Scatter(
-        x=df["timestamp"],
-        y=df[ratio_col_s4_s3],
-        mode="lines+markers",
-        name=f"S4/S3 Ratio: {selected_variable} (Depth: {selected_depth})"
-    ))
+        # Convert NaN to None for JSON compliance
+        df = df.where(pd.notnull(df), None)
 
-    # Set axis labels
-    fig.update_layout(
-        title="Ratio Plot",
-        xaxis_title="Date",
-        yaxis_title=f"{selected_variable} Ratio (Depth: {selected_depth})",
-        template="plotly_white",
-        legend = dict(
-            x=1,  # Right edge of the plot
-            y=1,  # Top edge of the plot
-            xanchor="right",
-            yanchor="top",
-            bgcolor="rgba(255, 255, 255, 0.8)",  # Semi-transparent background
-            bordercolor="black",
-            borderwidth=1
-        ),
-        margin = dict(l=60, r=20, t=50, b=50)  # Consistent margins
-    )
+        # Filter the dataset
+        filtered_df, _, _, _ = filter_loaded_dataset(year, granularity, start_date, end_date)
+        filtered_df = filtered_df.where(pd.notnull(filtered_df), None)
 
+        # Extract ratio data columns
+        ratio_columns = [
+            col for col in filtered_df.columns
+            if "ratio" in col.lower() and variable.lower() in col.lower()
+        ]
 
-    return fig.to_json()
+        if not ratio_columns:
+            return jsonify({"error": "No matching ratio columns found in dataset."}), 400
+
+        # Generate Plotly figure
+        fig = go.Figure()
+        for col in ratio_columns:
+            fig.add_trace(go.Scatter(
+                x=filtered_df["datetime"],
+                y=filtered_df[col],
+                mode="lines",
+                name=col.replace(f"{variable}_{depth}_", "").strip("_")
+            ))
+
+        fig.update_layout(
+            title=f"Ratio Data Plot for {variable} at {depth_display} in {strip}",
+            xaxis_title="Date",
+            yaxis_title="Value",
+            template="plotly_white"
+        )
+
+        # Sanitize the figure JSON to replace NaN with None
+        print("Filtered DataFrame for ratio plot:", filtered_df)
+        sanitized_json = sanitize_json(fig.to_plotly_json())
+
+        # Return the sanitized JSON
+        return jsonify(sanitized_json)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return jsonify({"error": "Error generating ratio plot."}), 500
+

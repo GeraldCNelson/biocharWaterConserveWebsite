@@ -3,162 +3,294 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biochar Water Conservation Data</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="{{ url_for('static', filename='js/marked.min.js') }}"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>Biochar Project</title>
+
+    <!-- Stylesheets -->
+    <link href="static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="static/css/styles.css" rel="stylesheet">
+
+    <!-- JavaScript Dependencies -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="static/js/bootstrap.bundle.min.js" defer></script>
+
+    <style>
+    .control-panel {
+        width: 100%;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .plot-panel {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .graph-container {
+        width: 100%;
+        height: 400px; /* Set a fixed height */
+    }
+</style>
 </head>
 <body>
-    <div class="tabs">
-        <button class="tab-button active" data-tab="intro">Introduction</button>
-        <button class="tab-button" data-tab="data">Main Data Display</button>
-    </div>
-    <div id="intro" class="tab-content active">
-        <h2>Introduction</h2>
-        <div id="intro-content">
-            <div class="markdown-content">
-                {{ intro_content | safe }}
+<div class="container-fluid mt-4">
+    <ul class="nav nav-tabs">
+        <li class="nav-item">
+            <a class="nav-link active" id="introduction-tab" data-bs-toggle="tab" href="#intro"
+               role="tab">Introduction</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="main-data-tab" data-bs-toggle="tab" href="#main-data" role="tab">Main Data
+                Display</a>
+        </li>
+    </ul>
+    <div class="tab-content">
+        <!-- Introduction Tab -->
+        <div class="tab-pane fade show active" id="intro" role="tabpanel">
+            <div id="intro-content" class="mt-3">Loading content...</div>
+        </div>
+
+        <!-- Main Data Display Tab -->
+        <div class="tab-pane fade" id="main-data" role="tabpanel">
+            <div class="row mt-3">
+                <!-- Control Panel -->
+                <div class="col-md-3">
+                    <div class="control-panel">
+                        <h4>Date Range Selection</h4>
+                        <label for="year">Year:</label>
+                        <select id="year" class="form-select mb-3"></select>
+                        <label for="start-date">Start Date:</label>
+                        <input type="date" id="start-date" class="form-control mb-3">
+                        <label for="end-date">End Date:</label>
+                        <input type="date" id="end-date" class="form-control mb-3">
+                        <label for="strip">Strip:</label>
+                        <select id="strip" class="form-select mb-3"></select>
+                        <label for="variable">Variable:</label>
+                        <select id="variable" class="form-select mb-3"></select>
+                        <label for="depth">Depth:</label>
+                        <select id="depth" class="form-select mb-3">
+                            <!-- Depth options will be dynamically populated using JavaScript -->
+                        </select>
+                        <button id="update-plots" class="btn btn-primary w-100 mb-3">Update Plots</button>
+                        <button id="download-raw" class="btn btn-secondary w-100 mb-3">Download Raw Data (CSV)</button>
+                        <button id="download-ratio" class="btn btn-secondary w-100">Download Ratio Data (CSV)</button>
+                    </div>
+                </div>
+
+                <!-- Graph Panels -->
+                <div class="col-md-9">
+                    <div class="plot-panel">
+                        <div id="graph-top" class="graph-container mb-4">
+                            <p class="text-muted">Raw Data Plot Placeholder</p>
+                        </div>
+                        <div id="graph-bottom" class="graph-container">
+                            <p class="text-muted">Ratio Plot Placeholder</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-    <div id="data" class="tab-content">
-        <div class="control-panel">
-            <h2>Date Range Selection</h2>
-            <label for="year">Year:</label><br>
-            <select id="year" name="year">
-                <option value="2023" {% if DEFAULT_YEAR == 2023 %}selected{% endif %}>2023</option>
-                <option value="2024" {% if DEFAULT_YEAR == 2024 %}selected{% endif %}>2024</option>
-            </select><br><br>
+</div>
 
-            <label for="start-date">Start Date:</label><br>
-            <input type="date" id="start-date" name="start-date"><br><br>
+<!-- Main JavaScript Logic -->
+<script>
+/* Numbering System Summary:
+1. Application Initialization
+2. Populate Control Panel
+3. Load Introduction Content
+4. Update Plots
+5. Fetch Default and Options
+6. Debugging Utilities
+7. Markdown Loading
+8. Replace NaN with Null */
 
-            <label for="end-date">End Date:</label><br>
-            <input type="date" id="end-date" name="end-date"><br><br>
-            <label for="strip">Strip:</label><br>
-            <select id="strip" name="strip">
-                <option value="S1">S1</option>
-                <option value="S2">S2</option>
-                <option value="S3">S3</option>
-                <option value="S4">S4</option>
-            </select><br><br>
+// 1. Application Initialization
+async function initializeApplication() {
+    console.log("Initializing application...");
 
-            <label for="variable">Variable:</label><br>
-            <select id="variable" name="variable">
-                <option value="VWC">Soil Moisture (VWC)</option>
-                <option value="T">Soil Temperature (T)</option>
-                <option value="EC">Electrical Conductivity (EC)</option>
-            </select><br><br>
+    // Fetch defaults and options
+    try {
+        console.log("Fetching defaults and options...");
+        const options = await fetchDefaultsAndOptions();
+        console.log("Defaults and options fetched:", options);
 
-            <label for="depth">Depth:</label><br>
-            <select id="depth" name="depth">
-                <option value="1">6"</option>
-                <option value="2">12"</option>
-                <option value="3">18"</option>
-            </select><br><br>
-            <button id="update-plots">Update Plots</button>
-        </div>
-        <div class="plot-panel">
-            <div class="graph-container graph-top" id="graph-top">
-                <!-- Placeholder for raw data plot -->
-            </div>
-            <div class="graph-container graph-bottom" id="graph-bottom">
-                <!-- Placeholder for ratio plot -->
-            </div>
-        </div>
-    </div>
+        // Populate control panel
+        console.log("Populating control panel with:", options);
+        populateControlPanel(options);
+    } catch (error) {
+        console.error("Error during application initialization:", error);
+        return;
+    }
 
-    <script>
-        $(document).ready(function () {
-            const DEFAULT_YEAR = '{{ DEFAULT_YEAR }}';
-            $('#year').val(DEFAULT_YEAR);  // Set the default year in the dropdown
-            setDefaultDates(DEFAULT_YEAR);
-            const DEFAULT_VARIABLE = '{{ DEFAULT_VARIABLE }}';
-            const DEFAULT_DEPTH = '{{ DEFAULT_DEPTH }}';
-            const DEFAULT_START_DATE = '{{ DEFAULT_START_DATE }}';
-            const DEFAULT_END_DATE = '{{ DEFAULT_END_DATE }}';
-            // Set default dates
-            $('#start-date').val(DEFAULT_START_DATE);
-            $('#end-date').val(DEFAULT_END_DATE);
+    // Load introduction content
+    await loadIntroductionContent();
 
-            let selectedYear = $('#year').val() || DEFAULT_YEAR;
-            let selectedVariable = $('#variable').val() || DEFAULT_VARIABLE;
-            let selectedDepth = $('#depth').val() || DEFAULT_DEPTH;
-            let selectedStartDate = $('#start-date').val() || DEFAULT_START_DATE;
-            let selectedEndDate = $('#end-date').val() || DEFAULT_END_DATE;
+    console.log("Application initialized.");
+}
 
-            function setDefaultDates(year) {
-                $('#start-date').val(`${year}-01-01`);
-                $('#end-date').val(`${year}-12-31`);
-            }
+// 2. Populate Control Panel
+function populateControlPanel({ defaults, years, strips, variables, depths }) {
+    const yearSelect = document.getElementById("year");
+    const stripSelect = document.getElementById("strip");
+    const variableSelect = document.getElementById("variable");
+    const depthSelect = document.getElementById("depth");
+    const startDateInput = document.getElementById("start-date");
+    const endDateInput = document.getElementById("end-date");
 
-            setDefaultDates(selectedYear);
+    // Populate dropdowns and inputs
+    years.forEach(year => {
+        const option = document.createElement("option");
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    });
+    strips.forEach(strip => {
+        const option = document.createElement("option");
+        option.value = strip;
+        option.textContent = strip;
+        stripSelect.appendChild(option);
+    });
+    variables.forEach(variable => {
+        const option = document.createElement("option");
+        option.value = variable;
+        option.textContent = variable;
+        variableSelect.appendChild(option);
+    });
+    depths.forEach(({ value, label }) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        depthSelect.appendChild(option);
+    });
 
-            $('#year').change(function () {
-                selectedYear = $(this).val();
-                setDefaultDates(selectedYear);
-            });
+    // Set defaults
+    yearSelect.value = defaults.year;
+    stripSelect.value = defaults.strip;
+    variableSelect.value = defaults.variable;
+    depthSelect.value = defaults.depth;
+    startDateInput.value = defaults.startDate;
+    endDateInput.value = defaults.endDate;
 
-            $('#update-plots').click(function () {
-                const selectedStartDate = $('#start-date').val() || DEFAULT_START_DATE;
-                const selectedEndDate = $('#end-date').val() || DEFAULT_END_DATE;
-                const selectedStrip = $('#strip').val() || 'S1';
-                const selectedVariable = $('#variable').val() || DEFAULT_VARIABLE;
-                const selectedDepth = $('#depth').val() || DEFAULT_DEPTH;
-                const selectedYear = $('#year').val() || DEFAULT_YEAR;
+    console.log("Control panel populated successfully.");
+}
 
-                console.log('Updating plots with:', {
-                selectedStartDate,
-                selectedEndDate,
-                selectedStrip,
-                selectedVariable,
-                selectedDepth,
-                selectedYear
-            });
+// 3. Load Introduction Content
+async function loadIntroductionContent() {
+    console.log("Loading introduction content...");
+    await loadMarkdownContent("/markdown/intro.md", "intro-content");
+    console.log("Loaded intro.md content successfully.");
+}
 
-            updatePlots(selectedStartDate, selectedEndDate, selectedStrip, selectedVariable, selectedDepth, selectedYear);
-});
+// 4. Update Plots
+async function updatePlots(params) {
+    console.log("Fetching plots with:", params);
 
-            $('.tab-button').click(function () {
-                $('.tab-button').removeClass('active');
-                $('.tab-content').removeClass('active');
-                $(this).addClass('active');
-                $('#' + $(this).data('tab')).addClass('active');
-            });
+    try {
+        // Ensure defaults are applied
+       //  params = ensureDefaults(params);
+        console.log("Params after ensuring defaults:", params);
+
+        // Fetch raw plot data
+        console.log("Fetching raw plot data...");
+        const rawResponse = await fetch("/plot_raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params)
+        });
+        console.log("Raw response:", rawResponse); // Debug statement to print rawResponse
+
+        if (rawResponse.ok) {
+            let rawData = await rawResponse.json();
+            rawData = replaceNaNWithNull(rawData); // Ensure NaN values are replaced
+            console.log("Sanitized raw data:", rawData);
+            Plotly.react("graph-top", rawData.data, rawData.layout);
+            console.log("Raw plot rendered successfully.");
+        } else {
+            throw new Error("Failed to load raw plot data.");
+        }
+
+        // Fetch ratio plot data
+        console.log("Fetching ratio plot data...");
+        const ratioResponse = await fetch("/plot_ratio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params)
         });
 
-        function updatePlots(startDate, endDate, strip, variable, depth, year) {
-            $.post('/plot_raw', {
-                start_date: startDate,
-                end_date: endDate,
-                strip: strip,
-                variable: variable,
-                depth: depth,
-                year: year
-            }, function (response) {
-                console.log('Response received for /plot_raw:', response);
-                Plotly.newPlot('graph-top', JSON.parse(response));
-            }).fail(function (xhr, status, error) {
-                console.error('Error occurred while processing /plot_raw:', status, error);
-            });
-
-            $.post('/plot_ratio', {
-                start_date: startDate,
-                end_date: endDate,
-                strip: strip,
-                variable: variable,
-                depth: depth,
-                year: year
-            }, function (response) {
-                console.log('Response received for /plot_ratio:', response);
-                Plotly.newPlot('graph-bottom', JSON.parse(response));
-            }).fail(function (xhr, status, error) {
-                console.error('Error occurred while processing /plot_ratio:', status, error);
-            });
+        if (ratioResponse.ok) {
+            let ratioData = await ratioResponse.json();
+            ratioData = replaceNaNWithNull(ratioData); // Ensure NaN values are replaced
+            console.log("Sanitized ratio data:", ratioData);
+            Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
+            console.log("Ratio plot rendered successfully.");
+        } else {
+            throw new Error("Failed to load ratio plot data.");
         }
-    </script>
+    } catch (error) {
+        console.error("Error fetching or rendering plots:", error);
+    }
+}
+
+// 5. Fetch Defaults and Options
+async function fetchDefaultsAndOptions() {
+    const response = await fetch("/get_defaults_and_options");
+    if (!response.ok) {
+        throw new Error("Failed to fetch defaults and options.");
+    }
+    return response.json();
+}
+
+// 6. Debugging Utilities
+function logError(message, error) {
+    console.error(message, error);
+}
+
+// 7. Markdown Loading
+async function loadMarkdownContent(filePath, elementId) {
+    console.log(`Loading markdown content from ${filePath} into element #${elementId}...`);
+    try {
+        const response = await fetch(filePath);
+        const markdownText = await response.text();
+        document.getElementById(elementId).innerHTML = marked.parse ? marked.parse(markdownText) : marked(markdownText);
+        console.log(`Loaded markdown content for ${elementId} successfully.`);
+    } catch (error) {
+        logError(`Error loading markdown content for ${elementId} from ${filePath}:`, error);
+    }
+}
+
+// 8. Replace NaN with Null
+function replaceNaNWithNull(obj) {
+    if (Array.isArray(obj)) {
+        return obj.map(replaceNaNWithNull);
+    } else if (obj !== null && typeof obj === "object") {
+        return Object.fromEntries(
+            Object.entries(obj).map(([key, value]) => [key, replaceNaNWithNull(value)])
+        );
+    } else if (Number.isNaN(obj)) {
+        return null;
+    }
+    return obj;
+}
+
+// Application entry point
+document.addEventListener("DOMContentLoaded", initializeApplication);
+document.getElementById("update-plots").addEventListener("click", () => {
+    const params = {
+        year: document.getElementById("year").value,
+        startDate: document.getElementById("start-date").value,
+        endDate: document.getElementById("end-date").value,
+        strip: document.getElementById("strip").value,
+        variable: document.getElementById("variable").value,
+        depth: document.getElementById("depth").value
+    };
+    updatePlots(params);
+});
+</script>
+
 </body>
 </html>
