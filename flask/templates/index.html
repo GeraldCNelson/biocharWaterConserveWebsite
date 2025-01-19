@@ -97,17 +97,17 @@
     </div>
 </div>
 
-<!-- Main JavaScript Logic -->
 <script>
 /* Numbering System Summary:
 1. Application Initialization
 2. Populate Control Panel
 3. Load Introduction Content
 4. Update Plots
-5. Fetch Default and Options
+5. Fetch Defaults and Options
 6. Debugging Utilities
 7. Markdown Loading
-8. Replace NaN with Null */
+8. Replace NaN with Null
+*/
 
 // 1. Application Initialization
 async function initializeApplication() {
@@ -191,23 +191,18 @@ async function updatePlots(params) {
     console.log("Fetching plots with:", params);
 
     try {
-        // Ensure defaults are applied
-       //  params = ensureDefaults(params);
         console.log("Params after ensuring defaults:", params);
 
         // Fetch raw plot data
-        console.log("Fetching raw plot data...");
         const rawResponse = await fetch("/plot_raw", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(params)
         });
-        console.log("Raw response:", rawResponse); // Debug statement to print rawResponse
 
         if (rawResponse.ok) {
             let rawData = await rawResponse.json();
-            rawData = replaceNaNWithNull(rawData); // Ensure NaN values are replaced
-            console.log("Sanitized raw data:", rawData);
+            rawData = replaceNaNWithNull(rawData); // Replace NaN with Null
             Plotly.react("graph-top", rawData.data, rawData.layout);
             console.log("Raw plot rendered successfully.");
         } else {
@@ -215,7 +210,6 @@ async function updatePlots(params) {
         }
 
         // Fetch ratio plot data
-        console.log("Fetching ratio plot data...");
         const ratioResponse = await fetch("/plot_ratio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -224,8 +218,7 @@ async function updatePlots(params) {
 
         if (ratioResponse.ok) {
             let ratioData = await ratioResponse.json();
-            ratioData = replaceNaNWithNull(ratioData); // Ensure NaN values are replaced
-            console.log("Sanitized ratio data:", ratioData);
+            ratioData = replaceNaNWithNull(ratioData); // Replace NaN with Null
             Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
             console.log("Ratio plot rendered successfully.");
         } else {
@@ -278,17 +271,20 @@ function replaceNaNWithNull(obj) {
 }
 
 // Application entry point
-document.addEventListener("DOMContentLoaded", initializeApplication);
-document.getElementById("update-plots").addEventListener("click", () => {
-    const params = {
-        year: document.getElementById("year").value,
-        startDate: document.getElementById("start-date").value,
-        endDate: document.getElementById("end-date").value,
-        strip: document.getElementById("strip").value,
-        variable: document.getElementById("variable").value,
-        depth: document.getElementById("depth").value
-    };
-    updatePlots(params);
+document.addEventListener("DOMContentLoaded", () => {
+    initializeApplication();
+
+    document.getElementById("update-plots").addEventListener("click", () => {
+        const params = {
+            year: document.getElementById("year").value,
+            startDate: document.getElementById("start-date").value,
+            endDate: document.getElementById("end-date").value,
+            strip: document.getElementById("strip").value,
+            variable: document.getElementById("variable").value,
+            depth: document.getElementById("depth").value
+        };
+        updatePlots(params);
+    });
 });
 </script>
 
