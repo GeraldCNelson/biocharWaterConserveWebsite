@@ -107,9 +107,9 @@
 6. Debugging Utilities
 7. Markdown Loading
 8. Replace NaN with Null
-*/
+9. Auto-display Plots on Tab Click */
 
-// 1. Application Initialization
+// Function 1: Application Initialization
 async function initializeApplication() {
     console.log("Initializing application...");
 
@@ -133,7 +133,7 @@ async function initializeApplication() {
     console.log("Application initialized.");
 }
 
-// 2. Populate Control Panel
+// Function 2: Populate Control Panel
 function populateControlPanel({ defaults, years, strips, variables, depths }) {
     const yearSelect = document.getElementById("year");
     const stripSelect = document.getElementById("strip");
@@ -179,14 +179,14 @@ function populateControlPanel({ defaults, years, strips, variables, depths }) {
     console.log("Control panel populated successfully.");
 }
 
-// 3. Load Introduction Content
+// Function 3: Load Introduction Content
 async function loadIntroductionContent() {
     console.log("Loading introduction content...");
     await loadMarkdownContent("/markdown/intro.md", "intro-content");
     console.log("Loaded intro.md content successfully.");
 }
 
-// 4. Update Plots
+// Function 4: Update Plots
 async function updatePlots(params) {
     console.log("Fetching plots with:", params);
 
@@ -194,15 +194,18 @@ async function updatePlots(params) {
         console.log("Params after ensuring defaults:", params);
 
         // Fetch raw plot data
+        console.log("Fetching raw plot data...");
         const rawResponse = await fetch("/plot_raw", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(params)
         });
+        console.log("Raw response:", rawResponse);
 
         if (rawResponse.ok) {
             let rawData = await rawResponse.json();
-            rawData = replaceNaNWithNull(rawData); // Replace NaN with Null
+            rawData = replaceNaNWithNull(rawData);
+            console.log("Sanitized raw data:", rawData);
             Plotly.react("graph-top", rawData.data, rawData.layout);
             console.log("Raw plot rendered successfully.");
         } else {
@@ -210,6 +213,7 @@ async function updatePlots(params) {
         }
 
         // Fetch ratio plot data
+        console.log("Fetching ratio plot data...");
         const ratioResponse = await fetch("/plot_ratio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -218,7 +222,8 @@ async function updatePlots(params) {
 
         if (ratioResponse.ok) {
             let ratioData = await ratioResponse.json();
-            ratioData = replaceNaNWithNull(ratioData); // Replace NaN with Null
+            ratioData = replaceNaNWithNull(ratioData);
+            console.log("Sanitized ratio data:", ratioData);
             Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
             console.log("Ratio plot rendered successfully.");
         } else {
@@ -229,7 +234,7 @@ async function updatePlots(params) {
     }
 }
 
-// 5. Fetch Defaults and Options
+// Function 5: Fetch Defaults and Options
 async function fetchDefaultsAndOptions() {
     const response = await fetch("/get_defaults_and_options");
     if (!response.ok) {
@@ -238,12 +243,12 @@ async function fetchDefaultsAndOptions() {
     return response.json();
 }
 
-// 6. Debugging Utilities
+// Function 6: Debugging Utilities
 function logError(message, error) {
     console.error(message, error);
 }
 
-// 7. Markdown Loading
+// Function 7: Markdown Loading
 async function loadMarkdownContent(filePath, elementId) {
     console.log(`Loading markdown content from ${filePath} into element #${elementId}...`);
     try {
@@ -256,7 +261,7 @@ async function loadMarkdownContent(filePath, elementId) {
     }
 }
 
-// 8. Replace NaN with Null
+// Function 8: Replace NaN with Null
 function replaceNaNWithNull(obj) {
     if (Array.isArray(obj)) {
         return obj.map(replaceNaNWithNull);
@@ -270,22 +275,21 @@ function replaceNaNWithNull(obj) {
     return obj;
 }
 
-// Application entry point
-document.addEventListener("DOMContentLoaded", () => {
-    initializeApplication();
-
-    document.getElementById("update-plots").addEventListener("click", () => {
-        const params = {
-            year: document.getElementById("year").value,
-            startDate: document.getElementById("start-date").value,
-            endDate: document.getElementById("end-date").value,
-            strip: document.getElementById("strip").value,
-            variable: document.getElementById("variable").value,
-            depth: document.getElementById("depth").value
-        };
-        updatePlots(params);
-    });
+// Function 9: Auto-display Plots on Tab Click
+document.getElementById("main-data-tab").addEventListener("click", () => {
+    const params = {
+        year: document.getElementById("year").value,
+        startDate: document.getElementById("start-date").value,
+        endDate: document.getElementById("end-date").value,
+        strip: document.getElementById("strip").value,
+        variable: document.getElementById("variable").value,
+        depth: document.getElementById("depth").value
+    };
+    updatePlots(params);
 });
+
+// Initialize application
+document.addEventListener("DOMContentLoaded", initializeApplication);
 </script>
 
 </body>
