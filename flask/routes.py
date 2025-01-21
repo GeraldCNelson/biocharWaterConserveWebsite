@@ -2,12 +2,12 @@
 from flask import Blueprint, jsonify, request, send_from_directory, render_template
 import os
 import pandas as pd
-import markdown
 import zipfile
 import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
 import logging
+import json
 
 main = Blueprint("main", __name__)
 
@@ -62,7 +62,7 @@ DEFAULT_END_DATE = get_default_end_date()
 DEFAULT_VARIABLE = "VWC"
 DEFAULT_DEPTH = "1"
 DEFAULT_STRIP = "S1"
-DEFAULT_LOGGER = "T"
+DEFAULT_LOGGER_LOCATION = "T"
 DEFAULT_GRANULARITY = "daily"  # Can be 'daily' or '15min'
 
 # Additional configurations
@@ -76,6 +76,13 @@ sensor_depth_mapping = {
     1: "6 inches",
     2: "12 inches",
     3: "18 inches"
+}
+
+# Logger location mapping
+logger_location_mapping = {
+    "T": "Top",
+    "M": "Middle",
+    "B": "Bottom"
 }
 
 def load_dataset(file_path):
@@ -96,6 +103,7 @@ def load_dataset(file_path):
             with z.open(csv_filename) as f:
                 # Read the CSV into a DataFrame
                 df = pd.read_csv(f, parse_dates=['datetime'])
+                df = df.where(pd.notnull(df), None)
                 return df
     except Exception as e:
         # Log and return None if an error occurs
@@ -106,39 +114,6 @@ def load_dataset(file_path):
 # Data cache to store loaded datasets for 15min and daily granularities
 data_cache = {"15min": {}, "daily": {}}  # A dictionary to store cached datasets
 
-def get_data(year, granularity):
-    """
-    Retrieve a DataFrame from cache or load it if not already cached.
-
-    Parameters:
-    - year: The year of the dataset (e.g., 2024).
-    - granularity: The granularity of the dataset ('15min' or 'daily').
-
-    Returns:
-    - DataFrame: The loaded or cached dataset.
-    """
-    # Check if the dataset is already cached
-    if year in data_cache[granularity]:
-        return data_cache[granularity][year]
-
-    # Construct the file path
-    data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
-    parsed_files = parse_filenames(data_dir, suffix=f"_{granularity}.zip")
-    matching_files = [f for start, end, f in parsed_files if start.startswith(f"{year}-01-01")]
-
-    if not matching_files:
-        raise FileNotFoundError(f"No dataset found for year {year} with granularity {granularity}")
-
-    file_path = os.path.join(data_dir, matching_files[0])
-
-    # Load the dataset
-    df = load_dataset(file_path)
-    if df is None:
-        raise FileNotFoundError(f"Dataset could not be loaded from {file_path}")
-
-    # Cache the dataset for future use
-    data_cache[granularity][year] = df
-    return df
 
 # Helper Function to Log Debug Info
 def log_debug_info(data, route_name):
@@ -192,11 +167,14 @@ def get_defaults_and_options():
             "variable": DEFAULT_VARIABLE,
             "depth": str(DEFAULT_DEPTH),  # Ensure depth is string if dropdown uses strings
             "strip": DEFAULT_STRIP,
+            "loggerLocation": DEFAULT_LOGGER_LOCATION,
         },
         "years": [2024, 2023],  # Example; adjust as needed
         "strips": strips,
         "variables": variables,
-        "depths": [{"value": str(depth), "label": sensor_depth_mapping[depth]} for depth in sensor_depths],  # Use sensor_depths
+        "depths": [{"value": str(depth), "label": sensor_depth_mapping[depth]} for depth in sensor_depths],
+        "loggerLocations": [{"value": key, "label": value} for key, value in logger_location_mapping.items()],
+        # Use sensor_depths
     }
     print("Returning defaults and options:", response_data)
     return jsonify(response_data)
@@ -239,7 +217,7 @@ def home():
         DEFAULT_VARIABLE=DEFAULT_VARIABLE,
         DEFAULT_DEPTH=DEFAULT_DEPTH,
         DEFAULT_STRIP=DEFAULT_STRIP,
-        DEFAULT_LOGGER=DEFAULT_LOGGER,
+        DEFAULT_LOGGER=DEFAULT_LOGGER_LOCATION,
     )
 
 
@@ -270,20 +248,44 @@ def filter_loaded_dataset(year, granularity, start_date, end_date):
     - end_date: The end date for filtering (string in "YYYY-MM-DD" format).
 
     Returns:
-    - filtered_df: The filtered DataFrame.
+    - filtered_df: The filtered DataFrame with NaNs replaced by None.
     - datetime_column: The formatted datetime column from the original DataFrame.
     - start_date: The start date used for filtering (unchanged, for reference).
     - end_date: The end date used for filtering (unchanged, for reference).
     """
-    # Load dataset using get_data
-    df = get_data(year, granularity)
-    if df is None:
-        raise FileNotFoundError(f"Dataset could not be loaded for year {year} and granularity {granularity}")
+    # Load dataset
+    data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
+    parsed_files = parse_filenames(data_dir, suffix=f"_{granularity}.zip")
+    matching_files = [f for start, end, f in parsed_files if start.startswith(f"{year}-01-01")]
+
+    if not matching_files:
+        raise FileNotFoundError(f"No dataset found for year {year} with granularity {granularity}")
+
+    file_path = os.path.join(data_dir, matching_files[0])
+    try:
+        # Open the ZIP file and read the CSV inside
+        with zipfile.ZipFile(file_path, 'r') as z:
+            csv_filename = z.namelist()[0]
+            with z.open(csv_filename) as f:
+                df = pd.read_csv(f, parse_dates=['datetime'])
+    except Exception as e:
+        raise FileNotFoundError(f"Dataset could not be loaded from {file_path}: {e}")
 
     # Format datetime and filter by date range
     df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%S")
     filtered_df = df[(df["datetime"] >= start_date) & (df["datetime"] <= end_date)]
-    filtered_df = filtered_df.where(pd.notnull(filtered_df), None)  # Replace NaN with None for JSON compliance
+
+    # Replace NaNs with None for JSON compliance
+    print("Before replacing NaNs with None:")
+    print(filtered_df.head())
+    filtered_df = filtered_df.replace({np.nan: None})
+    print("After replacing NaNs with None:")
+    print(filtered_df.head())
+    print("describe filtered_df", filtered_df.describe())
+
+    # Verify NaN replacement
+    total_nans = filtered_df.isna().sum().sum()
+    print(f"Total NaNs after replacement: {total_nans}")
 
     # Return filtered dataset, datetime column, and date range
     return filtered_df, df["datetime"], start_date, end_date
@@ -301,24 +303,21 @@ def default_dates():
 
 
 def sanitize_json(data):
-    """Recursively replace NaN with null and handle ndarray in a JSON object."""
-    if isinstance(data, dict):
-        return {k: sanitize_json(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [sanitize_json(i) for i in data]
-    elif isinstance(data, (float, int)) and np.isnan(data):
-        return None  # JSON libraries automatically convert None to null
-    elif isinstance(data, np.ndarray):
-        return [sanitize_json(item) for item in data.tolist()]  # Recursively sanitize ndarray elements
+    if isinstance(data, (dict, list)):
+        return json.loads(json.dumps(data, default=convert_ndarray))  # Handles NaN and ndarray in one step
     return data
+
 
 # Plot Raw Data
 @main.route("/plot_raw", methods=["POST"])
 def plot_raw():
     data = request.json
-    print("Raw Plot Params:", data)
+    print("Received Raw Plot Params:", data)
     log_debug_info(data, "plot_raw")
+    logger_location = data.get("loggerLocation", DEFAULT_LOGGER_LOCATION)
+    logger_label = logger_location_mapping.get(logger_location, "Unknown")  # Use mapping for the label
 
+    print(f"Logger location: {logger_location} ({logger_label})")  # For debugging
     year = data.get("year", DEFAULT_YEAR)
     start_date = data.get("startDate", DEFAULT_START_DATE)
     end_date = data.get("endDate", DEFAULT_END_DATE)
@@ -328,20 +327,21 @@ def plot_raw():
     depth_display = sensor_depth_mapping.get(depth, f"{depth} inches")
 
     try:
-        granularity = "15min" if (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days <= 30 else "daily"
+        granularity = "15min" if (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date,
+                                                                                              "%Y-%m-%d")).days <= 30 else "daily"
         print(f"Determined granularity: {granularity}")
-
-        # Get the dataset from the global cache
-        df = get_data(year, granularity)
-        if df is None:
-            raise FileNotFoundError(f"No cached data found for year {year} and granularity {granularity}")
-
-        # Convert NaN to None for JSON compliance
-        df = df.where(pd.notnull(df), None)
 
         # Filter the dataset
         filtered_df, _, _, _ = filter_loaded_dataset(year, granularity, start_date, end_date)
-        filtered_df = filtered_df.where(pd.notnull(filtered_df), None)
+        print('plot_raw describe data set', filtered_df.describe())
+        # Verify and count NaNs
+        total_nans = filtered_df.isna().sum().sum()
+        print(f"Total NaNs in the DataFrame after replacing with None: {total_nans}")
+
+        # Count the number of NaN values in each column
+        nans_per_column = filtered_df.isna().sum()
+        print("NaNs per column:")
+        print(nans_per_column)
 
         # Extract raw data columns
         variable_columns = [
@@ -349,12 +349,17 @@ def plot_raw():
             for logger in loggers
         ]
         available_columns = [col for col in variable_columns if col in filtered_df.columns]
+        print(f"Y values for raw plot: {filtered_df[available_columns].head()}")
 
         if not available_columns:
             return jsonify({"error": f"No matching columns found in dataset: {variable_columns}"}), 400
 
         # Generate Plotly figure
         fig = go.Figure()
+        print("Traces for raw plot:")
+        for col in available_columns:
+            y_values = filtered_df[col].tolist()
+            print(f"Column '{col}': Y Min = {min(y_values)}, Y Max = {max(y_values)}")
         for col in available_columns:
             fig.add_trace(go.Scatter(
                 x=filtered_df["datetime"],
@@ -364,9 +369,13 @@ def plot_raw():
             ))
 
         fig.update_layout(
-            title=f"Raw Data Plot for {variable} at {depth_display} in {strip}",
+            title=f"Ratio Data Plot for {variable} at {depth_display} in {strip}",
             xaxis_title="Date",
-            yaxis_title="Value",
+            yaxis_title=y_axis_label(variable),  # Ensure this function provides the correct label
+            yaxis=dict(
+                autorange=True,  # Automatically calculate the range based on data
+                rangemode="normal"  # Ensure it doesn't restrict the range to positive values only
+            ),
             template="plotly_white"
         )
 
@@ -386,9 +395,12 @@ def plot_raw():
 @main.route("/plot_ratio", methods=["POST"])
 def plot_ratio():
     data = request.json
-    print("Ratio Plot Params:", data)
+    print("Received Ratio Plot Params:", data)
     log_debug_info(data, "plot_ratio")
+    logger_location = data.get("loggerLocation", DEFAULT_LOGGER_LOCATION)
+    logger_label = logger_location_mapping.get(logger_location, "Unknown")  # Use mapping for the label
 
+    print(f"Logger location: {logger_location} ({logger_label})")  # For debugging
     year = data.get("year", DEFAULT_YEAR)
     start_date = data.get("startDate", DEFAULT_START_DATE)
     end_date = data.get("endDate", DEFAULT_END_DATE)
@@ -400,24 +412,61 @@ def plot_ratio():
     try:
         granularity = "15min" if (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days <= 30 else "daily"
 
-        # Get the dataset from the global cache
-        df = get_data(year, granularity)
-        if df is None:
-            raise FileNotFoundError(f"No cached data found for year {year} and granularity {granularity}")
-
-        # Convert NaN to None for JSON compliance
-        df = df.where(pd.notnull(df), None)
-
         # Filter the dataset
         filtered_df, _, _, _ = filter_loaded_dataset(year, granularity, start_date, end_date)
         filtered_df = filtered_df.where(pd.notnull(filtered_df), None)
+        # print("Columns in filtered DataFrame for ratio plot:", filtered_df.columns.tolist())
+        # Verify and count NaNs
+        total_nans = filtered_df.isna().sum().sum()
+        # print(f"Total NaNs in the DataFrame after replacing with None: {total_nans}")
+        print('plot_ratio describe data set', filtered_df.describe())
 
-        # Extract ratio data columns
-        ratio_columns = [
-            col for col in filtered_df.columns
-            if "ratio" in col.lower() and variable.lower() in col.lower()
-        ]
+        # Extract ratio data columns based on location type
+        location_type = data.get("locationType", "logger")  # Default to 'logger'
+        print(f"Location Type: {data.get('locationType')}")
 
+        if location_type == "logger":
+            # Filter for specific logger locations (T, M, B) for all depths
+            ratio_columns = [
+                col for col in filtered_df.columns
+                if col.lower().startswith(variable.lower()) and "ratio" in col.lower() and any(
+                    loc in col for loc in ["_T_", "_M_", "_B_"])
+            ]
+        elif location_type == "depth":
+            # Filter for specific depths (6, 12, 18 inches) across all loggers
+            ratio_columns = [
+                col for col in filtered_df.columns
+                if col.lower().startswith(variable.lower()) and "ratio" in col.lower() and any(
+                    depth in col for depth in ["_1_", "_2_", "_3_"])
+            ]
+            print(f"Depth: {data.get('depth')}")
+
+        else:
+            # Handle invalid locationType
+            return jsonify({"error": "Invalid location type."}), 400
+
+
+        print("Traces for ratio plot:")
+        for col in ratio_columns:
+            y_values = filtered_df[col].dropna().tolist()  # Drop NaNs to ensure valid values
+            print(f"Column '{col}': Y Min = {min(y_values)}, Y Max = {max(y_values)}")
+            print(f"Y values being passed to Plotly for column '{col}': Min = {min(y_values)}, Max = {max(y_values)}")
+            print(f"Column '{col}': Min = {filtered_df[col].min()}, Max = {filtered_df[col].max()}")
+
+        # Verify and log the selected columns
+        print("Filtered ratio columns:", ratio_columns)
+
+        # Ensure valid columns and plot
+        if not ratio_columns:
+            return jsonify({"error": "No matching ratio columns found in dataset."}), 400
+
+        ratio_data = filtered_df[ratio_columns]
+        print("Summary of ratio columns:")
+        print(ratio_data.describe())
+
+        for col in ratio_columns:
+            y_values = filtered_df[col].tolist()  # Directly convert column to list
+            # print(f"Y values being passed to Plotly for column '{col}': Min = {min(y_values)}, Max = {max(y_values)}")
         if not ratio_columns:
             return jsonify({"error": "No matching ratio columns found in dataset."}), 400
 
@@ -434,13 +483,15 @@ def plot_ratio():
         fig.update_layout(
             title=f"Ratio Data Plot for {variable} at {depth_display} in {strip}",
             xaxis_title="Date",
-            yaxis_title="Value",
+            yaxis_title=y_axis_label(variable),
             template="plotly_white"
         )
 
         # Sanitize the figure JSON to replace NaN with None
-        print("Filtered DataFrame for ratio plot:", filtered_df)
+        # print("Filtered DataFrame for ratio plot:", filtered_df)
         sanitized_json = sanitize_json(fig.to_plotly_json())
+        sanitized_json = sanitize_json(fig.to_plotly_json())
+        print("Sanitized JSON for ratio plot:", json.dumps(sanitized_json, indent=2))  # Pretty-print for debugging
 
         # Return the sanitized JSON
         return jsonify(sanitized_json)
