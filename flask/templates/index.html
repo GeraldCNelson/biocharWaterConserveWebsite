@@ -8,33 +8,15 @@
     <!-- Stylesheets -->
     <link href="static/css/bootstrap.min.css" rel="stylesheet">
     <link href="static/css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/themes/light.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Font Awesome -->
 
     <!-- JavaScript Dependencies -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="static/js/bootstrap.bundle.min.js" defer></script>
-
-    <style>
-    .control-panel {
-        width: 100%;
-        padding: 15px;
-        background-color: #f8f9fa;
-        border-radius: 5px;
-        margin-bottom: 20px;
-    }
-
-    .plot-panel {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-    }
-
-    .graph-container {
-        width: 100%;
-        height: 400px; /* Set a fixed height */
-    }
-</style>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
 </head>
 <body>
 <div class="container-fluid mt-4">
@@ -61,28 +43,79 @@
                 <div class="col-md-3">
                     <div class="control-panel">
                         <h4>Date Range Selection</h4>
-                        <label for="year">Year:</label>
-                        <select id="year" class="form-select mb-3"></select>
-                        <label for="start-date">Start Date:</label>
-                        <input type="date" id="start-date" class="form-control mb-3">
-                        <label for="end-date">End Date:</label>
-                        <input type="date" id="end-date" class="form-control mb-3">
-                        <label for="strip">Strip:</label>
-                        <select id="strip" class="form-select mb-3"></select>
-                        <label for="variable">Variable:</label>
-                        <select id="variable" class="form-select mb-3"></select>
-                        <label for="depth">Depth:</label>
-                        <select id="depth" class="form-select mb-3">
-                            <!-- Depth options will be dynamically populated using JavaScript -->
+                        <label for="year">
+                            Year:
+                            <i class="fa fa-info-circle" data-tippy-content="Choose the year to display data"></i>
+                        </label>
+                        <select id="year" class="form-select mb-2"></select>
+                        <label for="start-date">
+                            Start Date:
+                            <i class="fa fa-info-circle" data-tippy-content="Choose start date for data display"></i>
+                        </label>
+                        <input type="date" id="start-date" class="form-control mb-2">
+
+                        <label for="end-date">
+                            End Date:
+                            <i class="fa fa-info-circle" data-tippy-content="Choose end date for data display"></i>
+                        </label>
+                        <input type="date" id="end-date" class="form-control mb-2">
+                        <label for="variable">
+                            Variable:
+                            <i class="fa fa-info-circle" data-tippy-content="Select type of data to display. <br>VWC = Volumetric Water Content<br>T = Soil Temperature<br>EC = Electrical Conductivity<br>SWC = Soil Water Content"></i>
+                        </label>
+                        <select id="variable" class="form-select mb-2"></select>
+                        <label for="strip">
+                            Strip:
+                            <i class="fa fa-info-circle" data-tippy-content="Choose one of the 4 treatment strips"></i>
+                        </label>
+                        <select id="strip" class="form-select mb-2"></select>
+                        <label for="location-type">
+                            Logger Location:
+                            <i class="fa fa-info-circle" data-tippy-content="Choose the location of data logger in a strip. T = Top (closest to irrigation start), M = Middle of the strip, B = Bottom of the strip"></i>
+                        </label>
+                        <select id="location-type" class="form-select mb-2">
+                            <!-- Logger location options will be dynamically populated -->
                         </select>
-                        <button id="update-plots" class="btn btn-primary w-100 mb-3">Update Plots</button>
-                        <button id="download-raw" class="btn btn-secondary w-100 mb-3">Download Raw Data (CSV)</button>
-                        <button id="download-ratio" class="btn btn-secondary w-100">Download Ratio Data (CSV)</button>
+                        <label for="depthSelect">
+                            Depth:
+                            <i class="fa fa-info-circle" data-tippy-content="Location in the soil of the data collection probe."></i>
+                        </label>
+                        <select id="depthSelect" class="form-select mb-2">
+                            <!-- Depth options will be dynamically populated -->
+                        </select>
+                        <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
+                        <button id="download_raw" class="btn btn-primary w-100 mb-2" onclick="downloadTraceData('raw')">
+                            Download Raw Data (CSV)
+                        </button>
+                        <button id="download_ratio" class="btn btn-primary w-100 mb-2" onclick="downloadTraceData('ratio')">
+                            Download Ratio Data (CSV)
+                        </button>
+
+                        <!-- Download Plot Buttons -->
+                        <div class="dropdown mb-2">
+                            <button class="btn btn-primary w-100 dropdown-toggle" type="button" id="downloadRawPlot" data-bs-toggle="dropdown" aria-expanded="false">
+                                Download Raw Plot
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="downloadRawPlot">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-primary w-100 dropdown-toggle" type="button" id="downloadRatioPlot" data-bs-toggle="dropdown" aria-expanded="false">
+                                Download Ratio Plot
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="downloadRatioPlot">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+
                     </div>
                 </div>
 
                 <!-- Graph Panels -->
-                <div class="col-md-9">
+                <div class="col-md-12">
                     <div class="plot-panel">
                         <div id="graph-top" class="graph-container mb-4">
                             <p class="text-muted">Raw Data Plot Placeholder</p>
@@ -98,199 +131,242 @@
 </div>
 
 <script>
-/* Numbering System Summary:
-1. Application Initialization
-2. Populate Control Panel
-3. Load Introduction Content
-4. Update Plots
-5. Fetch Defaults and Options
-6. Debugging Utilities
-7. Markdown Loading
-8. Replace NaN with Null
-9. Auto-display Plots on Tab Click */
+    document.addEventListener("DOMContentLoaded", async function initializeApplication() {
+        console.log("Initializing application...");
 
-// Function 1: Application Initialization
-async function initializeApplication() {
-    console.log("Initializing application...");
+        try {
+            console.log("Fetching defaults...");
+            const options = await fetchDefaultsAndOptions();
+            console.log("Defaults fetched:", options);
+            populateControlPanel(options);
 
-    // Fetch defaults and options
-    try {
-        console.log("Fetching defaults and options...");
-        const options = await fetchDefaultsAndOptions();
-        console.log("Defaults and options fetched:", options);
+            document.getElementById("location-type").addEventListener("change", handleLocationTypeChange);
+            document.getElementById("update-plots").addEventListener("click", handleUpdatePlots);
 
-        // Populate control panel
-        console.log("Populating control panel with:", options);
-        populateControlPanel(options);
-    } catch (error) {
-        console.error("Error during application initialization:", error);
-        return;
-    }
+            console.log("Control panel populated successfully.");
 
-    // Load introduction content
-    await loadIntroductionContent();
-
-    console.log("Application initialized.");
-}
-
-// Function 2: Populate Control Panel
-function populateControlPanel({ defaults, years, strips, variables, depths }) {
-    const yearSelect = document.getElementById("year");
-    const stripSelect = document.getElementById("strip");
-    const variableSelect = document.getElementById("variable");
-    const depthSelect = document.getElementById("depth");
-    const startDateInput = document.getElementById("start-date");
-    const endDateInput = document.getElementById("end-date");
-
-    // Populate dropdowns and inputs
-    years.forEach(year => {
-        const option = document.createElement("option");
-        option.value = year;
-        option.textContent = year;
-        yearSelect.appendChild(option);
-    });
-    strips.forEach(strip => {
-        const option = document.createElement("option");
-        option.value = strip;
-        option.textContent = strip;
-        stripSelect.appendChild(option);
-    });
-    variables.forEach(variable => {
-        const option = document.createElement("option");
-        option.value = variable;
-        option.textContent = variable;
-        variableSelect.appendChild(option);
-    });
-    depths.forEach(({ value, label }) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = label;
-        depthSelect.appendChild(option);
-    });
-
-    // Set defaults
-    yearSelect.value = defaults.year;
-    stripSelect.value = defaults.strip;
-    variableSelect.value = defaults.variable;
-    depthSelect.value = defaults.depth;
-    startDateInput.value = defaults.startDate;
-    endDateInput.value = defaults.endDate;
-
-    console.log("Control panel populated successfully.");
-}
-
-// Function 3: Load Introduction Content
-async function loadIntroductionContent() {
-    console.log("Loading introduction content...");
-    await loadMarkdownContent("/markdown/intro.md", "intro-content");
-    console.log("Loaded intro.md content successfully.");
-}
-
-// Function 4: Update Plots
-async function updatePlots(params) {
-    console.log("Fetching plots with:", params);
-
-    try {
-        console.log("Params after ensuring defaults:", params);
-
-        // Fetch raw plot data
-        console.log("Fetching raw plot data...");
-        const rawResponse = await fetch("/plot_raw", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(params)
-        });
-        console.log("Raw response:", rawResponse);
-
-        if (rawResponse.ok) {
-            let rawData = await rawResponse.json();
-            rawData = replaceNaNWithNull(rawData);
-            console.log("Sanitized raw data:", rawData);
-            Plotly.react("graph-top", rawData.data, rawData.layout);
-            console.log("Raw plot rendered successfully.");
-        } else {
-            throw new Error("Failed to load raw plot data.");
+            const defaultParams = {
+                year: document.getElementById("year").value,
+                startDate: document.getElementById("start-date").value,
+                endDate: document.getElementById("end-date").value,
+                strip: document.getElementById("strip").value,
+                variable: document.getElementById("variable").value,
+                depth: document.getElementById("depthSelect").value,
+                locationType: document.getElementById("location-type").value,
+            };
+            console.log("Auto-generating plots with defaults:", defaultParams);
+            await updatePlots(defaultParams);
+        } catch (error) {
+            console.error("Error initializing application:", error);
         }
 
-        // Fetch ratio plot data
-        console.log("Fetching ratio plot data...");
-        const ratioResponse = await fetch("/plot_ratio", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(params)
+        tippy('[data-tippy-content]', {
+            theme: "light",
+            animation: "scale",
+            arrow: true,
+            allowHTML: true,
         });
 
-        if (ratioResponse.ok) {
-            let ratioData = await ratioResponse.json();
-            ratioData = replaceNaNWithNull(ratioData);
-            console.log("Sanitized ratio data:", ratioData);
-            Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
-            console.log("Ratio plot rendered successfully.");
-        } else {
-            throw new Error("Failed to load ratio plot data.");
-        }
-    } catch (error) {
-        console.error("Error fetching or rendering plots:", error);
-    }
-}
+        await loadIntroductionContent();
 
-// Function 5: Fetch Defaults and Options
-async function fetchDefaultsAndOptions() {
-    const response = await fetch("/get_defaults_and_options");
-    if (!response.ok) {
-        throw new Error("Failed to fetch defaults and options.");
-    }
-    return response.json();
-}
-
-// Function 6: Debugging Utilities
-function logError(message, error) {
-    console.error(message, error);
-}
-
-// Function 7: Markdown Loading
-async function loadMarkdownContent(filePath, elementId) {
-    console.log(`Loading markdown content from ${filePath} into element #${elementId}...`);
-    try {
-        const response = await fetch(filePath);
-        const markdownText = await response.text();
-        document.getElementById(elementId).innerHTML = marked.parse ? marked.parse(markdownText) : marked(markdownText);
-        console.log(`Loaded markdown content for ${elementId} successfully.`);
-    } catch (error) {
-        logError(`Error loading markdown content for ${elementId} from ${filePath}:`, error);
-    }
-}
-
-// Function 8: Replace NaN with Null
-function replaceNaNWithNull(obj) {
-    if (Array.isArray(obj)) {
-        return obj.map(replaceNaNWithNull);
-    } else if (obj !== null && typeof obj === "object") {
-        return Object.fromEntries(
-            Object.entries(obj).map(([key, value]) => [key, replaceNaNWithNull(value)])
-        );
-    } else if (Number.isNaN(obj)) {
-        return null;
-    }
-    return obj;
-}
-
-// Function 9: Auto-display Plots on Tab Click
-document.getElementById("main-data-tab").addEventListener("click", () => {
+        console.log("Application initialized.");
+    });
+    // Define handleUpdatePlots before it's used
+function handleUpdatePlots() {
     const params = {
         year: document.getElementById("year").value,
         startDate: document.getElementById("start-date").value,
         endDate: document.getElementById("end-date").value,
         strip: document.getElementById("strip").value,
         variable: document.getElementById("variable").value,
-        depth: document.getElementById("depth").value
+        depth: document.getElementById("depthSelect").value,
+        locationType: document.getElementById("location-type").value,
     };
-    updatePlots(params);
-});
+    console.log("Update Plots button clicked with params:", params);
+    updatePlots(params); // Calls the `updatePlots` function
+}
 
-// Initialize application
-document.addEventListener("DOMContentLoaded", initializeApplication);
+async function loadIntroductionContent() {
+        console.log("Loading introduction content...");
+        try {
+            const response = await fetch("/markdown/intro.md");
+            const markdown = await response.text();
+            document.getElementById("intro-content").innerHTML = marked.parse(markdown);
+            console.log("Introduction content loaded.");
+        } catch (error) {
+            console.error("Error loading introduction content:", error);
+        }
+    }
+
+async function fetchDefaultsAndOptions() {
+        const response = await fetch("/get_defaults_and_options");
+        if (!response.ok) {
+            throw new Error("Failed to fetch defaults and options.");
+        }
+        return response.json();
+    }
+
+function populateControlPanel({ defaults, years, strips, variables, depths, loggerLocations }) {
+        const yearSelect = document.getElementById("year");
+        const stripSelect = document.getElementById("strip");
+        const variableSelect = document.getElementById("variable");
+        const depthSelect = document.getElementById("depthSelect");
+        const startDateInput = document.getElementById("start-date");
+        const endDateInput = document.getElementById("end-date");
+        const locationTypeSelect = document.getElementById("location-type");
+
+        years.forEach(year => {
+            const option = document.createElement("option");
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+        });
+
+        strips.forEach(strip => {
+            const option = document.createElement("option");
+            option.value = strip;
+            option.textContent = strip;
+            stripSelect.appendChild(option);
+        });
+
+        variables.forEach(variable => {
+            const option = document.createElement("option");
+            option.value = variable;
+            option.textContent = variable;
+            variableSelect.appendChild(option);
+        });
+
+        loggerLocations.forEach(({ value, label }) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            locationTypeSelect.appendChild(option);
+        });
+
+        populateDepthOptions(depths);
+
+        yearSelect.value = defaults.year;
+        stripSelect.value = defaults.strip;
+        variableSelect.value = defaults.variable;
+        depthSelect.value = defaults.depth;
+        startDateInput.value = defaults.startDate;
+        endDateInput.value = defaults.endDate;
+        locationTypeSelect.value = defaults.loggerLocation;
+
+        console.log("Control panel populated with defaults.");
+    }
+
+function handleLocationTypeChange() {
+        const locationType = document.getElementById("location-type").value;
+        const depths = locationType === "logger"
+            ? [{ value: "T", label: "Top" }, { value: "M", label: "Middle" }, { value: "B", label: "Bottom" }]
+            : [{ value: "1", label: "6 inches" }, { value: "2", label: "12 inches" }, { value: "3", label: "18 inches" }];
+        populateDepthOptions(depths);
+    }
+
+function populateDepthOptions(depths) {
+        const depthSelect = document.getElementById("depthSelect");
+        depthSelect.innerHTML = "";
+        depths.forEach(({ value, label }) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            depthSelect.appendChild(option);
+        });
+    }
+
+async function updatePlots(params) {
+        try {
+            const rawResponse = await fetch("/plot_raw", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(params),
+            });
+            if (rawResponse.ok) {
+                const rawData = await rawResponse.json();
+                Plotly.react("graph-top", rawData.data, rawData.layout);
+                console.log("Plot data for raw plot:", document.getElementById("graph-top").data);
+                document.querySelector("#graph-top .text-muted").style.display = "none";
+            }
+
+            const ratioResponse = await fetch("/plot_ratio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(params),
+            });
+            if (ratioResponse.ok) {
+                const ratioData = await ratioResponse.json();
+                Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
+                console.log("Plot data for ratio plot:", document.getElementById("graph-bottom").data);
+                document.querySelector("#graph-bottom .text-muted").style.display = "none";
+            }
+        } catch (error) {
+            console.error("Error fetching or rendering plots:", error);
+        }
+    }
+
+// Download Plot as Image
+function downloadPlot(type, format) {
+    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
+    const plotElement = document.getElementById(plotId);
+
+    // Ensure the plot element exists
+    if (!plotElement) {
+        console.error(`Plot element for ${type} plot not found.`);
+        return; // Exit if no plot element is found
+    }
+
+    Plotly.toImage(plotElement, { format, width: 800, height: 600 })
+        .then(dataUrl => {
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `${type}_plot.${new Date().toISOString().split('T')[0]}.${format}`;
+            a.click();
+        })
+        .catch(error => console.error("Failed to download plot:", error));
+}
+
+// Download Trace Data as CSV
+function downloadTraceData(type) {
+    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
+    const plotElement = document.getElementById(plotId);
+
+    // Ensure the plot element exists
+    if (!plotElement) {
+        console.error(`Plot element for ${type} data not found.`);
+        return; // Exit if no plot element is found
+    }
+
+    // Get the trace data
+    const plotData = plotElement.data || [];
+    if (plotData.length === 0) {
+        console.error(`No data found for ${type} plot.`);
+        return; // Exit if no data is available
+    }
+
+    console.log(`Trace data for ${type}:`, plotData);
+
+    // Convert trace data to CSV
+    let csvContent = "data:text/csv;charset=utf-8,";
+   csvContent += "Data Series, Date, Measurement\n"; // Add header row
+    plotData.forEach((trace, index) => {
+        const xValues = trace.x || [];
+        const yValues = trace.y || [];
+        xValues.forEach((x, i) => {
+            const y = yValues[i] !== undefined ? yValues[i] : '';
+            csvContent += `${trace.name || `Data Series ${index + 1}`}, ${x}, ${y}\n`;
+        });
+    });
+
+    // Create and trigger the download
+    const a = document.createElement("a");
+    a.href = encodeURI(csvContent);
+    a.download = `${type}_data_${new Date().toISOString().split('T')[0]}.csv`;
+    console.log("CSV file name:", a.download);
+    a.click();
+    alert(`Download of ${type} data was successful!`);
+}
+
 </script>
-
 </body>
 </html>
