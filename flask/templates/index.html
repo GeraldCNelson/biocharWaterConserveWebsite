@@ -110,18 +110,19 @@
                                 <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'jpeg')">JPEG</a></li>
                             </ul>
                         </div>
-
                     </div>
                 </div>
 
                 <!-- Graph Panels -->
                 <div class="col-md-12">
                     <div class="plot-panel">
+                        <!-- Raw Plot -->
                         <div id="graph-top" class="graph-container mb-4">
-                            <p class="text-muted">Raw Data Plot Placeholder</p>
+                            <div id="rawPlot" style="width: 100%; height: 500px;"></div>
                         </div>
+                        <!-- Ratio Plot -->
                         <div id="graph-bottom" class="graph-container">
-                            <p class="text-muted">Ratio Plot Placeholder</p>
+                            <div id="ratioPlot" style="width: 100%; height: 500px;"></div>
                         </div>
                     </div>
                 </div>
@@ -131,35 +132,280 @@
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", async function initializeApplication() {
-        console.log("Initializing application...");
+/**
+ * Summary Table of Functions
+ * 1. fetchDefaultsAndOptions: Fetches default values and options for the control panel.
+ * 2. populateControlPanel: Populates control panel elements with defaults and available options.
+ * 3. handleLocationTypeChange: Updates depth options based on the selected logger location.
+ * 4. populateDepthOptions: Dynamically populates depth options in the dropdown.
+ * 5. loadIntroductionContent: Loads the introduction content for the "Introduction" tab.
+ * 6. updatePlots: Updates both raw and ratio plots based on the selected parameters.
+ * 7. updateOnlyLowerPlot: Updates only the ratio plot (lower plot) based on the date range.
+ * 8. handleUpdatePlots: Handles the "Update Plots" button click event.
+ * 9. getFormData: Collects selected values from the form elements in the control panel.
+ * 9. downloadPlot: Downloads a specific plot (raw or ratio) in the chosen format.
+ * 10. downloadTraceData: Downloads plot data (raw or ratio) as a CSV file.
+ * 11. initializeApplication: Initializes the entire application, including event listeners and plots.
+ */
 
-        try {
-            console.log("Fetching defaults...");
-            const options = await fetchDefaultsAndOptions();
-            console.log("Defaults fetched:", options);
-            populateControlPanel(options);
 
-            document.getElementById("location-type").addEventListener("change", handleLocationTypeChange);
-            document.getElementById("update-plots").addEventListener("click", handleUpdatePlots);
+async function fetchDefaultsAndOptions() {
+    console.log("Fetching defaults and options...");
+    const response = await fetch("/get_defaults_and_options");
+    if (!response.ok) {
+        console.error("Failed to fetch defaults and options. Response status:", response.status);
+        throw new Error("Failed to fetch defaults and options.");
+    }
+    const data = await response.json();
+    console.log("Fetched defaults and options:", data);
+    return data;
+}
 
-            console.log("Control panel populated successfully.");
 
-            const defaultParams = {
-                year: document.getElementById("year").value,
-                startDate: document.getElementById("start-date").value,
-                endDate: document.getElementById("end-date").value,
-                strip: document.getElementById("strip").value,
-                variable: document.getElementById("variable").value,
-                depth: document.getElementById("depthSelect").value,
-                locationType: document.getElementById("location-type").value,
-            };
-            console.log("Auto-generating plots with defaults:", defaultParams);
-            await updatePlots(defaultParams);
-        } catch (error) {
-            console.error("Error initializing application:", error);
+function populateControlPanel({ defaults, years, strips, variables, depths, loggerLocations }) {
+    console.log("Populating control panel...");
+    const yearSelect = document.getElementById("year");
+    const stripSelect = document.getElementById("strip");
+    const variableSelect = document.getElementById("variable");
+    const depthSelect = document.getElementById("depthSelect");
+    const startDateInput = document.getElementById("start-date");
+    const endDateInput = document.getElementById("end-date");
+    const locationTypeSelect = document.getElementById("location-type");
+
+        // ✅ Clear existing options before repopulating
+        yearSelect.innerHTML = "";
+        stripSelect.innerHTML = "";
+        variableSelect.innerHTML = "";
+        depthSelect.innerHTML = "";
+        locationTypeSelect.innerHTML = "";
+
+    // ✅ Populate year dropdown dynamically
+    years.forEach(year => {
+        const option = document.createElement("option");
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    });
+
+   // ✅ Populate strip dropdown
+    strips.forEach(strip => {
+        const option = document.createElement("option");
+        option.value = strip;
+        option.textContent = strip;
+        stripSelect.appendChild(option);
+    });
+
+   // ✅ Populate variable dropdown
+    variables.forEach(variable => {
+        const option = document.createElement("option");
+        option.value = variable;
+        option.textContent = variable;
+        variableSelect.appendChild(option);
+    });
+
+    // ✅ Populate logger location dropdown
+    loggerLocations.forEach(({ value, label }) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        locationTypeSelect.appendChild(option);
+    });
+
+ // ✅ Populate depth dropdown
+    populateDepthOptions(depths);
+
+    // ✅ Set default values
+    yearSelect.value = defaults.year;
+    stripSelect.value = defaults.strip;
+    variableSelect.value = defaults.variable;
+    startDateInput.value = defaults.startDate || "";
+    endDateInput.value = defaults.endDate || "";
+    locationTypeSelect.value = defaults.loggerLocation;
+
+    console.log("Control panel populated with defaults.");
+}
+
+function handleLocationTypeChange() {
+    const locationType = document.getElementById("location-type").value;
+    const depths = locationType === "logger"
+        ? [{ value: "T", label: "Top" }, { value: "M", label: "Middle" }, { value: "B", label: "Bottom" }]
+        : [{ value: "1", label: "6 inches" }, { value: "2", label: "12 inches" }, { value: "3", label: "18 inches" }];
+    populateDepthOptions(depths);
+}
+
+function populateDepthOptions(depths) {
+    const depthSelect = document.getElementById("depthSelect");
+    depthSelect.innerHTML = "";
+    depths.forEach(({ value, label }) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        depthSelect.appendChild(option);
+    });
+}
+
+async function loadIntroductionContent() {
+    console.log("Loading introduction content...");
+    try {
+        const response = await fetch("/markdown/intro.md");
+        const markdown = await response.text();
+        document.getElementById("intro-content").innerHTML = marked.parse(markdown);
+        console.log("Introduction content loaded.");
+    } catch (error) {
+        console.error("Error loading introduction content:", error);
+    }
+}
+
+async function handleUpdatePlots() {
+    // Get the form data from the control panel
+    const params = getFormData(); // Ensure this function correctly fetches the form values
+    console.log("Update Plots button clicked with params:", params);
+
+    try {
+        // Fetch raw plot data
+        console.log("Fetching raw plot data...");
+        const rawResponse = await fetch("/plot_raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+        const rawData = await rawResponse.json();
+        console.log("Raw data received:", rawData);
+
+        // Fetch ratio plot data
+        console.log("Fetching ratio plot data...");
+        const ratioResponse = await fetch("/plot_ratio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+        const ratioData = await ratioResponse.json();
+        console.log("Ratio data received:", ratioData);
+
+        // Update the plots
+        await updatePlots(rawData, ratioData);
+    } catch (error) {
+        console.error("Error updating plots:", error);
+    }
+}
+
+function getFormData() {
+    return {
+        year: document.getElementById("year").value,
+        startDate: document.getElementById("start-date").value,
+        endDate: document.getElementById("end-date").value,
+        strip: document.getElementById("strip").value,
+        variable: document.getElementById("variable").value,
+        depth: document.getElementById("depthSelect").value,
+        locationType: document.getElementById("location-type").value,
+    };
+}
+
+async function updateOnlyLowerPlot(newStartDate, newEndDate) {
+    console.log("Updating lower plot with new dates:", newStartDate, newEndDate);
+
+    const params = {
+        ...getFormData(),
+        startDate: newStartDate.split("T")[0],
+        endDate: newEndDate.split("T")[0],
+    };
+
+    try {
+        const response = await fetch("/plot_ratio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+        });
+
+        if (response.ok) {
+            const ratioData = await response.json();
+            console.log("Ratio plot data:", ratioData);
+            await Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
+        } else {
+            console.error("Failed to fetch updated ratio plot data.");
         }
+    } catch (error) {
+        console.error("Error updating the lower plot:", error);
+    }
+}
 
+function downloadPlot(type, format) {
+    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
+    const plotElement = document.getElementById(plotId);
+    if (!plotElement) {
+        console.error(`Plot element for ${type} plot not found.`);
+        return;
+    }
+
+    Plotly.toImage(plotElement, { format, width: 800, height: 600 })
+        .then(dataUrl => {
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `${type}_plot.${new Date().toISOString().split("T")[0]}.${format}`;
+            a.click();
+        })
+        .catch(error => console.error("Failed to download plot:", error));
+}
+
+function downloadTraceData(type) {
+    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
+    const plotElement = document.getElementById(plotId);
+
+    if (!plotElement) {
+        console.error(`Plot element for ${type} data not found.`);
+        return;
+    }
+
+    const plotData = plotElement.data || [];
+    if (plotData.length === 0) {
+        console.error(`No data found for ${type} plot.`);
+        return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Data Series, Date, Measurement\n";
+    plotData.forEach((trace, index) => {
+        const xValues = trace.x || [];
+        const yValues = trace.y || [];
+        xValues.forEach((x, i) => {
+            const y = yValues[i] !== undefined ? yValues[i] : "";
+            csvContent += `${trace.name || `Data Series ${index + 1}`}, ${x}, ${y}\n`;
+        });
+    });
+
+    const a = document.createElement("a");
+    a.href = encodeURI(csvContent);
+    a.download = `${type}_data_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+}
+
+document.addEventListener("DOMContentLoaded", async function initializeApplication() {
+    console.log("🌐 Initializing application...");
+
+    try {
+        console.log("📡 Fetching defaults...");
+        const options = await fetchDefaultsAndOptions();
+        console.log("✅ Defaults fetched:", options);
+        populateControlPanel(options);
+
+        document.getElementById("location-type").addEventListener("change", handleLocationTypeChange);
+        document.getElementById("update-plots").addEventListener("click", handleUpdatePlots);
+
+        // ✅ Load plots on startup **AFTER** defaults are set
+        console.log("📊 Auto-loading default plots...");
+        const defaultParams = {
+            year: document.getElementById("year").value,
+            startDate: document.getElementById("start-date").value,
+            endDate: document.getElementById("end-date").value,
+            strip: document.getElementById("strip").value,
+            variable: document.getElementById("variable").value,
+            depth: document.getElementById("depthSelect").value,
+            locationType: document.getElementById("location-type").value,
+        };
+        console.log("📊 Default parameters:", defaultParams);
+        await updatePlots(defaultParams);
+
+        // Initialize tooltips
         tippy('[data-tippy-content]', {
             theme: "light",
             animation: "scale",
@@ -168,10 +414,52 @@
         });
 
         await loadIntroductionContent();
+        console.log("✅ Application initialized.");
+    } catch (error) {
+        console.error("❌ Error initializing application:", error);
+    }
+});
 
-        console.log("Application initialized.");
-    });
-    // Define handleUpdatePlots before it's used
+/* ✅ Simpler Update Plots Function */
+async function updatePlots(params) {
+    console.log("📡 Fetching plots with:", params);
+
+    try {
+        const rawResponse = await fetch("/plot_raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params)
+        });
+        if (rawResponse.ok) {
+            const rawData = await rawResponse.json();
+            console.log("✅ Raw data received:", rawData);
+            Plotly.react("graph-top", rawData.data, rawData.layout);
+
+            // ✅ Check if the placeholder exists before hiding it
+            const rawPlaceholder = document.querySelector("#graph-top .text-muted");
+            if (rawPlaceholder) rawPlaceholder.style.display = "none";
+        }
+
+        const ratioResponse = await fetch("/plot_ratio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params)
+        });
+        if (ratioResponse.ok) {
+            const ratioData = await ratioResponse.json();
+            console.log("✅ Ratio data received:", ratioData);
+            Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
+
+            // ✅ Check if the placeholder exists before hiding it
+            const ratioPlaceholder = document.querySelector("#graph-bottom .text-muted");
+            if (ratioPlaceholder) ratioPlaceholder.style.display = "none";
+        }
+    } catch (error) {
+        console.error("❌ Error fetching or rendering plots:", error);
+    }
+}
+
+/* ✅ Simpler Handle Update Plots */
 function handleUpdatePlots() {
     const params = {
         year: document.getElementById("year").value,
@@ -182,190 +470,53 @@ function handleUpdatePlots() {
         depth: document.getElementById("depthSelect").value,
         locationType: document.getElementById("location-type").value,
     };
-    console.log("Update Plots button clicked with params:", params);
-    updatePlots(params); // Calls the `updatePlots` function
+    console.log("🆕 Update Plots button clicked with params:", params);
+    updatePlots(params);
 }
 
-async function loadIntroductionContent() {
-        console.log("Loading introduction content...");
-        try {
-            const response = await fetch("/markdown/intro.md");
-            const markdown = await response.text();
-            document.getElementById("intro-content").innerHTML = marked.parse(markdown);
-            console.log("Introduction content loaded.");
-        } catch (error) {
-            console.error("Error loading introduction content:", error);
-        }
-    }
+document.getElementById("main-data-tab").addEventListener("shown.bs.tab", async function () {
+    console.log("📊 Main Data Display tab opened. Checking if plots are visible...");
 
-async function fetchDefaultsAndOptions() {
-        const response = await fetch("/get_defaults_and_options");
+    // Add a slight delay to ensure tab is fully active
+    setTimeout(async () => {
+        const rawPlotContainer = document.getElementById("rawPlot");
+        const ratioPlotContainer = document.getElementById("ratioPlot");
+
+        const tracesExist = rawPlotContainer?.data?.length > 0;
+
+        if (!tracesExist) {
+            console.log("🔄 No traces found. Reloading plots...");
+            const defaultParams = getFormData();
+            await updatePlots(defaultParams);
+        } else {
+            console.log("✅ Plots already loaded. Forcing re-layout...");
+            Plotly.relayout("rawPlot", {});
+            Plotly.relayout("ratioPlot", {});
+        }
+    }, 250); // ⏳ 250ms delay to allow rendering
+
+document.getElementById("year").addEventListener("change", async function () {
+    const selectedYear = this.value;
+
+    // Set the start date to January 1st of the selected year
+    const startDateInput = document.getElementById("start-date");
+    startDateInput.value = `${selectedYear}-01-01`;
+
+    // Fetch the end date dynamically from the server
+    const endDateInput = document.getElementById("end-date");
+    try {
+        const response = await fetch(`/get_end_date?year=${selectedYear}`);
         if (!response.ok) {
-            throw new Error("Failed to fetch defaults and options.");
+            throw new Error("Failed to fetch the end date");
         }
-        return response.json();
+        const data = await response.json();
+        endDateInput.value = data.endDate; // Set the dynamically fetched end date
+    } catch (error) {
+        console.error("Error fetching the end date:", error);
+        endDateInput.value = ""; // Clear the end date field on error
     }
-
-function populateControlPanel({ defaults, years, strips, variables, depths, loggerLocations }) {
-        const yearSelect = document.getElementById("year");
-        const stripSelect = document.getElementById("strip");
-        const variableSelect = document.getElementById("variable");
-        const depthSelect = document.getElementById("depthSelect");
-        const startDateInput = document.getElementById("start-date");
-        const endDateInput = document.getElementById("end-date");
-        const locationTypeSelect = document.getElementById("location-type");
-
-        years.forEach(year => {
-            const option = document.createElement("option");
-            option.value = year;
-            option.textContent = year;
-            yearSelect.appendChild(option);
-        });
-
-        strips.forEach(strip => {
-            const option = document.createElement("option");
-            option.value = strip;
-            option.textContent = strip;
-            stripSelect.appendChild(option);
-        });
-
-        variables.forEach(variable => {
-            const option = document.createElement("option");
-            option.value = variable;
-            option.textContent = variable;
-            variableSelect.appendChild(option);
-        });
-
-        loggerLocations.forEach(({ value, label }) => {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
-            locationTypeSelect.appendChild(option);
-        });
-
-        populateDepthOptions(depths);
-
-        yearSelect.value = defaults.year;
-        stripSelect.value = defaults.strip;
-        variableSelect.value = defaults.variable;
-        depthSelect.value = defaults.depth;
-        startDateInput.value = defaults.startDate;
-        endDateInput.value = defaults.endDate;
-        locationTypeSelect.value = defaults.loggerLocation;
-
-        console.log("Control panel populated with defaults.");
-    }
-
-function handleLocationTypeChange() {
-        const locationType = document.getElementById("location-type").value;
-        const depths = locationType === "logger"
-            ? [{ value: "T", label: "Top" }, { value: "M", label: "Middle" }, { value: "B", label: "Bottom" }]
-            : [{ value: "1", label: "6 inches" }, { value: "2", label: "12 inches" }, { value: "3", label: "18 inches" }];
-        populateDepthOptions(depths);
-    }
-
-function populateDepthOptions(depths) {
-        const depthSelect = document.getElementById("depthSelect");
-        depthSelect.innerHTML = "";
-        depths.forEach(({ value, label }) => {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
-            depthSelect.appendChild(option);
-        });
-    }
-
-async function updatePlots(params) {
-        try {
-            const rawResponse = await fetch("/plot_raw", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(params),
-            });
-            if (rawResponse.ok) {
-                const rawData = await rawResponse.json();
-                Plotly.react("graph-top", rawData.data, rawData.layout);
-                console.log("Plot data for raw plot:", document.getElementById("graph-top").data);
-                document.querySelector("#graph-top .text-muted").style.display = "none";
-            }
-
-            const ratioResponse = await fetch("/plot_ratio", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(params),
-            });
-            if (ratioResponse.ok) {
-                const ratioData = await ratioResponse.json();
-                Plotly.react("graph-bottom", ratioData.data, ratioData.layout);
-                console.log("Plot data for ratio plot:", document.getElementById("graph-bottom").data);
-                document.querySelector("#graph-bottom .text-muted").style.display = "none";
-            }
-        } catch (error) {
-            console.error("Error fetching or rendering plots:", error);
-        }
-    }
-
-// Download Plot as Image
-function downloadPlot(type, format) {
-    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
-    const plotElement = document.getElementById(plotId);
-
-    // Ensure the plot element exists
-    if (!plotElement) {
-        console.error(`Plot element for ${type} plot not found.`);
-        return; // Exit if no plot element is found
-    }
-
-    Plotly.toImage(plotElement, { format, width: 800, height: 600 })
-        .then(dataUrl => {
-            const a = document.createElement("a");
-            a.href = dataUrl;
-            a.download = `${type}_plot.${new Date().toISOString().split('T')[0]}.${format}`;
-            a.click();
-        })
-        .catch(error => console.error("Failed to download plot:", error));
-}
-
-// Download Trace Data as CSV
-function downloadTraceData(type) {
-    const plotId = type === "raw" ? "graph-top" : "graph-bottom";
-    const plotElement = document.getElementById(plotId);
-
-    // Ensure the plot element exists
-    if (!plotElement) {
-        console.error(`Plot element for ${type} data not found.`);
-        return; // Exit if no plot element is found
-    }
-
-    // Get the trace data
-    const plotData = plotElement.data || [];
-    if (plotData.length === 0) {
-        console.error(`No data found for ${type} plot.`);
-        return; // Exit if no data is available
-    }
-
-    console.log(`Trace data for ${type}:`, plotData);
-
-    // Convert trace data to CSV
-    let csvContent = "data:text/csv;charset=utf-8,";
-   csvContent += "Data Series, Date, Measurement\n"; // Add header row
-    plotData.forEach((trace, index) => {
-        const xValues = trace.x || [];
-        const yValues = trace.y || [];
-        xValues.forEach((x, i) => {
-            const y = yValues[i] !== undefined ? yValues[i] : '';
-            csvContent += `${trace.name || `Data Series ${index + 1}`}, ${x}, ${y}\n`;
-        });
-    });
-
-    // Create and trigger the download
-    const a = document.createElement("a");
-    a.href = encodeURI(csvContent);
-    a.download = `${type}_data_${new Date().toISOString().split('T')[0]}.csv`;
-    console.log("CSV file name:", a.download);
-    a.click();
-    alert(`Download of ${type} data was successful!`);
-}
+});
+});
 
 </script>
 </body>
