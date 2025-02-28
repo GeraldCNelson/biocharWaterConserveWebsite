@@ -68,22 +68,22 @@ def check_duplicate_columns(df, step_name):
     duplicate_columns = df.columns[df.columns.duplicated()]
     if len(duplicate_columns) > 0:
         print(f"🚨 Duplicate columns detected, {step_name}: {duplicate_columns.tolist()}")
-    else:
-        print(f"✅ No duplicate columns, {step_name}.")
+    # else:
+    #     print(f"✅ No duplicate columns, {step_name}.")
 
-def ensure_timestamp_is_datetime(df, column="timestamp", dataset_name="Unknown Dataset"):
-    """Ensures a specified column is in datetime format, logs if conversion is needed, and flags issues."""
-    if column in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df[column]):
-            print(f"✅ Column '{column}' in '{dataset_name}' is already a datetime dtype.")
-        else:
-            print(f"❌ Column '{column}' in '{dataset_name}' is NOT a datetime dtype. Current dtype: {df[column].dtype}")
-            df[column] = pd.to_datetime(df[column], errors="coerce")
-            print(f"🔄 Converted '{column}' in '{dataset_name}' to datetime dtype.")
-    else:
-        print(f"🚨 ERROR: Column '{column}' NOT FOUND in '{dataset_name}'. Available columns: {df.columns}")
-        raise KeyError(f"Column '{column}' is missing in dataset '{dataset_name}'!")
-    return df
+# def ensure_timestamp_is_datetime(df, column="timestamp", dataset_name="Unknown Dataset"):
+#     """Ensures a specified column is in datetime format, logs if conversion is needed, and flags issues."""
+#     if column in df.columns:
+#         if pd.api.types.is_datetime64_any_dtype(df[column]):
+#             print(f"✅ Column '{column}' in '{dataset_name}' is already a datetime dtype.")
+#         else:
+#             print(f"❌ Column '{column}' in '{dataset_name}' is NOT a datetime dtype. Current dtype: {df[column].dtype}")
+#             df[column] = pd.to_datetime(df[column], errors="coerce")
+#             print(f"🔄 Converted '{column}' in '{dataset_name}' to datetime dtype.")
+#     else:
+#         print(f"🚨 ERROR: Column '{column}' NOT FOUND in '{dataset_name}'. Available columns: {df.columns}")
+#         raise KeyError(f"Column '{column}' is missing in dataset '{dataset_name}'!")
+#     return df
 
 def standardize_logger_column_names(df, logger_name=None):
     """Standardizes logger column names for consistency across datasets.
@@ -125,7 +125,7 @@ def standardize_logger_column_names(df, logger_name=None):
 
 
 def move_timestamp_to_front(df):
-    print("🔍 Checking duplicate columns in move timestamp:", df.columns[df.columns.duplicated()])
+    #print("🔍 Checking duplicate columns in move timestamp:", df.columns[df.columns.duplicated()])
     """Moves the 'timestamp' column to the front of the DataFrame."""
     if "timestamp" in df.columns:
         cols = ["timestamp"] + [col for col in df.columns if col != "timestamp"]
@@ -174,7 +174,7 @@ def standardize_timestamp_format(df, column="timestamp", source="Unknown File"):
         df[column] = pd.to_datetime(df[column], errors="coerce")
 
     # Use ensure_timestamp_is_datetime to finalize conversion
-    df = ensure_timestamp_is_datetime(df, column, dataset_name="standardize_timestamp_format")
+    # df = ensure_timestamp_is_datetime(df, column, dataset_name="standardize_timestamp_format")
 
     return df
 
@@ -251,9 +251,9 @@ def read_logger_data(year):
 
         except Exception as e:
             logging.error(f"❌ Error reading {file_path}: {e}")
-            df.drop(columns=["RECORD"], inplace=True, errors="ignore")  # ✅ Remove unnecessary RECORD column
-            df["timestamp"] = df["timestamp"].dt.tz_localize("America/Denver", ambiguous="NaT", nonexistent="NaT")
-            print(f"📊 Logger {logger_name} {year}: Min Date: {df['timestamp'].min()}, Max Date: {df['timestamp'].max()}")
+            #df.drop(columns=["RECORD"], inplace=True, errors="ignore")  # ✅ Remove unnecessary RECORD column
+            #df["timestamp"] = df["timestamp"].dt.tz_localize("America/Denver", ambiguous="NaT", nonexistent="NaT")
+            #print(f"📊 Logger {logger_name} {year}: Min Date: {df['timestamp'].min()}, Max Date: {df['timestamp'].max()}")
 
     return df_merged
 
@@ -285,7 +285,7 @@ def swc_calculations(df):
     swc_df = pd.DataFrame(new_swc_columns, index=df.index)
     swc_df.insert(0, "timestamp", pd.to_datetime(df["timestamp"], errors="coerce"))
 
-    logging.info(f"✅ Generated SWC columns: {list(new_swc_columns.keys())}")
+    #logging.info(f"✅ Generated SWC columns: {list(new_swc_columns.keys())}")
     #swc_df = move_timestamp_to_front(swc_df)
     # ✅ Filter only ratio columns + timestamp
     swc_columns = ["timestamp"] + [col for col in swc_df.columns if "SWC" in col]
@@ -325,7 +325,7 @@ def calculate_15min_ratios(df):
     logging.info(f"✅ Added {len([col for col in ratio_df.columns if '_ratio_' in col])} ratio columns.")
 
     # ✅ Ensure timestamp is datetime
-    ratio_df = ensure_timestamp_is_datetime(ratio_df, dataset_name="calculate_15min_ratios")
+    # ratio_df = ensure_timestamp_is_datetime(ratio_df, dataset_name="calculate_15min_ratios")
 
     return ratio_df  # ✅ Return only timestamp + ratio columns
 
@@ -373,7 +373,7 @@ def get_weather_data(combined_data, year):
     df_climate = standardize_timestamp_format(df_climate, column="timestamp", source="Weather Data (CoAgMet)")
 
     # ✅ Filter for timestamps for the year only
-    df_climate = ensure_timestamp_is_datetime(df_climate, column="timestamp", dataset_name="Weather Data (CoAgMet)")
+    # df_climate = ensure_timestamp_is_datetime(df_climate, column="timestamp", dataset_name="Weather Data (CoAgMet)")
 
     num_failed = df_climate["timestamp"].isna().sum()
     if num_failed > 0:
@@ -424,12 +424,12 @@ def combine_datasets(datasets_dict, mode="rows"):
         logging.error("❌ No valid datasets provided for combination!")
         return None
 
-    logging.info(f"📌 Combining datasets: {list(cleaned_datasets.keys())} using mode: {mode}...")
+    #logging.info(f"📌 Combining datasets: {list(cleaned_datasets.keys())} using mode: {mode}...")
 
     # ✅ Check for duplicate columns in each dataset before merging
     for name, df in cleaned_datasets.items():
         duplicate_columns = df.columns[df.columns.duplicated()]
-        print(f"🔍 Checking duplicate columns in dataset '{name}' BEFORE merging:", list(duplicate_columns))
+        #print(f"🔍 Checking duplicate columns in dataset '{name}' BEFORE merging:", list(duplicate_columns))
 
         if "timestamp" not in df.columns:
             logging.error(f"❌ Dataset '{name}' is missing the required 'timestamp' column!")
@@ -469,7 +469,7 @@ def aggregate_data(df, collection_year):
     logging.info("\n🔹 Aggregating data...")
 
     df_agg = df.copy()  # ✅ Work on a copy to avoid modifying the original DataFrame
-    df_agg = ensure_timestamp_is_datetime(df_agg, dataset_name="aggregate data")
+    # df_agg = ensure_timestamp_is_datetime(df_agg, dataset_name="aggregate data")
     df_agg.set_index("timestamp", inplace=True)
     df_agg.sort_index()
 
@@ -528,10 +528,7 @@ def aggregate_data(df, collection_year):
 
     # ✅ Save each aggregation as a ZIP file
     for key, df_out in agg_data.items():
-        if key == "growingseason":
-            zip_filename = f"dataloggerData_growingseason_{collection_year}.zip"
-        else:
-            zip_filename = f"dataloggerData_{collection_year}-01-01_{end_date}_{key}.zip"
+        zip_filename = f"dataloggerData_{collection_year}-01-01_{end_date}_{key}.zip"
         zip_path = os.path.join(DATA_PROCESSED_DIR, zip_filename)
         csv_filename = zip_filename.replace(".zip", ".csv")
         csv_path = os.path.join(DATA_PROCESSED_DIR, csv_filename)
@@ -575,8 +572,8 @@ def process_logger_and_climate_data(year):
 
     # ✅ Check for column overlaps before merging SWC data
     overlapping_cols = set(combined_data.columns) & set(swc_data.columns)
-    if overlapping_cols:
-        print(f"⚠️ Overlapping columns BEFORE merging SWC data: {overlapping_cols}")
+    # if overlapping_cols:
+    #     print(f"⚠️ Overlapping columns BEFORE merging SWC data: {overlapping_cols}")
     # ✅ Merge SWC data as new columns
     check_duplicate_columns(combined_data, "before merging SWC data")
     combined_data = combine_datasets({
@@ -597,20 +594,20 @@ def process_logger_and_climate_data(year):
     ratio_data = calculate_15min_ratios(combined_data)  # Returns a DataFrame with new ratio columns
 
     # ✅ Check for column overlaps before merging ratio data
-    print("🔍 Sorted columns in combined_data using set:", sorted(set(combined_data.columns)))
+   # print("🔍 Sorted columns in combined_data using set:", sorted(set(combined_data.columns)))
     overlapping_cols = set(combined_data.columns) & set(ratio_data.columns)
-    if overlapping_cols:
-        print(f"⚠️ Overlapping columns BEFORE merging ratio data: {overlapping_cols}")
+    # if overlapping_cols:
+    #     print(f"⚠️ Overlapping columns BEFORE merging ratio data: {overlapping_cols}")
 
         # ✅ Print out column names in combined_data before checking overlap
-        print("🔍 Columns in combined_data before checking overlap:", combined_data.columns.tolist())
+        #print("🔍 Columns in combined_data before checking overlap:", combined_data.columns.tolist())
 
         # ✅ Print out column names in ratio_data for further debugging
-        print("🔍 Columns in ratio_data before merging:", ratio_data.columns.tolist())
+        #print("🔍 Columns in ratio_data before merging:", ratio_data.columns.tolist())
 
-        if overlapping_cols:
-            print(f"⚠️ Overlapping columns BEFORE merging ratio data: {overlapping_cols}")
-    # ✅ Merge ratio data as new columns
+    #     if overlapping_cols:
+    #         print(f"⚠️ Overlapping columns BEFORE merging ratio data: {overlapping_cols}")
+    # # ✅ Merge ratio data as new columns
     check_duplicate_columns(combined_data, "before merging ratio data")
     combined_data = combine_datasets({
         "combined_data": combined_data,
@@ -625,9 +622,9 @@ def process_logger_and_climate_data(year):
     check_duplicate_columns(combined_data, "before merging weather data")
 
     # ✅ Check for column overlaps before merging weather data
-    overlapping_cols = set(combined_data.columns) & set(weather_data.columns)
-    if overlapping_cols:
-        print(f"⚠️ Overlapping columns BEFORE merging weather data: {overlapping_cols}")
+    # overlapping_cols = set(combined_data.columns) & set(weather_data.columns)
+    # if overlapping_cols:
+    #     print(f"⚠️ Overlapping columns BEFORE merging weather data: {overlapping_cols}")
 
     logging.info("🌤️ Adding weather data as rightmost columns...")
     combined_data = combine_datasets({

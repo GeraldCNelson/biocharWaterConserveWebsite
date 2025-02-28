@@ -44,19 +44,19 @@ QUARTERS = {
     "Q3_Peak_Harvest": [6, 7, 8, 9, 10],  # June - Oct (Peak Growth & Harvest)
 }
 
-def ensure_timestamp_is_datetime(df, column="timestamp", dataset_name="Unknown Dataset"):
-    """Ensures a specified column is in datetime format, logs if conversion is needed, and flags issues."""
-    if column in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df[column]):
-            print(f"✅ Column '{column}' in '{dataset_name}' is already a datetime dtype.")
-        else:
-            print(f"❌ Column '{column}' in '{dataset_name}' is NOT a datetime dtype. Current dtype: {df[column].dtype}")
-            df[column] = pd.to_datetime(df[column], errors="coerce")
-            print(f"🔄 Converted '{column}' in '{dataset_name}' to datetime dtype.")
-    else:
-        print(f"🚨 ERROR: Column '{column}' NOT FOUND in '{dataset_name}'. Available columns: {df.columns}")
-        raise KeyError(f"Column '{column}' is missing in dataset '{dataset_name}'!")
-    return df
+# def ensure_timestamp_is_datetime(df, column="timestamp", dataset_name="Unknown Dataset"):
+#     """Ensures a specified column is in datetime format, logs if conversion is needed, and flags issues."""
+#     if column in df.columns:
+#         if pd.api.types.is_datetime64_any_dtype(df[column]):
+#             print(f"✅ Column '{column}' in '{dataset_name}' is already a datetime dtype.")
+#         else:
+#             print(f"❌ Column '{column}' in '{dataset_name}' is NOT a datetime dtype. Current dtype: {df[column].dtype}")
+#             df[column] = pd.to_datetime(df[column], errors="coerce")
+#             print(f"🔄 Converted '{column}' in '{dataset_name}' to datetime dtype.")
+#     else:
+#         print(f"🚨 ERROR: Column '{column}' NOT FOUND in '{dataset_name}'. Available columns: {df.columns}")
+#         raise KeyError(f"Column '{column}' is missing in dataset '{dataset_name}'!")
+#     return df
 
 
 def debug_variable_values(df, function_name):
@@ -158,8 +158,8 @@ def standardize_timestamp_format(df, column="timestamp", source="Unknown File"):
         print(f"⚠️ No known timestamp format detected in {source}. Attempting generic parsing.")
         df[column] = pd.to_datetime(df[column], errors="coerce")
 
-    # Use ensure_timestamp_is_datetime to finalize conversion
-    df = ensure_timestamp_is_datetime(df, column, dataset_name="standardize_timestamp_format")
+    # # Use ensure_timestamp_is_datetime to finalize conversion
+    # df = ensure_timestamp_is_datetime(df, column, dataset_name="standardize_timestamp_format")
 
     return df
 
@@ -272,7 +272,6 @@ def read_extracted_logger_data_2023():
         return None
 
 
-
 def combine_datasets(datasets_dict, mode="rows"):
     """Combines multiple datasets either by adding rows or columns using a common index.
 
@@ -310,7 +309,7 @@ def combine_datasets(datasets_dict, mode="rows"):
     elif mode == "columns":
         # Use timestamp as index for alignment before concatenation
         for name, df in cleaned_datasets.items():
-            df = ensure_timestamp_is_datetime(df, dataset_name=name)
+            # df = ensure_timestamp_is_datetime(df, dataset_name=name)
             df = df.set_index("timestamp")  # Set timestamp as index
             df = df.sort_index()  # Ensure chronological order
 
@@ -385,7 +384,7 @@ def add_swc_calculations(df):
     else:
         logging.error("❌ 'timestamp' column is missing from SWC data!")
 
-    logging.info(f"✅ Generated SWC columns: {list(new_swc_columns.keys())}")
+    #logging.info(f"✅ Generated SWC columns: {list(new_swc_columns.keys())}")
     swc_df = move_timestamp_to_front(swc_df)
     return swc_df  # ✅ Return only the SWC DataFrame
 
@@ -466,7 +465,7 @@ def calculate_15min_ratios(df):
     logging.info(f"✅ Added {len([col for col in ratio_df.columns if '_ratio_' in col])} ratio columns.")
 
     # ✅ Ensure timestamp is datetime
-    ratio_df = ensure_timestamp_is_datetime(ratio_df, dataset_name="calculate_15min_ratios")
+    # ratio_df = ensure_timestamp_is_datetime(ratio_df, dataset_name="calculate_15min_ratios")
 
     return ratio_df  # ✅ Return only timestamp + ratio columns
 
@@ -508,7 +507,7 @@ def get_weather_data_2023():
     df_climate = standardize_timestamp_format(df_climate, column="timestamp", source="Weather Data (CoAgMet)")
 
     # ✅ Filter for 2023 timestamps only
-    df_climate = ensure_timestamp_is_datetime(df_climate, column="timestamp", dataset_name="Weather Data (CoAgMet)")
+    # df_climate = ensure_timestamp_is_datetime(df_climate, column="timestamp", dataset_name="Weather Data (CoAgMet)")
 
     num_failed = df_climate["timestamp"].isna().sum()
     if num_failed > 0:
@@ -546,115 +545,12 @@ def get_weather_data_2023():
     return df_climate
 
 
-### 🔹 **STEP 5: Aggregate Data**
-# def aggregate_data(df):
-#     """Aggregates data at different time resolutions and saves ZIP files, including growing season aggregation."""
-#     logging.info("\n🔹 Aggregating data...")
-#     #print("🔍 Checking duplicate columns stop 1:", df.columns[df.columns.duplicated()])
-#     # ✅ Ensure timestamp is properly set as the index
-#     df = ensure_timestamp_is_datetime(df, dataset_name="aggregate data")
-#     df.set_index("timestamp", inplace=True)
-#     df.sort_index()
-#
-#     # ✅ Define aggregation functions
-#     numeric_cols = df.select_dtypes(include=["number"]).columns
-#     agg_funcs = {col: "mean" for col in numeric_cols}
-#     if "precip_mm" in df.columns:
-#         agg_funcs["precip_mm"] = "sum"  # ✅ Precipitation should be summed, not averaged
-#
-#     # ✅ Standard Aggregations (15min, 1hour, daily, monthly)
-#     agg_data = {
-#         "15min": df.copy().reset_index(),
-#         "1hour": df.resample("h").agg(agg_funcs).reset_index(),
-#         "daily": df.resample("D").agg(agg_funcs).reset_index(),
-#         "monthly": df.groupby(df.index.to_period("M")).mean(numeric_only=True).reset_index()
-#     }
-#     #print("🔍 Checking duplicate columns stop 2:", df.columns[df.columns.duplicated()])
-#
-#     # ✅ ADD GROWING SEASON AGGREGATION
-#     growing_season_mask = df.index.month.isin(QUARTERS["Q2_Early_Growing"] + QUARTERS["Q3_Peak_Harvest"])
-#     df_growingseason = df[growing_season_mask].resample("D").agg(agg_funcs).reset_index()
-#     agg_data["growingseason"] = df_growingseason
-#
-#     # ✅ Ensure timestamp is set as index again for all aggregated DataFrames
-#     for key in agg_data:
-#         if "timestamp" in agg_data[key].columns:
-#             agg_data[key].set_index("timestamp", inplace=True)
-#
-#     # ✅ Monthly Aggregation
-#     df_monthly = df.groupby(df.index.to_period("M")).mean(numeric_only=True).reset_index()
-#     df_monthly.rename(columns={"timestamp": "timestamp"}, inplace=True)
-#     df_monthly["timestamp"] = df_monthly["timestamp"].dt.strftime("%Y-%m")
-#     df_monthly.set_index("timestamp", inplace=True)
-#     #print("🔍 Checking duplicate columns stop 3:", df.columns[df.columns.duplicated()])
-#
-#     # ✅ Add to aggregation dictionary
-#     agg_data["monthly"] = df_monthly
-#
-#     # ✅ Ensure `DATA_PROCESSED_DIR` exists
-#     os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
-#
-#     # ✅ Generate timestamps for filenames
-#     start_date = df.index.min().strftime("%Y-%m-%d")
-#     end_date = df.index.max().strftime("%Y-%m-%d")
-#
-#     # ✅ Save each aggregation as a CSV and ZIP separately
-#     # ✅ Ensure timestamp is properly handled before saving
-#     for key, df in agg_data.items():
-#         zip_filename = f"dataloggerData_{start_date}_{end_date}_{key}.zip"
-#         zip_path = os.path.join(DATA_PROCESSED_DIR, zip_filename)
-#
-#         csv_filename = f"dataloggerData_{start_date}_{end_date}_{key}.csv"
-#         csv_path = os.path.join(DATA_PROCESSED_DIR, csv_filename)
-#
-#         # ✅ Fix incorrect column structure
-#         if isinstance(df.index, pd.PeriodIndex) or "timestamp" not in df.columns:
-#             df = df.reset_index()  # Ensure timestamp is a column
-#             df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-#
-#         if "timestamp" in df.columns:
-#             if not pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
-#                 print(f"❌ Column 'timestamp' in DataFrame is NOT a datetime. Current dtype: {df['timestamp'].dtype}")
-#                 print(f"🔍 Problem detected in DataFrame with columns: {df.columns}")
-#                 df = ensure_timestamp_is_datetime(df, dataset_name="aggregate data 2")
-#         #else:
-#         #print("✅ 'timestamp' is already a datetime dtype. No conversion needed.")
-#         else:
-#             print(f"❌ ERROR: 'timestamp' column is missing in dataset! Columns present: {df.columns}")
-#             raise KeyError("timestamp column missing in dataset")
-#
-#         # # ✅ Ensure timestamp is the first column
-#         # df = move_timestamp_to_front(df)
-#
-#         # ✅ Reduce precision of float columns to 4 decimal places
-#         numeric_cols = df.select_dtypes(include=["number"]).columns
-#         # ✅ Ensure only existing numeric columns are selected for rounding
-#         existing_numeric_cols = [col for col in numeric_cols if col in df.columns]
-#         print(f"🔍 Debug: df shape before rounding: {df.shape}")
-#         print(f"🔍 Debug: Selected numeric columns count: {len(existing_numeric_cols)}")
-#         print(f"🔍 Debug: First few values before rounding:\n{df[existing_numeric_cols].head()}")
-#         #print("🔍 Checking duplicate columns before rounding:", df.columns[df.columns.duplicated()])
-#         df[existing_numeric_cols] = df[existing_numeric_cols].round(4)
-#
-#         # ✅ Save CSV properly
-#         df.to_csv(csv_path, index=False, encoding="utf-8")
-#
-#         # ✅ Create a ZIP file for each aggregation
-#         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-#             zipf.write(csv_path, csv_filename)
-#
-#         os.remove(csv_path)  # ✅ Remove CSV file after adding to ZIP
-#
-#         logging.info(f"✅ Saved: {zip_path}")
-#
-#     return agg_data
-
 def aggregate_data(df):
     """Aggregates data at different time resolutions and saves ZIP files, including growing season aggregation."""
     logging.info("\n🔹 Aggregating data...")
 
     df_agg = df.copy()  # ✅ Work on a copy to avoid modifying the original DataFrame
-    df_agg = ensure_timestamp_is_datetime(df_agg, dataset_name="aggregate data")
+    # df_agg = ensure_timestamp_is_datetime(df_agg, dataset_name="aggregate data")
     df_agg.set_index("timestamp", inplace=True)
     df_agg.sort_index()
 
@@ -662,7 +558,7 @@ def aggregate_data(df):
     numeric_cols = df_agg.select_dtypes(include=["number"]).columns
     agg_funcs = {col: "mean" for col in numeric_cols}
     if "precip_mm" in df_agg.columns:
-        agg_funcs["precip_mm"] = "sum"  # ✅ Precipitation should be summed, not averaged
+        agg_funcs["precip_mm"] = "sum"
 
     # ✅ Standard Aggregations (15min, 1hour, daily)
     agg_data = {
@@ -712,17 +608,14 @@ def aggregate_data(df):
 
     # ✅ Save each aggregation as a ZIP file
     for key, df_out in agg_data.items():
-        if key == "growingseason":
-            zip_filename = f"dataloggerData_growingseason_{collection_year}.zip"
-        else:
-            zip_filename = f"dataloggerData_{collection_year}-01-01_{end_date}_{key}.zip"
+        zip_filename = f"dataloggerData_{collection_year}-01-01_{end_date}_{key}.zip"
         zip_path = os.path.join(DATA_PROCESSED_DIR, zip_filename)
         csv_filename = zip_filename.replace(".zip", ".csv")
         csv_path = os.path.join(DATA_PROCESSED_DIR, csv_filename)
 
         # ✅ Ensure timestamp is properly formatted before saving
         if "timestamp" in df_out.columns:
-            df_out["timestamp"] = df_out["timestamp"].astype(str)  # ✅ Ensure proper string format
+            df_out["timestamp"] = df_out["timestamp"].astype(str)
 
         # ✅ Reduce precision of float columns to 4 decimal places
         numeric_cols = df_out.select_dtypes(include=["number"]).columns
@@ -738,17 +631,18 @@ def aggregate_data(df):
         os.remove(csv_path)  # ✅ Remove CSV file after adding to ZIP
         logging.info(f"✅ Saved: {zip_path}")
 
+
 def process_logger_and_climate_data_2023():
     """Processes logger and climate data for 2023."""
     logging.info("🚀 Processing logger and climate data for 2023...")
 
-    # ✅ Step 1: Read main logger data (columns added, timestamps merged)
+    # ✅ Step 1: Read main logger data
     main_data = read_logger_data_2023()
     if main_data is None:
         logging.error("❌ No main logger data found. Exiting process.")
         return
 
-    # ✅ Step 2: Read extracted late-2023 logger data (new rows added)
+    # ✅ Step 2: Read extracted late-2023 logger data
     extracted_logger_data = read_extracted_logger_data_2023()
 
     # ✅ Step 3: Merge extracted logger data by adding rows
@@ -757,41 +651,30 @@ def process_logger_and_climate_data_2023():
         "main_data": main_data,
         "extracted_logger_data": extracted_logger_data
     }, mode="rows")
-    logging.info(f"Columns after merging extracted data: {combined_data.columns.to_list()}")
-    print("🔍 Checking duplicate combined_data columns stop 1:", combined_data.columns[combined_data.columns.duplicated()])
 
-    # Step 4: Perform SWC calculations and add as columns
+    # ✅ Step 4: Perform SWC calculations and add as columns
     logging.info("🌱 Adding SWC calculations (Soil Water Content).")
-    swc_data = add_swc_calculations(combined_data)  # Returns a DataFrame with new SWC columns
+    swc_data = add_swc_calculations(combined_data)
 
     # ✅ Ensure 'timestamp' exists in swc_data
     if "timestamp" not in swc_data.columns:
         raise ValueError("❌ 'timestamp' is missing from SWC data before merging!")
 
     # ✅ Merge SWC data as new columns
-    logging.info(f"🔍 Structure of swc_data before merging:\n{swc_data.head()}")
     combined_data = combine_datasets({
         "combined_data": combined_data,
         "swc_data": swc_data
     }, mode="columns")
-    print("🔍 Checking duplicate combined_data columns stop 2:", combined_data.columns[combined_data.columns.duplicated()])
-
-    logging.info(f"Columns after merging swc data: {combined_data.columns.to_list()}")
 
     # ✅ Step 5: Compute 15-minute ratios and add as columns
     logging.info("🔢 Calculating 15-minute ratios...")
-    logging.info(f"Columns available before ratio calculations: {combined_data.columns.to_list()}")
-    ratio_data = calculate_15min_ratios(combined_data)  # Returns a DataFrame with new ratio columns
-    logging.info(f"🔍 Structure of ratio_data before merging:\n{ratio_data.head()}")
-    print("🔍 Debug: Checking columns in ratio_data before merging:", ratio_data.columns)
-    print("🔍 Debug: Checking columns in combined_data before merging:", combined_data.columns)
+    ratio_data = calculate_15min_ratios(combined_data)
 
+    # ✅ Merge ratio data
     combined_data = combine_datasets({
         "combined_data": combined_data,
         "ratio_data": ratio_data
     }, mode="columns")
-    #print("duplicated columns, combined_data after ratio_data", combined_data.columns[combined_data.columns.duplicated()])
-    print("🔍 Checking duplicate combined_data columns stop 3:", combined_data.columns[combined_data.columns.duplicated()])
 
     # ✅ Step 6: Read weather data and merge it as new columns
     weather_data = get_weather_data_2023()
