@@ -64,49 +64,46 @@ logger_location_mapping = {
     "B": "Bottom"
 }
 
+variable_name_mapping = {
+    "VWC": "Vol. Water Content",
+    "T": "Temp",  # Keep it concise but clear
+    "EC": "Electrical Conductivity",
+    "SWC": "Soil Water Content"
+}
 
 ###############################################
 # Helper Functions
 ###############################################
 
 def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
-    """
-    Parses filenames in the specified directory to extract start and end dates.
-
-    Args:
-        data_dir (str): The directory containing the files.
-        prefix (str): The prefix of the files to parse.
-        suffix (str): The suffix of the files to parse.
-
-    Returns:
-        list: A list of tuples in the format (start_date, end_date, filename).
-    """
     filenames = [f for f in os.listdir(data_dir) if f.startswith(prefix) and f.endswith(suffix)]
     parsed_files = []
 
     for filename in filenames:
         try:
-            # Ensure the filename matches the expected format
             if not filename.startswith(prefix) or not filename.endswith(suffix):
                 continue
 
-            parts = filename[len(prefix):-len(suffix)].split("_")  # Extract the date parts
-            if len(parts) != 2:
-                print(f"Skipping invalid filename format: {filename}")
+            # ✅ Extract start_date, end_date, granularity
+            parts = filename[len(prefix):-len(suffix)].split("_")
+            if len(parts) != 3:
+                logging.warning(f"Skipping invalid filename format: {filename}")
                 continue
 
-            start_date, end_date = parts
-            parsed_files.append((start_date, end_date, filename))
+            start_date, end_date, granularity = parts
+            parsed_files.append((start_date, end_date, granularity, filename))
 
         except (IndexError, ValueError) as e:
-            print(f"Error parsing filename {filename}: {e}")
+            logging.error(f"Error parsing filename {filename}: {e}")
             continue
 
+    # ✅ Debugging: Print parsed files
+    print("🔍 Parsed Files:", parsed_files)
     return parsed_files
 
 
 def get_default_end_date(year=None):
-    data_dir = os.path.join(os.getcwd(), "flask", "data-raw")
+    data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
     parsed_files = parse_filenames(data_dir)
     if not parsed_files:
         return f"{DEFAULT_YEAR}-12-31"
@@ -126,7 +123,7 @@ def load_dataset(file_path):
         with zipfile.ZipFile(file_path, 'r') as z:
             csv_filename = z.namelist()[0]
             with z.open(csv_filename) as f:
-                df = pd.read_csv(f, parse_dates=['datetime'])
+                df = pd.read_csv(f, parse_dates=['timestamp'])
                 df = df.where(pd.notnull(df), None)
                 return df
     except Exception as e:
@@ -174,52 +171,43 @@ def sanitize_json(data):
 
 
 def filter_loaded_dataset(year, granularity, start_date, end_date):
-    """
-    Load and filter the dataset based on year, granularity, and date range.
-
-    Args:
-        year (str): The year to load data for.
-        granularity (str): The time granularity ('15min', '1hour', 'daily').
-        start_date (str): The requested start date in 'YYYY-MM-DD' format.
-        end_date (str): The requested end date in 'YYYY-MM-DD' format.
-
-    Returns:
-        tuple: (filtered DataFrame, full datetime series, start_date, end_date)
-    """
     data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
-    parsed_files = parse_filenames(data_dir, suffix=f"_{granularity}.zip")
+    parsed_files = parse_filenames(data_dir)
 
-    # ✅ Find the latest dataset for the requested year
-    matching_files = [f for start, end, g, f in parsed_files if start.startswith(f"{year}-01-01") and g == granularity]
+    # ✅ Debugging - Print available parsed files
+    print(f"🔍 Available Files: {parsed_files}")
+
+    # ✅ Debugging - Print filtering criteria
+    print(f"🔍 Looking for files with Year: {year}, Granularity: {granularity}")
+
+    # ✅ Allow any dataset that starts in the given year
+    matching_files = [
+        f for start, end, g, f in parsed_files
+        if start.startswith(f"{year}-") and g == granularity
+    ]
+
+    # ✅ Debugging - Print matched files
+    print(f"🔍 Matching files: {matching_files}")
 
     if not matching_files:
         raise FileNotFoundError(f"No dataset found for year {year} with granularity {granularity}")
 
-    # ✅ Select the dataset with the latest end date
-    selected_file = max(matching_files, key=lambda x: x[1])
+    file_path = os.path.join(data_dir, matching_files[0])
+    logging.info(f"Using dataset: {file_path}")
 
-    file_path = os.path.join(data_dir, selected_file)
     try:
         with zipfile.ZipFile(file_path, 'r') as z:
             csv_filename = z.namelist()[0]
             with z.open(csv_filename) as f:
-                df = pd.read_csv(f, parse_dates=['datetime'])
+                df = pd.read_csv(f, parse_dates=['timestamp'])
     except Exception as e:
         raise FileNotFoundError(f"Dataset could not be loaded from {file_path}: {e}")
 
-    # ✅ Convert datetime format
-    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%S")
-
-    # ✅ Filter based on selected date range
-    filtered_df = df[(df["datetime"] >= start_date) & (df["datetime"] <= end_date)]
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%S")
+    filtered_df = df[(df["timestamp"] >= start_date) & (df["timestamp"] <= end_date)]
     filtered_df = filtered_df.replace({np.nan: None})
 
-    # ✅ Round numeric values for cleaner JSON
-    for col in filtered_df.columns:
-        if col != "datetime":
-            filtered_df[col] = filtered_df[col].apply(lambda x: round(x, 4) if pd.notna(x) else None)
-
-    return filtered_df, df["datetime"], start_date, end_date
+    return filtered_df, df["timestamp"], start_date, end_date
 
 
 ###############################################
@@ -273,18 +261,27 @@ def get_end_date():
     if not year:
         return jsonify({"error": "Year parameter is required"}), 400
 
-    data_dir = os.path.join(os.getcwd(), "flask", "data-raw")
+    data_dir = os.path.join(os.getcwd(), "flask", "data-processed")
     parsed_files = parse_filenames(data_dir)
 
-    # Filter parsed files for the given year
-    filtered_files = [
-        end_date for start_date, end_date, _ in parsed_files if start_date.startswith(year)
-    ]
-    if not filtered_files:
-        return jsonify({"endDate": f"{year}-12-31"})  # Default to December 31 if no files
+    try:
+        # Extract valid end dates while ensuring proper unpacking
+        parsed_end_dates = [
+            end_date for parts in parsed_files
+            if len(parts) >= 3 and parts[0].startswith(year)
+            for start_date, end_date, *_ in [parts]  # Unpack safely
+        ]
 
-    max_end_date = max(filtered_files)  # Get the latest end date
-    return jsonify({"endDate": max_end_date})
+        if parsed_end_dates:
+            max_end_date = max(parsed_end_dates)  # Get latest end date
+            return jsonify({"endDate": max_end_date})
+        else:
+            logging.warning(f"⚠️ No valid end date found for year {year}")
+            return jsonify({"endDate": f"{year}-12-31"})  # Default to Dec 31 if none found
+
+    except Exception as e:
+        logging.error(f"❌ Error extracting end date: {e}", exc_info=True)
+        return jsonify({"error": "Internal server error"}), 500
 
 @main.route("/")
 def home():
@@ -313,10 +310,10 @@ def plot_raw():
             logging.warning("No data found for the selected parameters.")
             return jsonify({"error": "No data found for the selected parameters."}), 404
 
-        selected_depth = data.get("depth", DEFAULT_DEPTH)
+        # selected_depth = data.get("depth", DEFAULT_DEPTH)
         variable_columns = [
-            f"{data['variable']}_{selected_depth}_raw_{data['strip']}_{logger}_{granularity}"
-            for logger in loggers
+            f"{data['variable']}_{i}_raw_{data['strip']}_{data['loggerLocation']}"
+            for i in sensor_depths  # Using sensor_depths = [1, 2, 3]
         ]
         available_columns = [col for col in variable_columns if col in filtered_df.columns]
 
@@ -325,25 +322,30 @@ def plot_raw():
             return jsonify({"error": f"No matching columns found in dataset: {variable_columns}"}), 400
 
         fig = go.Figure()
-        legend_title = "Logger Location"
+        legend_title = "Sensor depth"
 
         for col in available_columns:
-            logger_label = logger_location_mapping.get(col.split("_")[-2], "Unknown")
+            depth_index = int(col.split("_")[1])  # Extracts depth index (1, 2, 3)
+            sensor_depth = sensor_depth_mapping.get(depth_index, "Unknown Depth")  # Map to depth
+            logger_label = f"Sensor {sensor_depth} - {data['loggerLocation']}"
 
-            # 🛠️ **Ensure proper NaN conversion before adding traces**
+            existing_labels = {trace["name"] for trace in fig.to_plotly_json()["data"]}  # Safe lookup
+            if logger_label in existing_labels:
+                continue  # Skip duplicate entries
+
             y_values = [None if pd.isna(val) else val for val in filtered_df[col].tolist()]
 
             fig.add_trace(go.Scatter(
-                x=filtered_df["datetime"],
+                x=filtered_df["timestamp"],
                 y=y_values,
                 mode="lines",
-                name=logger_label,
+                name=logger_label,  # Updated legend label
                 hovertemplate="%{x|%m/%d}: %{y:.2f}<extra></extra>",
                 connectgaps=False
             ))
 
         fig.update_layout(
-            title=f"Raw Data Plot for {data['variable']} at {sensor_depth_mapping[int(selected_depth)]} in {data['strip']}",
+            title=f"Raw Data Plot for {variable_name_mapping.get(data['variable'], data['variable'])} in strip {data['strip']}, {logger_location_mapping.get(data['loggerLocation'], 'Unknown Location')} Logger",
             xaxis_title="Date",
             yaxis_title=y_axis_label(data['variable']),
             template="plotly_white",
@@ -407,20 +409,20 @@ def plot_ratio():
 
         selected_depth = data.get("depth", DEFAULT_DEPTH)
         selected_variable = data.get("variable", DEFAULT_VARIABLE)
-        selected_logger = data.get("locationType", DEFAULT_LOGGER_LOCATION)
+        selected_logger = data.get("loggerLocation", DEFAULT_LOGGER_LOCATION)
 
         # Identify relevant ratio columns
         ratio_columns = [
             col for col in filtered_df.columns
-            if selected_variable.lower() in col.lower()
-            and "ratio" in col.lower()
-            and f"_{selected_depth}_" in col
-            and f"_{selected_logger}_" in col
-            and ("S1_S2" in col or "S3_S4" in col)
+            if "ratio" in col and
+               f"{data['variable']}_{data['depth']}" in col and
+               f"_{data['loggerLocation']}" in col and
+               ("S1_S2" in col or "S3_S4" in col)
         ]
 
         if len(ratio_columns) != 2:
             logging.error(f"Expected exactly two ratio columns, found {len(ratio_columns)}: {ratio_columns}")
+            logging.error(f"🔍 Available columns: {filtered_df.columns.tolist()}")
             return jsonify({"error": "Expected exactly two ratio columns for S1/S2 and S3/S4."}), 400
 
         # Create Plotly figure
@@ -434,7 +436,7 @@ def plot_ratio():
             y_values = [None if pd.isna(val) else val for val in filtered_df[col].tolist()]
 
             fig.add_trace(go.Scatter(
-                x=filtered_df["datetime"],
+                x=filtered_df["timestamp"],
                 y=y_values,
                 mode="lines",
                 name=trace_label,
