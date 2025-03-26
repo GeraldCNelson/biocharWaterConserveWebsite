@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biochar Project</title>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    <!-- JavaScript Dependencies -->
+    <script src="{{ url_for('static', filename='js/vendor/popper.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/vendor/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/vendor/tippy.min.js') }}"></script>
+
+    <!-- Load Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/vendor/marked.min.js') }}"></script>
+
+    <!-- Load other scripts -->
+    <script src="{{ url_for('static', filename='js/api_requests.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/ui_controls.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/plots.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/downloads.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/markdown.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+
+</head>
+<body>
+
+<div class="container-fluid mt-4">
+    <ul class="nav nav-tabs">
+        <li class="nav-item"><a class="nav-link active" id="introduction-tab" data-bs-toggle="tab" href="#intro">Introduction</a></li>
+        <li class="nav-item"><a class="nav-link" id="main-data-tab" data-bs-toggle="tab" href="#main">Main Data Display</a></li>
+        <li class="nav-item"><a class="nav-link" id="summary-tab" data-bs-toggle="tab" href="#summary">Summary Statistics</a></li>
+        <li class="nav-item"><a class="nav-link" id="tech-details-tab" data-bs-toggle="tab" href="#tech-details">Technical Details</a></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Introduction Tab -->
+        <div class="tab-pane fade show active" id="intro">
+            <div id="intro-content" class="markdown-container mt-3">Introduction: Loading...</div>
+        </div>
+
+        <!-- ✅ Main Data Display -->
+        <div class="tab-pane fade" id="main">
+            <div class="row mt-3">
+                <!-- Control Panel -->
+                <div class="col-md-3">
+                    <div class="control-panel">
+                        <h3>Date Range Selection</h3>
+
+                        <label for="main-year">Year</label>
+                        <select id="main-year" class="year-dropdown form-select" data-tab="main"></select>
+
+                        <label for="start-date">Start Date</label>
+                        <input type="date" id="start-date" class="form-control">
+
+                        <label for="end-date">End Date</label>
+                        <input type="date" id="end-date" class="form-control">
+
+                        <label for="main-granularity">Granularity</label>
+                        <select id="main-granularity" class="granularity-dropdown form-select" data-tab="main"></select>
+
+                        <label for="main-variable">Variable</label>
+                        <select id="main-variable" class="variable-dropdown form-select" data-tab="main"></select>
+
+                        <label for="main-strip">Strip</label>
+                        <select id="main-strip" class="strip-dropdown form-select" data-tab="main"></select>
+
+                        <label for="main-loggerLocation">Logger Location</label>
+                        <select id="main-loggerLocation" class="loggerLocation-dropdown form-select" data-tab="main"></select>
+
+                        <label for="main-depth">Depth</label>
+                        <select id="main-depth" class="depth-dropdown form-select" data-tab="main"></select>
+
+                        <label for="trace-option">Traces Based On</label>
+                        <select id="trace-option" class="form-select">
+                            <option value="depth">Depth (6, 12, 18 inches)</option>
+                            <option value="logger">Logger Location (Top, Middle, Bottom)</option>
+                        </select>
+
+                        <!-- Buttons -->
+                        <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
+                        <button id="download_raw" class="btn btn-secondary w-100 mb-2" onclick="downloadTraceData('raw')">
+                            Download Raw Data (CSV)
+                        </button>
+                        <button id="download_ratio" class="btn btn-secondary w-100 mb-2" onclick="downloadTraceData('ratio')">
+                            Download Ratio Data (CSV)
+                        </button>
+
+                        <!-- Download Plot Buttons -->
+                        <div class="dropdown mb-2">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRawPlot" data-bs-toggle="dropdown">
+                                Download Raw Plot
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRatioPlot" data-bs-toggle="dropdown">
+                                Download Ratio Plot
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ✅ Two-Panel Plot Display -->
+                <div class="col-md-9">
+                    <div class="plot-panel">
+                        <div id="graph-top" class="graph-container mb-4">
+                            <div id="raw-plot" style="width: 100%; height: 400px;"></div>
+                        </div>
+                        <div id="graph-bottom" class="graph-container">
+                            <div id="ratio-plot" style="width: 100%; height: 400px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ Summary Statistics Tab -->
+        <div class="tab-pane fade" id="summary">
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <div class="control-panel">
+                        <h3>Summary Options</h3>
+                        <label for="summary-year">Year</label>
+                        <select id="summary-year" class="year-dropdown form-select" data-tab="summary"></select>
+
+                        <label for="summary-granularity">Granularity</label>
+                        <select id="summary-granularity" class="granularity-dropdown form-select" data-tab="summary"></select>
+
+                        <label for="summary-variable">Variable</label>
+                        <select id="summary-variable" class="variable-dropdown form-select" data-tab="summary"></select>
+
+                        <label for="summary-strip">Strip</label>
+                        <select id="summary-strip" class="strip-dropdown form-select" data-tab="summary"></select>
+
+                        <button id="update-summary" class="btn btn-primary w-100 mb-2">Update Summary</button>
+                        <button id="download-summary" class="btn btn-secondary w-100">Download Summary</button>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <h3>Summary Statistics</h3>
+                    <div id="summary-content"></div>
+                    <div id="summary-table-container">
+                        <p class="text-muted">Summary statistics will be displayed here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Details Tab -->
+        <div class="tab-pane fade" id="tech-details">
+            <h3>Technical details for the biochar data collection process</h3>
+            <div id="tech-content" class="mt-3">Technical details: Loading...</div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

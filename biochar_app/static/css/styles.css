@@ -1,0 +1,257 @@
+/* General Reset */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%; /* Ensure full height is applied to root elements */
+    font-family: Arial, sans-serif;
+}
+
+/* Global Box Sizing */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* ✅ Improve table appearance */
+#summary-table-container {
+    margin-top: 15px;
+}
+
+.table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.table th, .table td {
+    text-align: center;  /* ✅ Center-align values */
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+.thead-dark th {
+    background-color: #343a40 !important;
+    color: white;
+}
+
+/* Container */
+.container {
+    display: flex;
+    flex-wrap: nowrap; /* Prevent wrapping */
+    align-items: flex-start; /* Align panels to the top */
+    gap: 20px; /* Space between control and plot panels */
+    width: 100%; /* Full width of the parent */
+    max-width: 90%; /* Ensure the container does not exceed 90% of the page width */
+    margin-left: auto; /* Center the container */
+    margin-right: auto; /* Center the container */
+}
+
+.container.markdown-container {
+    max-width: 100%;
+    padding-left: 5%;
+    padding-right: 5%;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    background-color: #f8f9fa; /* Light Bootstrap gray */
+    padding: 10px;
+    border-bottom: 1px solid #dee2e6; /* Bootstrap border color */
+}
+
+.tabs button {
+    background-color: #e9ecef; /* Bootstrap light gray */
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    border-radius: 0.25rem; /* Bootstrap-style rounded corners */
+}
+
+.tabs button.active {
+    background-color: #0d6efd; /* Bootstrap primary color */
+    color: white;
+}
+
+.tab-content {
+    overflow: visible;
+    height: auto;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* ✅ General Control Panel Styling */
+.control-panel {
+    flex: 0 0 220px;  /* Consistent width for both panels */
+    max-width: 220px;
+    height: auto;
+    padding: 12px;
+    background-color: #f8f9fa; /* Light background for readability */
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+/* ✅ Sticky Control Panel for easier use */
+.control-panel {
+    position: sticky;
+    top: 10px;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ✅ Ensure uniform styling across inputs, dropdowns, and buttons */
+.control-panel select,
+.control-panel button,
+.control-panel input {
+    font-size: 14px;
+    padding: 4px 6px;
+    width: 100%;  /* Ensure elements take full width */
+}
+
+/* ✅ Keep spacing compact */
+.control-panel .form-control {
+    margin-bottom: 6px;
+}
+
+/* ✅ Heading Styles */
+.control-panel h3 {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+/* 🔹 Slight Variation for Summary Control Panel (if needed) */
+.summary-panel {
+    background-color: #eef2f6; /* Subtle background color difference */
+}
+
+/* Plot Panel Styling */
+.plot-panel {
+    flex-grow: 1;
+    display: block !important; /* Prevent flex from collapsing */
+    width: 100% !important; /* Ensure full width */
+    min-width: 600px !important;
+    min-height: 400px !important;
+    box-sizing: border-box;
+}
+
+    width: 100% !important;
+    min-width: 600px !important;
+    min-height: 400px !important;
+    height: auto; /* Allow resizing */
+    border: 1px solid #dee2e6;
+    padding: 10px;
+    background-color: #ffffff;
+    display: flex !important;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+.graph-container:last-child {
+    margin-bottom: 0;
+    font-family: inherit;
+}
+
+.graph-container p.text-muted {
+    text-align: center;
+    font-style: italic;
+    color: #6c757d;
+    margin-top: 16px;
+}
+
+.info-icon {
+    font-size: 14px;
+    font-weight: bold;
+    color: #007bff; /* Bootstrap primary blue */
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+#raw-plot, #ratio-plot {
+    width: 100% !important;
+    min-width: 600px !important;
+    min-height: 400px !important;
+    display: block !important;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 768px) {
+    .container {
+        flex-direction: column; /* Stack control and plot panels vertically */
+        align-items: center; /* Ensure everything centers properly */
+    }
+
+    .control-panel {
+        width: 100%; /* Full width */
+        max-width: 100%;
+        margin-bottom: 15px; /* Reduce margin */
+        padding: 10px;
+    }
+
+    .plot-panel {
+        width: 100%; /* Ensure full width on small screens */
+    }
+
+    .graph-container {
+        height: 400px; /* Reduce height slightly for mobile */
+    }
+}
+
+/* Buttons */
+input[type="submit"],
+button {
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #0d6efd; /* Bootstrap primary */
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+input[type="submit"]:hover,
+button:hover {
+    background-color: #0056b3; /* Bootstrap primary dark */
+}
+
+/* Markdown Content */
+.markdown-content {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+    color: #333;
+    margin-top: 20px;
+}
+
+.markdown-content p {
+    margin-bottom: 10px;
+}
+
+/* Ensure the row is a flex container */
+.row {
+    display: flex; /* ✅ Ensures side-by-side layout */
+    flex-wrap: nowrap; /* ✅ Prevents wrapping to the next line */
+    align-items: flex-start; /* ✅ Aligns both panels at the top */
+    gap: 20px; /* ✅ Adds spacing */
+}

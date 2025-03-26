@@ -1,0 +1,124 @@
+body {
+    font-family: "Georgia", serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    background-color: #f8f9fa; /* Light Bootstrap gray */
+    padding: 10px;
+    border-bottom: 1px solid #dee2e6; /* Bootstrap border color */
+}
+
+.tabs button {
+    background-color: #e9ecef; /* Bootstrap light gray */
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+    border-radius: 0.25rem; /* Bootstrap-style rounded corners */
+}
+
+.tabs button.active {
+    background-color: #0d6efd; /* Bootstrap primary color */
+    color: white;
+}
+
+.tab-content {
+    overflow: visible;
+    height: auto;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Panels */
+.control-panel {
+    width: 25%;
+    padding: 20px;
+    background-color: #f8f9fa; /* Bootstrap light gray */
+    box-sizing: border-box;
+    font-size: 14px;
+    float: left;
+}
+
+.plot-panel {
+    width: 75%;
+    padding: 20px;
+    box-sizing: border-box;
+    float: left;
+}
+
+.control-panel, .plot-panel {
+    height: 100%; /* Make them occupy the same height */
+}
+
+/* Graph Container */
+.graph-container {
+    height: 350px;
+    margin-bottom: 15px;
+    border: 1px solid #dee2e6;
+    padding: 10px;
+    box-sizing: border-box;
+    border-radius: 0.25rem;
+    background-color: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.row {
+    display: flex;
+    align-items: stretch; /* Ensure both columns align vertically */
+}
+
+.col-md-3 {
+    padding-left: 0; /* Remove left padding */
+}
+
+/* Buttons */
+input[type="submit"],
+button {
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #0d6efd; /* Bootstrap primary */
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+input[type="submit"]:hover,
+button:hover {
+    background-color: #0056b3; /* Bootstrap primary dark */
+}
+
+/* Markdown Content */
+.markdown-content {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+    color: #333;
+    margin-top: 20px;
+}
+
+.markdown-content p {
+    margin-bottom: 10px;
+}
