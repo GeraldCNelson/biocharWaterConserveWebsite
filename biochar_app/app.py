@@ -6,7 +6,7 @@ import logging
 import subprocess
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # ✅ Initialize the Flask app with correct paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get current directory of app.py
@@ -31,14 +31,14 @@ except Exception as e:
     print(f"❌ Error during pre-computation: {e}. Continuing without precomputed data.")
 
 # ✅ Register the Blueprint
-print("Starting app...")
+logging.info("Starting app...")
 app.register_blueprint(main, url_prefix='/')
 
 # ✅ Print registered routes
 if app.url_map.iter_rules():
-    print("Registered routes:")
+    logging.info("Registered routes:")
     for rule in app.url_map.iter_rules():
-        print(rule)
+        logging.info(rule)
 else:
     print("⚠️ No routes registered. Check Blueprint registration.")# ✅ Preload static logger datasets (2023 & 2024)
 
@@ -58,7 +58,7 @@ for preload_year in [2023, 2024]:
 # ✅ Run Flask
 if __name__ == "__main__":
     if app.jinja_loader and hasattr(app.jinja_loader, "searchpath"):
-        print(f"Flask is searching for templates in: {app.jinja_loader.searchpath}")
+        logging.info(f"Flask is searching for templates in: {app.jinja_loader.searchpath}")
     else:
-        print("⚠️ Warning: jinja_loader is not properly initialized.")
+        logging.info("⚠️ Warning: jinja_loader is not properly initialized.")
     app.run(debug=False, port=5000)

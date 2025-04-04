@@ -124,7 +124,7 @@ def load_logger_data(year: int, granularity: str):
         raise FileNotFoundError(f"No file found for {year} - {granularity}")
 
     file_path = os.path.join(DATA_PROCESSED_DIR, matching_file.filename)
-    print("file_path:", file_path)
+    logging.info("file_path:", file_path)
 
     with zipfile.ZipFile(file_path, 'r') as z:
         csv_filename = z.namelist()[0]
@@ -163,7 +163,7 @@ def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
             logging.error(f"Error parsing filename {filename}: {e}")
             continue
 
-    print("🔍 Parsed Files:", parsed_files)
+    logging.info("🔍 Parsed Files:", parsed_files)
     return parsed_files
 
 
@@ -458,7 +458,7 @@ def home():
 def plot_raw():
     try:
         data = request.get_json()
-        print("🧪 Incoming request to /plot_raw with data:", data)
+        logging.info("🧪 Incoming request to /plot_raw with data:", data)
 
         # ✅ Required keys validation
         required_keys = ["year", "variable", "strip", "granularity", "loggerLocation", "depth", "traceOption"]
@@ -606,7 +606,7 @@ def plot_raw_gseason():
             for depth in ["1", "2", "3"]:
                 col_name = f"{variable}_{depth}_raw_{strip}_{logger_location}"
                 if col_name in df.columns:
-                    print(f"✅ Found column {col_name}, sample values:", df[col_name].dropna().head())
+                    logging.info(f"✅ Found column {col_name}, sample values:", df[col_name].dropna().head())
                     traces.append(go.Bar(
                         x=df["gseason_periods"],
                         y=df[col_name].tolist(),
@@ -666,7 +666,7 @@ def plot_raw_gseason():
 def plot_ratio():
     try:
         data = request.get_json()
-        print("🧪 Incoming request to /plot_ratio with data:", data)
+        logging.info("🧪 Incoming request to /plot_ratio with data:", data)
         if not isinstance(data, dict):
             logging.error(f"❌ Expected JSON dictionary but got: {type(data)}")
             return jsonify({"error": "Invalid data format received"}), 400
@@ -766,7 +766,7 @@ def plot_ratio():
 
 @main.route("/plot_ratio_gseason", methods=["POST"])
 def plot_ratio_gseason():
-    print("✅ plot_ratio_gseason was called")
+    logging.info("✅ plot_ratio_gseason was called")
     try:
         data = request.get_json()
         logging.info("🧪 Incoming request to /plot_ratio_gseason with data: %s", data)
@@ -782,8 +782,8 @@ def plot_ratio_gseason():
         selected_logger = data["loggerLocation"]
 
         df = load_logger_data(year, "gseason")
-        print("🧪 plot_ratio_gseason request:", data)
-        print("📁 gseason DataFrame columns:", df.columns.tolist())
+        logging.info("🧪 plot_ratio_gseason request:", data)
+        logging.info("📁 gseason DataFrame columns:", df.columns.tolist())
 
         expected_columns = [
             f"{variable}_{selected_depth}_ratio_S1_S2_{selected_logger}",
