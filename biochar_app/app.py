@@ -6,7 +6,14 @@ import logging
 import subprocess
 
 # Configure logging
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("biochar_app.log"),
+        logging.StreamHandler()  # Optional: keep printing to terminal too
+    ]
+)
 
 # ✅ Initialize the Flask app with correct paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get current directory of app.py
