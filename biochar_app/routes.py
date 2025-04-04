@@ -124,7 +124,7 @@ def load_logger_data(year: int, granularity: str):
         raise FileNotFoundError(f"No file found for {year} - {granularity}")
 
     file_path = os.path.join(DATA_PROCESSED_DIR, matching_file.filename)
-    logging.info("file_path:", file_path)
+    logging.info(f"file_path:", file_path)
 
     with zipfile.ZipFile(file_path, 'r') as z:
         csv_filename = z.namelist()[0]
@@ -163,7 +163,7 @@ def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
             logging.error(f"Error parsing filename {filename}: {e}")
             continue
 
-    logging.info("🔍 Parsed Files:", parsed_files)
+    logging.info(f"🔍 Parsed Files:", parsed_files)
     return parsed_files
 
 
@@ -458,7 +458,7 @@ def home():
 def plot_raw():
     try:
         data = request.get_json()
-        logging.info("🧪 Incoming request to /plot_raw with data:", data)
+        logging.info(f"🧪 Incoming request to /plot_raw with data:", data)
 
         # ✅ Required keys validation
         required_keys = ["year", "variable", "strip", "granularity", "loggerLocation", "depth", "traceOption"]
@@ -584,7 +584,7 @@ def plot_raw_gseason():
     try:
 
         request_data = request.get_json()
-        logging.info("🧪 Incoming request to /plot_raw_gseason with data: %s", request_data)
+        logging.info(f"🧪 Incoming request to /plot_raw_gseason with data: %s", request_data)
 
         required_keys = ["year", "variable", "strip", "loggerLocation", "traceOption"]
         missing_keys = [key for key in required_keys if key not in request_data or not request_data[key]]
@@ -602,7 +602,7 @@ def plot_raw_gseason():
         traces = []
 
         if trace_option == "depths":
-            logging.info("📊 Gseason trace mode: DEPTHS")
+            logging.info(f"📊 Gseason trace mode: DEPTHS")
             for depth in ["1", "2", "3"]:
                 col_name = f"{variable}_{depth}_raw_{strip}_{logger_location}"
                 if col_name in df.columns:
@@ -617,7 +617,7 @@ def plot_raw_gseason():
                 else:
                     print(f"❌ Missing column: {col_name}")
         else:
-            logging.info("📊 Gseason trace mode: LOGGER")
+            logging.info(f"📊 Gseason trace mode: LOGGER")
             for loc in ["T", "M", "B"]:
                 col_name = f"{variable}_{request_data['depth']}_raw_{strip}_{loc}"
                 if col_name in df.columns:
@@ -652,7 +652,7 @@ def plot_raw_gseason():
             margin=dict(l=50, r=30, t=40, b=40)
         )
 
-        logging.info("✅ plot_raw_gseason completed successfully.")
+        logging.info(f"✅ plot_raw_gseason completed successfully.")
         fig = go.Figure(data=traces, layout=layout)
         return jsonify(sanitize_json(fig.to_plotly_json()))
 
@@ -666,7 +666,7 @@ def plot_raw_gseason():
 def plot_ratio():
     try:
         data = request.get_json()
-        logging.info("🧪 Incoming request to /plot_ratio with data:", data)
+        logging.info(f"🧪 Incoming request to /plot_ratio with data:", data)
         if not isinstance(data, dict):
             logging.error(f"❌ Expected JSON dictionary but got: {type(data)}")
             return jsonify({"error": "Invalid data format received"}), 400
@@ -769,7 +769,7 @@ def plot_ratio_gseason():
     logging.info("✅ plot_ratio_gseason was called")
     try:
         data = request.get_json()
-        logging.info("🧪 Incoming request to /plot_ratio_gseason with data: %s", data)
+        logging.info(f"🧪 Incoming request to /plot_ratio_gseason with data: %s", data)
 
         required_keys = ["year", "variable", "depth", "loggerLocation"]
         missing_keys = [key for key in required_keys if key not in data or not data[key]]
@@ -782,8 +782,8 @@ def plot_ratio_gseason():
         selected_logger = data["loggerLocation"]
 
         df = load_logger_data(year, "gseason")
-        logging.info("🧪 plot_ratio_gseason request:", data)
-        logging.info("📁 gseason DataFrame columns:", df.columns.tolist())
+        logging.info(f"🧪 plot_ratio_gseason request:", data)
+        logging.info(f"📁 gseason DataFrame columns:", df.columns.tolist())
 
         expected_columns = [
             f"{variable}_{selected_depth}_ratio_S1_S2_{selected_logger}",
