@@ -35,13 +35,13 @@ html, body {
 /* Container */
 .container {
     display: flex;
-    flex-wrap: nowrap; /* Prevent wrapping */
-    align-items: flex-start; /* Align panels to the top */
-    gap: 20px; /* Space between control and plot panels */
-    width: 100%; /* Full width of the parent */
-    max-width: 90%; /* Ensure the container does not exceed 90% of the page width */
-    margin-left: auto; /* Center the container */
-    margin-right: auto; /* Center the container */
+    flex-wrap: wrap;          /* ✅ allow wrapping on narrow screens */
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;              /* ✅ use full screen width */
+    max-width: 100%;          /* ✅ remove 90% constraint */
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .container.markdown-container {
@@ -101,15 +101,6 @@ html, body {
     font-family: inherit;
 }
 
-/* ✅ Sticky Control Panel for easier use */
-.control-panel {
-    position: sticky;
-    top: 10px;
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
 
 /* ✅ Ensure uniform styling across inputs, dropdowns, and buttons */
 .control-panel select,
@@ -140,24 +131,13 @@ html, body {
 /* Plot Panel Styling */
 .plot-panel {
     flex-grow: 1;
-    display: block !important; /* Prevent flex from collapsing */
-    width: 100% !important; /* Ensure full width */
-    min-width: 600px !important;
-    min-height: 400px !important;
+    flex-basis: 0;
+    min-width: 0;
+    width: 100%;
     box-sizing: border-box;
+    padding: 10px;
 }
 
-    width: 100% !important;
-    min-width: 600px !important;
-    min-height: 400px !important;
-    height: auto; /* Allow resizing */
-    border: 1px solid #dee2e6;
-    padding: 10px;
-    background-color: #ffffff;
-    display: flex !important;
-    align-items: flex-start;
-    justify-content: flex-start;
-}
 
 .graph-container:last-child {
     margin-bottom: 0;
@@ -180,8 +160,8 @@ html, body {
 }
 
 #raw-plot, #ratio-plot {
-    width: 100% !important;
-    min-width: 600px !important;
+    width: 100%;
+    min-width: 0;
     min-height: 400px !important;
     display: block !important;
 }
@@ -201,11 +181,14 @@ html, body {
     }
 
     .plot-panel {
-        width: 100%; /* Ensure full width on small screens */
+        width: 100%;
+        min-width: 0;
+        padding: 0 5px;
     }
 
     .graph-container {
-        height: 400px; /* Reduce height slightly for mobile */
+        width: 100%;
+        min-width: 0;
     }
 }
 
@@ -249,7 +232,7 @@ button:hover {
 }
 
 /* Ensure the row is a flex container */
-.row {
+.row.custom-flex-row {
     display: flex; /* ✅ Ensures side-by-side layout */
     flex-wrap: nowrap; /* ✅ Prevents wrapping to the next line */
     align-items: flex-start; /* ✅ Aligns both panels at the top */

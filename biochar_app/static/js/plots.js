@@ -1,14 +1,10 @@
+// plots.js (ES6 Module Version)
+import { getSelectedFilters } from "./ui_controls.js";
+import { getDropdownValue, getInputValue } from "./ui_utils.js";
+import { generateSummaryTable, updateMainDataDisplay } from "./api_requests.js";
+
 /**
  * 📊 updatePlot - Fetches and updates a Plotly chart dynamically.
- *
- * This function is used to fetch Plotly JSON data from either `/plot_raw` or `/plot_ratio`
- * and render it inside the specified `plotDiv` container.
- *
- * ✅ Why Use This?
- * - Reduces redundant code by handling both raw and ratio plots.
- * - Ensures consistent error handling and logging.
- * - Easily extendable for additional plots in the future.
- *
  * @param {string} plotType - The type of plot to fetch ("raw" or "ratio").
  * @param {string} plotDiv - The ID of the div where the plot will be rendered.
  */
@@ -18,18 +14,29 @@ async function updatePlot(plotType, plotDiv) {
     try {
         let requestData = getSelectedFilters("main");
 
-        // ✅ Add required traceOption (default to 'depth')
-        requestData.traceOption = "depth";
+        // requestData.traceOption = "depths";
 
-        // ✅ Conditional overlays
-        if (requestData.variable === "T") {
-            requestData.includeTemperature = true;
-        }
-        if (requestData.variable === "VWC") {
-            requestData.includeRainfall = true;
+        const isGseason = requestData.granularity === "gseason";
+
+        // ✅ Conditionally include weather overlays
+        if (!isGseason) {
+            if (requestData.variable === "T") {
+                requestData.includeTemperature = true;
+            }
+            if (requestData.variable === "VWC") {
+                requestData.includeRainfall = true;
+            }
+        } else {
+            // 🚫 Remove weather flags if present
+            delete requestData.includeRainfall;
+            delete requestData.includeTemperature;
         }
 
-        const response = await fetch(`/plot_${plotType}`, {
+        const route = isGseason
+            ? `/plot_${plotType}_gseason`
+            : `/plot_${plotType}`;
+
+        const response = await fetch(route, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestData),
@@ -43,28 +50,28 @@ async function updatePlot(plotType, plotDiv) {
         const plotlyJSON = await response.json();
         console.log(`✅ Received ${plotType} plot JSON:`, plotlyJSON);
 
-        Plotly.react(plotDiv, plotlyJSON.data, plotlyJSON.layout);
+        Plotly.react(plotDiv, plotlyJSON.data, plotlyJSON.layout)
+            .then(() => {
+                Plotly.Plots.resize(document.getElementById(plotDiv));
+                console.log(`🔄 Forced resize on ${plotDiv}`);
+            });
+
     } catch (error) {
         console.error(`❌ Error updating ${plotType} plot:`, error);
     }
 }
 
-// 🎯 Attach the function to the "Update Plots" button
-document.getElementById("update-plots").addEventListener("click", function () {
-    updatePlot("raw", "raw-plot");   // Fetch and update raw plot
-    updatePlot("ratio", "ratio-plot"); // Fetch and update ratio plot
-});
 
 async function updateSummaryStatistics() {
     console.log("📊 updateSummaryStatistics: Updating summary statistics...");
 
     try {
-        const year = document.getElementById("summary-year").value;
-        const variable = document.getElementById("summary-variable").value;
-        const strip = document.getElementById("summary-strip").value;
-        const granularity = document.getElementById("summary-granularity").value;
+        const year = parseInt(getDropdownValue("summary-year"));
+        const variable = getDropdownValue("summary-variable");
+        const strip = getDropdownValue("summary-strip");
+        const granularity = getDropdownValue("summary-granularity");
 
-        console.log("🔍 Selected Summary Filters (FINAL):", { year, variable, strip, granularity });
+        console.log("🔍 Selected Summary Filters:", { year, variable, strip, granularity });
 
         const response = await fetch("/get_summary_stats", {
             method: "POST",
@@ -74,28 +81,52 @@ async function updateSummaryStatistics() {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error("❌ updateSummaryStatistics: Server error:", errorText);
+            console.error("❌ Server error in updateSummaryStatistics:", errorText);
             alert("⚠️ Error retrieving summary statistics.");
             return;
         }
 
         const data = await response.json();
-        console.log("✅ updateSummaryStatistics: Data received:", data);
+        console.log("✅ Received summary stats response:", data);
 
-        if (!data.statistics || Object.keys(data.statistics).length === 0) {
-            console.warn("⚠️ No statistics found for selected variable.", data);
-            document.getElementById("summary-table-container").innerHTML =
-                "<p class='text-warning'>No statistics available for the selected variable.</p>";
-            return;
-        }
+        const title = `${capitalize(granularity)} Summary for ${variable} in Strip ${strip}, ${year}`;
+        document.getElementById("summary-title").textContent = title;
 
-        // ✅ Generate and insert summary table
-        console.log("🛠 Inserting summary table...");
-        document.getElementById("summary-table-container").innerHTML = generateSummaryTable(data.statistics, variable);
-        console.log("✅ Summary table successfully updated.");
+        const rawTable = generateSummaryTable(data.raw_statistics, variable);
+        const ratioTable = generateSummaryTable(data.ratio_statistics, variable);
 
+        const container = document.getElementById("summary-table-container");
+        container.innerHTML = `
+            <h5>Raw Data</h5>
+            ${rawTable}
+            <h5 class="mt-4">Ratio Data</h5>
+            ${ratioTable}
+        `;
+
+        console.log("✅ Summary statistics tables updated.");
     } catch (error) {
-        console.error("❌ updateSummaryStatistics: Unexpected error:", error);
+        console.error("❌ Unexpected error in updateSummaryStatistics:", error);
         alert("⚠️ Unexpected error occurred while updating summary statistics.");
     }
 }
+
+function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Hook up Update Plots button only after DOM is ready
+if (document.readyState !== "loading") {
+    document.getElementById("update-plots")?.addEventListener("click", () => {
+        updatePlot("raw", "raw-plot");
+        updatePlot("ratio", "ratio-plot");
+    });
+} else {
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("update-plots")?.addEventListener("click", () => {
+            updatePlot("raw", "raw-plot");
+            updatePlot("ratio", "ratio-plot");
+        });
+    });
+}
+
+export { updatePlot, updateSummaryStatistics };

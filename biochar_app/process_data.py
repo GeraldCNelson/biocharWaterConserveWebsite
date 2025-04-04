@@ -1,134 +1,168 @@
-import os
 import pandas as pd
-import zipfile
 import logging
-import pytz
-import requests  # Required if fetching weather data from CSU API in future
+import os
+import zipfile
+from datetime import datetime
+from biochar_app.get_weather_data import get_weather_data
+from biochar_app.config import (
+    BASE_DIR, DATA_RAW_DIR, DATA_PROCESSED_DIR, YEARS, DEPTHS,
+    SWC_DEPTH_WEIGHTS, LOGGER_LOCATIONS, STRIPS,
+    VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,
+    GSEASON_PERIODS
+)
 
 
-# Logging Configuration
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# Constants
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_RAW_DIR = os.path.join(BASE_DIR, "data-raw")
-DATA_PROCESSED_DIR = os.path.join(BASE_DIR, "data-processed")
-os.makedirs(DATA_RAW_DIR, exist_ok=True)
-os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
-
-STRIPS = ["S1", "S2", "S3", "S4"]
-LOCATIONS = ["T", "M", "B"]
-DEPTHS = ["1", "2", "3"]
-DEPTH_WEIGHTS = {"1": 0.75, "2": 0.5, "3": 0.75}
-VARS = {"VWC", "T", "EC", "SWC"}
-
-QUARTERS = {
-    "Q1_Winter": [11, 12, 1, 2],
-    "Q2_Early_Growing": [3, 4, 5],
-    "Q3_Peak_Harvest": [6, 7, 8, 9, 10],
-}
-
-# Weather config
-COAG_OUTPUT_FILE = "coagmet_{data_year}_15min.csv"
-METRICS_LABELS = ["timestamp", "temp_air_degC", "rh", "dewpoint_degC", "vaporpressure_kpa",
-                  "solarrad_wm-2", "precip_mm", "wind_m_s", "winddir_degN",
-                  "temp_soil_5cm_degC", "temp_soil_15cm_degC"]
-
-def get_weather_data(data_year):
-    processed_weather_file = os.path.join(DATA_PROCESSED_DIR, COAG_OUTPUT_FILE.format(year=data_year))
-
-    if not os.path.exists(processed_weather_file):
-        raise FileNotFoundError(f"❌ Expected weather data: {processed_weather_file}")
-
-    df_climate = pd.read_csv(processed_weather_file)
-    df_climate["timestamp"] = pd.to_datetime(df_climate["timestamp"], errors="coerce")
-    df_climate.dropna(subset=["timestamp"], inplace=True)
-    return df_climate
-
-def generate_timestamp_sequence(data_year):
-    utc = pytz.utc
-    denver_tz = pytz.timezone("America/Denver")
-    start_date_mt = denver_tz.localize(pd.Timestamp(f"{data_year}-01-01 00:00"))
-    end_date_mt = denver_tz.localize(pd.Timestamp(f"{data_year}-12-31 23:59"))
-    start_date_utc = start_date_mt.astimezone(utc)
-    end_date_utc = end_date_mt.astimezone(utc)
-    timestamp_seq_utc = pd.date_range(start=start_date_utc, end=end_date_utc, freq="15min", tz=utc)
-    timestamp_seq_local = timestamp_seq_utc.tz_convert(denver_tz)
-    timestamp_seq_local = timestamp_seq_local[timestamp_seq_local >= start_date_mt]
-    return pd.DataFrame({"timestamp": timestamp_seq_local})
-
-def read_logger_data(data_year):
-    data_dir = f"{DATA_RAW_DIR}/datfiles_{data_year}/"
-    df_merged = None
-    for logger_name in ["S1T", "S1M", "S1B", "S2T", "S2M", "S2B", "S3T", "S3B", "S3M", "S4T", "S4M", "S4B"]:
-        file_path = os.path.join(data_dir, f"{logger_name}_Table1.dat")
-        if not os.path.exists(file_path):
-            logging.warning(f"⚠️ Missing logger file: {file_path}")
+def rename_logger_columns(df, logger_name):
+    rename_dict = {}
+    for col in df.columns:
+        if col == "timestamp":
             continue
-        try:
-            df = pd.read_csv(file_path, skiprows=4, na_values=["", "NA", "NAN"],
-                             names=["timestamp", "RECORD"] + [f"{var}_{depth}_raw_{logger_name}" for var in VARS for depth in DEPTHS],
-                             dtype={"RECORD": "float64"})
-            df.drop(columns=["RECORD"], inplace=True, errors="ignore")
-            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce", utc=True)
-            df.drop_duplicates(subset=["timestamp"], keep="first", inplace=True)
-            df = df[df["timestamp"] >= pd.Timestamp(f"{data_year}-01-01 00:00", tz="UTC")]
-            if df_merged is None:
-                df_merged = df
-            else:
-                df_merged = pd.merge(df_merged, df, on="timestamp", how="outer")
-        except Exception as e:
-            logging.error(f"❌ Error reading {file_path}: {e}", exc_info=True)
-    return df_merged
+        elif col == "BattV_Min":
+            rename_dict[col] = f"BattV_Min_{logger_name[:2]}_{logger_name[2:]}"
+        elif col in VALUE_COLS_STANDARD:
+            base, depth, _ = col.split("_")
+            rename_dict[col] = f"{base}_{depth}_raw_{logger_name[:2]}_{logger_name[2:]}"
+    df.rename(columns=rename_dict, inplace=True)
+    return df
 
-def aggregate_data(df, df_weather, data_year):
-    df = pd.merge(df, df_weather, on="timestamp", how="outer")
+
+def read_logger_data(name, year):
+    filepath = os.path.join(DATA_RAW_DIR, f"datfiles_{year}/{name}_Table1.dat")
+    try:
+        df = pd.read_csv(
+            filepath, skiprows=4, na_values=["", "NA", "NAN"],
+            names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
+            parse_dates=["timestamp"]
+        ).drop(columns=["RECORD"])
+        df["timestamp"] = df["timestamp"].dt.tz_localize("America/Denver", ambiguous="NaT", nonexistent="NaT")
+        df = df[df["timestamp"] >= pd.Timestamp(f"{year}-01-01", tz="America/Denver")]
+        return rename_logger_columns(df, name)
+    except FileNotFoundError:
+        logging.warning(f"⚠️ File not found: {filepath}")
+        return None
+
+
+def merge_all_loggers(year):
+    merged = None
+    for strip in STRIPS:
+        for loc in LOGGER_LOCATIONS:
+            df = read_logger_data(f"{strip}{loc}", year)
+            if df is not None:
+                merged = df if merged is None else pd.merge(merged, df, on="timestamp", how="outer")
+    return merged
+
+
+def add_swc(df):
+    df = df.copy()
+    for strip in STRIPS:
+        for loc in LOGGER_LOCATIONS:
+            cols = [f"VWC_{d}_raw_{strip}_{loc}" for d in DEPTHS]
+            if all(c in df.columns for c in cols):
+                df[f"SWC_1_raw_{strip}_{loc}"] = sum(df[c] * SWC_DEPTH_WEIGHTS[d] for c, d in zip(cols, DEPTHS))
+    return df
+
+
+def calculate_ratios(df):
+    df = df.copy()
+    for var in ["VWC", "T", "EC", "SWC"]:
+        for s1, s2 in [("S1", "S2"), ("S3", "S4")]:
+            for loc in LOGGER_LOCATIONS:
+                for d in DEPTHS:
+                    if var == "SWC" and d != "1":
+                        continue
+                    c1, c2 = f"{var}_{d}_raw_{s1}_{loc}", f"{var}_{d}_raw_{s2}_{loc}"
+                    out = f"{var}_{d}_ratio_{s1}_{s2}_{loc}"
+                    df[out] = df[c1] / df[c2] if c1 in df.columns and c2 in df.columns else pd.NA
+    return df
+
+
+def assign_gseason_periods(ts, year):
+    for label, (start_str, end_str) in GSEASON_PERIODS.items():
+        sm, sd = map(int, start_str.split("-"))
+        em, ed = map(int, end_str.split("-"))
+        sy = year - 1 if sm > em else year
+        ey = year
+        start = pd.Timestamp(f"{sy}-{start_str}")
+        end = pd.Timestamp(f"{ey}-{end_str}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        if start <= ts <= end:
+            return label
+    return None
+
+
+def aggregate(df, year):
+    df = df.copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df[df["timestamp"].dt.year == int(year)]
     df.set_index("timestamp", inplace=True)
-    df.index = pd.to_datetime(df.index)  # ✅ Ensures .year/.month are available
-    df.sort_index(inplace=True)
-    df.sort_index()
-    numeric_cols = df.select_dtypes(include=["number"]).columns
-    agg_funcs = {col: "mean" for col in numeric_cols}
+    agg = {col: "mean" for col in df.select_dtypes("number").columns}
     if "precip_mm" in df.columns:
-        agg_funcs["precip_mm"] = "sum"
-    end_date = df.index.max().strftime("%Y-%m-%d")
-    agg_data = {
-        "15min": df.copy().reset_index(),
-        "1hour": df.resample("h").agg(agg_funcs).reset_index(),
-        "daily": df.resample("D").agg(agg_funcs).reset_index(),
+        agg["precip_mm"] = "sum"
+
+    df_gseason = df.reset_index()
+    df_gseason["gseason_periods"] = df_gseason["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
+    df_gseason = df_gseason.dropna(subset=["gseason_periods"])
+    gseason = df_gseason.groupby("gseason_periods").agg(agg).reset_index()
+
+    return {
+        "15min": df.reset_index(),
+        "1hour": df.resample("h").agg(agg).reset_index(),
+        "daily": df.resample("D").agg(agg).reset_index(),
+        "monthly": df.resample("ME").agg(agg).reset_index(),
+        "gseason": gseason
     }
-    df_monthly = df[df.index.year == int(data_year)].resample("ME").agg(agg_funcs).reset_index()
-    df_monthly["timestamp"] = df_monthly["timestamp"].dt.strftime("%Y-%m")
-    agg_data["monthly"] = df_monthly
-    growing_season_results = []
-    for season_name, months in QUARTERS.items():
-        season_mask = df.index.month.isin(months)
-        df_season = df[season_mask]
-        if not df_season.empty:
-            season_means = df_season.agg(agg_funcs)
-            season_means["timestamp"] = season_name
-            growing_season_results.append(season_means)
-    if growing_season_results:
-        df_growingseason = pd.DataFrame(growing_season_results)
-        df_growingseason.reset_index(drop=True, inplace=True)
-        agg_data["growingseason"] = df_growingseason
-    for key, df_out in agg_data.items():
-        zip_filename = f"dataloggerData_{data_year}-01-01_{end_date}_{key}.zip"
-        zip_path = os.path.join(DATA_PROCESSED_DIR, zip_filename)
-        csv_filename = zip_filename.replace(".zip", ".csv")
-        csv_path = os.path.join(DATA_PROCESSED_DIR, csv_filename)
-        df_out.to_csv(csv_path, index=False, encoding="utf-8")
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(csv_path, csv_filename)
+
+
+def save_outputs(year, aggregated):
+    for gran, df_out in aggregated.items():
+        if df_out.empty:
+            continue
+
+        # ✅ Determine the final date for filenames
+        if "timestamp" in df_out.columns:
+            end_timestamp = pd.to_datetime(df_out["timestamp"]).max()
+            end_date = end_timestamp.date()
+        else:
+            # e.g., gseason where no timestamp exists
+            end_date = f"{year}-10-31"
+
+        # ✅ Save CSV and ZIP
+        fname = f"dataloggerData_{year}-01-01_{end_date}_{gran}.csv"
+        zipname = fname.replace(".csv", ".zip")
+        csv_path = os.path.join(DATA_PROCESSED_DIR, fname)
+        zip_path = os.path.join(DATA_PROCESSED_DIR, zipname)
+
+        df_out.to_csv(csv_path, index=False, float_format="%.4f")
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(csv_path, arcname=fname)
+
         os.remove(csv_path)
         logging.info(f"✅ Saved: {zip_path}")
 
+
+def process_logger_and_climate_data(year):
+    logging.info(f"🚀 Processing year: {year}")
+    df_logger = merge_all_loggers(year)
+    if df_logger is None or df_logger.empty:
+        raise RuntimeError("❌ No logger data found")
+
+    df_logger["timestamp"] = df_logger["timestamp"].dt.tz_localize(None)
+    end_ts = df_logger["timestamp"].max()
+    df_weather = get_weather_data(year, end_timestamp=end_ts)
+
+    df_combined = pd.merge(df_logger, df_weather, on="timestamp", how="outer")
+    df_combined = add_swc(df_combined)
+    df_combined = calculate_ratios(df_combined)
+    aggregated = aggregate(df_combined, year)
+    save_outputs(year, aggregated)
+
+
 if __name__ == "__main__":
-    for year_to_process in ["2025"]:
-        logging.info(f"🚀 Processing data for {year_to_process}...")
-        df_logger = read_logger_data(year_to_process)
-        df_weather = get_weather_data(year_to_process)
-        if df_logger is not None and not df_logger.empty:
-            aggregate_data(df_logger, df_weather, year_to_process)
+    os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    for y in YEARS:
+        if y >= 2024:  # ⏳ Only process years that support growing season logic
+            process_logger_and_climate_data(y)
         else:
-            logging.error(f"❌ No valid data for {year_to_process}. Skipping aggregation.")
+            logging.info(f"⚠️ Skipping {y}: growing season logic not supported for this year.")

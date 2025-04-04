@@ -1,16 +1,19 @@
-/**
- * ✅ Markdown Loader Script
- * - Loads and renders markdown content dynamically into specified elements.
- */
+import { getElementByIdSafe } from "./ui_utils.js";
 
 /**
- * Load markdown content into a specified HTML element.
- * @param {string} elementId - The ID of the element where the markdown will be inserted.
- * @param {string} markdownUrl - The URL of the markdown file to fetch.
+ * 📖 Converts raw markdown text to HTML using the `marked` library.
+ */
+function convertMarkdownToHtml(markdownText) {
+    return marked.parse(markdownText);  // marked must be globally loaded
+}
+
+/**
+ * 📥 Fetch and render markdown content into the target container.
+ * @param {string} elementId - The ID of the DOM element to insert content into.
+ * @param {string} markdownUrl - The URL to fetch the markdown file from.
  */
 async function loadMarkdownContent(elementId, markdownUrl) {
     console.log(`📖 Loading markdown into #${elementId} from ${markdownUrl}...`);
-
     try {
         const response = await fetch(markdownUrl);
         if (!response.ok) {
@@ -18,29 +21,15 @@ async function loadMarkdownContent(elementId, markdownUrl) {
         }
 
         const markdownText = await response.text();
-        document.getElementById(elementId).innerHTML = convertMarkdownToHtml(markdownText);
+        const container = getElementByIdSafe(elementId);
+        container.innerHTML = convertMarkdownToHtml(markdownText);
 
         console.log(`✅ Markdown successfully loaded into #${elementId}`);
     } catch (error) {
         console.error(`❌ Error loading markdown for #${elementId}:`, error);
-        document.getElementById(elementId).innerHTML =
-            `<p class="text-danger">Failed to load content from ${markdownUrl}</p>`;
+        const fallback = getElementByIdSafe(elementId);
+        fallback.innerHTML = `<p class="text-danger">Failed to load content from ${markdownUrl}</p>`;
     }
 }
 
-/**
- * Convert markdown text to HTML.
- * @param {string} markdown - The markdown text.
- * @returns {string} - The converted HTML.
- */
-function convertMarkdownToHtml(markdown) {
-    return markdown
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
-        .replace(/\*(.*)\*/gim, '<i>$1</i>')
-        .replace(/!\[(.*?)\]\((.*?)\)/gim, "<img alt='$1' src='$2' />")
-        .replace(/\[(.*?)\]\((.*?)\)/gim, "<a href='$2'>$1</a>")
-        .replace(/\n/g, '<br>');
-}
+export { loadMarkdownContent };

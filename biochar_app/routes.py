@@ -15,6 +15,7 @@ from biochar_app.config import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
     DEFAULT_VARIABLE,
+    VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,
     DEFAULT_DEPTH,
     DEFAULT_STRIP,
     DEFAULT_LOGGER_LOCATION,
@@ -62,7 +63,7 @@ main = Blueprint("main", __name__)
 
 common_xaxis_config = dict(
     title="Date",
-    tickformat="%b %Y",  # ✅ Ensures "Jan 2024", "Feb 2024" format
+    tickformat="%b\n%Y",  # ✅ Ensures "Jan 2024", "Feb 2024" format
     type="date",
     showline=True,
     linewidth=1,
@@ -104,50 +105,41 @@ def common_legend_config(title="<b>Legend</b>"):
 # In-memory cache to store loaded datasets
 loaded_datasets = {}
 
-def load_logger_data(year, granularity):
-    """
-    Loads logger dataset for a specific year and granularity.
-    Uses in-memory caching to avoid reloading files.
-    Dynamically finds the correct end date using available files.
-    """
-    key = f"{year}_{granularity}"
+
+def load_logger_data(year: int, granularity: str):
+    key = f"{year}-{granularity}"  # ✅ Include granularity in cache key
     if key in loaded_datasets:
-        logging.info(f"📦 Using cached dataset: {key}")
         return loaded_datasets[key]
 
-    # Parse available files to get best match for year + granularity
+    # Parse all available files
     parsed_files = parse_filenames(DATA_PROCESSED_DIR)
-    matching = [
-        parts for parts in parsed_files
-        if len(parts) >= 3 and parts[0].startswith(year) and parts[2] == granularity
-    ]
 
-    if not matching:
-        logging.warning(f"⚠️ No data file found for {year} - {granularity}")
-        raise FileNotFoundError(f"No data available for {year} - {granularity}")
+    # Find the matching file
+    matching_file = next(
+        (f for f in parsed_files if f.granularity == granularity and f.start_date.startswith(str(year))),
+        None
+    )
+    if matching_file is None:
+        raise FileNotFoundError(f"No file found for {year} - {granularity}")
 
-    # Choose the file with the latest end date
-    best = max(matching, key=lambda info: info.end_date)  # parts = (start_date, end_date, granularity)
-    start_date, end_date, *_ = best
-    filename = f"dataloggerData_{best.start_date}_{best.end_date}_{best.granularity}.zip"
-    filepath = os.path.join(DATA_PROCESSED_DIR, filename)
+    file_path = os.path.join(DATA_PROCESSED_DIR, matching_file.filename)
+    print("file_path:", file_path)
 
-    if not os.path.exists(filepath):
-        logging.error(f"❌ File not found: {filepath}")
-        raise FileNotFoundError(f"❌ File not found: {filepath}")
-
-    logging.info(f"📂 Loading file: {filename}")
-
-    with zipfile.ZipFile(filepath, "r") as z:
+    with zipfile.ZipFile(file_path, 'r') as z:
         csv_filename = z.namelist()[0]
         with z.open(csv_filename) as f:
             df = pd.read_csv(f)
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            loaded_datasets[key] = df
-            return df
+
+    # Only convert timestamp column if it exists and granularity isn't gseason
+    if granularity != "gseason" and "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+    loaded_datasets[key] = df  # ✅ Cache it with granularity-specific key
+    return df
 
 
 LoggerFileInfo = namedtuple("LoggerFileInfo", ["start_date", "end_date", "granularity", "filename"])
+
 
 def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
     filenames = [f for f in os.listdir(data_dir) if f.startswith(prefix) and f.endswith(suffix)]
@@ -293,11 +285,11 @@ def filter_summary_statistics(df, year, variable, strip, granularity):
 
         # ✅ Apply filtering
         filtered_df = df[
-            (df["year"].astype(str) == str(year)) &
+            (df["year"] == year) &
             (df["variable"] == variable) &
             (df["strip"] == strip) &
             (df["granularity"] == granularity)
-        ]
+            ]
 
         return filtered_df  # NaNs preserved
 
@@ -372,46 +364,39 @@ def favicon():
 @main.route("/get_summary_stats", methods=["POST"])
 def get_summary_stats():
     try:
-        data = request.json
-        year = data.get("year")
-        variable = data.get("variable")
-        strip = data.get("strip")
-        granularity = data.get("granularity")
+        data = request.get_json()
+        year = int(data["year"])
+        variable = data["variable"]
+        strip = data["strip"]
+        granularity = data["granularity"]
 
-        # 🛠 Construct dataset path
-        dataset_path = f"{DATA_PROCESSED_DIR}/dataloggerData_{year}-01-01_{year}-12-31_{granularity}.zip"
-        if not os.path.exists(dataset_path):
-            return jsonify({"error": "Dataset file not found"}), 400
+        df = load_logger_data(year, granularity)
 
-        # ✅ Load data from zip file
-        with zipfile.ZipFile(dataset_path, 'r') as z:
-            csv_filename = z.namelist()[0]
-            with z.open(csv_filename) as f:
-                df = pd.read_csv(f)
+        # Filter relevant columns for RAW
+        raw_cols = [col for col in df.columns if col.startswith(f"{variable}_") and "_raw_" in col and f"_{strip}_" in col]
+        ratio_cols = [col for col in df.columns if col.startswith(f"{variable}_") and "_ratio_" in col and f"_{strip}_" in col]
 
-        expected_column = f"{variable}_1_raw_{strip}_T"
-        if expected_column not in df.columns:
-            return jsonify({"error": f"Column '{expected_column}' missing"}), 400
+        def compute_stats(columns):
+            return {
+                col.split("_")[-1]: {
+                    "min": round(df[col].min(), 4),
+                    "mean": round(df[col].mean(), 4),
+                    "max": round(df[col].max(), 4),
+                    "std": round(df[col].std(), 4),
+                }
+                for col in columns if col in df.columns
+            }
 
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["month"] = df["timestamp"].dt.strftime("%Y-%m")  # Format as Year-Month
-
-        # ✅ Compute summary statistics and round values to 4 decimal places
-        stats = df[expected_column].agg(["min", "mean", "max", "std"]).round(4).to_dict()
-
-        # 🛠 Fix output structure (nest statistics under variable name)
-        response_data = {
-            "granularity": granularity,
-            "statistics": {variable: stats},  # ✅ Now correctly nested
-            "strip": strip,
+        return jsonify({
+            "raw_statistics": compute_stats(raw_cols),
+            "ratio_statistics": compute_stats(ratio_cols),
+            "year": year,
             "variable": variable,
-            "year": year
-        }
-
-        return jsonify(response_data)
-
+            "strip": strip,
+            "granularity": granularity
+        })
     except Exception as e:
-        logging.error(f"❌ Error in /get_summary_stats: {str(e)}")
+        logging.error(f"❌ Error in /get_summary_stats: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
@@ -507,8 +492,8 @@ def plot_raw():
         traces = []
 
         # ✅ Handle trace grouping (depth-based or logger location-based)
-        if trace_option == "depth":
-            logging.info(f"📊 Trace mode: DEPTH")
+        if trace_option == "depths":
+            logging.info(f"📊 Trace mode: DEPTHS")
             logging.info(f"🔎 DataFrame columns: {filtered_df.columns.tolist()}")
             grouping_values = ["1", "2", "3"]  # Corresponds to depths: 6, 12, 18 inches
             for val in grouping_values:
@@ -520,8 +505,8 @@ def plot_raw():
                         mode="lines",
                         name=f"{variable} ({sensor_depth_mapping[int(val)]})"
                     ))
-        else:  # traceOption == "logger"
-            logging.info(f"📊 Trace mode: DEPTH")
+        else:  # traceOption == "location"
+            logging.info(f"📊 Trace mode: LOCATION")
             logging.info(f"🔎 DataFrame columns: {filtered_df.columns.tolist()}")
             grouping_values = ["T", "M", "B"]  # Top, Middle, Bottom locations
             for val in grouping_values:
@@ -535,30 +520,33 @@ def plot_raw():
                     ))
 
         # ✅ Add precipitation as bars for VWC
-        if variable == "VWC" and "precip_mm" in filtered_df.columns:
+        precip_col = f"precip_mm"
+        if variable == "VWC" and precip_col in filtered_df.columns:
             traces.append(go.Bar(
                 x=filtered_df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
-                y=filtered_df["precip_mm"].tolist(),
+                y=filtered_df[precip_col].tolist(),
                 name="Precipitation (mm)",
                 yaxis="y2",
                 marker=dict(color="lightgray"),
                 opacity=0.7,
-                width=1000000  # ✅ Adjust bar width for better visibility
+                width=1000 * 60 * 60 * 24  # day in ms
             ))
 
-        # ✅ Add air temperature trace for T
-        if variable == "T" and "temp_air_degC" in filtered_df.columns:
+        # ✅ Add air temperature trace for T if available
+        temp_col = f"temp_air_degC"
+        if variable == "T" and temp_col in filtered_df.columns:
             traces.append(go.Scatter(
                 x=filtered_df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
-                y=filtered_df["temp_air_degC"].tolist(),
+                y=filtered_df[temp_col].tolist(),
+                name="Air Temp (°C)",
                 mode="lines",
-                name="Air Temperature",
-                line=dict(color="orange", dash="dot")
+                line=dict(color="gray", dash="dot"),
+                yaxis="y2"
             ))
 
         # ✅ Build Plotly layout
         layout = go.Layout(
-            title=f"Raw Data Plot for {variable} in Strip {strip}",
+            title=f"{granularity_name_mapping[granularity]} Data Plot for {variable_name_mapping[variable]} in Strip {strip}, {year}",
             xaxis=dict(
                 **common_xaxis_config,
                 range=[start_date, end_date]
@@ -574,8 +562,9 @@ def plot_raw():
             ),
             legend=common_legend_config(),
             template="plotly_white",
-            width=1000,  # ✅ Adjust width dynamically
-            margin=dict(l=40, r=10, t=50, b=40)
+            margin=dict(l=50, r=50, t=40, b=40),
+            barmode="overlay",  # ✅ Corrected
+            autosize=True
         )
 
         logging.info("✅ plot_raw generated successfully.")
@@ -589,6 +578,88 @@ def plot_raw():
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 
+@main.route("/plot_raw_gseason", methods=["POST"])
+def plot_raw_gseason():
+    try:
+        request_data = request.get_json()
+        logging.info("🧪 Incoming request to /plot_raw_gseason with data: %s", request_data)
+
+        required_keys = ["year", "variable", "strip", "loggerLocation", "traceOption"]
+        missing_keys = [key for key in required_keys if key not in request_data or not request_data[key]]
+
+        if missing_keys:
+            return jsonify({"error": f"Missing required parameters: {missing_keys}"}), 400
+
+        year = request_data["year"]
+        variable = request_data["variable"]
+        strip = request_data["strip"]
+        logger_location = request_data["loggerLocation"]
+        trace_option = request_data["traceOption"]
+        # Load and filter the logger data
+        df = load_logger_data(year, "gseason")  # "gseason" as special granularity
+
+        traces = []
+
+        if trace_option == "depths":
+            logging.info("📊 Gseason trace mode: DEPTHS")
+            for depth in ["1", "2", "3"]:
+                col_name = f"{variable}_{depth}_raw_{strip}_{logger_location}"
+                if col_name in df.columns:
+                    print(f"✅ Found column {col_name}, sample values:", df[col_name].dropna().head())
+                    traces.append(go.Bar(
+                        x=df["gseason_periods"],
+                        y=df[col_name].tolist(),
+                        #mode="lines+markers",
+                        name=sensor_depth_mapping.get(int(depth), f"Depth {depth}"),
+                        width=0.1,
+                        bargap=0.15
+                        #line=dict(width=2)
+                    ))
+                else:
+                    print(f"❌ Missing column: {col_name}")
+        else:  # traceOption == "logger"
+            logging.info("📊 Gseason trace mode: LOGGER")
+            for loc in ["T", "M", "B"]:
+                col_name = f"{variable}_{request_data['depth']}_raw_{strip}_{loc}"
+                if col_name in df.columns:
+                    traces.append(go.Bar(
+                        x=df["gseason_periods"],
+                        y=df[col_name].tolist(),
+                        #mode="lines+markers",
+                        name=sensor_depth_mapping.get(int('depth'), f"Depth {'depth'}"),
+                        width=0.1,
+                        bargap=0.15
+                        #line=dict(width=2)
+                    ))
+
+        layout = go.Layout(
+            title=f"Growing Season Plot for {variable_name_mapping.get(variable, variable)} in Strip {strip}, Logger {logger_location}",
+            xaxis=dict(
+                title="Growing Season Period",
+                type="category",
+                categoryorder="array",
+                categoryarray=["Q1_Winter", "Q2_Early_Growing", "Q3_Peak_Harvest"]
+            ),
+            yaxis=common_yaxis_config(variable),
+            legend=common_legend_config(),
+            template="plotly_white",
+            margin=dict(l=50, r=30, t=40, b=40)
+        )
+
+        logging.info("✅ plot_raw_gseason completed successfully.")
+        fig = go.Figure(data=traces, layout=layout)
+        return jsonify(sanitize_json(fig.to_plotly_json()))
+        # logging.info("✅ plot_raw_gseason generated successfully.")
+        # return jsonify({
+        #     "data": [trace.to_plotly_json() for trace in traces],
+        #     "layout": layout.to_plotly_json()
+        # })
+
+    except Exception as e:
+        logging.error(f"❌ Error in plot_raw_gseason: {e}", exc_info=True)
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+
 @main.route("/plot_ratio", methods=["POST"])
 def plot_ratio():
     try:
@@ -599,7 +670,7 @@ def plot_ratio():
             return jsonify({"error": "Invalid data format received"}), 400
 
         # ✅ Extract user selections
-        year = str(data["year"])
+        year = (data["year"])
         start_date = str(data["startDate"])
         end_date = str(data["endDate"])
         granularity = data["granularity"]
@@ -662,18 +733,25 @@ def plot_ratio():
 
         # ✅ Clean up layout
         legend_title = f"{variable}, {selected_logger}, {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}"
+        ratio_y_label = f"{label_name_mapping.get(variable, variable)} Ratio"
         fig.update_layout(
-            title=(f"Ratio Data Plot for {variable} at {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}; "
-                  f"Biochar-Injected Strips (S1 & S3)<br> to no Biochar Strips (S2 & S4)"),
+            title=(
+                f"{granularity_name_mapping[granularity]} Ratio Data Plot for {variable_name_mapping[variable]} at {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}; "
+                f"<br>Biochar-Injected Strips (S1 & S3) to no Biochar Strips (S2 & S4)"),
             xaxis=dict(
                 **common_xaxis_config,
                 range=[start_date, end_date]
             ),
-            yaxis=common_yaxis_config(title="Ratio"),
-            margin=dict(l=40, r=10, t=50, b=50),
+            yaxis=dict(
+                title=ratio_y_label,
+                tickformat=".2f",
+                showline=True,
+                linecolor="black"
+            ),
+            margin=dict(l=50, r=50, t=40, b=40),
             legend=common_legend_config(title=legend_title),
             template="plotly_white",
-            width=1000,
+            autosize=True
         )
 
         logging.info(f"✅ Ratio plot generated with {len(fig.data)} traces.")
@@ -681,6 +759,86 @@ def plot_ratio():
 
     except Exception as e:
         logging.error(f"❌ Unexpected error in plot_ratio: {e}", exc_info=True)
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+
+@main.route("/plot_ratio_gseason", methods=["POST"])
+def plot_ratio_gseason():
+    print("✅ plot_raw_gseason was called")  # Add this for confirmation
+    try:
+        data = request.get_json()
+        logging.info("🧪 Incoming request to /plot_ratio_gseason with data: %s", data)
+
+        # ✅ Required field checks
+        required_keys = ["year", "variable", "depth", "loggerLocation"]
+        missing_keys = [key for key in required_keys if key not in data or not data[key]]
+        if missing_keys:
+            return jsonify({"error": f"Missing required parameters: {missing_keys}"}), 400
+
+        year = data["year"]
+        variable = data["variable"]
+        selected_depth = str(data["depth"])
+        selected_logger = data["loggerLocation"]
+
+        # ✅ Load gseason dataset
+        df = load_logger_data(year, "gseason")
+        print("🧪 plot_ratio_gseason request:", data)
+        print("📁 gseason DataFrame columns:", df.columns.tolist())
+        expected_columns = [
+            f"{variable}_{selected_depth}_ratio_S1_S2_{selected_logger}",
+            f"{variable}_{selected_depth}_ratio_S3_S4_{selected_logger}"
+        ]
+
+        logging.info(f"🔎 Gseason ratio expected columns: {expected_columns}")
+        logging.info(f"📋 Available columns in df: {df.columns.tolist()}")
+
+        available_columns = [col for col in expected_columns if col in df.columns]
+        if not available_columns:
+            return jsonify({"error": "No matching ratio columns found for growing season"}), 404
+
+        fig = go.Figure()
+        for col in available_columns:
+            label = "S1/S2" if "S1_S2" in col else "S3/S4"
+            fig.add_trace(go.Bar(
+                x=df["gseason_periods"],
+                y=df[col].replace({pd.NA: None}).tolist(),
+                #mode="lines+markers",
+                name=label,
+                #line=dict(width=2),
+                width=0.1,
+                bargap=0.15,
+                hovertemplate="%{x}: %{y:.2f}<extra></extra>"
+            ))
+
+        # ✅ Custom axis/legend styling
+        legend_title = f"{variable}, {selected_logger}, {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}"
+        ratio_y_label = f"{label_name_mapping.get(variable, variable)} Ratio"
+
+        fig.update_layout(
+            title=f"Growing Season Ratio Plot for {variable_name_mapping.get(variable, variable)} at {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}",
+            xaxis=dict(
+                title="Growing Season Period",
+                type="category",
+                categoryorder="array",
+                categoryarray=["Q1_Winter", "Q2_Early_Growing", "Q3_Peak_Harvest"]
+            ),
+            yaxis=dict(
+                title=ratio_y_label,
+                tickformat=".2f",
+                showline=True,
+                linecolor="black"
+            ),
+            legend=common_legend_config(title=legend_title),
+            template="plotly_white",
+            margin=dict(l=50, r=50, t=40, b=40),
+            autosize=True
+        )
+
+        logging.info("✅ plot_ratio_gseason completed successfully.")
+        return jsonify(sanitize_json(fig.to_plotly_json()))
+
+    except Exception as e:
+        logging.error(f"❌ Error in plot_ratio_gseason: {e}", exc_info=True)
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 
@@ -705,7 +863,7 @@ def download_csv_file(data_type):
 
         # ✅ Check if the file exists before sending
         if not os.path.exists(file_path):
-            return jsonify({"error": f"File not found: {filename}"}), 404
+            return jsonify({"error": f"In download_csv, File not found: {filename}"}), 404
 
         return send_from_directory("biochar_app/data-processed", filename, as_attachment=True)
 

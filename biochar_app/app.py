@@ -45,7 +45,7 @@ else:
 # Preload static datasets into memory (2023, 2024 only)
 # This avoids repeated ZIP file loading during requests
 
-for preload_year in ["2023", "2024"]:
+for preload_year in [2023, 2024]:
     for granularity in ["15min", "1hour", "daily", "monthly"]: #, "growingseason"
         try:
             load_logger_data(preload_year, granularity)
