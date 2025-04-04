@@ -6,12 +6,15 @@ import logging
 import subprocess
 
 # Configure logging
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
 logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler("biochar_app.log"),
-        logging.StreamHandler()  # Optional: keep printing to terminal too
+        logging.FileHandler(os.path.join(log_dir, "biochar_app.log"))
+        #logging.StreamHandler()  # Optional: keep printing to terminal too
     ]
 )
 
