@@ -10,6 +10,7 @@ import numpy as np
 import logging
 import json
 import glob
+from biochar_app.config import GSEASON_PERIODS
 from collections import namedtuple
 from biochar_app.config import (
     DEFAULT_YEAR,
@@ -581,6 +582,7 @@ def plot_raw():
 @main.route("/plot_raw_gseason", methods=["POST"])
 def plot_raw_gseason():
     try:
+
         request_data = request.get_json()
         logging.info("🧪 Incoming request to /plot_raw_gseason with data: %s", request_data)
 
@@ -595,8 +597,7 @@ def plot_raw_gseason():
         strip = request_data["strip"]
         logger_location = request_data["loggerLocation"]
         trace_option = request_data["traceOption"]
-        # Load and filter the logger data
-        df = load_logger_data(year, "gseason")  # "gseason" as special granularity
+        df = load_logger_data(year, "gseason")
 
         traces = []
 
@@ -609,15 +610,13 @@ def plot_raw_gseason():
                     traces.append(go.Bar(
                         x=df["gseason_periods"],
                         y=df[col_name].tolist(),
-                        #mode="lines+markers",
                         name=sensor_depth_mapping.get(int(depth), f"Depth {depth}"),
-                        width=0.1,
-                        bargap=0.15
-                        #line=dict(width=2)
+                        width=0.2,
+                        hovertemplate="%{x}: %{y:.2f}<extra></extra>"
                     ))
                 else:
                     print(f"❌ Missing column: {col_name}")
-        else:  # traceOption == "logger"
+        else:
             logging.info("📊 Gseason trace mode: LOGGER")
             for loc in ["T", "M", "B"]:
                 col_name = f"{variable}_{request_data['depth']}_raw_{strip}_{loc}"
@@ -625,12 +624,16 @@ def plot_raw_gseason():
                     traces.append(go.Bar(
                         x=df["gseason_periods"],
                         y=df[col_name].tolist(),
-                        #mode="lines+markers",
-                        name=sensor_depth_mapping.get(int('depth'), f"Depth {'depth'}"),
-                        width=0.1,
-                        bargap=0.15
-                        #line=dict(width=2)
+                        name=f"Logger {loc}",
+                        width=0.2,
+                        hovertemplate="%{x}: %{y:.2f}<extra></extra>"
                     ))
+
+        season_keys = list(GSEASON_PERIODS.keys())
+        season_labels = [
+            f"{key.split('_', 1)[1]} ({start} to {end})"
+            for key, (start, end) in GSEASON_PERIODS.items()
+        ]
 
         layout = go.Layout(
             title=f"Growing Season Plot for {variable_name_mapping.get(variable, variable)} in Strip {strip}, Logger {logger_location}",
@@ -638,7 +641,10 @@ def plot_raw_gseason():
                 title="Growing Season Period",
                 type="category",
                 categoryorder="array",
-                categoryarray=["Q1_Winter", "Q2_Early_Growing", "Q3_Peak_Harvest"]
+                categoryarray=season_keys,
+                tickmode="array",
+                tickvals=season_keys,
+                ticktext=season_labels
             ),
             yaxis=common_yaxis_config(variable),
             legend=common_legend_config(),
@@ -649,15 +655,11 @@ def plot_raw_gseason():
         logging.info("✅ plot_raw_gseason completed successfully.")
         fig = go.Figure(data=traces, layout=layout)
         return jsonify(sanitize_json(fig.to_plotly_json()))
-        # logging.info("✅ plot_raw_gseason generated successfully.")
-        # return jsonify({
-        #     "data": [trace.to_plotly_json() for trace in traces],
-        #     "layout": layout.to_plotly_json()
-        # })
 
     except Exception as e:
         logging.error(f"❌ Error in plot_raw_gseason: {e}", exc_info=True)
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
 
 
 @main.route("/plot_ratio", methods=["POST"])
@@ -764,12 +766,11 @@ def plot_ratio():
 
 @main.route("/plot_ratio_gseason", methods=["POST"])
 def plot_ratio_gseason():
-    print("✅ plot_raw_gseason was called")  # Add this for confirmation
+    print("✅ plot_ratio_gseason was called")
     try:
         data = request.get_json()
         logging.info("🧪 Incoming request to /plot_ratio_gseason with data: %s", data)
 
-        # ✅ Required field checks
         required_keys = ["year", "variable", "depth", "loggerLocation"]
         missing_keys = [key for key in required_keys if key not in data or not data[key]]
         if missing_keys:
@@ -780,10 +781,10 @@ def plot_ratio_gseason():
         selected_depth = str(data["depth"])
         selected_logger = data["loggerLocation"]
 
-        # ✅ Load gseason dataset
         df = load_logger_data(year, "gseason")
         print("🧪 plot_ratio_gseason request:", data)
         print("📁 gseason DataFrame columns:", df.columns.tolist())
+
         expected_columns = [
             f"{variable}_{selected_depth}_ratio_S1_S2_{selected_logger}",
             f"{variable}_{selected_depth}_ratio_S3_S4_{selected_logger}"
@@ -802,17 +803,19 @@ def plot_ratio_gseason():
             fig.add_trace(go.Bar(
                 x=df["gseason_periods"],
                 y=df[col].replace({pd.NA: None}).tolist(),
-                #mode="lines+markers",
                 name=label,
-                #line=dict(width=2),
-                width=0.1,
-                bargap=0.15,
+                width=0.2,
                 hovertemplate="%{x}: %{y:.2f}<extra></extra>"
             ))
 
-        # ✅ Custom axis/legend styling
         legend_title = f"{variable}, {selected_logger}, {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}"
         ratio_y_label = f"{label_name_mapping.get(variable, variable)} Ratio"
+
+        season_keys = list(GSEASON_PERIODS.keys())
+        season_labels = [
+            f"{key.split('_', 1)[1]} ({start} to {end})"
+            for key, (start, end) in GSEASON_PERIODS.items()
+        ]
 
         fig.update_layout(
             title=f"Growing Season Ratio Plot for {variable_name_mapping.get(variable, variable)} at {sensor_depth_mapping.get(int(selected_depth), 'Unknown Depth')}",
@@ -820,7 +823,10 @@ def plot_ratio_gseason():
                 title="Growing Season Period",
                 type="category",
                 categoryorder="array",
-                categoryarray=["Q1_Winter", "Q2_Early_Growing", "Q3_Peak_Harvest"]
+                categoryarray=season_keys,
+                tickmode="array",
+                tickvals=season_keys,
+                ticktext=season_labels
             ),
             yaxis=dict(
                 title=ratio_y_label,
