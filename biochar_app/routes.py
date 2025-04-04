@@ -10,9 +10,9 @@ import numpy as np
 import logging
 import json
 import glob
-from biochar_app.config import GSEASON_PERIODS
+from config import GSEASON_PERIODS
 from collections import namedtuple
-from biochar_app.config import (
+from config import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
     DEFAULT_VARIABLE,
