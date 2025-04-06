@@ -3,7 +3,7 @@ import pandas as pd
 import logging
 import requests
 
-from config import (
+from biochar_app.config import (
     DATA_RAW_DIR,
     DATA_PROCESSED_DIR,
     COAG_STATION,

@@ -3,8 +3,8 @@ import logging
 import os
 import zipfile
 from datetime import datetime
-from get_weather_data import get_weather_data
-from config import (
+from biochar_app.get_weather_data import get_weather_data
+from biochar_app.config import (
     BASE_DIR, DATA_RAW_DIR, DATA_PROCESSED_DIR, YEARS, DEPTHS,
     SWC_DEPTH_WEIGHTS, LOGGER_LOCATIONS, STRIPS,
     VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,

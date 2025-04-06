@@ -10,9 +10,8 @@ import numpy as np
 import logging
 import json
 import glob
-from config import GSEASON_PERIODS
 from collections import namedtuple
-from config import (
+from biochar_app.config import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
     DEFAULT_VARIABLE,
@@ -23,6 +22,7 @@ from config import (
     DEFAULT_GRANULARITY,
     DATA_PROCESSED_DIR,
     YEARS,
+    GSEASON_PERIODS,
     sensor_depth_mapping,
     logger_location_mapping,
     variable_name_mapping,
