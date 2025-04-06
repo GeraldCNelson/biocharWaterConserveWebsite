@@ -1,5 +1,5 @@
 ---
-title: "Biochar Injection Experiment, 2022-2024"
+title: "Biochar Injection Experiment, Fruita, CO, 2022-2024"
 author: "Gerald Nelson"
 date: "2025-03-21"
 output: md_document
@@ -12,7 +12,7 @@ This is an introduction to the project. Here's what you can expect:
 -   Overview of the biochar experiment.
 -   Digital data collection results in graphical and tabular form
 -   Technical details on the process.
--   Coming soon, fertilizer application, soil results and yield quantity and quality
+-   Coming soon, biochar source and characterics, fertilizer application, soil results and yield quantity and quality
 
 ## What is Biochar?
 

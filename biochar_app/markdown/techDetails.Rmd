@@ -1,9 +1,11 @@
 ---
 title: "Technical details for the biochar data collection process"
 author: "Gerald Nelson"
-date: "2025-01-29"
+date: "2025-04-05"
 output: md_document
 ---
+
+# The biochar field data collection process
 
 Data on soil volumetric water content (VWC), bulk electrical conductivity (EC), and temperature (degrees C) are collected from 12 Campbell Scientific CR206X data loggers 3 each in 4 strips. Each data logger is connected to 3 Campbell Scientific CS650 Water Content Reflectometers, located at 6, 12, and 18 inches below the surface of the field.
 
@@ -18,12 +20,6 @@ Electrical conductivity is determined by exciting the rods with a known non-pola
 Temperature is measured with a thermistor in contact with one of the rods.
 
 Source: Product Manual: CS650 and CS655 Water Content Reflectometers, Revision: 11/2021, Campbell Scientific, Inc. Available at the Campbell Scientific website - <https://www.campbellsci.com>.
-```{r}
-```
-
-
-```{r}
-```
 
 ### Storing and transmitting the data to the base station
 

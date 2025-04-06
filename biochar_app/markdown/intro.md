@@ -5,8 +5,8 @@ This is an introduction to the project. Here’s what you can expect:
 -   Overview of the biochar experiment.
 -   Digital data collection results in graphical and tabular form
 -   Technical details on the process.
--   Coming soon, fertilizer application, soil results and yield quantity
-    and quality
+-   Coming soon, biochar source and characterics, fertilizer
+    application, soil results and yield quantity and quality
 
 ## What is Biochar?
 

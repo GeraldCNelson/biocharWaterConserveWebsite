@@ -1,3 +1,5 @@
+# The biochar field data collection process
+
 Data on soil volumetric water content (VWC), bulk electrical
 conductivity (EC), and temperature (degrees C) are collected from 12
 Campbell Scientific CR206X data loggers 3 each in 4 strips. Each data
@@ -41,7 +43,7 @@ Temperature is measured with a thermistor in contact with one of the
 rods.
 
 Source: Product Manual: CS650 and CS655 Water Content Reflectometers,
-Revision: 11/2021, Campbell Scientific, Inc.. Available at the Campbell
+Revision: 11/2021, Campbell Scientific, Inc. Available at the Campbell
 Scientific website - <https://www.campbellsci.com>.
 
 ### Storing and transmitting the data to the base station
@@ -69,8 +71,8 @@ DC adapter.
 
 The experiment site is at a location with no internet access. To address
 this, the project uses a Starlink terminal connected to the base station
-through an ASUS wifi router. The Starlink terminal assigns both an IPv4
-and IPv6 address to the ASUS wifi router. The Starlink IPv4 address
+through an ASUS WiFi router. The Starlink terminal assigns both an IPv4
+and IPv6 address to the ASUS WiFi router. The Starlink IPv4 address
 can’t use port forwarding so it is necessary to configure the ASUS
 router to accept and assign IPv6 addresses. The network device in the
 base station receives this address and provides access to the field
@@ -80,6 +82,6 @@ The final stop for the data is at a remote location with a PC running
 the PC400 software from Campbell Scientific. The download process begins
 by establishing a connection from the PC to a datalogger and then
 choosing the data download tab after the connection is established. The
-new data (determined by a timestamp in each record of data) is appended
+new data (determined by a time stamp in each record of data) is appended
 to previously created .dat file (which is basically a .csv file with
 introductory metadata rows).
