@@ -44,10 +44,22 @@ html, body {
     margin-right: auto;
 }
 
+/* Default markdown layout for most screens */
 .container.markdown-container {
-    max-width: 100%;
-    padding-left: 5%;
-    padding-right: 5%;
+    max-width: 90%;
+    margin: 0 auto;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+.markdown-content {
+    font-family: Arial, sans-serif;
+    font-size: 16px;        /* consistent font size */
+    line-height: 1.6;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 30px;          /* nice internal space */
 }
 
 /* Tabs */
@@ -189,6 +201,13 @@ html, body {
     .graph-container {
         width: 100%;
         min-width: 0;
+    }
+}
+
+/* Larger screen override for readability */
+@media screen and (min-width: 992px) {
+    .container.markdown-container {
+        max-width: 1000px;
     }
 }
 

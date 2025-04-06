@@ -9,10 +9,11 @@ output: md_document
 
 This is an introduction to the project. Here's what you can expect:
 
--   Overview of the biochar experiment.
--   Digital data collection results in graphical and tabular form
--   Technical details on the process.
--   Coming soon, biochar source and characterics, fertilizer application, soil results and yield quantity and quality
+-   An introduction to what biochar is and why it is potentially valuable in western Colorado (and other drought prone areas of the world).
+-   Overview of the biochar experiment at the Colorado State University research station outside Fruita, CO.
+-   Digital data collection results in graphical (Main Data Display tab) and tabular form (Summary Statistics tab)
+-   Technical details on the data collection process.
+-   Coming soon, biochar source and characteristics, fertilizer application, soil results and yield quantity and quality
 
 ## What is Biochar?
 
