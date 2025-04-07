@@ -60,30 +60,35 @@ html, body {
     background-color: #f9f9f9;
     border-radius: 5px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 18px;
+    padding: 16px;  /* slightly tighter internal padding */
 }
 
-/* Tight headers */
+/* Headers */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
     color: #333;
-    margin-top: 0.2rem;
-    margin-bottom: 0.2rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.3rem;
 }
 
-/* Tight paragraphs */
+/* Paragraphs */
 .markdown-content p {
-    margin-top: 0rem;
-    margin-bottom: 0.1rem;
+    margin-top: 0;
+    margin-bottom: 0.4rem;  /* restore just enough vertical space */
 }
 
-/* Lists: small spacing between items */
+/* Lists */
 .markdown-content ul,
 .markdown-content ol {
-    margin-top: 0.2rem;
-    margin-bottom: 0.5rem;
+    margin-top: 0;
+    margin-bottom: 0.4rem;
     padding-left: 1.2rem;
+}
+
+.markdown-content * {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 /* Tabs */
