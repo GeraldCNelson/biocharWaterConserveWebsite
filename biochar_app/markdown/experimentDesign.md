@@ -20,7 +20,7 @@ south end of the field.
 
 <figure>
 <img src="../static/images/biocharExperimentalDesign.png"
-style="width:60.0%" alt="Experimental Layout" />
+style="width:50.0%" alt="Experimental Layout" />
 <figcaption aria-hidden="true">Experimental Layout</figcaption>
 </figure>
 

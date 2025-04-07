@@ -52,14 +52,38 @@ html, body {
     padding-right: 20px;
 }
 
+/* Compact and clean markdown styling */
 .markdown-content {
     font-family: Arial, sans-serif;
-    font-size: 16px;        /* consistent font size */
-    line-height: 1.6;
+    font-size: 14px;
+    line-height: 1.4;
     background-color: #f9f9f9;
     border-radius: 5px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 30px;          /* nice internal space */
+    padding: 18px;
+}
+
+/* Tight headers */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+    color: #333;
+    margin-top: 0.2rem;
+    margin-bottom: 0.2rem;
+}
+
+/* Tight paragraphs */
+.markdown-content p {
+    margin-top: 0rem;
+    margin-bottom: 0.1rem;
+}
+
+/* Lists: small spacing between items */
+.markdown-content ul,
+.markdown-content ol {
+    margin-top: 0.2rem;
+    margin-bottom: 0.5rem;
+    padding-left: 1.2rem;
 }
 
 /* Tabs */
@@ -227,27 +251,6 @@ button {
 input[type="submit"]:hover,
 button:hover {
     background-color: #0056b3; /* Bootstrap primary dark */
-}
-
-/* Markdown Content */
-.markdown-content {
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
-    padding: 20px;
-    background-color: #f9f9f9;
-    border-radius: 5px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3 {
-    color: #333;
-    margin-top: 20px;
-}
-
-.markdown-content p {
-    margin-bottom: 10px;
 }
 
 /* Ensure the row is a flex container */
