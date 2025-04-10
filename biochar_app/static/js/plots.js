@@ -88,7 +88,10 @@ async function updateSummaryStatistics() {
 
         const data = await response.json();
         console.log("✅ Received summary stats response:", data);
-
+        window.latestSummaryStats = {
+          raw: data.raw_statistics,
+          ratio: data.ratio_statistics
+        };
         const title = `${capitalize(granularity)} Summary for ${variable} in Strip ${strip}, ${year}`;
         document.getElementById("summary-title").textContent = title;
 

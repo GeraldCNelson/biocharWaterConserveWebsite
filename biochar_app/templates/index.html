@@ -40,19 +40,19 @@
         <li class="nav-item"><a class="nav-link" id="tech-details-tab" data-bs-toggle="tab" href="#tech-details">Technical Details</a></li>
     </ul>
     <div class="tab-content">
-<!-- ✅ Introduction Tab -->
-    <div class="tab-pane fade show active" id="intro">
-        <div id="intro-content" class="container markdown-container markdown-content mt-3">
-            Introduction: Loading...
+        <!-- ✅ Introduction Tab -->
+        <div class="tab-pane fade show active" id="intro">
+            <div id="intro-content" class="container markdown-container markdown-content mt-3">
+                Introduction: Loading...
+            </div>
         </div>
-    </div>
 
-<!-- ✅ Experiment Design Tab -->
-    <div class="tab-pane fade" id="experiment">
-        <div id="experiment-content" class="container markdown-container markdown-content mt-3">
-            Experiment Design: Loading...
+        <!-- ✅ Experiment Design Tab -->
+        <div class="tab-pane fade" id="experiment">
+            <div id="experiment-content" class="container markdown-container markdown-content mt-3">
+                Experiment Design: Loading...
+            </div>
         </div>
-    </div>
 
         <!-- ✅ Main Data Display -->
         <div class="tab-pane fade" id="main">
@@ -60,94 +60,98 @@
                 <!-- Control Panel -->
                 <div class="col-md-3">
                     <div class="control-panel">
-    <h3>Date Range Selection</h3>
+                        <h3>Plot Options</h3>
 
-    <label for="main-year">
-        Year
-        <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
-    </label>
-    <select id="main-year" class="year-dropdown form-select" data-tab="main"></select>
+                        <label for="main-year">
+                            Year
+                            <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
+                        </label>
+                        <select id="main-year" class="year-dropdown form-select" data-tab="main"></select>
 
-    <label for="start-date">
-        Start Date
-        <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
-    </label>
-    <input type="date" id="start-date" class="form-control">
+                        <label for="start-date">
+                            Start Date
+                            <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
+                        </label>
+                        <input type="date" id="start-date" class="form-control">
 
-    <label for="end-date">
-        End Date
-        <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
-    </label>
-    <input type="date" id="end-date" class="form-control">
+                        <label for="end-date">
+                            End Date
+                            <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
+                        </label>
+                        <input type="date" id="end-date" class="form-control">
 
-    <label for="main-granularity">
-        Granularity
-        <span class="info-icon" data-tippy-content="Choose data resolution (e.g., 15min, daily, monthly).">&#9432;</span>
-    </label>
-    <select id="main-granularity" class="granularity-dropdown form-select" data-tab="main"></select>
+                        <label for="main-granularity">
+                            Data time resolution
+                            <span class="info-icon" data-tippy-content="Choose data resolution (e.g., 15min, daily, monthly).">&#9432;</span>
+                        </label>
+                        <select id="main-granularity" class="granularity-dropdown form-select" data-tab="main"></select>
 
-    <label for="main-variable">
-        Variable
-        <span class="info-icon" data-tippy-content="Choose what variable to plot, e.g., VWC or Temperature.">&#9432;</span>
-    </label>
-    <select id="main-variable" class="variable-dropdown form-select" data-tab="main"></select>
+                        <label for="main-variable">
+                            Variable
+                            <span class="info-icon" data-tippy-content="Choose what variable to plot, e.g., VWC or Temperature.">&#9432;</span>
+                        </label>
+                        <select id="main-variable" class="variable-dropdown form-select" data-tab="main"></select>
 
-    <label for="main-strip">
-        Strip
-        <span class="info-icon" data-tippy-content="Choose the field strip (S1–S4).">&#9432;</span>
-    </label>
-    <select id="main-strip" class="strip-dropdown form-select" data-tab="main"></select>
+                        <label for="main-strip">
+                            Strip
+                            <span class="info-icon" data-tippy-content="Choose the field strip (S1–S4).">&#9432;</span>
+                        </label>
+                        <select id="main-strip" class="strip-dropdown form-select" data-tab="main"></select>
 
-    <label for="main-loggerLocation">
-        Logger Location
-        <span class="info-icon" data-tippy-content="Select the logger’s physical position (Top, Middle, Bottom).">&#9432;</span>
-    </label>
-    <select id="main-loggerLocation" class="loggerLocation-dropdown form-select" data-tab="main"></select>
+                        <label for="main-loggerLocation">
+                            Logger Location
+                            <span class="info-icon" data-tippy-content="Select the logger’s physical position (Top, Middle, Bottom).">&#9432;</span>
+                        </label>
+                        <select id="main-loggerLocation" class="loggerLocation-dropdown form-select" data-tab="main"></select>
 
-    <label for="main-depth">
-        Depth
-        <span class="info-icon" data-tippy-content="Sensor depth in soil: 6, 12, or 18 inches.">&#9432;</span>
-    </label>
-    <select id="main-depth" class="depth-dropdown form-select" data-tab="main"></select>
+                        <label for="main-depth">
+                            Depth
+                            <span class="info-icon" data-tippy-content="Sensor depth in soil: 6, 12, or 18 inches.">&#9432;</span>
+                        </label>
+                        <select id="main-depth" class="depth-dropdown form-select" data-tab="main"></select>
 
-    <label for="main-traceOption">
-        Traces Based On
-        <span class="info-icon" data-tippy-content="Choose whether traces are grouped by depth or logger location.">&#9432;</span>
-    </label>
-    <select id="main-traceOption" class="form-select">
-        <option value="depths">Depth (6, 12, 18 inches)</option>
-        <option value="location">Logger Location (Top, Middle, Bottom)</option>
-    </select>
+                        <label for="main-traceOption">
+                            Plots Based On
+                            <span class="info-icon" data-tippy-content="Choose whether the top plot values are grouped by depth or logger location.">&#9432;</span>
+                        </label>
+                        <select id="main-traceOption" class="form-select">
+                            <option value="depths">Depth (6, 12, 18 inches)</option>
+                            <option value="location">Logger Location (Top, Middle, Bottom)</option>
+                        </select>
 
-    <!-- Buttons remain unchanged -->
-    <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
-    <button id="download_raw" class="btn btn-secondary w-100 mb-2" onclick="downloadTraceData('raw')">
-        Download Raw Data (CSV)
-    </button>
-    <button id="download_ratio" class="btn btn-secondary w-100 mb-2" onclick="downloadTraceData('ratio')">
-        Download Ratio Data (CSV)
-    </button>
+                        <!-- Buttons remain unchanged -->
+                        <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
+                        <div class="dropdown mb-2">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadDataDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                Download Data
+                            </button>
+                            <ul class="dropdown-menu w-100" aria-labelledby="downloadDataDropdown">
+                                <li><a class="dropdown-item" href="#" onclick="downloadTraceData('raw')">Raw Data (CSV)</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadTraceData('ratio')">Ratio Data (CSV)</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadTraceData('all')">All Data (CSV)</a></li>
+                            </ul>
+                        </div>
 
-    <!-- Download Plot Buttons remain unchanged -->
-    <div class="dropdown mb-2">
-        <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRawPlot" data-bs-toggle="dropdown">
-            Download Raw Plot
-        </button>
-        <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'png')">PNG</a></li>
-            <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'jpeg')">JPEG</a></li>
-        </ul>
-    </div>
-    <div class="dropdown">
-        <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRatioPlot" data-bs-toggle="dropdown">
-            Download Ratio Plot
-        </button>
-        <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'png')">PNG</a></li>
-            <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'jpeg')">JPEG</a></li>
-        </ul>
-    </div>
-</div>
+                        <!-- Download Plot Buttons remain unchanged -->
+                        <div class="dropdown mb-2">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRawPlot" data-bs-toggle="dropdown">
+                                Download Raw Plot
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadRatioPlot" data-bs-toggle="dropdown">
+                                Download Ratio Plot
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'png')">PNG</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio', 'jpeg')">JPEG</a></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ✅ Two-Panel Plot Display -->
@@ -164,7 +168,7 @@
             </div>
         </div>
 
-<!-- ✅ Summary Statistics Tab -->
+        <!-- ✅ Summary Statistics Tab -->
         <div class="tab-pane fade" id="summary">
             <div class="row mt-3">
                 <!-- Summary Control Panel -->
@@ -179,7 +183,7 @@
                         <select id="summary-year" class="year-dropdown form-select" data-tab="summary"></select>
 
                         <label for="summary-granularity">
-                            Granularity
+                            Time averages
                             <span class="info-icon" data-tippy-content="Choose the level of aggregation: seasonal, monthly, daily, etc.">&#9432;</span>
                         </label>
                         <select id="summary-granularity" class="granularity-dropdown form-select" data-tab="summary"></select>
@@ -199,7 +203,16 @@
                         <select id="summary-strip" class="strip-dropdown form-select" data-tab="summary"></select>
 
                         <button id="update-summary" class="btn btn-primary w-100 mb-2">Update Summary</button>
-                        <button id="download-summary" class="btn btn-secondary w-100">Download Summary</button>
+                        <div class="dropdown mt-2">
+                            <button class="btn btn-secondary w-100 dropdown-toggle" type="button" id="downloadSummaryBtn" data-bs-toggle="dropdown">
+                                Download Summary
+                            </button>
+                            <ul class="dropdown-menu w-100">
+                                <li><a class="dropdown-item" href="#" id="download-summary-raw">Raw Summary (CSV)</a></li>
+                                <li><a class="dropdown-item" href="#" id="download-summary-ratio">Ratio Summary (CSV)</a></li>
+                                <li><a class="dropdown-item" href="#" id="download-summary-all">Raw + Ratio Summary (CSV)</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -213,13 +226,17 @@
             </div>
         </div>
 
-<!-- ✅ Technical Details Tab -->
-    <div class="tab-pane fade" id="tech-details">
-        <div id="tech-content" class="container markdown-container markdown-content mt-3">
-            Technical Details: Loading...
+        <!-- ✅ Technical Details Tab -->
+        <div class="tab-pane fade" id="tech-details">
+            <div id="tech-content" class="container markdown-container markdown-content mt-3">
+                Technical Details: Loading...
+            </div>
         </div>
     </div>
-    </div>
 </div>
+<!-- Load your JavaScript modules -->
+<script type="module" src="/static/js/ui_utils.js"></script>
+<script type="module" src="/static/js/downloads.js"></script>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

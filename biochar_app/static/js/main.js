@@ -1,4 +1,3 @@
-
 import { fetchDefaultsAndOptions, populateSelect, getSelectedFilters, populateDropdownsByTab } from "./ui_controls.js";
 import { getDropdownValue, getInputValue, setInputValue } from "./ui_utils.js";
 import { updateSummaryStatistics, updatePlot } from "./plots.js";
@@ -88,6 +87,102 @@ import { loadMarkdownContent } from "./markdown.js";
         document.getElementById("main-traceOption").addEventListener("change", () => {
             updatePlot("raw", "raw-plot");
             updatePlot("ratio", "ratio-plot");
+        });
+
+        document.getElementById("update-summary").addEventListener("click", async () => {
+            const year = document.getElementById("summary-year").value;
+            const granularity = document.getElementById("summary-granularity").value;
+            const variable = document.getElementById("summary-variable").value;
+            const strip = document.getElementById("summary-strip").value;
+
+            try {
+                const response = await fetch("/get_summary_stats", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ year, granularity, variable, strip })
+                });
+
+                const data = await response.json();
+
+
+                if (data.error) {
+                    document.getElementById("summary-table-container").innerHTML =
+                        `<p class="text-danger">${data.error}</p>`;
+                    return;
+                }
+
+
+                const table = document.createElement("table");
+                table.className = "table table-sm table-bordered";
+
+                const thead = table.createTHead();
+                thead.innerHTML = `
+                    <tr>
+                        <th>Trace</th>
+                        <th>Min</th>
+                        <th>Mean</th>
+                        <th>Max</th>
+                        <th>Std</th>
+                    </tr>`;
+
+                const tbody = table.createTBody();
+                for (const [trace, stats] of Object.entries(data.raw_statistics)) {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${trace}</td>
+                        <td>${stats.min}</td>
+                        <td>${stats.mean}</td>
+                        <td>${stats.max}</td>
+                        <td>${stats.std}</td>`;
+                }
+
+                document.getElementById("summary-table-container").innerHTML = "";
+                document.getElementById("summary-table-container").appendChild(table);
+
+                // ✅ Render ratio table below it
+                if (data.ratio_statistics && Object.keys(data.ratio_statistics).length > 0) {
+                    const ratioTitle = document.createElement("h5");
+                    ratioTitle.innerText = "Ratio Statistics";
+                    document.getElementById("summary-table-container").appendChild(ratioTitle);
+
+                    const ratioTable = document.createElement("table");
+                    ratioTable.className = "table table-sm table-bordered";
+
+                    const ratioHead = ratioTable.createTHead();
+                    ratioHead.innerHTML = `
+                        <tr>
+                            <th>Trace</th>
+                            <th>Min</th>
+                            <th>Mean</th>
+                            <th>Max</th>
+                            <th>Std</th>
+                        </tr>`;
+
+                    const ratioBody = ratioTable.createTBody();
+                    for (const [trace, stats] of Object.entries(data.ratio_statistics)) {
+                        const row = ratioBody.insertRow();
+                        row.innerHTML = `
+                            <td>${trace}</td>
+                            <td>${stats.min}</td>
+                            <td>${stats.mean}</td>
+                            <td>${stats.max}</td>
+                            <td>${stats.std}</td>`;
+                    }
+
+                    document.getElementById("summary-table-container").appendChild(ratioTitle);
+                    document.getElementById("summary-table-container").appendChild(ratioTable);
+                }
+
+                document.getElementById("summary-title").innerText =
+                    `Summary Statistics for ${variable} in Strip ${strip}, ${year} (${granularity})`;
+
+            } catch (error) {
+                console.error("Error fetching summary statistics:", error);
+                document.getElementById("summary-table-container").innerHTML =
+                    `<p class="text-danger">Failed to load summary statistics</p>`;
+            }
         });
 
         console.log("📊 Auto-loading plots and summary statistics...");

@@ -18,7 +18,7 @@ async function fetchAndRenderPlot(endpoint, plotContainerId, extraConfig = {}) {
             depth: getDropdownValue("main-depth"),
             startDate: getInputValue("start-date"),
             endDate: getInputValue("end-date"),
-            traceOption: getInputValue("traceOption") || extraConfig.traceOption || "depths"
+            traceOption: getDropdownValue("main-traceOption") || extraConfig.traceOption || "depths"  // ✅ FIXED HERE
         };
 
         console.log(`📡 Fetching plot from ${endpoint} with config:`, config);
