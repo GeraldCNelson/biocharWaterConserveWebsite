@@ -65,7 +65,7 @@ logger_location_mapping = {
 
 variable_name_mapping = {
     "VWC": "Vol. Water Content",
-    "T": "Temp",  # Keep it concise but clear
+    "T": "Temperature",  # Keep it concise but clear
     "EC": "Electrical Conductivity",
     "SWC": "Soil Water Content"
 }

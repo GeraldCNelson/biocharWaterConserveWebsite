@@ -1,12 +1,12 @@
-import { fetchDefaultsAndOptions, populateSelect, getSelectedFilters, populateDropdownsByTab } from "./ui_controls.js";
-import { getDropdownValue, getInputValue, setInputValue } from "./ui_utils.js";
-import { updateSummaryStatistics, updatePlot } from "./plots.js";
+import { fetchDefaultsAndOptions, populateDropdownsByTab } from "./ui_controls.js";
+import { getInputValue, setInputValue } from "./ui_utils.js";
 import { fetchAndRenderPlot, waitForAllDropdowns } from "./plot_utils.js";
 import { loadMarkdownContent } from "./markdown.js";
+import { generateSummaryTable } from "./api_requests.js";
+
 /* global Plotly */
 
-// ✅ Main initialization
-    document.addEventListener("DOMContentLoaded", async function () {
+document.addEventListener("DOMContentLoaded", async function () {
     console.log("🌐 Initializing application...");
 
     try {
@@ -17,14 +17,14 @@ import { loadMarkdownContent } from "./markdown.js";
         }
 
         console.log("🔍 Checking fetched options:", options);
-
         console.log("🛠 Populating dropdowns...");
         populateDropdownsByTab(options);
 
         await waitForAllDropdowns([
             "main-year", "main-variable", "main-strip", "main-granularity", "main-loggerLocation", "main-depth",
-            "summary-year", "summary-variable", "summary-strip", "summary-granularity"
+            "summary-year", "summary-variable", "summary-strip", "summary-granularity", "summary-depth"
         ]);
+
         console.log("✅ Dropdowns successfully populated.");
 
         window.mainDataDisplayConfig = {
@@ -94,18 +94,18 @@ import { loadMarkdownContent } from "./markdown.js";
             const granularity = document.getElementById("summary-granularity").value;
             const variable = document.getElementById("summary-variable").value;
             const strip = document.getElementById("summary-strip").value;
+            const depth = document.getElementById("summary-depth").value;
+            const startDate = document.getElementById("start-date")?.value || `${year}-01-01`;
+            const endDate = document.getElementById("end-date")?.value || `${year}-12-31`;
 
             try {
                 const response = await fetch("/get_summary_stats", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ year, granularity, variable, strip })
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ year, granularity, variable, strip, depth, startDate, endDate })
                 });
 
                 const data = await response.json();
-
 
                 if (data.error) {
                     document.getElementById("summary-table-container").innerHTML =
@@ -113,73 +113,16 @@ import { loadMarkdownContent } from "./markdown.js";
                     return;
                 }
 
+                window.latestSummaryStats = {
+                    raw: data.raw_statistics,
+                    ratio: data.ratio_statistics
+                };
 
-                const table = document.createElement("table");
-                table.className = "table table-sm table-bordered";
+                updateMainDataDisplay(data, options);
 
-                const thead = table.createTHead();
-                thead.innerHTML = `
-                    <tr>
-                        <th>Trace</th>
-                        <th>Min</th>
-                        <th>Mean</th>
-                        <th>Max</th>
-                        <th>Std</th>
-                    </tr>`;
-
-                const tbody = table.createTBody();
-                for (const [trace, stats] of Object.entries(data.raw_statistics)) {
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td>${trace}</td>
-                        <td>${stats.min}</td>
-                        <td>${stats.mean}</td>
-                        <td>${stats.max}</td>
-                        <td>${stats.std}</td>`;
-                }
-
-                document.getElementById("summary-table-container").innerHTML = "";
-                document.getElementById("summary-table-container").appendChild(table);
-
-                // ✅ Render ratio table below it
-                if (data.ratio_statistics && Object.keys(data.ratio_statistics).length > 0) {
-                    const ratioTitle = document.createElement("h5");
-                    ratioTitle.innerText = "Ratio Statistics";
-                    document.getElementById("summary-table-container").appendChild(ratioTitle);
-
-                    const ratioTable = document.createElement("table");
-                    ratioTable.className = "table table-sm table-bordered";
-
-                    const ratioHead = ratioTable.createTHead();
-                    ratioHead.innerHTML = `
-                        <tr>
-                            <th>Trace</th>
-                            <th>Min</th>
-                            <th>Mean</th>
-                            <th>Max</th>
-                            <th>Std</th>
-                        </tr>`;
-
-                    const ratioBody = ratioTable.createTBody();
-                    for (const [trace, stats] of Object.entries(data.ratio_statistics)) {
-                        const row = ratioBody.insertRow();
-                        row.innerHTML = `
-                            <td>${trace}</td>
-                            <td>${stats.min}</td>
-                            <td>${stats.mean}</td>
-                            <td>${stats.max}</td>
-                            <td>${stats.std}</td>`;
-                    }
-
-                    document.getElementById("summary-table-container").appendChild(ratioTitle);
-                    document.getElementById("summary-table-container").appendChild(ratioTable);
-                }
-
-                document.getElementById("summary-title").innerText =
-                    `Summary Statistics for ${variable} in Strip ${strip}, ${year} (${granularity})`;
-
+                console.log("✅ Summary tables updated successfully.");
             } catch (error) {
-                console.error("Error fetching summary statistics:", error);
+                console.error("❌ Error fetching summary statistics:", error);
                 document.getElementById("summary-table-container").innerHTML =
                     `<p class="text-danger">Failed to load summary statistics</p>`;
             }
@@ -190,10 +133,9 @@ import { loadMarkdownContent } from "./markdown.js";
             requestAnimationFrame(() => {
                 fetchAndRenderPlot("/plot_raw", "raw-plot", { traceOption: "depths" });
                 fetchAndRenderPlot("/plot_ratio", "ratio-plot");
+                document.getElementById("update-summary").click();
             });
-            updateSummaryStatistics();
         }, 600);
-        updateSummaryStatistics();
 
         console.log("📖 Loading markdown files...");
         await Promise.all([
@@ -218,3 +160,59 @@ import { loadMarkdownContent } from "./markdown.js";
         console.error("❌ ERROR: Application initialization failed:", error);
     }
 });
+
+function updateMainDataDisplay(data, options) {
+    const year = document.getElementById("summary-year").value;
+    const variable = document.getElementById("summary-variable").value;
+    const variableLabel = options?.variableNameMapping?.[variable] || variable;
+    const strip = document.getElementById("summary-strip").value;
+    const granularity = document.getElementById("summary-granularity").value;
+    const depthLabel = document.getElementById("summary-depth").selectedOptions[0]?.textContent || "";
+
+    const mainTitle = `${capitalizeFirst(granularity)} Summary for ${variableLabel} in Strip ${strip}, ${year}`;
+    document.getElementById("summary-title").textContent = mainTitle;
+
+    const rawTableHTML = generateSummaryTable(data.raw_statistics, variable);
+
+    const s1s2 = {};
+    const s3s4 = {};
+
+    for (const [key, value] of Object.entries(data.ratio_statistics || {})) {
+        if (key.includes("S1_S2")) s1s2[key] = value;
+        else if (key.includes("S3_S4")) s3s4[key] = value;
+    }
+
+const isTempVariable = ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"].includes(variable);
+
+const s1s2HTML = Object.keys(s1s2).length > 0
+    ? generateSummaryTable(s1s2, variable)
+    : isTempVariable
+        ? `<p class="text-muted">Temperature ratios are not shown because they are not meaningful.</p>`
+        : `<p class="text-danger">No summary statistics available.</p>`;
+
+const s3s4HTML = Object.keys(s3s4).length > 0
+    ? generateSummaryTable(s1s2, variable)
+    : isTempVariable
+        ? `<p class="text-muted">Temperature ratios are not shown because they are not meaningful.</p>`
+        : `<p class="text-danger">No summary statistics available.</p>`;
+
+    const ratioTitleS1S2 = `${capitalizeFirst(granularity)} Summary for ${variableLabel} (S1/S2, ${depthLabel}, ${year})`;
+    const ratioTitleS3S4 = `${capitalizeFirst(granularity)} Summary for ${variableLabel} (S3/S4, ${depthLabel}, ${year})`;
+
+    const ratioHTML = `
+        <h5 class="mt-4">${ratioTitleS1S2}</h5>
+        ${s1s2HTML}
+        <h5 class="mt-4">${ratioTitleS3S4}</h5>
+        ${s3s4HTML}
+    `;
+  
+    document.getElementById("summary-table-container").innerHTML = `
+        <h5>Raw Data (${depthLabel})</h5>
+        ${rawTableHTML}
+        ${ratioHTML}
+    `;
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}

@@ -95,16 +95,16 @@ async function updateSummaryStatistics() {
         const title = `${capitalize(granularity)} Summary for ${variable} in Strip ${strip}, ${year}`;
         document.getElementById("summary-title").textContent = title;
 
-        const rawTable = generateSummaryTable(data.raw_statistics, variable);
-        const ratioTable = generateSummaryTable(data.ratio_statistics, variable);
+//        const rawTable = generateSummaryTable(data.raw_statistics, variable);
+//        const ratioTable = generateSummaryTable(data.ratio_statistics, variable);
 
-        const container = document.getElementById("summary-table-container");
-        container.innerHTML = `
-            <h5>Raw Data</h5>
-            ${rawTable}
-            <h5 class="mt-4">Ratio Data</h5>
-            ${ratioTable}
-        `;
+//        const container = document.getElementById("summary-table-container");
+//        container.innerHTML = `
+//            <h5>Raw Data</h5>
+//            ${rawTable}
+//            <h5 class="mt-4">Ratio Data</h5>
+//            ${ratioTable}
+//        `;
 
         console.log("✅ Summary statistics tables updated.");
     } catch (error) {

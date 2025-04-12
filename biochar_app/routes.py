@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import zipfile
 import plotly.graph_objects as go
-# from datetime import datetime
+from datetime import datetime
 import numpy as np
 import logging
 import json
@@ -320,18 +320,49 @@ def filter_summary_statistics(df, year, variable, strip, granularity):
         return pd.DataFrame()  # Return empty DataFrame if an error occurs
 
 
-def compute_summary_statistics(df):
-    """Computes summary statistics for the filtered dataset."""
-    if df.empty:
-        return {}
+def compute_summary_statistics(df, variable, strip, depth):
+    """
+    Compute summary statistics for both raw and ratio data.
+    Filters by variable, strip, and depth before computing.
+    Returns two dictionaries: raw_stats and ratio_stats.
+    """
+    df = df.copy()
+    raw_stats = {}
+    ratio_stats = {}
 
-    stats = {
-        "mean": df.select_dtypes(include=["number"]).mean().to_dict(),
-        "median": df.select_dtypes(include=["number"]).median().to_dict(),
-        "min": df.select_dtypes(include=["number"]).min().to_dict(),
-        "max": df.select_dtypes(include=["number"]).max().to_dict()
-    }
-    return stats
+    if not variable or not strip or not depth:
+        return {}, {}
+
+    # Define the prefix for raw and ratio columns
+    raw_prefix = f"{variable}_{depth}_raw_{strip}_"
+    ratio_prefixes = [f"{variable}_{depth}_ratio_S1_S2_", f"{variable}_{depth}_ratio_S3_S4_"]
+
+    # ✅ Compute RAW stats
+    raw_cols = [col for col in df.columns if col.startswith(raw_prefix)]
+    for col in raw_cols:
+        series = df[col].dropna()
+        if not series.empty:
+            raw_stats[col] = {
+                "min": round(series.min(), 4),
+                "mean": round(series.mean(), 4),
+                "max": round(series.max(), 4),
+                "std": round(series.std(), 4),
+            }
+
+    # ✅ Compute RATIO stats (for both S1/S2 and S3/S4)
+    for prefix in ratio_prefixes:
+        for col in df.columns:
+            if col.startswith(prefix):
+                series = df[col].dropna()
+                if not series.empty:
+                    ratio_stats[col] = {
+                        "min": round(series.min(), 4),
+                        "mean": round(series.mean(), 4),
+                        "max": round(series.max(), 4),
+                        "std": round(series.std(), 4),
+                    }
+
+    return raw_stats, ratio_stats
 
 
 ###############################################
@@ -387,39 +418,48 @@ def favicon():
 def get_summary_stats():
     try:
         data = request.get_json()
-        year = int(data["year"])
-        variable = data["variable"]
-        strip = data["strip"]
-        granularity = data["granularity"]
+        year = int(data.get("year"))
+        variable = data.get("variable")
+        strip = data.get("strip")
+        granularity = data.get("granularity")
+        depth = str(data.get("depth"))
+
+        start_date = datetime.strptime(data["startDate"], "%Y-%m-%d")
+        end_date = datetime.strptime(data["endDate"], "%Y-%m-%d")
+
+        logging.info(f"📊 Summary request: {year}, {variable}, {strip}, {granularity}, {depth}")
 
         df = load_logger_data(year, granularity)
+        if df is None or df.empty:
+            return jsonify({"error": "No data found for the selected filters."})
 
-        # Filter relevant columns for RAW
-        raw_cols = [col for col in df.columns if col.startswith(f"{variable}_") and "_raw_" in col and f"_{strip}_" in col]
-        ratio_cols = [col for col in df.columns if col.startswith(f"{variable}_") and "_ratio_" in col and f"_{strip}_" in col]
+        filtered_df = filter_data_logger(df, start_date, end_date)
+        if filtered_df.empty:
+            return jsonify({"error": "No data available in the specified date range."})
 
-        def compute_stats(columns):
-            return {
-                col.split("_")[-1]: {
-                    "min": round(df[col].min(), 4),
-                    "mean": round(df[col].mean(), 4),
-                    "max": round(df[col].max(), 4),
-                    "std": round(df[col].std(), 4),
-                }
-                for col in columns if col in df.columns
-            }
+        # 🧠 Skip ratio statistics if the variable is temperature-based
+        is_temp_variable = variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]
 
+        if is_temp_variable:
+            stats_raw, _ = compute_summary_statistics(filtered_df, variable, strip, depth)
+            stats_ratio = {}  # Avoid showing misleading ratio values for temp
+        else:
+            stats_raw, stats_ratio = compute_summary_statistics(filtered_df, variable, strip, depth)
+
+        logging.info("✅ Summary statistics generated.")
         return jsonify({
-            "raw_statistics": compute_stats(raw_cols),
-            "ratio_statistics": compute_stats(ratio_cols),
             "year": year,
             "variable": variable,
             "strip": strip,
-            "granularity": granularity
+            "granularity": granularity,
+            "depth": depth,
+            "raw_statistics": stats_raw,
+            "ratio_statistics": stats_ratio
         })
+
     except Exception as e:
         logging.error(f"❌ Error in /get_summary_stats: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 
 @main.route("/markdown/<path:filename>")

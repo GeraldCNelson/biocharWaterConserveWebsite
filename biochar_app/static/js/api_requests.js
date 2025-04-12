@@ -3,14 +3,13 @@ import { getDropdownValue, getInputValue } from "./ui_utils.js";
 /**
  * ✅ Fetch summary statistics data from backend
  */
-function generateSummaryTable(statistics, variable) {
-    if (!statistics || Object.keys(statistics).length === 0) {
-        return "<p class='text-danger'>No summary statistics available.</p>";
-    }
+export function generateSummaryTable(stats, variable) {
+    const options = window.variableNameMapping || {};
+    const displayVar = options[variable] || variable;
 
-    let tableHTML = `
-        <table class="table table-bordered">
-            <thead class="thead-dark">
+    let table = `
+        <table class="table table-striped table-bordered">
+            <thead class="table-dark">
                 <tr>
                     <th>Variable (Logger)</th>
                     <th>Min</th>
@@ -22,26 +21,29 @@ function generateSummaryTable(statistics, variable) {
             <tbody>
     `;
 
-    for (const [logger, stats] of Object.entries(statistics)) {
-        if (stats) {
-            tableHTML += `
-                <tr>
-                    <td>${variable} (${logger})</td>
-                    <td>${stats.min.toFixed(4)}</td>
-                    <td>${stats.mean.toFixed(4)}</td>
-                    <td>${stats.max.toFixed(4)}</td>
-                    <td>${stats.std.toFixed(4)}</td>
-                </tr>
-            `;
-        }
+    for (const [key, value] of Object.entries(stats)) {
+        const match = key.match(/_(B|M|T)$/);  // Match suffix
+        const logger = match ? match[1] : key;
+        const displayName = `${displayVar} (${logger})`;
+
+        const { min, mean, max, std } = value;
+        table += `
+            <tr>
+                <td>${displayName}</td>
+                <td>${formatValue(min)}</td>
+                <td>${formatValue(mean)}</td>
+                <td>${formatValue(max)}</td>
+                <td>${formatValue(std)}</td>
+            </tr>
+        `;
     }
 
-    tableHTML += `
-            </tbody>
-        </table>
-    `;
+    table += "</tbody></table>";
+    return table;
+}
 
-    return tableHTML;
+function formatValue(value) {
+    return (value === null || isNaN(value)) ? "NA" : Number(value).toFixed(4);
 }
 
 async function updateMainDataDisplay() {
@@ -69,4 +71,4 @@ async function updateMainDataDisplay() {
     // const response = await fetch("/get_main_data", { ... });
 }
 
-export { generateSummaryTable, updateMainDataDisplay };
+export { updateMainDataDisplay };

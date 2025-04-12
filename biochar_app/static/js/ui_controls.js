@@ -178,6 +178,10 @@ function populateDropdownsByTab(options) {
         .map(granKey => `<option value="${granKey}" ${granKey === options.defaults.granularity ? 'selected' : ''}>${options.granularityNameMapping[granKey]}</option>`)
         .join("");
 
+    document.getElementById("summary-depth").innerHTML = Object.keys(options.depthMapping)
+        .map(depthKey => `<option value="${depthKey}" ${depthKey === options.defaults.depth ? 'selected' : ''}>${options.depthMapping[depthKey]}</option>`)
+        .join("");
+
     // ✅ Initialize Tippy.js tooltips
         tippy('[data-tippy-content]');
     console.log("✅ Summary dropdowns successfully populated.");

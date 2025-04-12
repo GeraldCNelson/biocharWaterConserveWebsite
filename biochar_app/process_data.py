@@ -2,6 +2,7 @@ import pandas as pd
 import logging
 import os
 import zipfile
+import numpy as np
 from datetime import datetime
 from biochar_app.get_weather_data import get_weather_data
 from biochar_app.config import (
@@ -10,7 +11,6 @@ from biochar_app.config import (
     VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,
     GSEASON_PERIODS
 )
-
 
 def rename_logger_columns(df, logger_name):
     rename_dict = {}
@@ -24,7 +24,6 @@ def rename_logger_columns(df, logger_name):
             rename_dict[col] = f"{base}_{depth}_raw_{logger_name[:2]}_{logger_name[2:]}"
     df.rename(columns=rename_dict, inplace=True)
     return df
-
 
 def read_logger_data(name, year):
     filepath = os.path.join(DATA_RAW_DIR, f"datfiles_{year}/{name}_Table1.dat")
@@ -41,7 +40,6 @@ def read_logger_data(name, year):
         logging.warning(f"⚠️ File not found: {filepath}")
         return None
 
-
 def merge_all_loggers(year):
     merged = None
     for strip in STRIPS:
@@ -51,6 +49,12 @@ def merge_all_loggers(year):
                 merged = df if merged is None else pd.merge(merged, df, on="timestamp", how="outer")
     return merged
 
+def replace_bad_values(df):
+    BAD_THRESHOLD = 999999
+    for col in df.select_dtypes(include=["float", "int"]):
+        df[col] = df[col].mask(df[col].abs() >= BAD_THRESHOLD, np.nan)
+    logging.info("🧹 Replaced extreme placeholder values with NaN")
+    return df
 
 def add_swc(df):
     df = df.copy()
@@ -60,7 +64,6 @@ def add_swc(df):
             if all(c in df.columns for c in cols):
                 df[f"SWC_1_raw_{strip}_{loc}"] = sum(df[c] * SWC_DEPTH_WEIGHTS[d] for c, d in zip(cols, DEPTHS))
     return df
-
 
 def calculate_ratios(df):
     df = df.copy()
@@ -75,7 +78,6 @@ def calculate_ratios(df):
                     df[out] = df[c1] / df[c2] if c1 in df.columns and c2 in df.columns else pd.NA
     return df
 
-
 def assign_gseason_periods(ts, year):
     for label, (start_str, end_str) in GSEASON_PERIODS.items():
         sm, sd = map(int, start_str.split("-"))
@@ -87,7 +89,6 @@ def assign_gseason_periods(ts, year):
         if start <= ts <= end:
             return label
     return None
-
 
 def aggregate(df, year):
     df = df.copy()
@@ -111,21 +112,17 @@ def aggregate(df, year):
         "gseason": gseason
     }
 
-
 def save_outputs(year, aggregated):
     for gran, df_out in aggregated.items():
         if df_out.empty:
             continue
 
-        # ✅ Determine the final date for filenames
         if "timestamp" in df_out.columns:
             end_timestamp = pd.to_datetime(df_out["timestamp"]).max()
             end_date = end_timestamp.date()
         else:
-            # e.g., gseason where no timestamp exists
             end_date = f"{year}-10-31"
 
-        # ✅ Save CSV and ZIP
         fname = f"dataloggerData_{year}-01-01_{end_date}_{gran}.csv"
         zipname = fname.replace(".csv", ".zip")
         csv_path = os.path.join(DATA_PROCESSED_DIR, fname)
@@ -139,7 +136,6 @@ def save_outputs(year, aggregated):
         os.remove(csv_path)
         logging.info(f"✅ Saved: {zip_path}")
 
-
 def process_logger_and_climate_data(year):
     logging.info(f"🚀 Processing year: {year}")
     df_logger = merge_all_loggers(year)
@@ -147,22 +143,30 @@ def process_logger_and_climate_data(year):
         raise RuntimeError("❌ No logger data found")
 
     df_logger["timestamp"] = df_logger["timestamp"].dt.tz_localize(None)
+    df_logger = replace_bad_values(df_logger)
+
     end_ts = df_logger["timestamp"].max()
     df_weather = get_weather_data(year, end_timestamp=end_ts)
 
     df_combined = pd.merge(df_logger, df_weather, on="timestamp", how="outer")
     df_combined = add_swc(df_combined)
     df_combined = calculate_ratios(df_combined)
+    # 🧹 Clean implausible VWC outliers (>150%)
+    vwc_cols = [col for col in df_combined.columns if col.startswith("VWC_") and "_raw_" in col]
+    num_outliers = (df_combined[vwc_cols] > 1.5).sum().sum()
+
+    if num_outliers > 0:
+        logging.warning(f"🧹 Found {num_outliers} VWC values > 1.5 — setting to NaN")
+        df_combined[vwc_cols] = df_combined[vwc_cols].mask(df_combined[vwc_cols] > 1.5)
     aggregated = aggregate(df_combined, year)
     save_outputs(year, aggregated)
-
 
 if __name__ == "__main__":
     os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
     for y in YEARS:
-        if y >= 2024:  # ⏳ Only process years that support growing season logic
+        if y >= 2024:
             process_logger_and_climate_data(y)
         else:
             logging.info(f"⚠️ Skipping {y}: growing season logic not supported for this year.")
