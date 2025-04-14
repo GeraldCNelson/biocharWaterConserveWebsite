@@ -3,13 +3,11 @@ import logging
 import os
 import zipfile
 import numpy as np
-from datetime import datetime
 from biochar_app.get_weather_data import get_weather_data
 from biochar_app.config import (
-    BASE_DIR, DATA_RAW_DIR, DATA_PROCESSED_DIR, YEARS, DEPTHS,
+    DATA_RAW_DIR, DATA_PROCESSED_DIR, YEARS, DEPTHS,
     SWC_DEPTH_WEIGHTS, LOGGER_LOCATIONS, STRIPS,
-    VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,
-    GSEASON_PERIODS
+    VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS
 )
 
 def rename_logger_columns(df, logger_name):
@@ -42,17 +40,21 @@ def read_logger_data(name, year):
 
 def merge_all_loggers(year):
     merged = None
+    found_any = False
     for strip in STRIPS:
         for loc in LOGGER_LOCATIONS:
             df = read_logger_data(f"{strip}{loc}", year)
             if df is not None:
+                found_any = True
                 merged = df if merged is None else pd.merge(merged, df, on="timestamp", how="outer")
+        if not found_any:
+            logging.warning(f"⚠️ No logger data found for year {year}")
     return merged
 
 def replace_bad_values(df):
-    BAD_THRESHOLD = 999999
+    bad_threshold = 999999
     for col in df.select_dtypes(include=["float", "int"]):
-        df[col] = df[col].mask(df[col].abs() >= BAD_THRESHOLD, np.nan)
+        df[col] = df[col].mask(df[col].abs() >= bad_threshold, np.nan)
     logging.info("🧹 Replaced extreme placeholder values with NaN")
     return df
 
@@ -78,19 +80,11 @@ def calculate_ratios(df):
                     df[out] = df[c1] / df[c2] if c1 in df.columns and c2 in df.columns else pd.NA
     return df
 
-def assign_gseason_periods(ts, year):
-    for label, (start_str, end_str) in GSEASON_PERIODS.items():
-        sm, sd = map(int, start_str.split("-"))
-        em, ed = map(int, end_str.split("-"))
-        sy = year - 1 if sm > em else year
-        ey = year
-        start = pd.Timestamp(f"{sy}-{start_str}")
-        end = pd.Timestamp(f"{ey}-{end_str}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        if start <= ts <= end:
-            return label
-    return None
 
 def aggregate(df, year):
+    if "timestamp" not in df.columns:
+        raise ValueError("❌ DataFrame does not contain 'timestamp' column.")
+
     df = df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df[df["timestamp"].dt.year == int(year)]
@@ -99,17 +93,11 @@ def aggregate(df, year):
     if "precip_mm" in df.columns:
         agg["precip_mm"] = "sum"
 
-    df_gseason = df.reset_index()
-    df_gseason["gseason_periods"] = df_gseason["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
-    df_gseason = df_gseason.dropna(subset=["gseason_periods"])
-    gseason = df_gseason.groupby("gseason_periods").agg(agg).reset_index()
-
     return {
         "15min": df.reset_index(),
         "1hour": df.resample("h").agg(agg).reset_index(),
         "daily": df.resample("D").agg(agg).reset_index(),
-        "monthly": df.resample("ME").agg(agg).reset_index(),
-        "gseason": gseason
+        "monthly": df.resample("ME").agg(agg).reset_index()
     }
 
 def save_outputs(year, aggregated):
@@ -124,9 +112,9 @@ def save_outputs(year, aggregated):
             end_date = f"{year}-10-31"
 
         fname = f"dataloggerData_{year}-01-01_{end_date}_{gran}.csv"
-        zipname = fname.replace(".csv", ".zip")
+        zipname_csv = fname.replace(".csv", ".zip")
         csv_path = os.path.join(DATA_PROCESSED_DIR, fname)
-        zip_path = os.path.join(DATA_PROCESSED_DIR, zipname)
+        zip_path = os.path.join(DATA_PROCESSED_DIR, zipname_csv)
 
         df_out.to_csv(csv_path, index=False, float_format="%.4f")
 

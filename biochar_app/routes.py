@@ -3,9 +3,9 @@
 from flask import Blueprint, jsonify, request, send_from_directory, render_template
 import os
 import pandas as pd
-import zipfile
 import plotly.graph_objects as go
 from datetime import datetime
+from biochar_app.utils import load_logger_data, compute_summary_statistics, parse_filenames, assign_gseason_periods
 import numpy as np
 import logging
 import json
@@ -16,7 +16,6 @@ from biochar_app.config import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
     DEFAULT_VARIABLE,
-    VALUE_COLS_STANDARD, VALUE_COLS_2024_PLUS,
     DEFAULT_DEPTH,
     DEFAULT_STRIP,
     DEFAULT_LOGGER_LOCATION,
@@ -40,7 +39,6 @@ main = Blueprint("main", __name__)
 # Summary Table
 ###############################################
 # Helper Functions
-# 1. parse_filenames: Parse filenames to extract date ranges.
 # 2. get_default_end_date: Determine default end date from filenames.
 # 3. load_loggerdata: Load loggerdata from a ZIP file containing a CSV.
 # 4. log_and_translate_depth_info: Log debug information for routes.
@@ -128,64 +126,7 @@ def build_plot_title_and_legend_label(granularity, variable, strip, year, trace_
 loaded_datasets = {}
 
 
-def load_logger_data(year: int, granularity: str):
-    key = f"{year}-{granularity}"  # ✅ Include granularity in cache key
-    if key in loaded_datasets:
-        return loaded_datasets[key]
-
-    # Parse all available files
-    parsed_files = parse_filenames(DATA_PROCESSED_DIR)
-
-    # Find the matching file
-    matching_file = next(
-        (f for f in parsed_files if f.granularity == granularity and f.start_date.startswith(str(year))),
-        None
-    )
-    if matching_file is None:
-        raise FileNotFoundError(f"No file found for {year} - {granularity}")
-
-    file_path = os.path.join(DATA_PROCESSED_DIR, matching_file.filename)
-    logging.info(f"file_path:", file_path)
-
-    with zipfile.ZipFile(file_path, 'r') as z:
-        csv_filename = z.namelist()[0]
-        with z.open(csv_filename) as f:
-            df = pd.read_csv(f)
-
-    # Only convert timestamp column if it exists and granularity isn't gseason
-    if granularity != "gseason" and "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-    loaded_datasets[key] = df  # ✅ Cache it with granularity-specific key
-    return df
-
-
 LoggerFileInfo = namedtuple("LoggerFileInfo", ["start_date", "end_date", "granularity", "filename"])
-
-
-def parse_filenames(data_dir, prefix="dataloggerData_", suffix=".zip"):
-    filenames = [f for f in os.listdir(data_dir) if f.startswith(prefix) and f.endswith(suffix)]
-    parsed_files = []
-
-    for filename in filenames:
-        try:
-            if not filename.startswith(prefix) or not filename.endswith(suffix):
-                continue
-
-            parts = filename[len(prefix):-len(suffix)].split("_")
-            if len(parts) != 3:
-                logging.warning(f"Skipping invalid filename format: {filename}")
-                continue
-
-            start_date, end_date, granularity = parts
-            parsed_files.append(LoggerFileInfo(start_date, end_date, granularity, filename))
-
-        except (IndexError, ValueError) as e:
-            logging.error(f"Error parsing filename {filename}: {e}")
-            continue
-
-    logging.info(f"🔍 Parsed Files:", parsed_files)
-    return parsed_files
 
 
 def get_available_years():
@@ -229,20 +170,17 @@ def find_matching_file(year, granularity):
         return None
 
 
-def get_default_end_date(year=DEFAULT_YEAR):
-    data_dir = DATA_PROCESSED_DIR
-    parsed_files = parse_filenames(data_dir)
+def get_default_end_date(year=None):
+    parsed_files = parse_filenames(DATA_PROCESSED_DIR)
+    if year:
+        filtered_files = [file for file in parsed_files if file.start_date.startswith(str(year))]
+    else:
+        filtered_files = parsed_files
 
-    if not parsed_files:
-        raise FileNotFoundError(f"❌ No files found in {data_dir}. Cannot determine default end date.")
+    if not filtered_files:
+        return f"{year}-12-31" if year else "2024-12-31"
 
-    # Filter parsed files by the specified year
-    filtered_files = [file for file in parsed_files if file[1].startswith(str(year))]
-    if filtered_files:
-        return max(filtered_files, key=lambda x: x[1])[1]
-
-    raise ValueError(f"❌ No data files found for the year {year} in {data_dir}.")
-DEFAULT_END_DATE = get_default_end_date()
+    return max(filtered_files, key=lambda x: x.end_date).end_date
 
 
 def axis_label(variable):
@@ -320,51 +258,6 @@ def filter_summary_statistics(df, year, variable, strip, granularity):
         return pd.DataFrame()  # Return empty DataFrame if an error occurs
 
 
-def compute_summary_statistics(df, variable, strip, depth):
-    """
-    Compute summary statistics for both raw and ratio data.
-    Filters by variable, strip, and depth before computing.
-    Returns two dictionaries: raw_stats and ratio_stats.
-    """
-    df = df.copy()
-    raw_stats = {}
-    ratio_stats = {}
-
-    if not variable or not strip or not depth:
-        return {}, {}
-
-    # Define the prefix for raw and ratio columns
-    raw_prefix = f"{variable}_{depth}_raw_{strip}_"
-    ratio_prefixes = [f"{variable}_{depth}_ratio_S1_S2_", f"{variable}_{depth}_ratio_S3_S4_"]
-
-    # ✅ Compute RAW stats
-    raw_cols = [col for col in df.columns if col.startswith(raw_prefix)]
-    for col in raw_cols:
-        series = df[col].dropna()
-        if not series.empty:
-            raw_stats[col] = {
-                "min": round(series.min(), 4),
-                "mean": round(series.mean(), 4),
-                "max": round(series.max(), 4),
-                "std": round(series.std(), 4),
-            }
-
-    # ✅ Compute RATIO stats (for both S1/S2 and S3/S4)
-    for prefix in ratio_prefixes:
-        for col in df.columns:
-            if col.startswith(prefix):
-                series = df[col].dropna()
-                if not series.empty:
-                    ratio_stats[col] = {
-                        "min": round(series.min(), 4),
-                        "mean": round(series.mean(), 4),
-                        "max": round(series.max(), 4),
-                        "std": round(series.std(), 4),
-                    }
-
-    return raw_stats, ratio_stats
-
-
 ###############################################
 # Routes
 ###############################################
@@ -382,7 +275,7 @@ def get_defaults_and_options():
             "depth": DEFAULT_DEPTH,
             "loggerLocation": DEFAULT_LOGGER_LOCATION,
             "startDate": DEFAULT_START_DATE,
-            "endDate": DEFAULT_END_DATE
+            "endDate": get_default_end_date(DEFAULT_YEAR)
         },
 
         "years": YEARS,  # ✅ Use predefined YEARS variable
@@ -394,10 +287,11 @@ def get_defaults_and_options():
 
         # ✅ Ensure mappings are correctly assigned
         "variableNameMapping": variable_name_mapping,
+        "labelNameMapping": label_name_mapping,
         "granularityNameMapping": granularity_name_mapping,
         "stripNameMapping": strip_name_mapping,
-        "loggerLocationMapping": logger_location_mapping,  # ✅ Fix this
-        "depthMapping": sensor_depth_mapping  # ✅ Fix this
+        "loggerLocationMapping": logger_location_mapping,
+        "depthMapping": sensor_depth_mapping
     }
 
     logging.info(f"📤 Sending options: {json.dumps(options, indent=2)}")  # ✅ Debugging output
@@ -423,30 +317,67 @@ def get_summary_stats():
         strip = data.get("strip")
         granularity = data.get("granularity")
         depth = str(data.get("depth"))
-
-        start_date = datetime.strptime(data["startDate"], "%Y-%m-%d")
-        end_date = datetime.strptime(data["endDate"], "%Y-%m-%d")
+        start_date = data.get("startDate")
+        end_date = data.get("endDate")
 
         logging.info(f"📊 Summary request: {year}, {variable}, {strip}, {granularity}, {depth}")
 
-        df = load_logger_data(year, granularity)
-        if df is None or df.empty:
+        df_15min = load_logger_data(year, "15min")
+        gseason_df = df_15min.copy()
+        if gseason_df is None or gseason_df.empty:
             return jsonify({"error": "No data found for the selected filters."})
 
-        filtered_df = filter_data_logger(df, start_date, end_date)
-        if filtered_df.empty:
-            return jsonify({"error": "No data available in the specified date range."})
-
-        # 🧠 Skip ratio statistics if the variable is temperature-based
         is_temp_variable = variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]
 
-        if is_temp_variable:
-            stats_raw, _ = compute_summary_statistics(filtered_df, variable, strip, depth)
-            stats_ratio = {}  # Avoid showing misleading ratio values for temp
-        else:
-            stats_raw, stats_ratio = compute_summary_statistics(filtered_df, variable, strip, depth)
+        # 🧠 Handle gseason before any timestamp filtering
+        if granularity == "gseason":
+            logging.info("🌱 Processing gseason from 15-minute data...")
+            df_15min = load_logger_data(year, "15min")
 
-        logging.info("✅ Summary statistics generated.")
+            if df_15min is None or df_15min.empty:
+                return jsonify({"error": "No 15-minute data found for the selected year."})
+
+            df_15min = df_15min.copy()
+            df_15min["gseason_periods"] = df_15min["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
+            df_15min = df_15min.dropna(subset=["gseason_periods"])
+
+            results = {}
+            for label, _ in GSEASON_PERIODS.items():
+                gseason_df = df_15min[df_15min["gseason_periods"] == label]
+                if gseason_df.empty:
+                    stats_raw, stats_ratio = {}, {}
+                else:
+                    stats_raw, stats_ratio = compute_summary_statistics(gseason_df, variable, strip, depth)
+                    if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
+                        stats_ratio = {}
+
+                results[label] = {
+                    "raw_statistics": stats_raw,
+                    "ratio_statistics": stats_ratio
+                }
+
+            return jsonify({
+                "year": year,
+                "variable": variable,
+                "strip": strip,
+                "granularity": granularity,
+                "depth": depth,
+                "gseason_stats": results
+            })
+
+        # 🔁 Only apply timestamp filtering for non-gseason granularities
+        if "timestamp" in df_15min.columns and start_date and end_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            df_15min = filter_data_logger(df_15min, start_dt, end_dt)
+            if df_15min.empty:
+                return jsonify({"error": "No data available in the specified date range."})
+
+        # Standard summary
+        stats_raw, stats_ratio = compute_summary_statistics(df_15min, variable, strip, depth)
+        if is_temp_variable:
+            stats_ratio = {}
+
         return jsonify({
             "year": year,
             "variable": variable,
@@ -460,7 +391,6 @@ def get_summary_stats():
     except Exception as e:
         logging.error(f"❌ Error in /get_summary_stats: {e}", exc_info=True)
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
-
 
 @main.route("/markdown/<path:filename>")
 def serve_markdown(filename):
@@ -511,7 +441,7 @@ def home():
                            depths=[{"value": key, "label": label} for key, label in sensor_depth_mapping.items()],
                            loggers=[{"value": key, "label": label} for key, label in logger_location_mapping.items()],
                            DEFAULT_YEAR=DEFAULT_YEAR, DEFAULT_START_DATE=DEFAULT_START_DATE,
-                           DEFAULT_END_DATE=DEFAULT_END_DATE, DEFAULT_VARIABLE=DEFAULT_VARIABLE,
+                           DEFAULT_END_DATE=get_default_end_date(DEFAULT_YEAR), DEFAULT_VARIABLE=DEFAULT_VARIABLE,
                            DEFAULT_DEPTH=DEFAULT_DEPTH,
                            DEFAULT_STRIP=DEFAULT_STRIP, DEFAULT_LOGGER=DEFAULT_LOGGER_LOCATION)
 
@@ -682,11 +612,26 @@ def download_summary_data():
         if not stats:
             return jsonify({"error": "No summary statistics provided"}), 400
 
-        # Flatten nested stats dict
+        # Flatten nested stats dict with extracted fields
         rows = []
         for trace, values in stats.items():
+            parts = trace.split("_")
+            var = parts[0] if len(parts) > 0 else "unknown"
+            type_ = "raw" if "_raw_" in trace else "ratio" if "_ratio_" in trace else "unknown"
+
+            # Extract strip(s): e.g., S1 or S1_S2
+            import re
+            strip_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
+            strips = strip_match.group(1) if strip_match else "unknown"
+
+            # Logger location: final segment
+            logger_location = parts[-1] if parts else "unknown"
+
             row = {
-                "Trace": trace,
+                "Variable": var,
+                "Type": type_,
+                "Strips": strips,
+                "Logger Location": logger_location,
                 "Min": round(values.get("min", 0), 4),
                 "Mean": round(values.get("mean", 0), 4),
                 "Max": round(values.get("max", 0), 4),
@@ -694,16 +639,17 @@ def download_summary_data():
             }
             rows.append(row)
 
+        # Build DataFrame and CSV
         df = pd.DataFrame(rows)
-
-        # Convert to CSV string
         csv_data = df.to_csv(index=False)
+
         filename = f"summary_data_{year}_{variable}_{strip}_{granularity}.csv"
         return Response(
             csv_data,
             mimetype="text/csv",
             headers={"Content-Disposition": f"attachment;filename={filename}"}
         )
+
     except Exception as e:
         logging.error(f"❌ Error in download_summary_data: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

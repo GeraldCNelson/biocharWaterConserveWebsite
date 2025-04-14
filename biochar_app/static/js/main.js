@@ -1,8 +1,8 @@
 import { fetchDefaultsAndOptions, populateDropdownsByTab } from "./ui_controls.js";
-import { getInputValue, setInputValue } from "./ui_utils.js";
+import { getInputValue, setInputValue, getDropdownValue } from "./ui_utils.js";
 import { fetchAndRenderPlot, waitForAllDropdowns } from "./plot_utils.js";
 import { loadMarkdownContent } from "./markdown.js";
-import { generateSummaryTable } from "./api_requests.js";
+import { generateSummaryTable, updateMainDataDisplay } from "./api_requests.js";
 
 /* global Plotly */
 
@@ -35,6 +35,9 @@ document.addEventListener("DOMContentLoaded", async function () {
             depth: options.defaults.depth || options.depths?.[0] || null,
             granularity: options.defaults.granularity || options.granularities?.[0] || null,
         };
+
+        window.variableNameMapping = options.variableNameMapping;
+        window.labelNameMapping = options.labelNameMapping;
 
         const missingFields = Object.entries(window.mainDataDisplayConfig)
             .filter(([_, value]) => value === null)
@@ -89,44 +92,63 @@ document.addEventListener("DOMContentLoaded", async function () {
             updatePlot("ratio", "ratio-plot");
         });
 
-        document.getElementById("update-summary").addEventListener("click", async () => {
-            const year = document.getElementById("summary-year").value;
-            const granularity = document.getElementById("summary-granularity").value;
-            const variable = document.getElementById("summary-variable").value;
-            const strip = document.getElementById("summary-strip").value;
-            const depth = document.getElementById("summary-depth").value;
-            const startDate = document.getElementById("start-date")?.value || `${year}-01-01`;
-            const endDate = document.getElementById("end-date")?.value || `${year}-12-31`;
+     document.getElementById("update-summary").addEventListener("click", async () => {
+    const year = getDropdownValue("summary-year");
+    const granularity = getDropdownValue("summary-granularity");
+    const variable = getDropdownValue("summary-variable");
+    const strip = getDropdownValue("summary-strip");
+    const depth = getDropdownValue("summary-depth");
 
-            try {
-                const response = await fetch("/get_summary_stats", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ year, granularity, variable, strip, depth, startDate, endDate })
-                });
+    let startDate = null;
+    let endDate = null;
 
-                const data = await response.json();
+    // Only set date range if NOT 'gseason'
+    if (granularity !== "gseason") {
+        startDate = getInputValue("start-date") || `${year}-01-01`;
+        endDate = getInputValue("end-date") || `${year}-12-31`;
+    }
 
-                if (data.error) {
-                    document.getElementById("summary-table-container").innerHTML =
-                        `<p class="text-danger">${data.error}</p>`;
-                    return;
-                }
+    try {
+        const payload = { year, granularity, variable, strip, depth };
+        if (startDate && endDate) {
+            payload.startDate = startDate;
+            payload.endDate = endDate;
+        }
 
-                window.latestSummaryStats = {
-                    raw: data.raw_statistics,
-                    ratio: data.ratio_statistics
-                };
-
-                updateMainDataDisplay(data, options);
-
-                console.log("✅ Summary tables updated successfully.");
-            } catch (error) {
-                console.error("❌ Error fetching summary statistics:", error);
-                document.getElementById("summary-table-container").innerHTML =
-                    `<p class="text-danger">Failed to load summary statistics</p>`;
-            }
+        const response = await fetch("/get_summary_stats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
         });
+
+        if (!response.ok) {
+            const text = await response.text();  // Fallback to reading it as text
+            throw new Error(`❌ Server responded with status ${response.status}: ${text}`);
+        }
+
+const data = await response.json();
+        console.log("📦 Full summary stats response:", data);
+
+        if (data.error) {
+            document.getElementById("summary-table-container").innerHTML =
+                `<p class="text-danger">${data.error}</p>`;
+            return;
+        }
+
+        window.latestSummaryStats = {
+            raw: data.raw_statistics,
+            ratio: data.ratio_statistics
+        };
+
+        updateMainDataDisplay(data, options);
+        console.log("✅ Summary tables updated successfully.");
+    } catch (error) {
+        console.error("❌ Error fetching summary statistics:", error);
+        document.getElementById("summary-table-container").innerHTML =
+            `<p class="text-danger">Failed to load summary statistics</p>`;
+    }
+});
+
 
         console.log("📊 Auto-loading plots and summary statistics...");
         setTimeout(() => {
@@ -160,59 +182,3 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.error("❌ ERROR: Application initialization failed:", error);
     }
 });
-
-function updateMainDataDisplay(data, options) {
-    const year = document.getElementById("summary-year").value;
-    const variable = document.getElementById("summary-variable").value;
-    const variableLabel = options?.variableNameMapping?.[variable] || variable;
-    const strip = document.getElementById("summary-strip").value;
-    const granularity = document.getElementById("summary-granularity").value;
-    const depthLabel = document.getElementById("summary-depth").selectedOptions[0]?.textContent || "";
-
-    const mainTitle = `${capitalizeFirst(granularity)} Summary for ${variableLabel} in Strip ${strip}, ${year}`;
-    document.getElementById("summary-title").textContent = mainTitle;
-
-    const rawTableHTML = generateSummaryTable(data.raw_statistics, variable);
-
-    const s1s2 = {};
-    const s3s4 = {};
-
-    for (const [key, value] of Object.entries(data.ratio_statistics || {})) {
-        if (key.includes("S1_S2")) s1s2[key] = value;
-        else if (key.includes("S3_S4")) s3s4[key] = value;
-    }
-
-const isTempVariable = ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"].includes(variable);
-
-const s1s2HTML = Object.keys(s1s2).length > 0
-    ? generateSummaryTable(s1s2, variable)
-    : isTempVariable
-        ? `<p class="text-muted">Temperature ratios are not shown because they are not meaningful.</p>`
-        : `<p class="text-danger">No summary statistics available.</p>`;
-
-const s3s4HTML = Object.keys(s3s4).length > 0
-    ? generateSummaryTable(s1s2, variable)
-    : isTempVariable
-        ? `<p class="text-muted">Temperature ratios are not shown because they are not meaningful.</p>`
-        : `<p class="text-danger">No summary statistics available.</p>`;
-
-    const ratioTitleS1S2 = `${capitalizeFirst(granularity)} Summary for ${variableLabel} (S1/S2, ${depthLabel}, ${year})`;
-    const ratioTitleS3S4 = `${capitalizeFirst(granularity)} Summary for ${variableLabel} (S3/S4, ${depthLabel}, ${year})`;
-
-    const ratioHTML = `
-        <h5 class="mt-4">${ratioTitleS1S2}</h5>
-        ${s1s2HTML}
-        <h5 class="mt-4">${ratioTitleS3S4}</h5>
-        ${s3s4HTML}
-    `;
-  
-    document.getElementById("summary-table-container").innerHTML = `
-        <h5>Raw Data (${depthLabel})</h5>
-        ${rawTableHTML}
-        ${ratioHTML}
-    `;
-}
-
-function capitalizeFirst(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}

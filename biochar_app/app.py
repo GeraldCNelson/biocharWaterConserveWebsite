@@ -4,6 +4,8 @@ from biochar_app.routes import main, load_logger_data
 #from biochar_app.precompute_calculations import process_all_datasets
 import logging
 import subprocess
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -13,8 +15,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(log_dir, "biochar_app.log"))
-        #logging.StreamHandler()  # Optional: keep printing to terminal too
+        logging.FileHandler(os.path.join(log_dir, "biochar_app.log")),
+        logging.StreamHandler()  # ✅ Adds console output
     ]
 )
 
@@ -58,6 +60,7 @@ else:
 for preload_year in [2023, 2024]:
     for granularity in ["15min", "1hour", "daily", "monthly"]: #, "growingseason"
         try:
+            logging.info(f"Trying to load: {preload_year} - {granularity}")
             load_logger_data(preload_year, granularity)
             logging.info(f"✅ Preloaded {preload_year}-{granularity}")
         except Exception as e:
