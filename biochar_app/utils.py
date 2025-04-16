@@ -7,6 +7,7 @@ import zipfile
 import json
 from dataclasses import dataclass
 from biochar_app.config import DATA_PROCESSED_DIR, GSEASON_PERIODS
+from datetime import datetime
 
 @dataclass
 class LoggerFileInfo:
@@ -126,7 +127,9 @@ def compute_summary_statistics(df, variable: str, strip: str, depth: str):
 
 
 def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
-    for label, (start_str, end_str) in GSEASON_PERIODS.items():
+    for label, period in GSEASON_PERIODS.items():
+        start_str = period["start"]
+        end_str = period["end"]
         sm, sd = map(int, start_str.split("-"))
         em, ed = map(int, end_str.split("-"))
 
@@ -143,9 +146,20 @@ def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
 def load_or_generate_gseason_summary(year, overwrite=False):
     summary_path = os.path.join(DATA_PROCESSED_DIR, f"gseason_summary_{year}.json")
     if not os.path.exists(summary_path) or overwrite:
+        # ✅ Local import to avoid circular dependency
         from biochar_app.generate_gseason_summary import generate_gseason_summary
         generate_gseason_summary(year, overwrite=overwrite)
 
     with open(summary_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+def format_gseason_label(code):
+    period = GSEASON_PERIODS.get(code)
+    if not period:
+        return code.replace("_", " ")  # fallback
+
+    month_abbr = lambda date_str: datetime.strptime(date_str, "%m-%d").strftime("%b")
+    start_month = month_abbr(period["start"])
+    end_month = month_abbr(period["end"])
+    label = period["label"]
+    return f"{label} Season Summary ({start_month}–{end_month})"

@@ -1,5 +1,9 @@
 import { getDropdownValue, getElementByIdSafe } from "./ui_utils.js";
 
+function showAlert(msg) {
+  alert(msg); // replace with modal or toast if desired
+}
+
 function downloadPlot(plotType, format) {
     console.log(`📡 Downloading ${plotType} plot as ${format}...`);
 
@@ -62,65 +66,73 @@ function downloadTraceData(type) {
  * Relies on data previously fetched and displayed in summary-table-container.
  */
 
-function downloadSummaryData(type) {
-  const rawStats = window.latestSummaryStats?.raw;
-  const ratioStats = window.latestSummaryStats?.ratio;
-
-  if (!rawStats && !ratioStats) {
-    alert("⚠️ No summary statistics available for download.");
-    return;
-  }
-
-  let statsToDownload = {};
-  let suffix = type;
-
-  if (type === "raw") {
-    statsToDownload = rawStats;
-  } else if (type === "ratio") {
-    statsToDownload = ratioStats;
-  } else if (type === "all") {
-    statsToDownload = {
-      ...Object.fromEntries(Object.entries(rawStats || {}).map(([k, v]) => [`Raw - ${k}`, v])),
-      ...Object.fromEntries(Object.entries(ratioStats || {}).map(([k, v]) => [`Ratio - ${k}`, v]))
-    };
-  }
-
+export async function downloadSummaryData(type) {
   const year = getDropdownValue("summary-year");
   const variable = getDropdownValue("summary-variable");
   const strip = getDropdownValue("summary-strip");
+  const depth = getDropdownValue("summary-depth");
   const granularity = getDropdownValue("summary-granularity");
 
   const payload = {
-    summaryStats: statsToDownload,
     year,
     variable,
     strip,
-    granularity
+    depth,
+    granularity,
+    type  // "raw", "ratio", or "all"
   };
 
-  fetch("/download_summary_data", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  })
-    .then(response => {
-      if (!response.ok) throw new Error("❌ Download request failed.");
-      return response.blob();
-    })
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `summary_${suffix}_${variable}_${strip}_${year}_${granularity}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    })
-    .catch(error => {
-      console.error("❌ Error downloading summary:", error);
-      alert("⚠️ Error downloading summary data.");
+  // 🧠 Check that we have stats available before trying to download
+  const stats = window.latestSummaryStats || {};
+  const isGseason = granularity === "gseason";
+
+  if (isGseason) {
+    if (!stats.gseason_stats || Object.keys(stats.gseason_stats).length === 0) {
+      return showAlert("No seasonal summary statistics available.");
+    }
+  } else {
+    const hasRaw = stats.raw && Object.keys(stats.raw).length > 0;
+    const hasRatio = stats.ratio && Object.keys(stats.ratio).length > 0;
+
+    if (
+      (type === "raw" && !hasRaw) ||
+      (type === "ratio" && !hasRatio) ||
+      (type === "all" && !hasRaw && !hasRatio)
+    ) {
+      return showAlert("No summary statistics available for download.");
+    }
+  }
+
+  try {
+      payload.summaryStats = isGseason ? stats.gseason_stats : (
+      type === "raw" ? stats.raw :
+      type === "ratio" ? stats.ratio :
+      { ...stats.raw, ...stats.ratio }
+    );
+    const response = await fetch("/download_summary_data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Download failed: ${text}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    const fileName = `summary_${granularity}_${type}.zip`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("❌ Download error:", err);
+    showAlert("Failed to download summary data.");
+  }
 }
 
 

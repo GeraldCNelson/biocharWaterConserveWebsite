@@ -31,7 +31,9 @@ def generate_gseason_summary(year, gseason_periods=None, overwrite=False):
 
     summary = {}
 
-    for label, (start_str, end_str) in gseason_periods.items():
+    for label, info in gseason_periods.items():
+        start_str = info["start"]
+        end_str = info["end"]
         start_year = year - 1 if start_str > end_str else year
         start = pd.Timestamp(f"{start_year}-{start_str}")
         end = pd.Timestamp(f"{year}-{end_str}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)

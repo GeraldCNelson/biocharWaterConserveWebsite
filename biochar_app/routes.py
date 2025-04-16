@@ -5,12 +5,15 @@ import os
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
-from biochar_app.utils import load_logger_data, compute_summary_statistics, parse_filenames, assign_gseason_periods
+from biochar_app.utils import load_logger_data, compute_summary_statistics, parse_filenames, assign_gseason_periods, load_or_generate_gseason_summary
 import numpy as np
 import logging
 import json
 import glob
-from flask import Response
+import re
+from io import BytesIO
+import zipfile
+from flask import Response, send_file
 from collections import namedtuple
 from biochar_app.config import (
     DEFAULT_YEAR,
@@ -291,7 +294,8 @@ def get_defaults_and_options():
         "granularityNameMapping": granularity_name_mapping,
         "stripNameMapping": strip_name_mapping,
         "loggerLocationMapping": logger_location_mapping,
-        "depthMapping": sensor_depth_mapping
+        "depthMapping": sensor_depth_mapping,
+        "gseasonPeriods": GSEASON_PERIODS  # ✅ Add seasonal periods with labels and month ranges
     }
 
     logging.info(f"📤 Sending options: {json.dumps(options, indent=2)}")  # ✅ Debugging output
@@ -322,39 +326,32 @@ def get_summary_stats():
 
         logging.info(f"📊 Summary request: {year}, {variable}, {strip}, {granularity}, {depth}")
 
-        df_15min = load_logger_data(year, "15min")
-        gseason_df = df_15min.copy()
-        if gseason_df is None or gseason_df.empty:
-            return jsonify({"error": "No data found for the selected filters."})
-
         is_temp_variable = variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]
 
-        # 🧠 Handle gseason before any timestamp filtering
         if granularity == "gseason":
-            logging.info("🌱 Processing gseason from 15-minute data...")
-            df_15min = load_logger_data(year, "15min")
+            gseason_stats = load_or_generate_gseason_summary(year)
+            key = f"{strip}_D{depth}"
+            safe_stats = {}
 
-            if df_15min is None or df_15min.empty:
-                return jsonify({"error": "No 15-minute data found for the selected year."})
+            for season_code, season_data in gseason_stats.items():
+                season_variable_block = season_data.get(variable)
+                if not isinstance(season_variable_block, dict):
+                    logging.warning(f"⚠️ No data for variable '{variable}' in {season_code}")
+                    safe_stats[season_code] = {}
+                    continue
 
-            df_15min = df_15min.copy()
-            df_15min["gseason_periods"] = df_15min["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
-            df_15min = df_15min.dropna(subset=["gseason_periods"])
+                if key not in season_variable_block:
+                    logging.warning(f"⚠️ No data for key '{key}' in {season_code}")
+                    safe_stats[season_code] = {}
+                    continue
 
-            results = {}
-            for label, _ in GSEASON_PERIODS.items():
-                gseason_df = df_15min[df_15min["gseason_periods"] == label]
-                if gseason_df.empty:
-                    stats_raw, stats_ratio = {}, {}
-                else:
-                    stats_raw, stats_ratio = compute_summary_statistics(gseason_df, variable, strip, depth)
-                    if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
-                        stats_ratio = {}
+                safe_stats[season_code] = season_variable_block[key]
 
-                results[label] = {
-                    "raw_statistics": stats_raw,
-                    "ratio_statistics": stats_ratio
-                }
+            granularity_label = "Seasonal"
+            variable_label = label_name_mapping.get(variable, variable)
+            strip_label = strip_name_mapping.get(strip, strip)
+            depth_label = sensor_depth_mapping.get(depth, f"{depth} in")
+            title = f"{granularity_label} Summary for {variable_label}, {strip_label}, {depth_label}, {year}"
 
             return jsonify({
                 "year": year,
@@ -362,10 +359,15 @@ def get_summary_stats():
                 "strip": strip,
                 "granularity": granularity,
                 "depth": depth,
-                "gseason_stats": results
+                "title": title,
+                "gseason_stats": safe_stats
             })
 
-        # 🔁 Only apply timestamp filtering for non-gseason granularities
+        # ✅ For non-gseason granularities
+        df_15min = load_logger_data(year, "15min")
+        if df_15min is None or df_15min.empty:
+            return jsonify({"error": "No data found for the selected filters."})
+
         if "timestamp" in df_15min.columns and start_date and end_date:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.strptime(end_date, "%Y-%m-%d")
@@ -373,10 +375,15 @@ def get_summary_stats():
             if df_15min.empty:
                 return jsonify({"error": "No data available in the specified date range."})
 
-        # Standard summary
         stats_raw, stats_ratio = compute_summary_statistics(df_15min, variable, strip, depth)
         if is_temp_variable:
             stats_ratio = {}
+
+        granularity_label = granularity_name_mapping.get(granularity, granularity.capitalize())
+        variable_label = label_name_mapping.get(variable, variable)
+        strip_label = strip_name_mapping.get(strip, strip)
+        depth_label = sensor_depth_mapping.get(depth, f"{depth} in")
+        title = f"{granularity_label} Summary for {variable_label}, {strip_label}, {depth_label}, {year}"
 
         return jsonify({
             "year": year,
@@ -384,13 +391,14 @@ def get_summary_stats():
             "strip": strip,
             "granularity": granularity,
             "depth": depth,
+            "title": title,
             "raw_statistics": stats_raw,
             "ratio_statistics": stats_ratio
         })
 
     except Exception as e:
-        logging.error(f"❌ Error in /get_summary_stats: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        logging.exception("❌ Error in /get_summary_stats")
+        return jsonify({"error": str(e)}), 500
 
 @main.route("/markdown/<path:filename>")
 def serve_markdown(filename):
@@ -603,31 +611,81 @@ def plot_raw():
 def download_summary_data():
     try:
         data = request.get_json()
-        stats = data.get("summaryStats", {})
         year = data.get("year", "unknown")
         variable = data.get("variable", "unknown")
         strip = data.get("strip", "unknown")
         granularity = data.get("granularity", "unknown")
+        stats = data.get("summaryStats", {})
 
+        logging.info(f"📥 Download request: {year}, {variable}, {strip}, {granularity}")
+
+        # 🌱 Growing Season Logic
+        if granularity == "gseason":
+            gseason_stats = load_or_generate_gseason_summary(year)
+            raw_rows, ratio_rows = [], []
+
+            for season_code, season_data in gseason_stats.items():
+                for var_key, strip_blocks in season_data.items():
+                    for strip_key, stat_obj in strip_blocks.items():
+                        raw_stats = stat_obj.get("raw_statistics", {})
+                        ratio_stats = stat_obj.get("ratio_statistics", {})
+
+                        for trace, values in raw_stats.items():
+                            logger = trace.split("_")[-1]
+                            raw_rows.append({
+                                "Season": season_code,
+                                "Variable": var_key,
+                                "Strip": strip_key,
+                                "Logger Location": logger,
+                                "Min": round(values.get("min", 0), 4),
+                                "Mean": round(values.get("mean", 0), 4),
+                                "Max": round(values.get("max", 0), 4),
+                                "Std": round(values.get("std", 0), 4)
+                            })
+
+                        for trace, values in ratio_stats.items():
+                            parts = trace.split("_")
+                            strips = parts[3] if len(parts) >= 5 else "unknown"
+                            logger = parts[-1]
+                            ratio_rows.append({
+                                "Season": season_code,
+                                "Variable": var_key,
+                                "Strips": strips,
+                                "Logger Location": logger,
+                                "Min": round(values.get("min", 0), 4),
+                                "Mean": round(values.get("mean", 0), 4),
+                                "Max": round(values.get("max", 0), 4),
+                                "Std": round(values.get("std", 0), 4)
+                            })
+
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zf:
+                if raw_rows:
+                    df_raw = pd.DataFrame(raw_rows)
+                    zf.writestr("gseason_raw_summary.csv", df_raw.to_csv(index=False))
+                if ratio_rows:
+                    df_ratio = pd.DataFrame(ratio_rows)
+                    zf.writestr("gseason_ratio_summary.csv", df_ratio.to_csv(index=False))
+
+            zip_buffer.seek(0)
+            filename = f"summary_gseason_{year}_{variable}_{strip}.zip"
+            logging.info(f"📦 Sending ZIP: {filename}")
+            return send_file(zip_buffer, mimetype="application/zip", download_name=filename, as_attachment=True)
+
+        # 📊 Standard Granularities
         if not stats:
             return jsonify({"error": "No summary statistics provided"}), 400
 
-        # Flatten nested stats dict with extracted fields
         rows = []
         for trace, values in stats.items():
             parts = trace.split("_")
-            var = parts[0] if len(parts) > 0 else "unknown"
+            var = parts[0] if parts else "unknown"
             type_ = "raw" if "_raw_" in trace else "ratio" if "_ratio_" in trace else "unknown"
-
-            # Extract strip(s): e.g., S1 or S1_S2
-            import re
             strip_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
             strips = strip_match.group(1) if strip_match else "unknown"
-
-            # Logger location: final segment
             logger_location = parts[-1] if parts else "unknown"
 
-            row = {
+            rows.append({
                 "Variable": var,
                 "Type": type_,
                 "Strips": strips,
@@ -636,14 +694,12 @@ def download_summary_data():
                 "Mean": round(values.get("mean", 0), 4),
                 "Max": round(values.get("max", 0), 4),
                 "Std": round(values.get("std", 0), 4)
-            }
-            rows.append(row)
+            })
 
-        # Build DataFrame and CSV
         df = pd.DataFrame(rows)
         csv_data = df.to_csv(index=False)
-
         filename = f"summary_data_{year}_{variable}_{strip}_{granularity}.csv"
+        logging.info(f"📤 Sending CSV: {filename}")
         return Response(
             csv_data,
             mimetype="text/csv",
@@ -651,7 +707,7 @@ def download_summary_data():
         )
 
     except Exception as e:
-        logging.error(f"❌ Error in download_summary_data: {e}", exc_info=True)
+        logging.exception("❌ Error in /download_summary_data")
         return jsonify({"error": str(e)}), 500
 
 

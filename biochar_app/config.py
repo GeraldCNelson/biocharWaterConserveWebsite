@@ -42,9 +42,21 @@ SWC_DEPTH_WEIGHTS = {
 }
 
 GSEASON_PERIODS = {
-    "Q1_Winter": ("11-01", "02-28"),
-    "Q2_Early_Growing": ("03-01", "05-31"),
-    "Q3_Peak_Harvest": ("06-01", "10-31")
+    "Q1_Winter": {
+        "label": "Winter",
+        "start": "11-01",
+        "end": "02-28"
+    },
+    "Q2_Early_Growing": {
+        "label": "Early Growing",
+        "start": "03-01",
+        "end": "05-31"
+    },
+    "Q3_Peak_Harvest": {
+        "label": "Peak Harvest",
+        "start": "06-01",
+        "end": "10-31"
+    }
 }
 
 STRIPS = ["S1", "S2", "S3", "S4"]

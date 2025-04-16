@@ -92,8 +92,7 @@ async function updateSummaryStatistics() {
           raw: data.raw_statistics,
           ratio: data.ratio_statistics
         };
-        const title = `${capitalize(granularity)} Summary for ${variable} in Strip ${strip}, ${year}`;
-        document.getElementById("summary-title").textContent = title;
+        document.getElementById("summary-title").textContent = data.title || "Summary Results";
 
 //        const rawTable = generateSummaryTable(data.raw_statistics, variable);
 //        const ratioTable = generateSummaryTable(data.ratio_statistics, variable);

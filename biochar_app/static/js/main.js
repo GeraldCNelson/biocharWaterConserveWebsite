@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
 
         console.log("🔍 Checking fetched options:", options);
+        window.gseasonPeriods = options?.gseasonPeriods || {};
         console.log("🛠 Populating dropdowns...");
         populateDropdownsByTab(options);
 
@@ -102,6 +103,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     let startDate = null;
     let endDate = null;
 
+
     // Only set date range if NOT 'gseason'
     if (granularity !== "gseason") {
         startDate = getInputValue("start-date") || `${year}-01-01`;
@@ -126,7 +128,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             throw new Error(`❌ Server responded with status ${response.status}: ${text}`);
         }
 
-const data = await response.json();
+    const data = await response.json();
         console.log("📦 Full summary stats response:", data);
 
         if (data.error) {
@@ -141,6 +143,9 @@ const data = await response.json();
         };
 
         updateMainDataDisplay(data, options);
+        if (granularity === "gseason" && data.gseason_stats) {
+          window.latestSummaryStats.gseason_stats = data.gseason_stats;
+        }
         console.log("✅ Summary tables updated successfully.");
     } catch (error) {
         console.error("❌ Error fetching summary statistics:", error);
