@@ -298,7 +298,7 @@ def get_defaults_and_options():
         "gseasonPeriods": GSEASON_PERIODS  # ✅ Add seasonal periods with labels and month ranges
     }
 
-    logging.info(f"📤 Sending options: {json.dumps(options, indent=2)}")  # ✅ Debugging output
+    # logging.info(f"📤 Sending options: {json.dumps(options, indent=2)}")  # ✅ Debugging output
     return jsonify(options)
 
 @main.route("/favicon.ico")

@@ -7,6 +7,8 @@ output: md_document
 
 # Welcome to the Fruita Biochar Project
 
+[Note: This is an early version of this website. Expect problems. If you find one or just have a suggestion for improvements, please email *nelson.gerald.c\@gmail.com*.]
+
 This is an introduction to the project. Here's what you can expect:
 
 -   An introduction to what biochar is and why it is potentially valuable in western Colorado (and other drought prone areas of the world).
@@ -25,3 +27,9 @@ Biochar is the solid material obtained from the thermochemical conversion of bio
 ```{r, echo=FALSE, out.width="25%"}
 knitr::include_graphics("../static/images/biocharMicro1.jpg")
 ```
+
+For those interested in the chemistry, a bit of biological history is in order. In plant-based biochar, a key element of vascular plants is the carbohydrate *lignan*. It provides the support structure for plants, allowing them to adapt to life on land. A diagram of the chemical formula for lignan is below.
+
+`{r, echo=FALSE, out.width="25%"} knitr::include_graphics("../static/images/lignan_diagram.jpg")`
+
+`{r, echo=FALSE, out.width="25%"} knitr::include_graphics("../static/images/biochar_diagram.jpg")`

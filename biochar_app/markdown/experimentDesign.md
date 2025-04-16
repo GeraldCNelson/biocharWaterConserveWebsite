@@ -18,6 +18,8 @@ furrows 30 inches apart. Irrigation water is applied at the north end
 until it is saturated. Any excess runs into a drainage ditch at the
 south end of the field.
 
+Irrigation is applied to the east two rows (strips 3 and 4) roughly every two weeks during the growing season. The west two strips are irrigated only once a month.
+
 <figure>
 <img src="../static/images/biocharExperimentalDesign.png"
 style="width:50.0%" alt="Experimental Layout" />
@@ -40,6 +42,7 @@ alt="Pistacchio shell biochar" />
 The process to collect soil moisture, electrical conductivity, and
 temperature is described in detail in the Technical Details tab.
 
+<br><br>
 ### Soil sampling
 
 Soil samples for each strip were collected in early spring and late fall
