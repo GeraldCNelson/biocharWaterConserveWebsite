@@ -60,21 +60,58 @@ html, body {
 
 /* Default markdown layout for most screens */
 .container.markdown-container {
-    max-width: 90%;
-    margin: 0 auto;
-    padding-left: 20px;
-    padding-right: 20px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 20px;
 }
 
 /* Compact and clean markdown styling */
 .markdown-content {
-    font-family: Arial, sans-serif;
+    font-family: Georgia, serif !important;
     font-size: 14px;
     line-height: 1.4;
     background-color: #f9f9f9;
     border-radius: 5px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     padding: 16px;  /* slightly tighter internal padding */
+}
+
+.markdown-content figure,
+.markdown-content h2,
+.markdown-content h1,
+.markdown-content p {
+  display: block;
+  width: 100%;
+  clear: both;
+}
+
+.markdown-content img {
+  display: block;
+  margin: 0 auto;
+}
+
+.markdown-content figcaption {
+  text-align: center;
+  font-style: italic;
+  margin-top: 0.5em;
+}
+
+.markdown-content table {
+  display: table;
+  margin-left: auto;
+  margin-right: auto;
+  width: auto; /* ✅ Overrides Bootstrap's 100% width */
+}
+
+table {
+  display: table;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Match tab font to content */
+.nav-tabs .nav-link {
+    font-family: Georgia, serif;
 }
 
 /* Headers */
@@ -84,6 +121,7 @@ html, body {
     color: #333;
     margin-top: 0.5rem;
     margin-bottom: 0.3rem;
+    text-align: left !important;
 }
 
 /* Paragraphs */
@@ -185,14 +223,12 @@ html, body {
 
 /* Plot Panel Styling */
 .plot-panel {
-    flex-grow: 1;
-    flex-basis: 0;
-    min-width: 0;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 10px;
+  flex-grow: 1;
+  flex-basis: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px;
 }
-
 
 .graph-container:last-child {
     margin-bottom: 0;
@@ -214,10 +250,14 @@ html, body {
     margin-left: 5px;
 }
 
+.plot-container {
+  width: 100%;
+}
+
 #raw-plot, #ratio-plot {
     width: 100%;
     min-width: 0;
-    min-height: 400px !important;
+    min-height: 500px !important;
     display: block !important;
 }
 
@@ -278,4 +318,26 @@ button:hover {
     flex-wrap: nowrap; /* ✅ Prevents wrapping to the next line */
     align-items: flex-start; /* ✅ Aligns both panels at the top */
     gap: 20px; /* ✅ Adds spacing */
+}
+
+figure {
+  display: block;
+  clear: both;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+figure img {
+  display: block;
+  margin: 0 auto;
+}
+
+figcaption {
+  text-align: center;
+  font-style: italic;
+}
+
+h2 {
+  display: block;
+  margin-top: 2em;
 }
