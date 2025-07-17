@@ -1,0 +1,120 @@
+**Deploying the Biochar Website on Amazon Lightsail**
+
+### **Step 1: Create a Lightsail Instance**
+1. Go to [Amazon Lightsail](https://lightsail.aws.amazon.com).
+2. Click **Create Instance**.
+3. Select **Linux/Unix** as the platform.
+4. Choose **Ubuntu 22.04 LTS**.
+5. Select an instance plan:
+   - **Cheapest** option (~$3.50/month) is fine for now.
+   - Upgrade later if needed.
+6. Name the instance (e.g., `biochar-webserver`).
+7. Click **Create Instance**.
+
+---
+
+### **Step 2: Connect to the Server**
+1. Once the instance is running, click on it.
+2. Click **Connect using SSH** (via the Lightsail browser).
+3. Run updates:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   ```
+
+---
+
+### **Step 3: Install Required Software**
+Run the following commands:
+
+```bash
+# Install required packages
+sudo apt install -y python3-pip python3-venv nginx
+
+# Create a directory for your app
+mkdir ~/biochar_app && cd ~/biochar_app
+
+# Create a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Flask and dependencies
+pip install flask gunicorn pandas plotly
+```
+
+---
+
+### **Step 4: Upload Your Application**
+#### **Option 1: Using GitHub**
+```bash
+sudo apt install -y git
+git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git biochar_app
+cd biochar_app
+pip install -r requirements.txt
+```
+
+#### **Option 2: Manual Upload**
+- **For Mac/Linux:** Use SCP:
+  ```bash
+  scp -r /path/to/your/project ubuntu@your-lightsail-ip:~/biochar_app
+  ```
+- **For Windows:** Use **WinSCP** to drag and drop files.
+
+---
+
+### **Step 5: Configure Gunicorn (Production Web Server)**
+Run Gunicorn to serve Flask:
+```bash
+gunicorn --bind 0.0.0.0:8000 wsgi:app
+```
+- Replace `wsgi:app` with your Flask app's entry point.
+
+To run Gunicorn in the background:
+```bash
+nohup gunicorn --bind 0.0.0.0:8000 wsgi:app &
+```
+
+---
+
+### **Step 6: Configure Nginx (Reverse Proxy)**
+1. Create an Nginx config:
+   ```bash
+   sudo nano /etc/nginx/sites-available/biochar
+   ```
+2. Add the following configuration:
+   ```
+   server {
+       listen 80;
+       server_name YOUR_LIGHTSAIL_IP;
+
+       location / {
+           proxy_pass http://127.0.0.1:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       }
+   }
+   ```
+3. Enable the config:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/biochar /etc/nginx/sites-enabled/
+   sudo systemctl restart nginx
+   ```
+
+---
+
+### **Step 7: Test Your Deployment**
+1. Open your browser and go to:
+   ```
+   http://YOUR_LIGHTSAIL_IP
+   ```
+2. You should see your Flask application running!
+
+---
+
+### **Next Steps**
+- **Secure Your Server**: Set up a firewall and enable HTTPS with **Let’s Encrypt**.
+- **Automate Deployment**: Use GitHub Actions to auto-deploy updates.
+- **Optimize Performance**: Consider caching and database tuning.
+
+🚀 **Let me know once you've deployed it, and we can move forward with further enhancements!**
+

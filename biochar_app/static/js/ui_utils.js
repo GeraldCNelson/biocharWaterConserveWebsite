@@ -25,3 +25,7 @@ export function getElementByIdSafe(id) {
     }
     return el;
 }
+
+export function formatValue(value) {
+    return (value === null || isNaN(value)) ? "NA" : Number(value).toFixed(4);
+}

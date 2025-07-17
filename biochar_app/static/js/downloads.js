@@ -109,7 +109,7 @@ export async function downloadSummaryData(type) {
       type === "ratio" ? stats.ratio :
       { ...stats.raw, ...stats.ratio }
     );
-    const response = await fetch("/download_summary_data", {
+    const response = await fetch("/api/download_summary_data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -169,3 +169,5 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadSummaryData("all");
   });
 });
+
+export {downloadTraceData }

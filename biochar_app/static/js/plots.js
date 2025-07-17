@@ -1,134 +1,98 @@
 // plots.js (ES6 Module Version)
 import { getSelectedFilters } from "./ui_controls.js";
-import { getDropdownValue, getInputValue } from "./ui_utils.js";
-import { generateSummaryTable, updateMainDataDisplay } from "./api_requests.js";
+import { DEBUG } from "./config.js";
+
+function debugLog(...args) {
+  if (DEBUG) console.log(...args);
+}
+function debugGroup(title, callback) {
+  if (DEBUG) {
+    console.groupCollapsed(title);
+    try {
+      callback();
+    } finally {
+      console.groupEnd();
+    }
+  } else {
+    callback();
+  }
+}
+
+const API_BASE = "/api";
 
 /**
  * 📊 updatePlot - Fetches and updates a Plotly chart dynamically.
- * @param {string} plotType - The type of plot to fetch ("raw" or "ratio").
- * @param {string} plotDiv - The ID of the div where the plot will be rendered.
+ * @param {string} plotType - "raw" or "ratio"
+ * @param {string} plotDiv  - the DOM id of the div to render into
  */
-async function updatePlot(plotType, plotDiv) {
-    console.log(`📡 Fetching ${plotType} plot data...`);
+export async function updatePlot(plotType, plotDiv) {
+  debugLog(`📡 Fetching ${plotType} plot data...`);
 
-    try {
-        let requestData = getSelectedFilters("main");
+  try {
+    // 1) Grab all your dropdowns + inputs
+    const requestData = getSelectedFilters("main");
+    const { startDate, endDate, granularity, variable } = requestData;
 
-        // requestData.traceOption = "depths";
-
-        const isGseason = requestData.granularity === "gseason";
-
-        // ✅ Conditionally include weather overlays
-        if (!isGseason) {
-            if (requestData.variable === "T") {
-                requestData.includeTemperature = true;
-            }
-            if (requestData.variable === "VWC") {
-                requestData.includeRainfall = true;
-            }
-        } else {
-            // 🚫 Remove weather flags if present
-            delete requestData.includeRainfall;
-            delete requestData.includeTemperature;
-        }
-
-        const route = isGseason
-            ? `/plot_${plotType}_gseason`
-            : `/plot_${plotType}`;
-
-        const response = await fetch(route, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestData),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`❌ Server returned error: ${response.status} - ${errorText}`);
-        }
-
-        const plotlyJSON = await response.json();
-        console.log(`✅ Received ${plotType} plot JSON:`, plotlyJSON);
-
-        Plotly.react(plotDiv, plotlyJSON.data, plotlyJSON.layout)
-            .then(() => {
-                Plotly.Plots.resize(document.getElementById(plotDiv));
-                console.log(`🔄 Forced resize on ${plotDiv}`);
-            });
-
-    } catch (error) {
-        console.error(`❌ Error updating ${plotType} plot:`, error);
+    // 2) Validate dates
+    if (!startDate || !endDate) {
+      console.error(
+        `❌ Cannot update plots: ${
+          !startDate && !endDate
+            ? "both Start Date and End Date are required."
+            : !startDate
+            ? "Start Date is missing."
+            : "End Date is missing."
+        }`
+      );
+      return;
     }
-}
 
+    // 3) Build query string
+    const params = new URLSearchParams({
+      year: requestData.year,            // if you have a year field
+      granularity,                       // "raw", "monthly", or "gseason"
+      startDate,                         // ISO yyyy-mm-dd
+      endDate,                           // ISO yyyy-mm-dd
+      variable,                         // e.g. "VWC" or "T"
+      depth: requestData.depth,          // sensor depth code
+      strip: requestData.strip,          // e.g. "S1"
+      logger: requestData.logger,        // e.g. "M" or "B"
+    });
 
-async function updateSummaryStatistics() {
-    console.log("📊 updateSummaryStatistics: Updating summary statistics...");
-
-    try {
-        const year = parseInt(getDropdownValue("summary-year"));
-        const variable = getDropdownValue("summary-variable");
-        const strip = getDropdownValue("summary-strip");
-        const granularity = getDropdownValue("summary-granularity");
-
-        console.log("🔍 Selected Summary Filters:", { year, variable, strip, granularity });
-
-        const response = await fetch("/get_summary_stats", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ year, variable, strip, granularity })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("❌ Server error in updateSummaryStatistics:", errorText);
-            alert("⚠️ Error retrieving summary statistics.");
-            return;
-        }
-
-        const data = await response.json();
-        console.log("✅ Received summary stats response:", data);
-        window.latestSummaryStats = {
-          raw: data.raw_statistics,
-          ratio: data.ratio_statistics
-        };
-        document.getElementById("summary-title").textContent = data.title || "Summary Results";
-
-//        const rawTable = generateSummaryTable(data.raw_statistics, variable);
-//        const ratioTable = generateSummaryTable(data.ratio_statistics, variable);
-
-//        const container = document.getElementById("summary-table-container");
-//        container.innerHTML = `
-//            <h5>Raw Data</h5>
-//            ${rawTable}
-//            <h5 class="mt-4">Ratio Data</h5>
-//            ${ratioTable}
-//        `;
-
-        console.log("✅ Summary statistics tables updated.");
-    } catch (error) {
-        console.error("❌ Unexpected error in updateSummaryStatistics:", error);
-        alert("⚠️ Unexpected error occurred while updating summary statistics.");
+    // 4) Conditionally include weather overlays
+    if (granularity !== "gseason") {
+      if (variable === "T")   params.set("includeTemperature", "true");
+      if (variable === "VWC") params.set("includeRainfall",  "true");
     }
-}
 
-function capitalize(s) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
+    // 5) Construct the GET URL
+    const url = `${API_BASE}/plot/${plotType}?${params.toString()}`;
+    debugLog("GET", url);
 
-// Hook up Update Plots button only after DOM is ready
-if (document.readyState !== "loading") {
-    document.getElementById("update-plots")?.addEventListener("click", () => {
-        updatePlot("raw", "raw-plot");
-        updatePlot("ratio", "ratio-plot");
+    // 6) Fetch & render
+    const response = await fetch(url, { method: "GET" });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`❌ Server error: ${response.status} – ${errText}`);
+    }
+
+    const plotlyJSON = await response.json();
+    debugLog(`✅ Received ${plotType} JSON:`, plotlyJSON);
+
+    // 7) Plotly.react for fast updates
+    Plotly.react(plotDiv, plotlyJSON.data, plotlyJSON.layout).then(() => {
+      Plotly.Plots.resize(document.getElementById(plotDiv));
+      debugLog(`🔄 Resized ${plotDiv}`);
     });
-} else {
-    document.addEventListener("DOMContentLoaded", () => {
-        document.getElementById("update-plots")?.addEventListener("click", () => {
-            updatePlot("raw", "raw-plot");
-            updatePlot("ratio", "ratio-plot");
-        });
-    });
+  } catch (err) {
+    console.error(`❌ Error updating ${plotType} plot:`, err);
+  }
 }
 
-export { updatePlot, updateSummaryStatistics };
+/**
+ * Helper to capitalize strings if you need it elsewhere.
+ */
+export function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

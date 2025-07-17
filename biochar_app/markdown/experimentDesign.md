@@ -37,7 +37,7 @@ figcaption, caption {
   margin-top: 0.5em;
 }
 
-</style></head><h1 id="the-biochar-experimental-design">The Biochar Experimental Design</h1>
+</style></head><h1 id="the-biochar-experimental-design">The Fruita Biochar Project Experimental Design</h1>
 <h2 id="hypotheses-to-be-tested">Hypotheses to be tested</h2>
 <p>As discussed in the Introduction tab, the process of making biochar leaves massive amounts of space where water, nutrients, and soil biota can be stored. In a desert environment like that around Fruita, water shortages can be a big problem. The primary question for this experiment is how much more water can be stored in a field with biochar than one without and for how long. A second research question is what does biochar contribute to quantity and quality of pasture production. A third topic is do the benefits of having biochar in the soil last for multiple years.</p>
 <p>The experiment began in Spring 2023 at the Fruita Research Station of Colorado State University.</p>

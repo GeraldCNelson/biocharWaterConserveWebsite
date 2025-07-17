@@ -1,0 +1,32 @@
+\section*{CS650 Frequency-Domain Reflectometer (FDR) Sensor}
+
+The CS650 Water Content Reflectometer measures volumetric water content (VWC) by probing the soil’s dielectric constant via high-frequency electromagnetic waves.  Its key specifications and operating principles are:
+
+\begin{itemize}
+  \item \textbf{Measurement Principle:}  
+    Frequency-Domain Reflectometry (FDR) at a nominal frequency of 70\,MHz.  A burst of RF energy is emitted along the waveguide rods; the reflected signal phase shift is proportional to the soil’s dielectric permittivity \(\varepsilon\).
+
+  \item \textbf{Probe Geometry \& Volume:}  
+    Three stainless-steel waveguides, 10\,cm long and 2.5\,mm diameter, form an equilateral triangle.  
+    The effective sampling volume is approximately a cylinder of length 10\,cm and radius 3–5\,cm around the probes.
+
+  \item \textbf{Calibration \& Conversion:}  
+    The raw phase shift \(\phi\) is processed inside the CR6 datalogger to compute \(\varepsilon\), then converted to VWC (\(\theta\)) using a factory-tuned calibration curve:
+    \[
+      \theta = a_0 + a_1\,\varepsilon + a_2\,\varepsilon^2\,,
+    \]
+    where \(a_0, a_1, a_2\) are sensor-specific coefficients.
+
+  \item \textbf{Accuracy \& Resolution:}  
+    \begin{itemize}
+      \item Typical accuracy: \(\pm0.02\) (±2 % VWC) in mineral soils  
+      \item Resolution: 0.0001 m³/m³  
+      \item Response time: ≪1 s
+    \end{itemize}
+
+  \item \textbf{Environmental Range:}  
+    \(\theta\in[0,\,0.5]\) m³/m³; soil temperature range −40 °C to +60 °C.
+
+  \item \textbf{Data Logging:}  
+    Paired with a Campbell Scientific CR6 datalogger, which timestamps and stores measurements at user-defined intervals, and can apply temperature and bulk density corrections in real time.
+\end{itemize}

@@ -1,189 +1,140 @@
-import { fetchDefaultsAndOptions, populateDropdownsByTab } from "./ui_controls.js";
-import { getInputValue, setInputValue, getDropdownValue } from "./ui_utils.js";
-import { fetchAndRenderPlot, waitForAllDropdowns } from "./plot_utils.js";
+// main.js – Handles page load, toggles, and UI event wiring
+
+import { DEBUG, MARKDOWN_FILES } from "./config.js";
+import {
+  initializeMainDatepickers,
+  updateStartAndEndDatesFromYear,
+  fetchDefaultsAndOptions,
+  populateSelect,
+  updateDepthLabels,
+  handleTraceOptionChange
+} from "./ui_controls.js";
+import { waitForAllDropdowns, fetchAndRenderPlot } from "./plot_utils.js";
+import { updateSummaryStatistics } from "./tables.js";
+import {
+  populateAllDropdowns,
+  setupUnitToggleHandlers,
+  initializeUpdateButtons,
+  getAllDropdownIds
+} from "./control_panel.js";
 import { loadMarkdownContent } from "./markdown.js";
-import { generateSummaryTable, updateMainDataDisplay } from "./api_requests.js";
+import { renderMainPlots } from "./plot_utils.js";
 
-/* global Plotly */
+function debugLog(...args) {
+  if (DEBUG) console.log(...args);
+}
+function debugGroup(title, callback) {
+  if (DEBUG) {
+    console.groupCollapsed(title);
+    try { callback(); }
+    finally { console.groupEnd(); }
+  } else {
+    callback();
+  }
+}
 
+// ─── wire the year‐dropdown change to call the imported helper ────────────────
+document
+  .getElementById("main-year")
+  ?.addEventListener("change", () => updateStartAndEndDatesFromYear("main"));
+
+document
+  .getElementById("summary-year")
+  ?.addEventListener("change", () => updateStartAndEndDatesFromYear("summary"));
+
+// ─── on load, seed any existing <select>s into the date‐fields ───────────────
+updateStartAndEndDatesFromYear("main");
+updateStartAndEndDatesFromYear("summary");
+
+// ─── DOMContentLoaded: the rest of your initialization ────────────────────────
 document.addEventListener("DOMContentLoaded", async function () {
-    console.log("🌐 Initializing application...");
+  debugLog("🌐 Initializing application...");
 
-    try {
-        console.log("🟡 Fetching defaults and options...");
-        const options = await fetchDefaultsAndOptions();
-        if (!options || !options.defaults) {
-            throw new Error("❌ CRITICAL ERROR: Missing defaults or options!");
-        }
+  // 1) Fetch defaults & options from the server
+  const options = await fetchDefaultsAndOptions();
+  if (!options) return;
+  window.unitSystem      = options.defaults.unitSystem || "us";
+  window.dropdownOptions = options;
 
-        console.log("🔍 Checking fetched options:", options);
-        window.gseasonPeriods = options?.gseasonPeriods || {};
-        console.log("🛠 Populating dropdowns...");
-        populateDropdownsByTab(options);
+  // 2) Build out all dropdowns & wire the unit-toggle & "Update Plots" button
+  populateAllDropdowns(options, window.unitSystem);
+  setupUnitToggleHandlers(options);
+    initializeMainDatepickers(
+      options.years,
+      options.defaults.startDate,
+      options.defaults.endDate
+    );
+  initializeUpdateButtons();
 
-        await waitForAllDropdowns([
-            "main-year", "main-variable", "main-strip", "main-granularity", "main-loggerLocation", "main-depth",
-            "summary-year", "summary-variable", "summary-strip", "summary-granularity", "summary-depth"
-        ]);
+  // 3) Wait until every dropdown is populated (and let Bootstrap finish layout)
+  await waitForAllDropdowns(getAllDropdownIds());
+  await new Promise(requestAnimationFrame);
 
-        console.log("✅ Dropdowns successfully populated.");
+  // 4) Seed defaults into all <select> and <input> controls
+  for (const [key, value] of Object.entries(options.defaults)) {
+    const mainEl    = document.getElementById(`main-${key}`);
+    const summaryEl = document.getElementById(`summary-${key}`);
+    if (mainEl)    mainEl.value    = value;
+    if (summaryEl) summaryEl.value = value;
+  }
 
-        window.mainDataDisplayConfig = {
-            year: options.defaults.year || options.years?.[0] || null,
-            strip: options.defaults.strip || options.strips?.[0] || null,
-            variable: options.defaults.variable || options.variables?.[0] || null,
-            loggerLocation: options.defaults.loggerLocation || options.loggerLocations?.[0] || null,
-            depth: options.defaults.depth || options.depths?.[0] || null,
-            granularity: options.defaults.granularity || options.granularities?.[0] || null,
-        };
+  // 5) Initialize the Main date-pickers (range allowed + default start/end)
+  //    signature is: initializeMainDatepickers(years, defaultStart, defaultEnd)
+  initializeMainDatepickers(
+    options.years,
+    options.defaults.startDate,
+    options.defaults.endDate
+  );
 
-        window.variableNameMapping = options.variableNameMapping;
-        window.labelNameMapping = options.labelNameMapping;
+  // 6) Whenever the user changes the year → update both start & end via your fetch‐backed helper
+  document
+    .getElementById("main-year")
+    ?.addEventListener("change", () => updateStartAndEndDatesFromYear("main"));
 
-        const missingFields = Object.entries(window.mainDataDisplayConfig)
-            .filter(([_, value]) => value === null)
-            .map(([key]) => key);
+  document
+    .getElementById("summary-year")
+    ?.addEventListener("change", () => updateStartAndEndDatesFromYear("summary"));
 
-        if (missingFields.length > 0) {
-            throw new Error(`❌ Missing required values: ${missingFields.join(", ")}`);
-        }
+  // 7) Apply depth labels (for both main & summary depth selects)
+  updateDepthLabels(options.depthMapping, window.unitSystem);
 
-        console.log("✅ Initialized mainDataDisplayConfig:", window.mainDataDisplayConfig);
+  debugGroup("🎛️ Dropdown defaults & mappings", () => {
+    console.table(options.defaults);
+    console.table(
+      Object.entries(options.depthMapping).map(([key, d]) => ({
+        DepthNumber: key,
+        US: d.us,
+        Metric: d.metric,
+      }))
+    );
+  });
 
-        const defaultYear = window.mainDataDisplayConfig.year;
-        setInputValue("start-date", `${defaultYear}-01-01`);
-        setInputValue("end-date", options.defaults.endDate);
+  // 8) Attach trace‐option change handler
+  const traceOptionEl = document.getElementById("main-traceOption");
+  if (traceOptionEl) {
+    traceOptionEl.addEventListener("change", handleTraceOptionChange);
+    debugLog("🛠️ Trace-Option handler attached to main-traceOption.");
+  }
 
-        document.getElementById("main-year").addEventListener("change", function () {
-            const selectedYear = this.value;
-            setInputValue("start-date", `${selectedYear}-01-01`);
+  // 9) Initial render if Main tab is already active
+  const mainTabLink = document.querySelector('a[href="#main"]');
+  if (mainTabLink?.classList.contains("active")) {
+    await renderMainPlots();
+  }
 
-            fetch(`/get_end_date?year=${selectedYear}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.endDate) {
-                        setInputValue("end-date", data.endDate);
-                    } else {
-                        console.warn("⚠️ No endDate returned, falling back to Dec 31");
-                        setInputValue("end-date", `${selectedYear}-12-31`);
-                    }
-                })
-                .catch(error => {
-                    console.error("❌ Error fetching end date:", error);
-                    setInputValue("end-date", `${selectedYear}-12-31`);
-                });
+  // 10) Re-render whenever Main tab is shown
+  mainTabLink?.addEventListener("shown.bs.tab", renderMainPlots);
 
-            console.log("✅ Start and End Dates Initialized.");
-        });
+  // 11) Initial summary-statistics render
+  updateSummaryStatistics();
 
-        document.getElementById("main-granularity").addEventListener("change", function () {
-            const selected = this.value;
-            const startInput = document.getElementById("start-date");
-            const endInput = document.getElementById("end-date");
+  // 12) Load all markdown snippets into their modals
+  debugLog("📖 Loading markdown snippets…");
+  await Promise.all(
+    Object.entries(MARKDOWN_FILES).map(([id, path]) =>
+      loadMarkdownContent(id, path)
+    )
+  );
 
-            const isGseason = selected === "gseason";
-            startInput.disabled = isGseason;
-            endInput.disabled = isGseason;
-            startInput.style.opacity = isGseason ? 0.5 : 1;
-            endInput.style.opacity = isGseason ? 0.5 : 1;
-        });
-
-        document.getElementById("main-traceOption").addEventListener("change", () => {
-            updatePlot("raw", "raw-plot");
-            updatePlot("ratio", "ratio-plot");
-        });
-
-     document.getElementById("update-summary").addEventListener("click", async () => {
-    const year = getDropdownValue("summary-year");
-    const granularity = getDropdownValue("summary-granularity");
-    const variable = getDropdownValue("summary-variable");
-    const strip = getDropdownValue("summary-strip");
-    const depth = getDropdownValue("summary-depth");
-
-    let startDate = null;
-    let endDate = null;
-
-
-    // Only set date range if NOT 'gseason'
-    if (granularity !== "gseason") {
-        startDate = getInputValue("start-date") || `${year}-01-01`;
-        endDate = getInputValue("end-date") || `${year}-12-31`;
-    }
-
-    try {
-        const payload = { year, granularity, variable, strip, depth };
-        if (startDate && endDate) {
-            payload.startDate = startDate;
-            payload.endDate = endDate;
-        }
-
-        const response = await fetch("/get_summary_stats", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const text = await response.text();  // Fallback to reading it as text
-            throw new Error(`❌ Server responded with status ${response.status}: ${text}`);
-        }
-
-    const data = await response.json();
-        console.log("📦 Full summary stats response:", data);
-
-        if (data.error) {
-            document.getElementById("summary-table-container").innerHTML =
-                `<p class="text-danger">${data.error}</p>`;
-            return;
-        }
-
-        window.latestSummaryStats = {
-            raw: data.raw_statistics,
-            ratio: data.ratio_statistics
-        };
-
-        updateMainDataDisplay(data, options);
-        if (granularity === "gseason" && data.gseason_stats) {
-          window.latestSummaryStats.gseason_stats = data.gseason_stats;
-        }
-        console.log("✅ Summary tables updated successfully.");
-    } catch (error) {
-        console.error("❌ Error fetching summary statistics:", error);
-        document.getElementById("summary-table-container").innerHTML =
-            `<p class="text-danger">Failed to load summary statistics</p>`;
-    }
-});
-
-
-        console.log("📊 Auto-loading plots and summary statistics...");
-        setTimeout(() => {
-            requestAnimationFrame(() => {
-                fetchAndRenderPlot("/plot_raw", "raw-plot", { traceOption: "depths" });
-                fetchAndRenderPlot("/plot_ratio", "ratio-plot");
-                document.getElementById("update-summary").click();
-            });
-        }, 600);
-
-        console.log("📖 Loading markdown files...");
-        await Promise.all([
-            loadMarkdownContent("intro-content", "/markdown/intro.md"),
-            loadMarkdownContent("experiment-content", "/markdown/experimentDesign.md"),
-            loadMarkdownContent("tech-content", "/markdown/techDetails.md")
-        ]);
-
-        const tabLink = document.querySelector('a[href="#main"]');
-        if (tabLink) {
-            tabLink.addEventListener("shown.bs.tab", function () {
-                console.log("🧼 Tab is now visible: resizing plots...");
-                Plotly.Plots.resize(document.getElementById("raw-plot"));
-                Plotly.Plots.resize(document.getElementById("ratio-plot"));
-            });
-        } else {
-            console.warn("⚠️ Main tab link not found: skipping tab resize hook.");
-        }
-        console.log("✅ Application successfully initialized.");
-
-    } catch (error) {
-        console.error("❌ ERROR: Application initialization failed:", error);
-    }
+  debugLog("✅ Application initialized.");
 });
