@@ -8,7 +8,7 @@
   <!-- Core CSS -->
   <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}" />
-
+  <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
   <!-- Datepicker CSS -->
   <link
     rel="stylesheet"
@@ -46,38 +46,135 @@
 <body>
   <div class="container-fluid mt-4">
     <!-- Navigation Tabs -->
-    <ul class="nav nav-tabs">
-      <li class="nav-item"><a class="nav-link active"   data-bs-toggle="tab" href="#intro">Introduction</a></li>
-      <li class="nav-item"><a class="nav-link"          data-bs-toggle="tab" href="#experiment">Experiment Design</a></li>
-      <li class="nav-item"><a class="nav-link"          data-bs-toggle="tab" href="#main">Main Data Display</a></li>
-      <li class="nav-item"><a class="nav-link"          data-bs-toggle="tab" href="#summary">Summary Statistics</a></li>
-      <li class="nav-item"><a class="nav-link"          data-bs-toggle="tab" href="#tech-details">Technical Details</a></li>
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <a
+          id="intro-tab"
+          class="nav-link active"
+          data-bs-toggle="tab"
+          href="#intro"
+          role="tab"
+          aria-controls="intro"
+          aria-selected="true"
+        >
+          Introduction
+        </a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a
+          id="experiment-tab"
+          class="nav-link"
+          data-bs-toggle="tab"
+          href="#experiment"
+          role="tab"
+          aria-controls="experiment"
+          aria-selected="false"
+        >
+          Experiment Design
+        </a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a
+          id="gseason-tab"
+          class="nav-link"
+          data-bs-toggle="tab"
+          href="#gseason"
+          role="tab"
+          aria-controls="gseason"
+          aria-selected="false"
+        >
+          Custom Season
+        </a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a
+          id="main-tab"
+          class="nav-link"
+          data-bs-toggle="tab"
+          href="#main"
+          role="tab"
+          aria-controls="main"
+          aria-selected="false"
+        >
+          Main Data Display
+        </a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a
+          id="summary-tab"
+          class="nav-link"
+          data-bs-toggle="tab"
+          href="#summary"
+          role="tab"
+          aria-controls="summary"
+          aria-selected="false"
+        >
+          Summary Statistics
+        </a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a
+          id="tech-details-tab"
+          class="nav-link"
+          data-bs-toggle="tab"
+          href="#tech-details"
+          role="tab"
+          aria-controls="tech-details"
+          aria-selected="false"
+        >
+          Technical Details
+        </a>
+      </li>
     </ul>
 
     <div class="tab-content">
       <!-- Introduction Pane -->
-      <div class="tab-pane fade show active" id="intro">
+      <div
+        class="tab-pane fade show active"
+        id="intro"
+        role="tabpanel"
+        aria-labelledby="intro-tab"
+      >
         <div id="intro-content" class="container markdown-container mt-3">
           Loading introduction…
         </div>
       </div>
 
       <!-- Experiment Design Pane -->
-      <div class="tab-pane fade" id="experiment">
+      <div
+        class="tab-pane fade"
+        id="experiment"
+        role="tabpanel"
+        aria-labelledby="experiment-tab"
+      >
         <div id="experiment-content" class="container markdown-container mt-3">
           Loading experiment design…
         </div>
       </div>
 
-      <!-- Main Data Display Pane -->
-      <div class="tab-pane fade" id="main">
-        <div class="row mt-3">
+      <!-- Custom Growing‐Season Pane -->
+      <div
+        class="tab-pane fade"
+        id="gseason"
+        role="tabpanel"
+        aria-labelledby="gseason-tab"
+      >
+        <div id="gseason-content" class="container markdown-container mt-3">
+          Loading custom season editor…
+        </div>
+      </div>
 
+      <!-- Main Data Display Pane -->
+      <div
+        class="tab-pane fade"
+        id="main"
+        role="tabpanel"
+        aria-labelledby="main-tab"
+      >
+        <div class="row mt-3">
           <!-- Control Panel -->
-<!--          <div class="col-md-2">-->
           <div id="control-col" class="col-md-2">
             <div class="control-panel p-3">
-
               <!-- Directions -->
               <div class="mb-2">
                 <button
@@ -88,8 +185,7 @@
                   Directions
                 </button>
               </div>
-
-              <!-- Unit Toggle (stacked immediately under) -->
+              <!-- Unit Toggle -->
               <div class="mb-3">
                 <div class="form-check form-switch">
                   <input
@@ -108,42 +204,28 @@
 
               <h5>Plot Options</h5>
 
-              <!-- Year -->
-              <label for="main-year" class="form-label">
-                Year
-                <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
-              </label>
-              <select
-                id="main-year"
-                class="year-dropdown form-select mb-2"
-                data-tab="main"
-              ></select>
+              <div id="main-date-controls">
+                <!-- Year -->
+                <label for="main-year" class="form-label">
+                  Year
+                  <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
+                </label>
+                <select id="main-year" class="year-dropdown form-select mb-2" data-tab="main"></select>
 
-              <!-- Start Date -->
-              <!-- Input type changed from “date” to “text” to disable the native picker -->
-              <label for="main-startDate" class="form-label">
-                Start Date
-                <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
-              </label>
-              <input
-                type="text"
-                id="main-startDate"
-                class="form-control mb-2"
-                autocomplete="off"
-                placeholder="YYYY-MM-DD"
-              >
-              <!-- End Date -->
-              <label for="main-endDate" class="form-label">
-                End Date
-                <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
-              </label>
-              <input
-                type="text"
-                id="main-endDate"
-                class="form-control mb-2"
-                autocomplete="off"
-                placeholder="YYYY-MM-DD"
-              />
+                <!-- Start Date -->
+                <label for="main-startDate" class="form-label">
+                  Start Date
+                  <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
+                </label>
+                <input type="text" id="main-startDate" class="form-control mb-2" placeholder="YYYY-MM-DD">
+
+                <!-- End Date -->
+                <label for="main-endDate" class="form-label">
+                  End Date
+                  <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
+                </label>
+                <input type="text" id="main-endDate" class="form-control mb-2" placeholder="YYYY-MM-DD">
+              </div>
 
               <!-- Granularity -->
               <label for="main-granularity" class="form-label">
@@ -154,7 +236,13 @@
                 id="main-granularity"
                 class="granularity-dropdown form-select mb-2"
                 data-tab="main"
-              ></select>
+              >
+                <option value="15min">15 Minute</option>
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Custom Season</option>
+              </select>
 
               <!-- Variable -->
               <label for="main-variable" class="form-label">
@@ -217,7 +305,6 @@
 
               <!-- Update & Download Buttons -->
               <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
-
               <div class="dropdown mb-2">
                 <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
                         id="downloadDataDropdown" data-bs-toggle="dropdown"
@@ -228,25 +315,24 @@
                   <li><a class="dropdown-item" href="#" onclick="downloadTraceData('all')">All Data (CSV)</a></li>
                 </ul>
               </div>
-
               <div class="dropdown mb-2">
                 <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
-                        id="downloadRawPlot" data-bs-toggle="dropdown">Download Raw Plot</button>
+                        id="downloadRawPlot" data-bs-toggle="dropdown"
+                        aria-expanded="false">Download Raw Plot</button>
                 <ul class="dropdown-menu w-100" aria-labelledby="downloadRawPlot">
                   <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw','png')">PNG</a></li>
                   <li><a class="dropdown-item" href="#" onclick="downloadPlot('raw','jpeg')">JPEG</a></li>
                 </ul>
               </div>
-
               <div class="dropdown">
                 <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
-                        id="downloadRatioPlot" data-bs-toggle="dropdown">Download Ratio Plot</button>
+                        id="downloadRatioPlot" data-bs-toggle="dropdown"
+                        aria-expanded="false">Download Ratio Plot</button>
                 <ul class="dropdown-menu w-100" aria-labelledby="downloadRatioPlot">
                   <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio','png')">PNG</a></li>
                   <li><a class="dropdown-item" href="#" onclick="downloadPlot('ratio','jpeg')">JPEG</a></li>
                 </ul>
               </div>
-
             </div>
           </div>
 
@@ -256,18 +342,22 @@
               <div class="mb-4">
                 <div id="plot-1"></div>
               </div>
-                <div id="plot-2"></div>
+              <div id="plot-2"></div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Summary Statistics Pane -->
-      <div class="tab-pane fade" id="summary">
+      <div
+        class="tab-pane fade"
+        id="summary"
+        role="tabpanel"
+        aria-labelledby="summary-tab"
+      >
         <div class="row mt-3">
           <div class="col-md-3">
             <div class="control-panel p-3 summary-panel">
-
               <!-- Directions -->
               <button
                 class="btn btn-info mb-3"
@@ -353,17 +443,16 @@
 
               <!-- Update & Download -->
               <button id="update-summary" class="btn btn-primary w-100 mb-2">Update Summary</button>
-
               <div class="dropdown">
                 <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
-                        id="downloadSummaryBtn" data-bs-toggle="dropdown">Download Summary</button>
+                        id="downloadSummaryBtn" data-bs-toggle="dropdown"
+                        aria-expanded="false">Download Summary</button>
                 <ul class="dropdown-menu w-100" aria-labelledby="downloadSummaryBtn">
                   <li><a class="dropdown-item" href="#" id="download-summary-raw">Raw Summary (CSV)</a></li>
                   <li><a class="dropdown-item" href="#" id="download-summary-ratio">Ratio Summary (CSV)</a></li>
                   <li><a class="dropdown-item" href="#" id="download-summary-all">All Summary (CSV)</a></li>
                 </ul>
               </div>
-
             </div>
           </div>
 
@@ -377,7 +466,12 @@
       </div>
 
       <!-- Technical Details Pane -->
-      <div class="tab-pane fade" id="tech-details">
+      <div
+        class="tab-pane fade"
+        id="tech-details"
+        role="tabpanel"
+        aria-labelledby="tech-details-tab"
+      >
         <div id="tech-content" class="container markdown-container mt-3">
           Loading technical details…
         </div>
@@ -419,5 +513,23 @@
       </div>
     </div>
   </div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const gran = document.getElementById("main-granularity");
+    const dateControls = document.getElementById("main-date-controls");
+
+    function toggleDateControls() {
+      const disable = gran.value === "custom";
+      dateControls.querySelectorAll("select, input").forEach(el => {
+        el.disabled = disable;
+        el.classList.toggle("disabled", disable);
+      });
+    }
+
+    gran.addEventListener("change", toggleDateControls);
+    toggleDateControls();  // initial state
+  });
+</script>
 </body>
 </html>

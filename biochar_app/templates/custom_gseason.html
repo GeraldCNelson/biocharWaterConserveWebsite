@@ -1,0 +1,35 @@
+{# templates/custom_gseason.html #}
+<section
+  id="custom-gseason-section"
+  role="region"
+  aria-labelledby="gseason-tab"
+  class="container mt-3"
+>
+  <h2 id="gseason-heading">Custom Growing-Season Periods</h2>
+
+  <p>
+    The Main Data Display and Summary Results tabs provide results at standard temporal
+    aggregations—15 minutes, hourly, daily, and monthly. In this “Custom Season” tab you
+    can edit or add your own sub-periods within a growing‐season (which may span across years).
+  </p>
+  <p>
+    Change the name, start or end date of any period below, or click “+ Add Period” to insert
+    additional ones. These will then be available to use when you switch back to the other
+    tabs.
+  </p>
+
+  <div class="row mb-3">
+    <label for="anchor-year" class="col-sm-2 col-form-label">Anchor Year</label>
+    <div class="col-sm-2">
+      <select id="anchor-year" class="form-select"></select>
+    </div>
+    <div class="col-sm-8 text-end">
+      <button type="button" id="add-period" class="btn btn-outline-secondary">
+        + Add Period
+      </button>
+    </div>
+  </div>
+
+  <div id="periods-container"></div>
+</section>
+

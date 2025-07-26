@@ -29,3 +29,8 @@ export function getElementByIdSafe(id) {
 export function formatValue(value) {
     return (value === null || isNaN(value)) ? "NA" : Number(value).toFixed(4);
 }
+
+export function isMobileDevice() {
+  return /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+    .test(navigator.userAgent);
+}

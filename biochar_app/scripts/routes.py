@@ -4,7 +4,7 @@ import glob
 import logging
 from io import BytesIO
 import zipfile
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
 import pandas as pd
 import numpy as np
@@ -13,9 +13,10 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from biochar_app.scripts.routes_utils import load_gseason_df
 from biochar_app.scripts.utils import parse_filenames
-from biochar_app.scripts.routes_utils import load_logger_year, load_summary_df
-from biochar_app.scripts.gseason import compute_summary_statistics, get_gseason_summary
+from biochar_app.scripts.routes_utils import load_logger_year, merge_all_loggers, load_summary_df
+from biochar_app.scripts.gseason import compute_summary_statistics, get_flat_gseason_summary
 from biochar_app.scripts.plot_helpers import sanitize_json, convert_units_for_download
 from biochar_app.scripts.plot_utils import (
     make_raw_figure,
@@ -33,7 +34,7 @@ from biochar_app.scripts.config import (
     DEFAULT_LOGGER_LOCATION,
     DEFAULT_GRANULARITY,
     YEARS,
-    GSEASON_PERIODS,
+    DEFAULT_GSEASON_PERIODS,
     sensor_depth_mapping,
     logger_location_mapping,
     variable_name_mapping,
@@ -107,6 +108,12 @@ async def get_defaults_and_options():
 
 # --- Page routes (render index.html) ---
 
+class Period(BaseModel):
+    code:  str
+    label: str
+    start: str  # e.g. "2024-03-01"
+    end:   str  # e.g. "2024-05-31"
+
 class PlotRequest(BaseModel):
     year: int
     variable: str
@@ -118,99 +125,112 @@ class PlotRequest(BaseModel):
     depth: str
     traceOption: str
     unitSystem: str
+    customPeriods:    Optional[List[Period]] = None
 
 @api_router.post("/plot_raw")
 async def api_plot_raw(req: PlotRequest):
-    year           = req.year
-    granularity    = req.granularity
-    start_date     = req.startDate
-    end_date       = req.endDate
-    variable       = req.variable
-    strip          = req.strip
-    logger_loc     = req.loggerLocation
-    depth          = req.depth
-    trace_option   = "depths" if req.traceOption == "depth" else "locations" if req.traceOption=="loggerLocation" else req.traceOption
-    unit_system    = req.unitSystem
+    year        = req.year
+    gran        = req.granularity.lower()
+    var         = req.variable
+    strip       = req.strip
+    loc         = req.loggerLocation
+    depth       = req.depth
+    unit        = req.unitSystem
+    trace_opt   = "depths" if req.traceOption=="depth" else "locations"
+    start_date  = req.startDate
+    end_date    = req.endDate
 
-    # 2) load (15 min or pre-agg) by granularity
-    try:
-        df = load_logger_year(year, granularity)
-    except FileNotFoundError:
-        raise HTTPException(404, f"No data found for {year}/{granularity}")
+    # ---- growing-season or custom ----
+    if gran in ("gseason", "custom"):
+        # use customPeriods if present, else your defaults
+        periods = req.customPeriods or [
+            { **info, "code": code }
+            for code, info in DEFAULT_GSEASON_PERIODS.items()
+        ]
+        # this should return a DataFrame with a DatetimeIndex
+        df = load_gseason_df(year, periods, unit_system=unit)
+        fig = make_raw_gseason_figure(
+            df               = df,
+            variable         = var,
+            strip            = strip,
+            logger_location  = loc,
+            depth            = depth,
+            unit_system      = unit,
+            year             = year,
+            granularity      = gran,
+        )
+        return JSONResponse(fig)
 
-    # 3) sanity-check
-    if "timestamp" not in df.columns:
+    # ---- standard time-series ----
+    df = load_logger_year(year, gran)
+    if "timestamp" not in df:
         raise HTTPException(400, "No timestamp column in data")
 
-    # 4) filter to window
     df = df[(df["timestamp"] >= start_date) & (df["timestamp"] <= end_date)]
-
-    # 5) build figure
-    try:
-        fig_json = make_raw_figure(
-            df               = df,
-            year             = year,
-            variable         = variable,
-            strip            = strip,
-            granularity      = granularity,
-            logger_location  = logger_loc,
-            depth            = depth,
-            trace_option     = trace_option,
-            unit_system      = unit_system,
-            start            = start_date,
-            end              = end_date,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    return JSONResponse(fig_json)
+    fig = make_raw_figure(
+        df               = df,
+        year             = year,
+        variable         = var,
+        strip            = strip,
+        granularity      = gran,
+        logger_location  = loc,
+        depth            = depth,
+        trace_option     = trace_opt,
+        unit_system      = unit,
+        start            = start_date,
+        end              = end_date,
+    )
+    return JSONResponse(fig)
 
 
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
-    year           = req.year
-    granularity    = req.granularity
-    start_date     = req.startDate
-    end_date       = req.endDate
-    variable       = req.variable
-    strip          = req.strip
-    logger_loc     = req.loggerLocation
-    depth          = req.depth
- #   trace_option   = "depths" if req.traceOption == "depth" else "locations" if req.traceOption=="loggerLocation" else req.traceOption
-    unit_system    = req.unitSystem
+    year   = req.year
+    gran   = req.granularity.lower()
+    var    = req.variable
+    strip  = req.strip
+    loc    = req.loggerLocation
+    depth  = req.depth
+    unit   = req.unitSystem
+    start  = req.startDate
+    end    = req.endDate
 
-    # 2) load
-    try:
-        df = load_logger_year(year, granularity)
-    except FileNotFoundError:
-        raise HTTPException(404, f"No data found for {year}/{granularity}")
-
-    # 3) sanity-check
-    if "timestamp" not in df.columns:
-        raise HTTPException(400, "No timestamp column in data")
-
-    # 4) filter
-    df = df[(df["timestamp"] >= start_date) & (df["timestamp"] <= end_date)]
-
-    # 5) build ratio figure
-    try:
-        fig_json = make_ratio_figure(
+    if gran in ("gseason", "custom"):
+        periods = req.customPeriods or [
+            { **info, "code": code }
+            for code, info in DEFAULT_GSEASON_PERIODS.items()
+        ]
+        df = load_gseason_df(year, periods, unit_system=unit)
+        fig = make_ratio_gseason_figure(
             df               = df,
-            year             = year,
-            variable         = variable,
+            variable         = var,
             strip            = strip,
-            granularity      = granularity,
-            logger_location  = logger_loc,
+            logger_location  = loc,
             depth            = depth,
-      #      trace_option     = trace_option,
-            start            = start_date,
-            end              = end_date,
-            unit_system      = unit_system,
+            unit_system      = unit,
+            year             = year,
+            granularity      = gran,
         )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+        return JSONResponse(fig)
 
-    return JSONResponse(fig_json)
+    # ---- standard time-series ----
+    df = load_logger_year(year, gran)
+    if "timestamp" not in df:
+        raise HTTPException(400, "No timestamp column in data")
+    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+    fig = make_ratio_figure(
+        df               = df,
+        year             = year,
+        variable         = var,
+        strip            = strip,
+        granularity      = gran,
+        logger_location  = loc,
+        depth            = depth,
+        start            = start,
+        end              = end,
+        unit_system      = unit,
+    )
+    return JSONResponse(fig)
 
 
 # --- Download summary endpoint ---
@@ -228,7 +248,7 @@ async def download_summary_data(req: SummaryStatsRequest):
         req.year, req.variable, req.strip, req.granularity, req.summaryStats
     )
     if granularity == "gseason":
-        gstats = get_gseason_summary(year, GSEASON_PERIODS)
+        gstats = get_flat_gseason_summary(year)
         raw_rows, ratio_rows = [], []
         for season_code, season_block in gstats.items():
             for var_key, strip_blocks in season_block.items():
@@ -352,10 +372,22 @@ async def serve_markdown(filename: str):
     """
     Serves markdown from: biochar_app/templates/markdown/<filename>
     """
-    # Calculate the absolute path to your markdown folder
+    # Calculate the absolute path to your Markdown folder
     md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown")
     fullpath = os.path.abspath(os.path.join(md_dir, filename))
 
     if not os.path.exists(fullpath):
         raise HTTPException(status_code=404, detail=f"Markdown file '{filename}' not found")
     return FileResponse(fullpath, media_type="text/markdown")
+
+@main_router.get("/custom-gseason")
+async def custom_gseason(request: Request):
+    return templates.TemplateResponse(
+        "custom_gseason.html",
+        {
+            "request": request,
+            "DEFAULT_YEAR": DEFAULT_YEAR,
+            "YEARS": YEARS,              # or derive from your data
+            "DEFAULT_GSEASON_PERIODS": DEFAULT_GSEASON_PERIODS,
+        },
+    )

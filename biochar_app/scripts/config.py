@@ -20,6 +20,14 @@ GRANULARITIES = [
     ("gseason", None),      # growing-season summary
 ]
 
+ms_per_day = 24 * 3600 * 1000
+bar_width_map = {
+    "15min": 15 * 60 * 1000,
+    "hourly": 3600 * 1000,
+    "daily": ms_per_day * 0.8,       # 80% of a day
+    "monthly": 30 * ms_per_day * 0.8 # ~80% of a 30-day month
+}
+
 # Core default values
 DEFAULT_YEAR = 2024
 DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
@@ -66,8 +74,15 @@ class PakbusConfig:
     base_id: int
     logger_ids: List[int]
 
+# PAKBUS = PakbusConfig(
+#     host=os.getenv("PAKBUS_HOST", "2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD"),
+#     port=int(os.getenv("PAKBUS_PORT", 6785)),
+#     base_id=int(os.getenv("PAKBUS_BASE_ID", 4093)),
+#     logger_ids=list(range(2, 14)),
+# )
+
 PAKBUS = PakbusConfig(
-    host=os.getenv("PAKBUS_HOST", "2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD"),
+    host=os.getenv("PAKBUS_HOST", "2605:59c0:3000:dfef:ea9c:25ff:fed5:5928"),
     port=int(os.getenv("PAKBUS_PORT", 6785)),
     base_id=int(os.getenv("PAKBUS_BASE_ID", 4093)),
     logger_ids=list(range(2, 14)),
@@ -220,7 +235,7 @@ sensor_depth_mapping = {
     }
 }
 
-GSEASON_PERIODS = {
+DEFAULT_GSEASON_PERIODS = {
     "Q1_Winter": {
         "label": "Winter",
         "start": "11-01",

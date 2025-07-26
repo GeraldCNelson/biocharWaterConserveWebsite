@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, date
-from typing import Any, Optional, Tuple, Sequence
+from typing import Any, Optional, Tuple, Dict,Sequence
 import re
 from flask import abort
 
@@ -15,7 +15,7 @@ from biochar_app.scripts.config import (
     label_name_mapping,
     human_label,
     logger_location_mapping,
-    GSEASON_PERIODS,
+    DEFAULT_GSEASON_PERIODS,
 )
 
 
@@ -68,22 +68,31 @@ def sanitize_json(obj: Any) -> Any:
     return str(obj)
 
 
-def common_xaxis_config(granularity: str, start: str, end: str) -> dict[str, Any]:
-    cfg = {
-        "title": "Date",
+def common_xaxis_config(
+    granularity: str,
+    start: Optional[str] = None,
+    end:   Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Build the common x-axis config for time series.
+    If granularity == "gseason", we leave it as a free date axis.
+    Otherwise, if start/end are provided, we set a fixed range.
+    """
+    cfg: Dict[str, Any] = {
+        "title":    "Date",
         "showgrid": True,
-        "tickformat": "%b %Y",  # e.g. “Jan 2024”
-        "type": "date",
-        "tickmode": "linear",
-        "dtick": "M1",
-        "showline": True,
-        "linecolor": "black",
-        "linewidth": 1,
+        "type":     "date",
+        "tickformat": "%b %Y",
+        "tickmode":   "linear",
+        "dtick":      "M1",
+        "showline":   True,
+        "linecolor":  "black",
+        "linewidth":  1,
     }
-    # only set a range for non-gseason plots
-    if granularity != "gseason" and start and end:
-        # Plotly wants ["YYYY-MM-DD", "YYYY-MM-DD"], so we ignore the type checker here:
-        cfg["range"] = [start, end]  # type: ignore[assignment]
+    # only set a numeric range if it's not gseason
+    if granularity.lower() != "gseason" and start and end:
+        # Plotly wants an array of two strings here
+        cfg["range"] = [start, end]
     return cfg
 
 

@@ -1,67 +1,59 @@
 // plot_utils.js
-// @ts-nocheck
-import { getDropdownValue, getInputValue } from "./ui_utils.js";
-import { getSelectedFilters } from "./ui_controls.js";
-import { DEBUG } from "./config.js";
 
-function debugLog(...args) {
-  if (DEBUG) console.log(...args);
-}
-function debugGroup(title, callback) {
-  if (DEBUG) {
-    console.groupCollapsed(title);
-    try {
-      callback();
-    } finally {
-      console.groupEnd();
-    }
-  } else {
-    callback();
+import { getSelectedFilters } from "./ui_controls.js";
+import { isMobileDevice } from "./ui_utils.js";
+
+/**
+ * Pause until each of the given dropdown IDs exists in the DOM
+ * and has been populated with at least one <option>.
+ * @param {string[]} ids – array of element IDs, e.g. ["main-year", "main-variable", …]
+ */
+export async function waitForAllDropdowns(ids) {
+  const delay = ms => new Promise(res => setTimeout(res, ms));
+  while (true) {
+    const missing = ids.filter(id => {
+      const el = document.getElementById(id);
+      return !(el && el.options && el.options.length > 0);
+    });
+    if (missing.length === 0) break;
+    await delay(50);
   }
 }
 
-/* global Plotly */
-
-function isMobileDevice() {
-  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
 /**
- * Fetch and render the main plots (raw & ratio) into their containers.
- */
-export const renderMainPlots = async () => {
-  console.log("▶️ Rendering Main Data Display plots…");
-  await fetchAndRenderPlot("raw", "plot-1");
-  await fetchAndRenderPlot("ratio", "plot-2");
-  // ensure proper sizing
-  Plotly.Plots.resize(document.getElementById("plot-1"));
-  Plotly.Plots.resize(document.getElementById("plot-2"));
-};
-
-/**
- * Fetch & render one Plotly chart (raw or ratio) into a specified div.
- * @param {"raw"|"ratio"} plotType
- * @param {string} [plotDivId]  target div id (defaults to `plot-${plotType}`)
+ * Fetch plot data from the server and render it into a Plotly div.
+ * @param {string} plotType – e.g. "raw" or "ratio"
+ * @param {string} [plotDivId] – the DOM id of the target <div>; defaults to `plot-${plotType}`
  */
 export async function fetchAndRenderPlot(plotType, plotDivId) {
-  console.group(`🔧 fetchAndRenderPlot("${plotType}", "#${plotDivId || `plot-${plotType}`}")`);
+  console.group(`🔧 fetchAndRenderPlot("${plotType}", "${plotDivId || `plot-${plotType}`}")`);
   try {
-    // derive container ID
+    // 1) Determine container ID
     const targetId = plotDivId || `plot-${plotType}`;
 
-    // gather filters
+    // 2) Gather filters from the DOM
     const filters = getSelectedFilters("main");
-    filters.kind = plotType;
-    console.log("🔍 Filters →", filters);
 
-    // pick endpoint
+    // 3) Debug: current unitSystem
+    console.log("🌐 window.unitSystem =", window.unitSystem);
+    console.log("🌐 filters =", filters);
+
+    // 4) Inject unitSystem (FastAPI requires it)
+    filters.unitSystem = window.unitSystem || "us";
+
+    // 5) Add kind
+    filters.kind = plotType;
+
+    // 6) Debug assembled filters
+    console.log("🔍 Filters (JS object) →", filters);
+    console.log("📤 Payload JSON →", JSON.stringify(filters));
+
+    // 7) Choose endpoint
     const isGseason = filters.granularity === "gseason";
-    const url = isGseason
-      ? `/api/plot_${plotType}_gseason`
-      : `/api/plot_${plotType}`;
+    const url = `/api/plot_${plotType}`;
     console.log("🌐 Fetching →", url);
 
-    // fetch
+    // 8) Send request
     const resp = await fetch(url, {
       method:      "POST",
       headers:     { "Content-Type": "application/json" },
@@ -69,83 +61,58 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       body:        JSON.stringify(filters),
     });
 
+    // 9) Read and log response
     const text = await resp.text();
     console.log("⏳ Response →", resp.status, resp.statusText);
     const snippet = text.length > 200
-      ? text.slice(0, 200).replace(/\s+/g, ' ') + '…'
-      : text.replace(/\s+/g, ' ');
+      ? text.slice(0, 200).replace(/\s+/g, " ") + "…"
+      : text.replace(/\s+/g, " ");
     console.log("📄 Body snippet →", snippet);
 
     if (!resp.ok) {
       console.error(`❌ Server error ${resp.status}:`, text);
-      console.groupEnd();
-      return;
+      return console.groupEnd();
     }
 
-    // parse JSON
-    let plotData;
-    try {
-      plotData = JSON.parse(text);
+    // 10) Parse JSON payload
+    const plotData = JSON.parse(text);
+    console.log("❓ payload for", plotType, plotData);
+    console.log("🧱 shapes →", plotData.layout?.shapes);
 
-      // **NEW**: inspect entire payload
-      console.log("❓ payload for", plotType, plotData);
-     // debugger;
-
-      console.log("🧱 shapes →", plotData.layout?.shapes);
-      // debugger;
-    }
-    catch (err) {
-      console.error("❌ JSON parse error:", err);
-      console.groupEnd();
-      return;
-    }
-
-    // debug trace info
+    // 11) Debug trace info
     console.log("🔢 total traces →", plotData.data.length);
     console.log("🔖 trace names →", plotData.data.map(t => t.name));
     console.log("🔧 trace types →", plotData.data.map(t => t.type));
 
-    // 2) (optional) drop the irrigation‐volume trace entirely,
-    //    since we only want it as vertical shapes, not as a data series
+    // 12) Optionally drop irrigation‐volume trace
     plotData.data = plotData.data.filter(
       t => t.name !== "Irrigation Volume (000 gal)"
     );
 
-    // **NEW**: inspect data & layout right before rendering
     console.log("📊 final data →", plotData.data);
     console.log("📊 final layout →", plotData.layout);
-    // debugger;
 
-    // validate
+    // 13) Validate data & find container
     if (!Array.isArray(plotData.data)) {
       console.error("❌ `data` is not an array:", plotData.data);
-      console.groupEnd();
-      return;
+      return console.groupEnd();
     }
-
-    // find container
     const container = document.getElementById(targetId);
     if (!container) {
       console.error(`❌ Container "#${targetId}" not found`);
-      console.groupEnd();
-      return;
+      return console.groupEnd();
     }
     console.log(`📦 Rendering into → #${targetId}`, container);
 
-    // wait a frame for layout
+    // 14) Render with Plotly
     await new Promise(r => requestAnimationFrame(r));
-
-    // purge old plot
     Plotly.purge(container);
-
-    // measure & set size
     const parentWidth = container.clientWidth;
-    const fixedHeight = 500;
     const layout = {
       ...plotData.layout,
       autosize: false,
       width:    parentWidth,
-      height:   fixedHeight,
+      height:   500,
       margin: {
         l: plotData.layout?.margin?.l ?? 60,
         r: 20,
@@ -153,14 +120,10 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
         b: plotData.layout?.margin?.b ?? 50,
       }
     };
-
-    // config for Plotly (must be declared before use)
     const plotConfig = {
       displayModeBar: !isMobileDevice(),
       responsive:     false,
     };
-
-    // draw & resize
     await Plotly.newPlot(container, plotData.data, layout, plotConfig);
     Plotly.Plots.resize(container);
   }
@@ -172,37 +135,19 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
   }
 }
 
-// resize when Bootstrap tabs show
-document.querySelectorAll('a[data-toggle="tab"]').forEach(tab => {
-  tab.addEventListener("shown.bs.tab", () => {
-    ["plot-1","plot-2"].forEach(id => {
-      const gd = document.getElementById(id);
-      if (gd && gd.data) Plotly.Plots.resize(gd);
-    });
-  });
-});
-
 /**
- * Wait for dropdown elements to populate.
+ * Kick off both of your main‐tab plots in sequence.
  */
-export async function waitForAllDropdowns(dropdownIds, timeout = 7000, postDelay = 200) {
-  console.log("⏳ Waiting for dropdowns to be available...");
-  return new Promise((resolve, reject) => {
-    let elapsed = 0;
-    const interval = 150;
-    const check = setInterval(() => {
-      const missing = dropdownIds.filter(id => {
-        const el = document.getElementById(id);
-        return !el || el.options.length === 0;
-      });
-      if (missing.length === 0) {
-        clearInterval(check);
-        setTimeout(resolve, postDelay);
-      } else if (elapsed >= timeout) {
-        clearInterval(check);
-        reject(new Error(`Timeout waiting for dropdowns: ${missing.join(", ")}`));
-      }
-      elapsed += interval;
-    }, interval);
-  });
+export async function renderMainPlots() {
+  console.group("▶️ Rendering Main Data Display plots…");
+  try {
+    await fetchAndRenderPlot("raw",   "plot-1");
+    await fetchAndRenderPlot("ratio", "plot-2");
+  }
+  catch (err) {
+    console.error("❌ renderMainPlots uncaught:", err);
+  }
+  finally {
+    console.groupEnd();
+  }
 }

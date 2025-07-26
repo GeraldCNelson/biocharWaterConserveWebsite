@@ -6,27 +6,16 @@ let dateDebounceTimer;
 
 import { populateDropdown } from "./ui_controls.js";
 import { updateSummaryStatistics } from "./tables.js";
-import { fetchAndRenderPlot, renderMainPlots } from "./plot_utils.js";
+import { renderMainPlots } from "./plot_utils.js";
 
 export function initializeUpdateButtons() {
   console.log("🔘 Initializing update buttons");
-  document.getElementById("update-plots")?.addEventListener("click", () => {
-    console.log("🔄 Update plots button clicked");
-    fetchAndRenderPlot("raw",   "plot-1");
-    fetchAndRenderPlot("ratio", "plot-2");
-  });
-
-  ["start-date", "end-date"].forEach(id => {
-    const el = document.getElementById(`main-${id}`);
-    if (!el) return;
-    el.addEventListener("input", () => {
-      clearTimeout(dateDebounceTimer);
-      dateDebounceTimer = setTimeout(() => {
-        console.log(`⏱ Debounced date input (${id}), triggering update`);
-        document.getElementById("update-plots")?.click();
-      }, 500);
+  document
+    .getElementById("update-plots")
+    ?.addEventListener("click", async () => {
+      console.log("🔄 Update plots button clicked");
+      await renderMainPlots();
     });
-  });
 }
 
 export const dropdownConfigs = {
@@ -48,43 +37,6 @@ export const dropdownConfigs = {
   ]
 };
 
-// ─── populateAllDropdowns: handles both primitive arrays and {value,label} arrays ───
-export function populateAllDropdowns(options, unitSystem) {
-  console.log("🔑 Populating dropdowns; sources =", Object.keys(options));
-
-  ["main", "summary"].forEach((tab) => {
-    dropdownConfigs[tab].forEach(({ id, source }) => {
-      const selectId = `${tab}-${id}`;
-      const list     = options[source];
-
-      if (!Array.isArray(list)) {
-        console.warn(`⚠️ Skipping '${source}', not an array:`, list);
-        return;
-      }
-
-      let values, labels;
-
-      // object style: [{value,label}, …]
-      if (list[0] != null && typeof list[0] === "object" && "value" in list[0]) {
-        values = list.map(item => item.value);
-        labels = list.map(item => item.label);
-      } else {
-        // primitive style: [2023,2024,2025] or ["a","b"]
-        values = list;
-        labels = list.map(item => String(item));
-      }
-
-      console.log(`[${tab}] ${id}:`, values, labels);
-
-      populateDropdown(
-        selectId,
-        values,
-        options.defaults[id],
-        labels
-      );
-    });
-  });
-}
 
 export function setupUnitToggleHandlers(options) {
   console.log("🔄 Setting up unit toggle handlers");

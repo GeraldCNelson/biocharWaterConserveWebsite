@@ -3,13 +3,17 @@ import json
 import logging
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
+from typing import Dict
+
+from biochar_app.scripts.gseason_utils import compute_seasons, assign_gseason_periods
 
 from biochar_app.scripts.config import (
     DATA_PROCESSED_DIR,
     VARIABLES,
     STRIPS,
     DEPTHS,
-    GSEASON_PERIODS,
+    DEFAULT_GSEASON_PERIODS,
     YEARS,
     PRECIP_COLS,
 )
@@ -18,56 +22,28 @@ from biochar_app.scripts.routes_utils import load_logger_year
 
 # Generate growing season summary statistics(min, mean, m
 # ax, std) for each growing season period in a year
-def generate_gseason_summary(year, gseason_periods=None, overwrite=False):
-    gseason_periods = gseason_periods or GSEASON_PERIODS
-    logging.info(f"🌱 Generating growing season summary for {year}...")
+def generate_gseason_summary(
+    year: int,
+    periods: dict[str, dict[str, str]] | None = None,
+    overwrite: bool = False,
+) -> None:
+    """
+    Generate and persist growing-season summary for a given year.
 
-    output_path = os.path.join(DATA_PROCESSED_DIR, f"gseason_summary_{year}.json")
-    if os.path.exists(output_path) and not overwrite:
-        logging.info(f"✅ Already exists: {output_path} — Skipping.")
-        return
+    This function delegates the work to compute_seasons(), which:
+      - loads the 15-minute logger data for `year`
+      - applies each period in `periods` (defaulting to GSEASON_PERIODS)
+      - computes raw and ratio statistics per variable/strip/depth
+      - writes out a JSON file named gseason_summary_{year}.json
+      - logs progress and respects the `overwrite` flag
 
-    df_15min = load_logger_year(year, "15min")
-    if df_15min is None or df_15min.empty:
-        raise RuntimeError("❌ No 15-minute logger data available.")
-
-    df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
-
-    summary = {}
-
-    for label, info in gseason_periods.items():
-        start_str = info["start"]
-        end_str = info["end"]
-        start_year = year - 1 if start_str > end_str else year
-        start = pd.Timestamp(f"{start_year}-{start_str}")
-        end = pd.Timestamp(f"{year}-{end_str}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-        mask = (df_15min["timestamp"] >= start) & (df_15min["timestamp"] <= end)
-        df_season = df_15min[mask]
-        logging.info(f"📅 {label}: {len(df_season)} records from {start.date()} to {end.date()}")
-
-        season_stats = {}
-        for variable in VARIABLES:
-            season_stats[variable] = {}
-            for strip in STRIPS:
-                for depth in DEPTHS:
-                    raw, ratio = compute_summary_statistics(df_season, variable, strip, depth)
-                    is_temp = variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]
-                    if is_temp:
-                        ratio = {}
-                    season_stats[variable][f"{strip}_D{depth}"] = {
-                        "raw_statistics": raw,
-                        "ratio_statistics": ratio
-                    }
-
-        summary[label] = season_stats
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
-
-    for y in YEARS:
-        if y >= 2024:
-            generate_gseason_summary(y, overwrite=True)
+    Args:
+        year: calendar year to summarize.
+        periods: mapping of period codes to { label, start, end }; if None,
+                 uses the default GSEASON_PERIODS from config.
+        overwrite: if True, regenerate even if the output JSON already exists.
+    """
+    compute_seasons(year=year, periods=periods or GSEASON_PERIODS, overwrite=overwrite)
 
 
 def compute_summary_statistics(df, variable: str, strip: str, depth: str):
@@ -116,120 +92,64 @@ def compute_summary_statistics(df, variable: str, strip: str, depth: str):
 
     return raw_stats, ratio_stats
 
+
 def get_flat_gseason_summary(year: int) -> pd.DataFrame:
     """
-    Return a flattened DataFrame with columns:
-      period_code, variable, strip, depth, location, **raw_statistics, **ratio_statistics
+    Flatten the nested dict into a DataFrame with columns:
+      period_code, variable, strip, depth, location,
+      plus raw_… statistics and ratio_… statistics all as separate columns.
     """
     nested = load_or_generate_gseason_summary(year)
-    records: list[dict] = []
-    for period_code, vars_dict in nested.items():
-        for var, strips in vars_dict.items():
-            for strip_depth, stats in strips.items():
-                strip, depth = strip_depth.split("_D")
-                for loc_key, raw_stat in stats["raw_statistics"].items():
-                    # raw_stat key naming: {var}_{depth}_raw_{strip}_{loc}
-                    _, _, _, loc = loc_key.rsplit("_", 1)
-                    record = {
-                        "period_code": period_code,
-                        "variable": var,
-                        "strip": strip,
-                        "depth": depth,
-                        "location": loc,
-                        **raw_stat,
-                    }
-                    records.append(record)
+    records = []
 
+    for period_code, by_var in nested.items():
+        # by_var is e.g. { "VWC": {"S1_D1": {...}, "S1_D2": {...}, …}, "EC": {…}, … }
+        for var, by_strip_depth in by_var.items():
+            # by_strip_depth is e.g. {"S1_D1": { "raw_statistics": {...}, "ratio_statistics": {...} }, …}
+            for strip_depth, stats in by_strip_depth.items():
+                strip, depth = strip_depth.split("_D", 1)
+                # raw first
+                raw_stats = stats.get("raw_statistics", {})
+                for col_name, metrics in raw_stats.items():
+                    # e.g. col_name = "VWC_1_raw_S1_T"
+                    *_, loc = col_name.rsplit("_", 1)
+                    rec = {
+                        "period_code": period_code,
+                        "variable":    var,
+                        "strip":       strip,
+                        "depth":       depth,
+                        "location":    loc,
+                    }
+                    rec.update({ f"raw_{k}": v for k, v in metrics.items() })
+                    records.append(rec)
+
+                # then ratio
+                ratio_stats = stats.get("ratio_statistics", {})
+                for col_name, metrics in ratio_stats.items():
+                    *_, loc = col_name.rsplit("_", 1)
+                    rec = {
+                        "period_code": period_code,
+                        "variable":    var,
+                        "strip":       strip,
+                        "depth":       depth,
+                        "location":    loc,
+                    }
+                    rec.update({ f"ratio_{k}": v for k, v in metrics.items() })
+                    records.append(rec)
     return pd.DataFrame.from_records(records)
 
 
-def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
-    for label, period in GSEASON_PERIODS.items():
-        start_str = period["start"]
-        end_str = period["end"]
-        sm, sd = map(int, start_str.split("-"))
-        em, ed = map(int, end_str.split("-"))
-
-        start_year = year - 1 if sm > em else year
-        end_year = year
-
-        start = pd.Timestamp(f"{start_year}-{start_str}")
-        end = pd.Timestamp(f"{end_year}-{end_str}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-        if start <= ts <= end:
-            return label
-    return None
-
-
-def load_or_generate_gseason_summary(year, overwrite=False):
-    summary_path = os.path.join(DATA_PROCESSED_DIR, f"gseason_summary_{year}.json")
-    if not os.path.exists(summary_path) or overwrite:
-        # ✅ Local import to avoid circular dependency
-        from biochar_app.scripts.gseason import generate_gseason_summary
+def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict:
+    """
+    Load the nested JSON summary (period → variable → strip_depth → stats).
+    Returns the raw dict, not a DataFrame.
+    """
+    summary_path = Path(DATA_PROCESSED_DIR) / f"gseason_summary_{year}.json"
+    if not summary_path.exists() or overwrite:
+        # avoid circular imports at module‐load time
         generate_gseason_summary(year, overwrite=overwrite)
-
-    with open(summary_path, "r", encoding="utf-8") as f:
+    with summary_path.open("r", encoding="utf-8") as f:
         return json.load(f)
-
-def get_gseason_summary(
-    year: int,
-    gseason_periods: dict | None = None,
-    overwrite: bool = False,
-) -> dict[str, dict]:
-    """
-    Load the per‐season summary for `year` if it exists (unless overwrite=True),
-    otherwise compute it, save it, and return it.
-    """
-    gseason_periods = gseason_periods or GSEASON_PERIODS
-    summary_path = os.path.join(DATA_PROCESSED_DIR, f"gseason_summary_{year}.json")
-
-    # if file already there and not forcing a rebuild, just read & return it
-    if os.path.exists(summary_path) and not overwrite:
-        logging.info(f"✅ Loading existing summary from {summary_path}")
-        with open(summary_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    # otherwise we need to build it
-    logging.info(f"🌱 Building growing-season summary for {year}…")
-    df = load_logger_year(year, granularity="15min")
-    if df is None or df.empty:
-        raise RuntimeError("No 15‐minute logger data found for year {year}")
-
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    summary: dict[str, dict] = {}
-
-    for label, info in gseason_periods.items():
-        # compute start/end timestamps (handles crossing calendar‐year boundary)
-        start_year = year - 1 if info["start"] > info["end"] else year
-        start = pd.Timestamp(f"{start_year}-{info['start']}")
-        end   = pd.Timestamp(f"{year}-{info['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
-        logging.info(f"  • {label}: {start.date()} → {end.date()}")
-        season_df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
-        season_stats: dict[str, dict] = {}
-
-        for var in ("VWC", "T", "EC", "SWC"):
-            season_stats[var] = {}
-            for strip in ("S1", "S2", "S3", "S4"):
-                for depth in ("1", "2", "3"):
-                    raw_stats, ratio_stats = compute_summary_statistics(season_df, var, strip, depth)
-                    # zero‐out ratios on temperature if you’d like:
-                    if var == "T":
-                        ratio_stats = {}
-                    season_stats[var][f"{strip}_D{depth}"] = {
-                        "raw_statistics":   raw_stats,
-                        "ratio_statistics": ratio_stats,
-                    }
-
-        summary[label] = season_stats
-
-    # persist and return
-    os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
-    logging.info(f"✅ Saved summary to {summary_path}")
-
-    return summary
 
 
 def format_gseason_label(code):
