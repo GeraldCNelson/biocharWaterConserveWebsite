@@ -12,7 +12,7 @@ function convertMarkdownToHtml(markdownText) {
  * @param {string} elementId - The ID of the DOM element to insert content into.
  * @param {string} markdownUrl - The URL to fetch the markdown file from.
  */
-async function loadMarkdownContent(elementId, markdownUrl) {
+export async function loadMarkdownContent(elementId, markdownUrl) {
     console.log(`📖 Loading markdown into #${elementId} from ${markdownUrl}...`);
     try {
         const response = await fetch(markdownUrl);
@@ -31,5 +31,3 @@ async function loadMarkdownContent(elementId, markdownUrl) {
         fallback.innerHTML = `<p class="text-danger">Failed to load content from ${markdownUrl}</p>`;
     }
 }
-
-export { loadMarkdownContent };

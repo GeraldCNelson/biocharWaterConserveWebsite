@@ -1,20 +1,38 @@
 // static/js/main.js
-import { debugLog, debugGroup, loadMarkdownContent, waitForAllDropdowns } from "./ui_utils.js";
-import { fetchDefaultsAndOptions } from "./api_requests.js";
+
+// 1) debugging & logging
+import { debugLog, debugGroup } from "./plots.js";
+
+// 2) markdown loader
+import { loadMarkdownContent } from "./markdown.js";
+
+// 3) all your UI controls (dropdowns, handlers, etc.)
 import {
+  fetchDefaultsAndOptions,
+  updateDepthLabels,
+  handleTraceOptionChange,
   populateAllDropdowns,
-  setupUnitToggleHandlers,
-  initializeUpdateButtons,
-  getAllDropdownIds,
-} from "./ui_controls.js";
-import {
   initializeMainDatepickers,
   updateStartAndEndDatesFromYear,
+} from "./ui_controls.js";
+
+// 4) datepicker & date‐range helpers
+import {
+  initializeUpdateButtons,
+  setupUnitToggleHandlers,
+  getAllDropdownIds,
 } from "./control_panel.js";
-import { updateDepthLabels } from "./ui_utils.js";
-import { handleTraceOptionChange } from "./plots.js";
-import { renderMainPlots } from "./plot_utils.js";
+
+// 5) main plotting routines
+import {
+  renderMainPlots,
+  waitForAllDropdowns
+} from "./plot_utils.js";
+
+// 6) summary‐table updater
 import { updateSummaryStatistics } from "./tables.js";
+
+// 7) custom‐season setup
 import { initCustomGseason } from "./custom_gseason.js";
 
 // mapping of markdown‐injection points to files
@@ -102,24 +120,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
   debugLog("✅ Application initialized.");
 
-  // 13) Finally: fetch & inject the Custom-Season editor, then init it
-  const gseasonContent = document.getElementById("gseason-content");
-  if (gseasonContent) {
-    try {
-      const resp = await fetch("/custom-gseason");
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const html = await resp.text();
-      gseasonContent.innerHTML = html;
-
-      // now that the HTML is in the DOM, kick off your custom Gseason scripts
-      initCustomGseason(
-        options.defaults.DEFAULT_YEAR,
-        options.defaults.YEARS,
-        options.defaults.DEFAULT_GSEASON_PERIODS
-      );
-    } catch (err) {
-      console.error("Failed to load Custom Season editor:", err);
-      gseasonContent.innerHTML = `<p class="text-danger">Could not load Custom Season editor.</p>`;
-    }
-  }
+// 13) Initialize the Custom Season editor (partial is already in the DOM)
+const gseasonContent = document.getElementById("gseason-content");
+if (gseasonContent) {
+  // grab the config blob you rendered into window.CUSTOM_GSEASON_CONFIG
+  const cfg = window.CUSTOM_GSEASON_CONFIG;
+  // now call it with a single object:
+  initCustomGseason(cfg);
+}
 });

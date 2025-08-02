@@ -123,17 +123,44 @@ export function populateDropdown(elementId, values, defaultValue, labelMapping =
 /**
  * Read current selections from the DOM for a given tab.
  */
+// ui_controls.js
+
+/**
+ * Collects all of the controls for the given tab, and if on the Main tab
+ * with granularity="custom", also pulls in your custom‐season rows.
+ *
+ * @param {"main"|"summary"|...} tab
+ * @returns {Object} filters
+ */
 export function getSelectedFilters(tab) {
   const keys = [
     "year", "startDate", "endDate",
     "variable", "strip", "granularity",
     "loggerLocation", "depth", "traceOption"
   ];
-  return keys.reduce((acc, id) => {
+
+  // 1) collect all the simple dropdown/text values
+  const filters = keys.reduce((acc, id) => {
     const el = document.getElementById(`${tab}-${id}`);
     if (el) acc[id] = el.value;
     return acc;
   }, {});
+
+  // 2) if we're on Main + “Growing Season”, scrape all your .period-row cards
+  if (tab === "main" && filters.granularity === "gseason") {
+    const periods = Array.from(
+      document.querySelectorAll(".period-row")
+    ).map(row => {
+      const code  = row.dataset.code;
+      const label = row.querySelector(".period-label")?.value;
+      const start = row.querySelector(".period-start")?.value;
+      const end   = row.querySelector(".period-end")?.value;
+      return { code, label, start, end };
+    });
+    filters.periods = periods;
+  }
+
+  return filters;
 }
 
 /**

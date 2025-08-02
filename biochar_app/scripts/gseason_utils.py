@@ -51,15 +51,14 @@ def compute_seasons(
     # pre‐compute fallback column & conversion if needed
     fallback = "precip_mm" if precip_col == "precip_in" else "precip_in"
     for p in periods:
-        start = pd.to_datetime(p["start"])
-        end   = pd.to_datetime(p["end"])
+        start = pd.to_datetime(p.start)
+        end   = pd.to_datetime(p.end)
         # 1) mean of all sensor columns
         means = slice_and_mean(df.drop(columns=["timestamp"], errors="ignore"), start, end)
         data = means.to_dict()
-
         # 2) metadata
-        data["period_code"]  = p["code"]
-        data["period_label"] = p.get("label", p["code"])
+        code  = p.code
+        label = p.label
 
         # 3) optional precip sum
         if include_precip:

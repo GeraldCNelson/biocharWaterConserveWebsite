@@ -22,8 +22,9 @@ from biochar_app.scripts.config import (
     STRIPS,
     VALUE_COLS_STANDARD,
     VALUE_COLS_2024_PLUS,
-    GSEASON_PERIODS
+    DEFAULT_GSEASON_PERIODS
 )
+from biochar_app.scripts.gseason import load_or_generate_gseason_summary
 
 
 def rename_logger_columns(df, logger_name):
@@ -69,8 +70,7 @@ def read_logger_data(name, year):
     num_nat = df["timestamp"].isna().sum()
     if num_nat > 0:
         logging.warning(
-            f"⚠️ Found {num_nat} NaT timestamps in {name} after tz_localize — "
-            "check DST gaps or data issues."
+            f"⚠️ Found {num_nat} NaT timestamps in {name} after tz_localize — check DST gaps or data issues."
         )
 
     # Keep only rows from Jan 1 of `year` onward
@@ -218,7 +218,7 @@ def aggregate(df, year):
 
     # Now add “gseason”
     growing_season_results = []
-    for season_name, months in GSEASON_PERIODS.items():
+    for season_name, months in DEFAULT_GSEASON_PERIODS.items():
         start_m, _ = months["start"].split("-")
         end_m, _ = months["end"].split("-")
         sm, em = int(start_m), int(end_m)

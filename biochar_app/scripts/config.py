@@ -14,8 +14,8 @@ YEARS = [2023, 2024, 2025]
 LOGGER_LOCATIONS = ["T", "M", "B"]
 GRANULARITIES = [
     ("15min",   "15min"),   # 15-minute bins
-    ("hourly",  "H"),       # hourly
-    ("daily",   "D"),       # daily
+    ("hourly",  "h"),       # hourly
+    ("daily",   "d"),       # daily
     ("monthly", "ME"),       # month-end
     ("gseason", None),      # growing-season summary
 ]
@@ -59,6 +59,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_RAW_DIR       = BASE_DIR / "data-raw"
 DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
 PARQUET_DIR     = BASE_DIR / "data-processed" / "parquet"
+PARQUET_GSEASON_DIR = PARQUET_DIR / "gseason"
 
 # Default settings for bringing in the data from the dataloggers
 DEFAULT_TABLE = "Table1"

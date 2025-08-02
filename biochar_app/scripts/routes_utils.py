@@ -7,6 +7,7 @@ from datetime import datetime
 
 from biochar_app.scripts.config import PARQUET_DIR, DEFAULT_GSEASON_PERIODS, DATA_RAW_DIR
 from biochar_app.scripts.gseason_utils import compute_seasons
+GSEASON_DIR = PARQUET_DIR / "gseason"
 logger = logging.getLogger(__name__)
 
 def load_summary_df(year: int, granularity: str, variable: str, strip: str) -> pd.DataFrame:
@@ -125,23 +126,32 @@ def load_gseason_df(
     year: int,
     periods: list[dict],
     precip_col: str = "precip_in",
-    unit_system: str = "us"
+    unit_system: str = "us",
+    use_ratios: bool = False,
 ) -> pd.DataFrame:
     """
-    Load the 15-min data for `year` and slice into custom seasons.
-    Returns a DataFrame with one row per period (with period_code, means, precip).
+    Load growing‐season aggregated data for `year`.
+
+    If use_ratios=True and periods is empty (i.e. using defaults),
+    reads from data-processed/parquet/gseason/{year}_gseason_ratios.parquet.
+
+    Otherwise slices the raw 15-min data via compute_seasons().
     """
-    # 1) load the fine-grain data
+    # 1) Precomputed ratios path
+    if use_ratios and not periods:
+        fn = GSEASON_DIR / f"{year}_gseason_ratios.parquet"
+        return pd.read_parquet(fn)
+
+    # 2) Otherwise compute from 15-min data
     df_15min = load_logger_year(year, "15min")
-    # 2) ensure timestamp index
     df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
     df_15min = df_15min.set_index("timestamp", drop=False)
-    # 3) compute season slices
+
     return compute_seasons(
-        df=df_15min,
-        periods=periods,
-        precip_col=precip_col,
-        include_precip=True,
-        unit_system=unit_system,
+        df             = df_15min,
+        periods        = periods,
+        precip_col    = precip_col,
+        include_precip = True,
+        unit_system    = unit_system,
     )
 

@@ -11,13 +11,13 @@ import numpy as np
 from fastapi import APIRouter, Request, HTTPException, Query, Body
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from biochar_app.scripts.routes_utils import load_gseason_df
-from biochar_app.scripts.utils import parse_filenames
+#from biochar_app.scripts.utils import parse_filenames
 from biochar_app.scripts.routes_utils import load_logger_year, merge_all_loggers, load_summary_df
 from biochar_app.scripts.gseason import compute_summary_statistics, get_flat_gseason_summary
-from biochar_app.scripts.plot_helpers import sanitize_json, convert_units_for_download
+#from biochar_app.scripts.plot_helpers import sanitize_json, convert_units_for_download
 from biochar_app.scripts.plot_utils import (
     make_raw_figure,
     make_ratio_figure,
@@ -108,7 +108,7 @@ async def get_defaults_and_options():
 
 # --- Page routes (render index.html) ---
 
-class Period(BaseModel):
+class PeriodSpec(BaseModel):
     code:  str
     label: str
     start: str  # e.g. "2024-03-01"
@@ -125,48 +125,83 @@ class PlotRequest(BaseModel):
     depth: str
     traceOption: str
     unitSystem: str
-    customPeriods:    Optional[List[Period]] = None
+
+
+    periods: Optional[List[PeriodSpec]] = Field(
+        None,
+        description="Custom G-season periods",
+        example=[{"code":"Q1","label":"Winter","start":"2023-11-01","end":"2024-02-28"}]
+    )
+    class Config:
+        validate_by_name = True
+
 
 @api_router.post("/plot_raw")
 async def api_plot_raw(req: PlotRequest):
-    year        = req.year
-    gran        = req.granularity.lower()
-    var         = req.variable
-    strip       = req.strip
-    loc         = req.loggerLocation
-    depth       = req.depth
-    unit        = req.unitSystem
-    trace_opt   = "depths" if req.traceOption=="depth" else "locations"
-    start_date  = req.startDate
-    end_date    = req.endDate
+    year      = req.year
+    gran      = req.granularity.lower()
+    var       = req.variable
+    strip     = req.strip
+    loc       = req.loggerLocation
+    depth     = req.depth
+    unit      = req.unitSystem
+    trace_opt = "depths" if req.traceOption == "depth" else "locations"
+    start     = req.startDate
+    end       = req.endDate
 
-    # ---- growing-season or custom ----
-    if gran in ("gseason", "custom"):
-        # use customPeriods if present, else your defaults
-        periods = req.customPeriods or [
-            { **info, "code": code }
-            for code, info in DEFAULT_GSEASON_PERIODS.items()
-        ]
-        # this should return a DataFrame with a DatetimeIndex
-        df = load_gseason_df(year, periods, unit_system=unit)
+    # ---- growing-season / custom ----
+    if gran == "gseason":
+        # grab any custom period specs
+        periods = req.periods or []
+
+        # load the precomputed or on-the-fly gseason DataFrame
+        df_gseason = load_gseason_df(
+            year       = year,
+            periods    = periods,
+            unit_system= unit,
+        )
+
+        # pass periods into the g-season figure builder
         fig = make_raw_gseason_figure(
-            df               = df,
-            variable         = var,
-            strip            = strip,
-            logger_location  = loc,
-            depth            = depth,
-            unit_system      = unit,
-            year             = year,
-            granularity      = gran,
+            df              = df_gseason,
+            periods         = periods,
+            variable        = var,
+            strip           = strip,
+            logger_location = loc,
+            depth           = int(depth),
+            unit_system     = unit,
+            year            = year,
+            trace_option    = trace_opt,
         )
         return JSONResponse(fig)
 
     # ---- standard time-series ----
     df = load_logger_year(year, gran)
-    if "timestamp" not in df:
+    if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    df = df[(df["timestamp"] >= start_date) & (df["timestamp"] <= end_date)]
+    # restrict to the user’s window
+    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+
+    # ensure there’s at least one non-empty series to plot
+    if trace_opt == "depths":
+        expected = [f"{var}_{d}_raw_{strip}_{loc}" for d in sensor_depth_mapping]
+    else:
+        expected = [f"{var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
+
+    present   = [c for c in expected if c in df.columns]
+    non_empty = [c for c in present  if df[c].notna().any()]
+
+    if not non_empty:
+        raise HTTPException(
+            400,
+            detail=(
+                f"No valid data to plot for {var!r} @ strip={strip!r}, "
+                f"loc={loc!r}, depth={depth!r} between {start} and {end}. "
+                f"Found columns: {present}"
+            )
+        )
+
     fig = make_raw_figure(
         df               = df,
         year             = year,
@@ -177,58 +212,62 @@ async def api_plot_raw(req: PlotRequest):
         depth            = depth,
         trace_option     = trace_opt,
         unit_system      = unit,
-        start            = start_date,
-        end              = end_date,
+        start            = start,
+        end              = end,
     )
     return JSONResponse(fig)
 
 
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
-    year   = req.year
-    gran   = req.granularity.lower()
-    var    = req.variable
-    strip  = req.strip
-    loc    = req.loggerLocation
-    depth  = req.depth
-    unit   = req.unitSystem
-    start  = req.startDate
-    end    = req.endDate
+    year  = req.year
+    gran  = req.granularity.lower()
+    var   = req.variable
+    strip = req.strip
+    loc   = req.loggerLocation
+    depth = req.depth
+    unit  = req.unitSystem
+    start = req.startDate
+    end   = req.endDate
 
-    if gran in ("gseason", "custom"):
-        periods = req.customPeriods or [
-            { **info, "code": code }
-            for code, info in DEFAULT_GSEASON_PERIODS.items()
-        ]
-        df = load_gseason_df(year, periods, unit_system=unit)
+    # ---- GROWING-SEASON RATIO BARS ----
+    if gran == "gseason":
+        periods = req.periods or []
+        df_gs = load_gseason_df(
+            year        = year,
+            periods     = periods,
+            unit_system = unit,
+            use_ratios  = True,
+        )
         fig = make_ratio_gseason_figure(
-            df               = df,
+            df               = df_gs,
+            periods          = periods,
             variable         = var,
             strip            = strip,
-            logger_location  = loc,
-            depth            = depth,
+            logger_location  = loc,      # ← use the selected loggerLocation
+            depth            = int(depth),
             unit_system      = unit,
             year             = year,
-            granularity      = gran,
         )
         return JSONResponse(fig)
 
-    # ---- standard time-series ----
+    # ---- DAILY RATIO LINES ----
     df = load_logger_year(year, gran)
-    if "timestamp" not in df:
+    if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
     df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+
     fig = make_ratio_figure(
         df               = df,
-        year             = year,
         variable         = var,
         strip            = strip,
-        granularity      = gran,
-        logger_location  = loc,
+        logger_location  = loc,       # ← and here, too
         depth            = depth,
+        unit_system      = unit,
+        granularity      = gran,
+        year             = year,
         start            = start,
         end              = end,
-        unit_system      = unit,
     )
     return JSONResponse(fig)
 
@@ -383,11 +422,6 @@ async def serve_markdown(filename: str):
 @main_router.get("/custom-gseason")
 async def custom_gseason(request: Request):
     return templates.TemplateResponse(
-        "custom_gseason.html",
-        {
-            "request": request,
-            "DEFAULT_YEAR": DEFAULT_YEAR,
-            "YEARS": YEARS,              # or derive from your data
-            "DEFAULT_GSEASON_PERIODS": DEFAULT_GSEASON_PERIODS,
-        },
+        "_custom_gseason.html",
+        {"request": request},
     )

@@ -1,14 +1,18 @@
-import os
+#import os
 import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+#from flask import abort
+#from typing import Any, Dict, List
+#from fastapi import HTTPException
 from typing import Any, Dict, List, Optional, Union
-from plotly import graph_objects as go
 from flask import abort
 from biochar_app.scripts.config import DEFAULT_GSEASON_PERIODS, logger_location_mapping, human_label, UnitSystem, DEFAULT_UNITS, sensor_depth_mapping, TRACE_CHOICES
 from biochar_app.scripts.config import PRECIP_COLS, UNIT_CONVERSIONS, DATA_PROCESSED_DIR, bar_width_map
-from pandas import Series
+#from pandas import Series
 import json
 from plotly.utils import PlotlyJSONEncoder
-from biochar_app.scripts.routes_utils import load_logger_year
+#from biochar_app.scripts.routes_utils import load_logger_year
 
 import logging
 logger = logging.getLogger(__name__)
@@ -37,7 +41,7 @@ from biochar_app.scripts.plot_helpers import (
 )
 
 from datetime import datetime, timedelta
-# import plotly.graph_objects as go
+
 # from .plot_utils import (
 #     common_xaxis_config, common_legend_config,
 #     prepare_plot_for_json, configure_axes,
@@ -308,10 +312,6 @@ def configure_axes(
             )
 
 
-from flask import abort
-from typing import Any, Dict, List
-import plotly.graph_objects as go
-
 def make_raw_figure(
     *,
     df: pd.DataFrame,
@@ -524,172 +524,166 @@ def make_ratio_figure(
     return prepare_plot_for_json(fig)
 
 
-
 def make_raw_gseason_figure(
-    df: pd.DataFrame,
+    *,
+    df,
+    periods: List[Any],
     variable: str,
     strip: str,
     logger_location: str,
-    depth: str,
+    depth: int,
     unit_system: str,
     year: int,
-    granularity: str,
+    trace_option: str,             # "depths" or "loggerLocation"
 ) -> Dict[str, Any]:
     """
-    Bar chart of raw growing‐season means on a continuous date axis.
+    Build a growing‐season bar‐chart Plotly figure.
+    One bar per period, with either depths‐at‐one‐location or locations‐at‐one‐depth.
     """
-    # build list of seasons with their date windows and means
-    seasons = []
-    for code, meta in GSEASON_PERIODS.items():
-        sm, sd = map(int, meta["start"].split("-"))
-        em, ed = map(int, meta["end"].split("-"))
-        if sm <= em:
-            start_dt = datetime(year, sm, sd)
-            end_dt   = datetime(year, em, ed)
-        else:
-            # wrap‐around winter
-            start_dt = datetime(year, sm, sd)
-            end_dt   = datetime(year+1, em, ed)
-
-        summary = get_flat_gseason_summary(year)
-        stats   = (
-            summary.get(code, {})
-                   .get(variable, {})
-                   .get(f"{strip}_D{depth}", {})
-                   .get("raw_statistics", {})
-        )
-        mean_v = stats.get("mean")
-        if mean_v is not None:
-            mean_v = float(mean_v) * (100 if variable == "VWC" else 1)
-        seasons.append({
-            "code":  code,
-            "label": meta["label"],
-            "start": start_dt,
-            "end":   end_dt,
-            "mean":  mean_v,
-        })
-
-    # build figure
     fig = go.Figure()
-    mids, widths, vals = [], [], []
-    for s in seasons:
-        if s["mean"] is None:
-            continue
-        delta = s["end"] - s["start"]
-        mids.append(s["start"] + delta/2)
-        widths.append(delta.total_seconds() * 1000)
-        vals.append(s["mean"])
-    fig.add_trace(
-        go.Bar(
-            x=mids,
-            y=vals,
-            width=widths,
-            name=logger_location_mapping.get(logger_location, logger_location),
-            opacity=0.8,
-        )
-    )
-
-    # precipitation on y2
-    precip_df = calculate_gseason_precip(df, year, unit_system)
-    mids_p, widths_p, precips = [], [], []
-    for s in seasons:
-        row = precip_df.loc[precip_df["period_code"] == s["code"]]
-        if row.empty:
-            continue
-        delta = s["end"] - s["start"]
-        mids_p.append(s["start"] + delta/2)
-        widths_p.append(delta.total_seconds() * 1000)
-        precips.append(float(row["precip"].iat[0]))
-    fig.add_trace(
-        go.Bar(
-            x=mids_p,
-            y=precips,
-            width=widths_p,
-            name=human_label("precip", unit_system),
-            yaxis="y2",
-            marker=dict(color="lightgrey"),
-            opacity=0.4,
-        )
-    )
-
-    # final layout
     human_var = label_name_mapping.get(variable, {}).get(unit_system, variable)
+    scale = 100 if variable == "VWC" else 1
+
+    # 1) x‐axis categories & ticktext (two‐line)
+    codes = [p.code for p in periods]
+    ticktext = [f"{p.label}<br>{p.start}–{p.end}" for p in periods]
+
+    # 2) sensor bars
+    y_cols: List[str] = []
+    if trace_option == "depths":
+        # one trace per depth at fixed logger_location
+        for d, depth_labels in sensor_depth_mapping.items():
+            col = f"{variable}_{d}_raw_{strip}_{logger_location}"
+            if col not in df.columns:
+                continue
+            y_cols.append(col)
+            fig.add_trace(go.Bar(
+                x=codes,
+                y=(df[col].astype(float) * scale).tolist(),
+                name=f"{human_var}, {depth_labels[unit_system]}",
+            ))
+    else:
+        # one trace per logger location at fixed depth
+        for loc_key, loc_label in logger_location_mapping.items():
+            col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
+            if col not in df.columns:
+                continue
+            y_cols.append(col)
+            fig.add_trace(go.Bar(
+                x=codes,
+                y=(df[col].astype(float) * scale).tolist(),
+                name=f"{human_var}, {loc_label}",
+            ))
+
+    # 3) precipitation overlay only for daily backend
+    #    skip here because df has no timestamp; use add_precipitation_bars in the daily figure
+    #    (we can add gseason‐precip later once we have period‐aggregated precip)
+    # if variable == "VWC" and granularity.lower() != "gseason":
+    #     add_precipitation_bars(fig, df, unit_system, granularity)
+    #     fig.update_layout(yaxis2=common_yaxis2_config(unit_system))
+
+    # 4) irrigation verticals
+    add_irrigation_shapes(fig, strip, year, unit_system)
+
+    # 5) layout
     fig.update_layout(
-        barmode="overlay",
-        title= {"text": f"Raw Growing-Season Means for {human_var} in {strip}, {year}", "x": 0.5},
-        xaxis= common_xaxis_config(granularity, None, None),  # now allowed
-        yaxis= dict(title=human_var),
-        yaxis2=dict(
-            title=human_label("precip", unit_system),
-            overlaying="y", side="right", showgrid=False
+        title={
+            "text": f"Raw Growing-Season Means for {human_var} in {strip}, {year}",
+            "x": 0.5
+        },
+        xaxis={
+            "title": "Season",
+            "type": "category",
+            "categoryorder": "array",
+            "categoryarray": codes,
+            "tickmode": "array",
+            "tickvals": codes,
+            "ticktext": ticktext,
+        },
+        yaxis=common_yaxis_config(
+            kind="raw",
+            variable=variable,
+            unit_system=unit_system,
+            global_min=df[y_cols].min(numeric_only=True).min(),
+            global_max=df[y_cols].max(numeric_only=True).max(),
         ),
-        legend= common_legend_config("Legend"),
+        # no yaxis2 for gseason
+        legend=common_legend_config("Legend"),
         template="plotly_white",
-        margin= {"l": 60, "r": 60, "t": 60, "b": 40},
+        margin={"l": 60, "r": 20, "t": 60, "b": 60},
         height=400,
+    )
+
+    # 6) auto‐scale
+    configure_axes(
+        fig=fig,
+        df=df,
+        y_cols=y_cols,
+        variable=variable,
+        unit_system=unit_system,
+        kind="raw",
     )
 
     return prepare_plot_for_json(fig)
 
 
 def make_ratio_gseason_figure(
-    df, variable: str, strip: str, logger_location: str,
-    depth: str, unit_system: str, year: int
-) -> dict:
+    *,
+    df: pd.DataFrame,
+    periods: List[dict],
+    variable: str,
+    strip: str,
+    logger_location: str,
+    depth: int,
+    unit_system: str,
+    year: int,
+) -> Dict[str, Any]:
     """
-    Bar chart of growing‐season ratios, on a continuous date axis.
+    Build a growing‐season bar chart of strip‐ratios S1/S2 and S3/S4.
+    Depth and logger_location come from the UI; periods is your list of
+    season specs (code,label,start,end).
     """
-    # pull the same season definitions
-    seasons = []
-    for code, meta in GSEASON_PERIODS.items():
-        sm, sd = map(int, meta["start"].split("-"))
-        em, ed = map(int, meta["end"].split("-"))
-        if sm <= em:
-            start = datetime(year, sm, sd)
-            end   = datetime(year, em, ed)
-        else:
-            start = datetime(year, sm, sd)
-            end   = datetime(year+1, em, ed)
-        seasons.append((code, start, end, meta["label"]))
 
-    # get your flat summary dict:
-    summary = get_flat_gseason_summary(year)
-
-    # two strip‐pairs
-    pairs = [("S1","S2"), ("S3","S4")]
+    # 1) build x-axis labels: "Label\nstart-end"
+    x_labels = [f"{p['label']}\n{p['start']}-{p['end']}" for p in periods]
 
     fig = go.Figure()
-    for top, bottom in pairs:
-        mids, widths, vals = [], [], []
-        key = f"{variable}_{depth}_ratio_{strip}_{top}_{bottom}_{logger_location}"
-        for code, start, end, _lbl in seasons:
-            container = summary.get(code, {})
-            val = container.get(key, None)
-            if val is None:
-                continue
-            delta = end - start
-            mids.append(start + delta/2)
-            widths.append(delta.total_seconds()*1000)
-            vals.append(float(val))
+    y_cols = []
+
+    # 2) always these two strip‐ratios
+    for (p1, p2) in [("S1", "S2"), ("S3", "S4")]:
+        col = f"{variable}_{depth}_ratio_{p1}_{p2}_{logger_location}"
+        if col not in df.columns:
+            continue
+        y = df[col].astype(float).tolist()
+        y_cols.append(col)
         fig.add_trace(go.Bar(
-            x=mids,
-            y=vals,
-            width=widths,
-            name=f"{top}/{bottom}",
-            opacity=0.8
+            x=x_labels,
+            y=y,
+            name=f"{p1}/{p2}",
         ))
 
-    human_var = label_name_mapping.get(variable, {}).get(unit_system, variable)
+    # 3) layout & axes
+    # Compute exact global min/max from those columns
+    global_min = df[y_cols].min(numeric_only=True).min() if y_cols else 0
+    global_max = df[y_cols].max(numeric_only=True).max() if y_cols else 1
+
     fig.update_layout(
-        barmode="group",
-        title={"text": f"Growing-Season Ratios for {human_var} in {strip}, {year}", "x":0.5},
-        xaxis=common_xaxis_config("gseason", None, None),
-        yaxis=dict(title=f"{human_var} Ratio", rangemode="tozero"),
+        title={"text": f"Growing-Season Ratios for {variable} in {strip}, {year}", "x": 0.5},
+        xaxis={"title": "Season", "type": "category"},
+        yaxis=common_yaxis_config(
+            kind="ratio",
+            variable=variable,
+            unit_system=unit_system,
+            global_min=global_min,
+            global_max=global_max,
+        ),
         legend=common_legend_config("Strip Ratios"),
         template="plotly_white",
-        margin=dict(l=60, r=20, t=60, b=40),
+        margin={"l": 60, "r": 20, "t": 60, "b": 40},
         height=400,
     )
+
     return prepare_plot_for_json(fig)
 
 

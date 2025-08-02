@@ -2,10 +2,10 @@
 import { getSelectedFilters } from "./ui_controls.js";
 import { DEBUG } from "./config.js";
 
-function debugLog(...args) {
+export function debugLog(...args) {
   if (DEBUG) console.log(...args);
 }
-function debugGroup(title, callback) {
+export function debugGroup(title, callback) {
   if (DEBUG) {
     console.groupCollapsed(title);
     try {

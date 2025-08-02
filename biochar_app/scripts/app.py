@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
 # ─── Your imports ──────────────────────────────────────────────────────────────
-from biochar_app.scripts.config        import BASE_DIR, DEFAULT_GRANULARITY, DEFAULT_YEAR, YEARS
+from biochar_app.scripts.config        import BASE_DIR, DEFAULT_GRANULARITY, DEFAULT_YEAR, YEARS, DEFAULT_GSEASON_PERIODS
 from biochar_app.scripts.routes_utils  import load_logger_year as _orig_load_logger_year
 from biochar_app.scripts.routes        import main_router, api_router
 
@@ -45,10 +45,27 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_spa(request: Request):
-    """
-    Render the single-page app (index.html).
-    """
-    return templates.TemplateResponse("index.html", {"request": request})
+    # convert the PERIODS dict into a list suitable for JSON:
+    periods_list = [
+        {
+            "code": code,
+            "label": info["label"],
+            "start": info["start"],
+            "end": info["end"],
+        }
+        for code, info in DEFAULT_GSEASON_PERIODS.items()
+    ]
+
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "DEFAULT_YEAR": DEFAULT_YEAR,
+            "YEARS": YEARS,
+            # now this is a *list* in JS, not an object
+            "DEFAULT_GSEASON_PERIODS": periods_list,
+        },
+    )
 
 # ─── 4) Ensure processed data exists ───────────────────────────────────────────
 PARQUET_ROOT = os.path.join(BASE_DIR, "data-processed", "parquet")
