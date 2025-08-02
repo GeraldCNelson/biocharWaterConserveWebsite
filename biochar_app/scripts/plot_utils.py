@@ -630,7 +630,7 @@ def make_raw_gseason_figure(
 def make_ratio_gseason_figure(
     *,
     df: pd.DataFrame,
-    periods: List[dict],
+    periods: List[Any],           # could be dicts or PeriodSpec instances
     variable: str,
     strip: str,
     logger_location: str,
@@ -639,51 +639,63 @@ def make_ratio_gseason_figure(
     year: int,
 ) -> Dict[str, Any]:
     """
-    Build a growing‐season bar chart of strip‐ratios S1/S2 and S3/S4.
-    Depth and logger_location come from the UI; periods is your list of
-    season specs (code,label,start,end).
+    Build a growing‐season ratio bar‐chart:
+     1) reuse the raw gseason figure
+     2) swap title, drop irrigation axis, adjust y-axis for ratio
     """
-
-    # 1) build x-axis labels: "Label\nstart-end"
-    x_labels = [f"{p['label']}\n{p['start']}-{p['end']}" for p in periods]
-
-    fig = go.Figure()
-    y_cols = []
-
-    # 2) always these two strip‐ratios
-    for (p1, p2) in [("S1", "S2"), ("S3", "S4")]:
-        col = f"{variable}_{depth}_ratio_{p1}_{p2}_{logger_location}"
-        if col not in df.columns:
-            continue
-        y = df[col].astype(float).tolist()
-        y_cols.append(col)
-        fig.add_trace(go.Bar(
-            x=x_labels,
-            y=y,
-            name=f"{p1}/{p2}",
-        ))
-
-    # 3) layout & axes
-    # Compute exact global min/max from those columns
-    global_min = df[y_cols].min(numeric_only=True).min() if y_cols else 0
-    global_max = df[y_cols].max(numeric_only=True).max() if y_cols else 1
-
-    fig.update_layout(
-        title={"text": f"Growing-Season Ratios for {variable} in {strip}, {year}", "x": 0.5},
-        xaxis={"title": "Season", "type": "category"},
-        yaxis=common_yaxis_config(
-            kind="ratio",
-            variable=variable,
-            unit_system=unit_system,
-            global_min=global_min,
-            global_max=global_max,
-        ),
-        legend=common_legend_config("Strip Ratios"),
-        template="plotly_white",
-        margin={"l": 60, "r": 20, "t": 60, "b": 40},
-        height=400,
+    # 1) Build the underlying raw‐gseason bar chart (no granularity/start/end here)
+    fig_json = make_raw_gseason_figure(
+        df               = df,
+        periods          = periods,
+        variable         = variable,
+        strip            = strip,
+        logger_location  = logger_location,
+        depth            = depth,
+        unit_system      = unit_system,
+        year             = year,
+        trace_option     = "depths",   # always depths‐based for ratio bars
     )
 
-    return prepare_plot_for_json(fig)
+    # 2) Relabel the x-axis ticks to show "Label\nstart-end"
+    #    handle both dicts and PeriodSpec objects:
+    x_labels = []
+    for p in periods:
+        if hasattr(p, "label"):
+            lbl   = p.label
+            start = p.start
+            end   = p.end
+        else:
+            lbl   = p["label"]
+            start = p["start"]
+            end   = p["end"]
+        x_labels.append(f"{lbl}\n{start}-{end}")
+
+    fig_json["layout"]["xaxis"].update({
+        "tickmode": "array",
+        "tickvals": list(range(len(periods))),
+        "ticktext": x_labels,
+    })
+
+    # 3) Swap title
+    fig_json["layout"]["title"]["text"] = (
+        fig_json["layout"]["title"]["text"]
+        .replace("Raw", "Growing-Season Ratios")
+    )
+
+    # 4) Drop the secondary (irrigation) axis entirely
+    fig_json["layout"].pop("yaxis2", None)
+
+    # 5) Rescale the primary y-axis for ratio values
+    fig_json["layout"]["yaxis"].update(
+        common_yaxis_config(
+            kind       = "ratio",
+            variable   = variable,
+            unit_system= unit_system,
+            global_min = df.min(numeric_only=True).min(),
+            global_max = df.max(numeric_only=True).max(),
+        )
+    )
+
+    return fig_json
 
 

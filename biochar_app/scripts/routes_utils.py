@@ -7,7 +7,7 @@ from datetime import datetime
 
 from biochar_app.scripts.config import PARQUET_DIR, DEFAULT_GSEASON_PERIODS, DATA_RAW_DIR
 from biochar_app.scripts.gseason_utils import compute_seasons
-GSEASON_DIR = PARQUET_DIR / "gseason"
+GSEASON_SUMMARY_DIR = PARQUET_DIR / "summary" / "gseason"
 logger = logging.getLogger(__name__)
 
 def load_summary_df(year: int, granularity: str, variable: str, strip: str) -> pd.DataFrame:
@@ -122,6 +122,8 @@ def merge_all_loggers(year: int) -> pd.DataFrame:
     merged = merged.loc[merged.index.year == year]
     return merged
 
+
+
 def load_gseason_df(
     year: int,
     periods: list[dict],
@@ -132,14 +134,16 @@ def load_gseason_df(
     """
     Load growing‐season aggregated data for `year`.
 
-    If use_ratios=True and periods is empty (i.e. using defaults),
-    reads from data-processed/parquet/gseason/{year}_gseason_ratios.parquet.
+    If periods is empty:
+      - loads summary/gseason/{year}_gseason.parquet  (use_ratios=False)
+      - or summary/gseason/{year}_gseason_ratios.parquet  (use_ratios=True)
 
-    Otherwise slices the raw 15-min data via compute_seasons().
+    Otherwise, slices the raw 15-min data via compute_seasons().
     """
-    # 1) Precomputed ratios path
-    if use_ratios and not periods:
-        fn = GSEASON_DIR / f"{year}_gseason_ratios.parquet"
+    # 1) If no custom periods, read the precomputed summary
+    if not periods:
+        fn = GSEASON_SUMMARY_DIR / f"{year}_gseason"
+        fn = fn.with_suffix("_ratios.parquet") if use_ratios else fn.with_suffix(".parquet")
         return pd.read_parquet(fn)
 
     # 2) Otherwise compute from 15-min data

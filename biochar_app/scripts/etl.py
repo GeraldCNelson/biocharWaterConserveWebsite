@@ -64,6 +64,7 @@ def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
 
 def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
     """Read one strip+loc .dat, normalize & filter to year, rename."""
+    from pathlib import Path
     datfile = Path(DATA_RAW_DIR) / f"datfiles_{year}" / f"{name}_Table1.dat"
     if not datfile.exists():
         logger.warning(f"⚠️ Not found: {datfile}")
@@ -91,6 +92,7 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
 
 def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     """Outer‐join all strip/logger .dat into one wide DataFrame."""
+    from pathlib import Path
     frames: List[pd.DataFrame] = []
     for strip in STRIPS:
         for loc in LOGGER_LOCATIONS:
@@ -139,12 +141,6 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
 
 
 from pathlib import Path
-from typing import List
-import pandas as pd
-import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
 
 def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     """
@@ -159,8 +155,8 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     # 1) Raw + Ratios
     raw_path   = year_dir / f"{year}_raw_logger.parquet"
     ratio_path = year_dir / f"{year}_raw_logger_ratios.parquet"
-    df.reset_index().to_parquet(raw_path,   index=False)
-    calculate_ratios(df).reset_index().to_parquet(ratio_path, index=False)
+    df.reset_index().to_parquet(raw_path, index=False, compression="snappy")
+    calculate_ratios(df).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
     # Identify “sensor” cols so we can drop periods with no real data
@@ -187,8 +183,8 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         df_s = df_s.dropna(subset=sensor_cols, how="all")
         df_s = df_s.reset_index()
 
-        fn_raw   = f"{year}_{freq}.parquet"
-        df_s.to_parquet(out_dir / fn_raw, index=False)
+        fn_raw = f"{year}_{freq}.parquet"
+        df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq}: {fn_raw}")
 
         # c) summary‐ratios
@@ -196,7 +192,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
             df_s.set_index("timestamp", drop=True)
         )
         fn_ratio = f"{year}_{freq}_ratios.parquet"
-        df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False)
+        df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq} ratios: {fn_ratio}")
 
     # 3) Growing‐season summary (only periods with data)
@@ -225,7 +221,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
 
         # raw growing‐season
         fn_gs = f"{year}_gseason.parquet"
-        df_gs.to_parquet(out_dir / fn_gs, index=False)
+        df_gs.to_parquet(out_dir / fn_gs, index=False, compression="snappy")
         logger.info(f"✅ Growing‐season summary: {fn_gs}")
 
         # ratio growing‐season
@@ -233,7 +229,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
             df_gs.set_index("period_code", drop=True)
         )
         fn_gs_ratio = f"{year}_gseason_ratios.parquet"
-        df_gs_ratio.reset_index().to_parquet(out_dir / fn_gs_ratio, index=False)
+        df_gs_ratio.reset_index().to_parquet(out_dir / fn_gs_ratio, index=False, compression="snappy")
         logger.info(f"✅ Growing‐season ratios: {fn_gs_ratio}")
 
 
@@ -290,7 +286,7 @@ def generate_summaries(years: List[int]) -> None:
             }
             dfr = dfw.resample(code).agg(agg_map).round(3).reset_index()
             fn = f"{year}_{freq}.parquet"
-            dfr.to_parquet(out_dir / fn, index=False)
+            dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")
 
     logger.info("🎉 ETL complete.")
