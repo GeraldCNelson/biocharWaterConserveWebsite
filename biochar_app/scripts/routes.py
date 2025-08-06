@@ -35,6 +35,8 @@ from biochar_app.scripts.config import (
     DEFAULT_GRANULARITY,
     YEARS,
     DEFAULT_GSEASON_PERIODS,
+    PLOT_BASED_ON_OPTIONS,
+    TRACE_OPTION_MAP,
     sensor_depth_mapping,
     logger_location_mapping,
     variable_name_mapping,
@@ -73,33 +75,29 @@ async def get_defaults_and_options():
         {"value": g, "label": granularity_name_mapping[g]}
         for g in granularity_name_mapping
     ]
-    trace_options = [
-        {"value": "depth",          "label": "Depth"},
-        {"value": "loggerLocation", "label": "Logger Location"},
-    ]
 
     # 2) Assemble the payload exactly as your UI code expects:
     response_data = {
         "defaults": {
-            "year":           DEFAULT_YEAR,
-            "startDate":      DEFAULT_START_DATE,
-            "endDate":        DEFAULT_END_DATE,
-            "variable":       DEFAULT_VARIABLE,
-            "depth":          str(DEFAULT_DEPTH),
-            "strip":          DEFAULT_STRIP,
+            "year": DEFAULT_YEAR,
+            "startDate": DEFAULT_START_DATE,
+            "endDate": DEFAULT_END_DATE,
+            "variable": DEFAULT_VARIABLE,
+            "depth": str(DEFAULT_DEPTH),
+            "strip": DEFAULT_STRIP,
             "loggerLocation": DEFAULT_LOGGER_LOCATION,
-            "granularity":    DEFAULT_GRANULARITY,
-            "traceOption":    "depth",
-            "unitSystem":     "us",
+            "granularity": DEFAULT_GRANULARITY,
+            "traceOption": PLOT_BASED_ON_OPTIONS[0]["value"],  # change “depth” → “depths” to match your values
+            "unitSystem": "us",
         },
-        "years":           years,
-        "strips":          strips,
-        "variables":       variables,
-        "depths":          depths,
+        "years": years,
+        "strips": strips,
+        "variables": variables,
+        "depths": depths,
         "loggerLocations": logger_locations,
-        "granularities":   granularities,
-        "traceOptions":    trace_options,
-        "depthMapping":    sensor_depth_mapping,
+        "granularities": granularities,
+        "traceOptions": PLOT_BASED_ON_OPTIONS,
+        "depthMapping": sensor_depth_mapping,
     }
 
     # 3) Return it!
@@ -113,6 +111,16 @@ class PeriodSpec(BaseModel):
     label: str
     start: str  # e.g. "2024-03-01"
     end:   str  # e.g. "2024-05-31"
+
+class GSeasonParams(BaseModel):
+    periods: Optional[List[PeriodSpec]] = Field(
+        default=None,
+        description="Custom G-season periods",
+        examples=[{"code":"Q1","label":"Winter","start":"2023-11-01","end":"2024-02-28"}],
+    )
+
+    class Config:
+        validate_by_name = True
 
 class PlotRequest(BaseModel):
     year: int
@@ -145,7 +153,7 @@ async def api_plot_raw(req: PlotRequest):
     loc       = req.loggerLocation
     depth     = req.depth
     unit      = req.unitSystem
-    trace_opt = "depths" if req.traceOption == "depth" else "locations"
+    trace_opt = TRACE_OPTION_MAP[req.traceOption]
     start     = req.startDate
     end       = req.endDate
 
@@ -230,7 +238,11 @@ async def api_plot_ratio(req: PlotRequest):
     start = req.startDate
     end   = req.endDate
 
-    # ---- GROWING-SEASON RATIO BARS ----
+    # this dropdown controls whether we compare depths or locations,
+    # but for ratios we always show S1/S2 & S3/S4
+    trace_opt = "depths" if req.traceOption == "depth" else "locations"
+
+    # ---- growing-season ratios ----
     if gran == "gseason":
         periods = req.periods or []
         df_gs = load_gseason_df(
@@ -244,14 +256,14 @@ async def api_plot_ratio(req: PlotRequest):
             periods          = periods,
             variable         = var,
             strip            = strip,
-            logger_location  = loc,      # ← use the selected loggerLocation
+            logger_location  = loc,
             depth            = int(depth),
             unit_system      = unit,
             year             = year,
         )
         return JSONResponse(fig)
 
-    # ---- DAILY RATIO LINES ----
+    # ---- standard time-series ratios ----
     df = load_logger_year(year, gran)
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
@@ -261,13 +273,13 @@ async def api_plot_ratio(req: PlotRequest):
         df               = df,
         variable         = var,
         strip            = strip,
-        logger_location  = loc,       # ← and here, too
-        depth            = depth,
+        logger_location  = loc,
         unit_system      = unit,
         granularity      = gran,
         year             = year,
         start            = start,
         end              = end,
+        depth            = depth,
     )
     return JSONResponse(fig)
 

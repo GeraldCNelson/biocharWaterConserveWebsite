@@ -13,9 +13,9 @@ Full ETL:
 
 import os
 import logging
-# from pathlib import Path
+from pathlib import Path
 from typing import Any, Dict, List, Optional
-# from functools import partial
+
 import numpy as np
 import pandas as pd
 
@@ -64,14 +64,13 @@ def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
 
 def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
     """Read one strip+loc .dat, normalize & filter to year, rename."""
-    from pathlib import Path
     datfile = Path(DATA_RAW_DIR) / f"datfiles_{year}" / f"{name}_Table1.dat"
     if not datfile.exists():
         logger.warning(f"⚠️ Not found: {datfile}")
         return None
 
-    df = pd.read_csv(
-        datfile,
+    df = pd.read_csv(   # type: ignore[arg-type]
+        str(datfile),        header=None,
         skiprows=4,
         names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
         na_values=["", "NA", "NAN"],
@@ -92,7 +91,6 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
 
 def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     """Outer‐join all strip/logger .dat into one wide DataFrame."""
-    from pathlib import Path
     frames: List[pd.DataFrame] = []
     for strip in STRIPS:
         for loc in LOGGER_LOCATIONS:
@@ -112,7 +110,7 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     return merged.reset_index()
 
 
-def replace_bad_values(df: pd.DataFrame, threshold: float = 999999.0) -> pd.DataFrame:
+def replace_bad_values(df: pd.DataFrame, threshold: float = 999_999.0) -> pd.DataFrame:
     """Mask any |value| ≥ threshold as NaN in numeric columns."""
     for col in df.select_dtypes(include=["float", "int"]):
         df[col] = df[col].mask(df[col].abs() >= threshold, np.nan)
@@ -124,7 +122,7 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
     """Compute SWC cylinder volumes in L & gallons for each VWC sensor."""
     df = df.copy()
     cyl_cm3 = cylinder_volume_m3()
-    cyl_L = cyl_cm3 / 1000.0
+    cyl_L   = cyl_cm3 / 1000.0
     cyl_gal = UNIT_CONVERSIONS["metric_to_us"]["irrigation"](cyl_L)
 
     for strip in STRIPS:
@@ -134,13 +132,11 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
                 if col not in df:
                     continue
                 frac = df[col].astype(float) / 100.0
-                df[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_L
+                df[f"SWC_vol_L_{strip}_{loc}_{depth}"]  = frac * cyl_L
                 df[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
 
     return df
 
-
-from pathlib import Path
 
 def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     """
@@ -155,14 +151,15 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     # 1) Raw + Ratios
     raw_path   = year_dir / f"{year}_raw_logger.parquet"
     ratio_path = year_dir / f"{year}_raw_logger_ratios.parquet"
-    df.reset_index().to_parquet(raw_path, index=False, compression="snappy")
+    df.reset_index().to_parquet(raw_path,   index=False, compression="snappy")
     calculate_ratios(df).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
-    # Identify “sensor” cols so we can drop periods with no real data
-    sensor_cols = [c for c in df.columns if any(
-        c.startswith(v) for v in ("VWC_", "T_", "EC_", "SWC_")
-    )]
+    # identify actual sensor columns
+    sensor_cols = [
+        c for c in df.columns
+        if any(c.startswith(prefix) for prefix in ("VWC_", "T_", "EC_", "SWC_"))
+    ]
 
     # 2) Fixed‐frequency summaries
     summary_base = Path(PARQUET_DIR) / "summary"
@@ -172,66 +169,58 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         out_dir = summary_base / freq
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        agg_map = {
-            col: ("sum" if col.startswith("precip") else "mean")
-            for col in df.columns
-        }
+        agg_map = {col: ("sum" if col.startswith("precip") else "mean")
+                   for col in df.columns}
 
         # a) raw summary
         df_s = df.resample(code).agg(agg_map).round(3)
-        # b) drop any bins where *all* sensors are NaN
-        df_s = df_s.dropna(subset=sensor_cols, how="all")
-        df_s = df_s.reset_index()
+        df_s = df_s.dropna(subset=sensor_cols, how="all").reset_index()
 
         fn_raw = f"{year}_{freq}.parquet"
         df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq}: {fn_raw}")
 
-        # c) summary‐ratios
-        df_s_ratio = calculate_ratios(
-            df_s.set_index("timestamp", drop=True)
-        )
-        fn_ratio = f"{year}_{freq}_ratios.parquet"
+        # b) summary‐ratios
+        df_s_ratio = calculate_ratios(df_s.set_index("timestamp", drop=True))
+        fn_ratio    = f"{year}_{freq}_ratios.parquet"
         df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq} ratios: {fn_ratio}")
 
-    # 3) Growing‐season summary (only periods with data)
+    # 3) Growing‐season summary
     gs_rows: List[pd.Series] = []
     for period_code, info in DEFAULT_GSEASON_PERIODS.items():
         sm, _ = info["start"].split("-")
         em, _ = info["end"].split("-")
         start_m, end_m = int(sm), int(em)
         months = (
-            list(range(start_m, end_m + 1))
+            list(range(start_m, end_m+1))
             if start_m <= end_m
-            else list(range(start_m, 13)) + list(range(1, end_m + 1))
+            else list(range(start_m,13)) + list(range(1, end_m+1))
         )
 
         slice_df = df[df.index.month.isin(months)]
-        # drop if no sensor data at all in slice
         if not slice_df[sensor_cols].dropna(how="all").empty:
-            means = slice_df.mean(skipna=True)
+            means = slice_df.mean(skipna=True).round(3)
             means.name = period_code
             gs_rows.append(means)
 
     if gs_rows:
         df_gs = pd.DataFrame(gs_rows).reset_index().rename(columns={"index":"period_code"})
+
+        # Note: we do *not* reconvert VWC again—leave them in the same percent units
         out_dir = summary_base / "gseason"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # raw growing‐season
+        # a) raw growing‐season
         fn_gs = f"{year}_gseason.parquet"
         df_gs.to_parquet(out_dir / fn_gs, index=False, compression="snappy")
         logger.info(f"✅ Growing‐season summary: {fn_gs}")
 
-        # ratio growing‐season
-        df_gs_ratio = calculate_ratios(
-            df_gs.set_index("period_code", drop=True)
-        )
+        # b) growing‐season ratios
+        df_gs_ratio = calculate_ratios(df_gs.set_index("period_code", drop=True))
         fn_gs_ratio = f"{year}_gseason_ratios.parquet"
         df_gs_ratio.reset_index().to_parquet(out_dir / fn_gs_ratio, index=False, compression="snappy")
         logger.info(f"✅ Growing‐season ratios: {fn_gs_ratio}")
-
 
 def generate_summaries(years: List[int]) -> None:
     for year in years:
@@ -243,9 +232,6 @@ def generate_summaries(years: List[int]) -> None:
 
         # 1) Normalize & drop DST‐gap NaTs
         df["timestamp"] = normalize_timestamp_series(df["timestamp"])
-        nat = df["timestamp"].isna().sum()
-        if nat:
-            logger.warning(f"⚠️ {nat} NaT timestamps in merged data")
         df = df.dropna(subset=["timestamp"])
 
         # 2) Mask placeholder extremes
@@ -253,7 +239,7 @@ def generate_summaries(years: List[int]) -> None:
 
         # 3) Mask VWC >150%
         vwc_cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
-        outliers = (df[vwc_cols] > 150.0).sum().sum()
+        outliers = df[vwc_cols].gt(150.0).sum().sum()
         if outliers:
             logger.warning(f"⚠️ {outliers} VWC>150% → NaN")
             df[vwc_cols] = df[vwc_cols].mask(df[vwc_cols] > 150.0)
@@ -280,12 +266,9 @@ def generate_summaries(years: List[int]) -> None:
             out_dir = weather_base / freq
             out_dir.mkdir(parents=True, exist_ok=True)
 
-            agg_map = {
-                col: ("sum" if col.startswith("precip") else "mean")
-                for col in dfw.columns
-            }
+            agg_map = {col: ("sum" if col.startswith("precip") else "mean") for col in dfw.columns}
             dfr = dfw.resample(code).agg(agg_map).round(3).reset_index()
-            fn = f"{year}_{freq}.parquet"
+            fn  = f"{year}_{freq}.parquet"
             dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")
 

@@ -140,22 +140,23 @@ def load_gseason_df(
 
     Otherwise, slices the raw 15-min data via compute_seasons().
     """
-    # 1) If no custom periods, read the precomputed summary
+    # 1) If no custom periods, load the on-disk summary (raw or ratios).
     if not periods:
-        fn = GSEASON_SUMMARY_DIR / f"{year}_gseason"
-        fn = fn.with_suffix("_ratios.parquet") if use_ratios else fn.with_suffix(".parquet")
+        fn_raw = GSEASON_SUMMARY_DIR / f"{year}_gseason.parquet"
+        fn_ratio = GSEASON_SUMMARY_DIR / f"{year}_gseason_ratios.parquet"
+        fn = fn_ratio if use_ratios else fn_raw
         return pd.read_parquet(fn)
 
-    # 2) Otherwise compute from 15-min data
+    # 2) Otherwise, slice the 15-min data:
     df_15min = load_logger_year(year, "15min")
     df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
     df_15min = df_15min.set_index("timestamp", drop=False)
 
     return compute_seasons(
-        df             = df_15min,
-        periods        = periods,
-        precip_col    = precip_col,
-        include_precip = True,
-        unit_system    = unit_system,
+        df=df_15min,
+        periods=periods,
+        precip_col=precip_col,
+        include_precip=True,
+        unit_system=unit_system,
     )
 

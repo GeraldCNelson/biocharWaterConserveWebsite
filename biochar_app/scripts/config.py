@@ -240,16 +240,16 @@ DEFAULT_GSEASON_PERIODS = {
     "Q1_Winter": {
         "label": "Winter",
         "start": "11-01",
-        "end": "02-28"
+        "end": "04-30"
     },
     "Q2_Early_Growing": {
         "label": "Early Growing",
-        "start": "03-01",
-        "end": "05-31"
+        "start": "04-01",
+        "end": "06-30"
     },
     "Q3_Peak_Harvest": {
         "label": "Peak Harvest",
-        "start": "06-01",
+        "start": "07-01",
         "end": "10-31"
     }
 }
@@ -364,3 +364,14 @@ def conversion_for_column(colname: str):
         if colname.endswith(suffix):
             return UNIT_CONVERSIONS["us_to_metric"][var]
     return None
+
+PLOT_BASED_ON_OPTIONS = [
+    {"value": "depth",          "label": "Depth"},
+    {"value": "loggerLocation", "label": "Logger Location"},
+]
+
+# Map the front-end “traceOption” values to plot_utils’ trace keys
+TRACE_OPTION_MAP: dict[str, str] = {
+    "depth":          "depths",
+    "loggerLocation": "locations",
+}
