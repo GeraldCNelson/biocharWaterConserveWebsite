@@ -200,7 +200,14 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
 
         slice_df = df[df.index.month.isin(months)]
         if not slice_df[sensor_cols].dropna(how="all").empty:
-            means = slice_df.mean(skipna=True).round(3)
+            means = slice_df.mean(skipna=True)
+
+            # override the precip columns to be the *sum* over the whole period
+            for pc in ("precip_in", "precip_mm"):
+                if pc in slice_df.columns:
+                    means[pc] = slice_df[pc].sum(skipna=True)
+
+            means = means.round(3)
             means.name = period_code
             gs_rows.append(means)
 

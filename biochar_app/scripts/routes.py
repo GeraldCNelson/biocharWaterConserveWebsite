@@ -153,7 +153,7 @@ async def api_plot_raw(req: PlotRequest):
     loc       = req.loggerLocation
     depth     = req.depth
     unit      = req.unitSystem
-    trace_opt = TRACE_OPTION_MAP[req.traceOption]
+    trace_option = TRACE_OPTION_MAP[req.traceOption]
     start     = req.startDate
     end       = req.endDate
 
@@ -179,7 +179,7 @@ async def api_plot_raw(req: PlotRequest):
             depth           = int(depth),
             unit_system     = unit,
             year            = year,
-            trace_option    = trace_opt,
+            trace_option    = trace_option,
         )
         return JSONResponse(fig)
 
@@ -192,7 +192,7 @@ async def api_plot_raw(req: PlotRequest):
     df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
     # ensure there’s at least one non-empty series to plot
-    if trace_opt == "depths":
+    if trace_option == "depths":
         expected = [f"{var}_{d}_raw_{strip}_{loc}" for d in sensor_depth_mapping]
     else:
         expected = [f"{var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
@@ -218,7 +218,7 @@ async def api_plot_raw(req: PlotRequest):
         granularity      = gran,
         logger_location  = loc,
         depth            = depth,
-        trace_option     = trace_opt,
+        trace_option     = TRACE_OPTION_MAP[req.traceOption],
         unit_system      = unit,
         start            = start,
         end              = end,
@@ -228,19 +228,10 @@ async def api_plot_raw(req: PlotRequest):
 
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
-    year  = req.year
-    gran  = req.granularity.lower()
-    var   = req.variable
-    strip = req.strip
-    loc   = req.loggerLocation
-    depth = req.depth
-    unit  = req.unitSystem
-    start = req.startDate
-    end   = req.endDate
-
-    # this dropdown controls whether we compare depths or locations,
-    # but for ratios we always show S1/S2 & S3/S4
-    trace_opt = "depths" if req.traceOption == "depth" else "locations"
+    year, gran = req.year, req.granularity.lower()
+    var, strip, loc = req.variable, req.strip, req.loggerLocation
+    depth, unit = int(req.depth), req.unitSystem
+    start, end = req.startDate, req.endDate
 
     # ---- growing-season ratios ----
     if gran == "gseason":
@@ -252,18 +243,18 @@ async def api_plot_ratio(req: PlotRequest):
             use_ratios  = True,
         )
         fig = make_ratio_gseason_figure(
-            df               = df_gs,
-            periods          = periods,
-            variable         = var,
-            strip            = strip,
-            logger_location  = loc,
-            depth            = int(depth),
-            unit_system      = unit,
-            year             = year,
+            df              = df_gs,
+            periods         = periods,
+            variable        = var,
+            strip           = strip,
+            logger_location = loc,
+            depth           = depth,
+            unit_system     = unit,
+            year            = year,
         )
         return JSONResponse(fig)
 
-    # ---- standard time-series ratios ----
+    # ---- time-series ratios ----
     df = load_logger_year(year, gran)
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
@@ -279,7 +270,7 @@ async def api_plot_ratio(req: PlotRequest):
         year             = year,
         start            = start,
         end              = end,
-        depth            = depth,
+        depth            = str(depth),
     )
     return JSONResponse(fig)
 
