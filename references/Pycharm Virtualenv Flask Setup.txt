@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Biochar Water Conservation</title>
+</head>
+<body>
+    <h1>Welcome to the Biochar Water Conservation Website!</h1>
+    <p><a href="/plot_raw">View Raw Data Plot</a></p>
+    <p><a href="/plot_ratio">View Ratio Data Plot</a></p>
+</body>
+</html>

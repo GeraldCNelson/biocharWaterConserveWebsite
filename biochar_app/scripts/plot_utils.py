@@ -518,7 +518,19 @@ def make_raw_gseason_figure(
     if variable == "VWC":
         add_irrigation_shapes(fig, strip, year, unit_system, sum_only=True, periods=periods)
 
-    # 5) Layout
+    # 5a) pick exactly the G-season sensor cols we actually drew
+    sensor_cols = (
+        [f"{variable}_{d}_raw_{strip}_{logger_location}"
+         for d in sensor_depth_mapping
+         if f"{variable}_{d}_raw_{strip}_{logger_location}" in df.columns]
+        if trace_option == "depths"
+        else
+        [f"{variable}_{depth}_raw_{strip}_{loc_key}"
+         for loc_key in logger_location_mapping
+         if f"{variable}_{depth}_raw_{strip}_{loc_key}" in df.columns]
+    )
+
+    # 5b) now lay out the axes using that same sensor_cols
     fig.update_layout(
         barmode      = "group",
         bargap       = 0.2,
@@ -540,8 +552,8 @@ def make_raw_gseason_figure(
                 variable    = variable,
                 unit_system = unit_system,
                 # compute global min/max only across the sensor columns, not precipitation
-                global_min  = df.filter(like=f"{variable}_").min(numeric_only=True).min(),
-                global_max  = df.filter(like=f"{variable}_").max(numeric_only=True).max(),
+                global_min  = df[sensor_cols].min(numeric_only=True).min(),
+                global_max  = df[sensor_cols].max(numeric_only=True).max(),
             ),
             "title": human_var,
         },

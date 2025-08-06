@@ -1,0 +1,131 @@
+Biochar Website Deployment Guide (Finalized)
+============================================
+
+This document captures the full process used to deploy the Flask-based biocharresearch.org website
+on an AWS Lightsail instance with HTTPS and persistent services.
+console is at https://lightsail.aws.amazon.com/ code is at ~/biochar_app
+Access the site with ssh -i ~/.ssh/gnelsonAmazonPrivateKey.pem ubuntu@18.218.206.65 (main need bash)
+
+once inside
+cd ~/biocharWaterConserveWebsite to get to the app
+
+Run ~/update_repo.sh to update the repo
+
+-----------------------------
+1. Server Environment
+-----------------------------
+- Host: AWS Lightsail (Ubuntu 22.04)
+- Static IP: Assigned via Lightsail dashboard - 18.218.206.65
+- Domain: Registered (biocharresearch.org via Squarespace)
+- Firewall: Open ports 22 (SSH), 80 (HTTP), 443 (HTTPS), 8000 (for internal testing)
+
+-----------------------------
+2. Application Setup
+-----------------------------
+- App directory: /home/ubuntu/biochar_app
+- Python virtual environment:
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+
+-----------------------------
+3. Gunicorn Setup (App Server)
+-----------------------------
+- Entry point: wsgi.py
+- systemd service file: /etc/systemd/system/biochar.service
+
+  [Unit]
+  Description=Gunicorn instance to serve Biochar Flask app
+  After=network.target
+
+  [Service]
+  User=ubuntu
+  Group=www-data
+  WorkingDirectory=/home/ubuntu/biochar_app
+  ExecStart=/home/ubuntu/biochar_app/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 wsgi:app
+
+  [Install]
+  WantedBy=multi-user.target
+
+Commands to enable:
+    sudo systemctl daemon-reload
+    sudo systemctl start biochar
+    sudo systemctl enable biochar
+
+-----------------------------
+4. Nginx Setup (Web Server)
+-----------------------------
+- Config file: /etc/nginx/sites-available/biochar
+- Symlinked to sites-enabled:
+    sudo ln -s /etc/nginx/sites-available/biochar /etc/nginx/sites-enabled/
+
+Final config (2 server blocks):
+
+  server {
+      listen 80;
+      server_name biocharresearch.org www.biocharresearch.org;
+
+      location / {
+          return 301 https://$host$request_uri;
+      }
+  }
+
+  server {
+      listen 443 ssl;
+      server_name biocharresearch.org www.biocharresearch.org;
+
+      ssl_certificate /etc/letsencrypt/live/biocharresearch.org/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/live/biocharresearch.org/privkey.pem;
+      include /etc/letsencrypt/options-ssl-nginx.conf;
+      ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+      location / {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+      }
+  }
+
+Restart nginx:
+    sudo nginx -t
+    sudo systemctl reload nginx
+
+-----------------------------
+5. HTTPS with Certbot
+-----------------------------
+Install:
+    sudo apt update
+    sudo apt install certbot python3-certbot-nginx
+
+Generate certs:
+    sudo certbot --nginx -d biocharresearch.org -d www.biocharresearch.org
+
+Verify auto-renew:
+    sudo certbot renew --dry-run
+
+-----------------------------
+6. DNS Settings (Squarespace)
+-----------------------------
+- A Record @ → 18.218.206.65
+- A Record www → 18.218.206.65
+
+-----------------------------
+7. Lightsail Firewall Rules
+-----------------------------
+Add these inbound rules:
+- HTTP (TCP 80)
+- HTTPS (TCP 443)
+- Custom (TCP 8000) [optional]
+- SSH (TCP 22)
+
+-----------------------------
+8. Snapshot & Backup
+-----------------------------
+Create a Lightsail snapshot now that deployment is verified. This allows rollback in case of error.
+
+-----------------------------
+Status: ✅ LIVE
+URL: https://biocharresearch.org
+-----------------------------
