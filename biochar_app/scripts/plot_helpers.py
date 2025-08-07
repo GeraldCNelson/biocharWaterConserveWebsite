@@ -225,6 +225,7 @@ def common_yaxis2_config(unit_system: str = "us") -> dict[str, Any]:
         "linewidth": 1,
         # always start at zero
         "rangemode": "tozero",
+        "tickformat": ".0f",
     }
 
 

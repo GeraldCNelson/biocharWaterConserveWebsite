@@ -482,6 +482,7 @@ def make_raw_gseason_figure(
             marker      = dict(color="LightSteelBlue"),
             yaxis       = "y2",
             offsetgroup = "0",
+            opacity     = 0.6,
         ))
 
     # 3) Sensor bars (already in % units, no *100)
