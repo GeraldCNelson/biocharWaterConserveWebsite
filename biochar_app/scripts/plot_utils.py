@@ -266,7 +266,7 @@ def add_irrigation_shapes(
     ))
 
 
-def configure_axes(
+def configure_primary_yaxis(
     fig: go.Figure,
     df: pd.DataFrame,
     y_cols: List[str],
@@ -372,7 +372,7 @@ def make_raw_figure(
         c for c in df.columns
         if c.startswith(f"{variable}_") and "_raw_" in c
     ]
-    configure_axes(
+    configure_primary_yaxis(
         fig=fig,
         df=df,
         y_cols=y_cols,         #sensor_cols,
@@ -445,13 +445,13 @@ def make_ratio_figure(
         height=400,
         autosize=True,
     )
-    configure_axes(fig, df, y_cols, variable, unit_system, kind="ratio")
+    configure_primary_yaxis(fig, df, y_cols, variable, unit_system, kind="ratio")
     return prepare_plot_for_json(fig)
 
 def make_raw_gseason_figure(
     *,
     df: pd.DataFrame,
-    periods: List[Any],           # list of PeriodSpec
+    periods: List[Any],
     variable: str,
     strip: str,
     logger_location: str,
@@ -461,135 +461,154 @@ def make_raw_gseason_figure(
     trace_option: str,
 ) -> Dict[str, Any]:
     """
-    Build a raw growing‐season bar chart with true grouped bars:
-      - precipitation in its own offsetgroup on y2
-      - sensor‐bars (percent, no extra *100)
-      - summed irrigation‐lines (one per period)
+    Raw growing‐season bar chart:
+      - precip‐bars on y2
+      - sensor‐bars on y1
+      - irrigation‐sum lines + annotation
+      - dummy irrigation bar on y2 for the legend
     """
 
-    # 1) category labels
+    # 1) build category labels
     labels = [f"{p.label}\n{p.start}-{p.end}" for p in periods]
-
     fig = go.Figure()
 
-    # 2) Precipitation (only for VWC) on true secondary axis
+    # 2) precipitation bars on y2
     precip_col = "precip_in" if unit_system == "us" else "precip_mm"
     if variable == "VWC" and precip_col in df.columns:
         fig.add_trace(go.Bar(
-            x           = labels,
-            y           = df[precip_col].tolist(),
-            name        = label_name_mapping["precip"][unit_system],
-            marker      = dict(color="LightSteelBlue"),
-            yaxis       = "y2",
-            offsetgroup = "0",
-            opacity     = 0.6,
+            x=labels,
+            y=df[precip_col].tolist(),
+            name=label_name_mapping["precip"][unit_system],
+            marker=dict(color="LightSteelBlue"),
+            yaxis="y2",
+            offsetgroup="0",
+            opacity=0.6,
         ))
 
-    # 3) Sensor bars (already in % units, no *100)
+    # 3) sensor bars on y1
     human_var   = label_name_mapping[variable][unit_system]
     abbrev      = variable_name_abbrev[variable]
     legend_pref = f"{abbrev}, {{}}"
 
     if trace_option == "depths":
-        # one location, multiple depths
         for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
             col = f"{variable}_{d}_raw_{strip}_{logger_location}"
             if col not in df.columns:
                 continue
             fig.add_trace(go.Bar(
-                x           = labels,
-                y           = df[col].astype(float).tolist(),
-                name        = legend_pref.format(depth_map[unit_system]),
-                offsetgroup = str(idx),
+                x=labels,
+                y=df[col].tolist(),
+                name=legend_pref.format(depth_map[unit_system]),
+                offsetgroup=str(idx),
             ))
     else:
-        # one depth, multiple locations
         for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
             col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
             if col not in df.columns:
                 continue
             fig.add_trace(go.Bar(
-                x           = labels,
-                y           = df[col].astype(float).tolist(),
-                name        = legend_pref.format(loc_label),
-                offsetgroup = str(idx),
+                x=labels,
+                y=df[col].tolist(),
+                name=legend_pref.format(loc_label),
+                offsetgroup=str(idx),
             ))
 
-    # 4) Summed irrigation‐lines (one per period)
-    if variable == "VWC":
-        add_irrigation_shapes(fig, strip, year, unit_system, sum_only=True, periods=periods)
+    # 4) irrigation‐sum vertical lines + annotation
+    evs      = load_irrigation_events(strip, year).to_dict(orient="records")
+    conv     = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
+    unit_lbl = "k L" if unit_system == "metric" else "k gal"
 
-    # 5a) pick exactly the G-season sensor cols we actually drew
-    sensor_cols = (
-        [f"{variable}_{d}_raw_{strip}_{logger_location}"
-         for d in sensor_depth_mapping
-         if f"{variable}_{d}_raw_{strip}_{logger_location}" in df.columns]
-        if trace_option == "depths"
-        else
-        [f"{variable}_{depth}_raw_{strip}_{loc_key}"
-         for loc_key in logger_location_mapping
-         if f"{variable}_{depth}_raw_{strip}_{loc_key}" in df.columns]
-    )
+    for i, p in enumerate(periods):
+        start_ts = pd.to_datetime(p.start)
+        end_ts   = pd.to_datetime(p.end)
+        total = sum(
+            float(ev.get("volume_gal", 0))
+            for ev in evs
+            if start_ts <= pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce") <= end_ts
+        )
+        if total:
+            if unit_system == "metric":
+                total = conv(total)
+            frac = i / (len(periods) - 1) if len(periods) > 1 else 0.5
+            fig.add_shape(
+                type="line",
+                xref="x domain", x0=frac, x1=frac,
+                yref="paper",     y0=0,     y1=1,
+                line=dict(color="Sienna", dash="dot", width=2),
+            )
+            fig.add_annotation(
+                xref="x domain", x=frac,
+                yref="paper",    y=1.02,
+                text=f"{total/1000:.0f} {unit_lbl}",
+                showarrow=False,
+                font=dict(size=10, color="Sienna"),
+            )
 
-    # 5b) now lay out the axes using that same sensor_cols
+    # 5) dummy zero‐height bar on y2 so “Irrigation” appears in legend
+    fig.add_trace(go.Bar(
+        x=labels,
+        y=[0] * len(labels),
+        name=label_name_mapping["irrigation"][unit_system],
+        marker=dict(color="Sienna"),
+        yaxis="y2",
+        offsetgroup=str(len(periods) + 1),
+    ))
+
+    # 6) layout including explicit y2 axis
     fig.update_layout(
-        barmode      = "group",
-        bargap       = 0.2,
-        bargroupgap  = 0.1,
-        title        = {
-            "text": f"Raw Growing-Season Means for {human_var} in {strip}, {year}",
-            "x": 0.5,
-        },
-        xaxis        = {
+        barmode="group",
+        bargap=0.2,
+        bargroupgap=0.1,
+        title={"text": f"Raw Growing-Season Means for {human_var} in {strip}, {year}", "x": 0.5},
+        xaxis={
             "title":    "Season",
             "type":     "category",
             "showline": True,
             "linecolor":"black",
             "linewidth":1,
         },
-        yaxis        = {
+        yaxis={
             **common_yaxis_config(
-                kind        = "raw",
-                variable    = variable,
-                unit_system = unit_system,
-                # compute global min/max only across the sensor columns, not precipitation
-                global_min  = df[sensor_cols].min(numeric_only=True).min(),
-                global_max  = df[sensor_cols].max(numeric_only=True).max(),
+                kind="raw",
+                variable=variable,
+                unit_system=unit_system,
+                global_min=df.filter(like=f"{variable}_").min(numeric_only=True).min(),
+                global_max=df.filter(like=f"{variable}_").max(numeric_only=True).max(),
             ),
             "title": human_var,
         },
-        yaxis2       = {
+        yaxis2={
             **common_yaxis2_config(unit_system),
             "overlaying": "y",
             "side":       "right",
         },
-        legend       = common_legend_config("Legend"),
-        template     = "plotly_white",
-        margin       = {"l":60, "r":20, "t":60, "b":40},
-        height       = 400,
+        legend=common_legend_config("Legend"),
+        template="plotly_white",
+        margin={"l":60, "r":20, "t":60, "b":40},
+        height=400,
     )
 
-    # 6) Auto‐scale the primary axis using only the sensor traces
+    # 7) finally, autoscale only the primary (y1) axis
     if trace_option == "depths":
-        sensor_cols = [
+        ycols = [
             f"{variable}_{d}_raw_{strip}_{logger_location}"
             for d in sensor_depth_mapping
             if f"{variable}_{d}_raw_{strip}_{logger_location}" in df.columns
         ]
     else:
-        sensor_cols = [
-            f"{variable}_{depth}_raw_{strip}_{loc_key}"
-            for loc_key in logger_location_mapping
-            if f"{variable}_{depth}_raw_{strip}_{loc_key}" in df.columns
+        ycols = [
+            f"{variable}_{depth}_raw_{strip}_{loc}"
+            for loc in logger_location_mapping
+            if f"{variable}_{depth}_raw_{strip}_{loc}" in df.columns
         ]
 
-    configure_axes(
-        fig         = fig,
-        df          = df,
-        y_cols      = sensor_cols,
-        variable    = variable,
-        unit_system = unit_system,
-        kind        = "raw",
+    configure_primary_yaxis(
+        fig=fig,
+        df=df,
+        y_cols=ycols,
+        variable=variable,
+        unit_system=unit_system,
+        kind="raw",
     )
 
     return prepare_plot_for_json(fig)
