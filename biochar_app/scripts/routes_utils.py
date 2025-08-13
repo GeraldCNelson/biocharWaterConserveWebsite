@@ -2,11 +2,23 @@ import os
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 from datetime import datetime
 
 from biochar_app.scripts.config import PARQUET_DIR, DEFAULT_GSEASON_PERIODS, DATA_RAW_DIR
 from biochar_app.scripts.gseason_utils import compute_seasons
+from dataclasses import dataclass
+from typing import List
+from biochar_app.scripts.weather_runtime import load_weather_range
+from biochar_app.scripts.config import UNIT_CONVERSIONS
+
+@dataclass
+class PeriodSpec:
+    code:  str   # e.g. "Q1_Winter"
+    label: str   # e.g. "Winter"
+    start: str   # ISO date "YYYY-MM-DD"
+    end:   str   # ISO date "YYYY-MM-DD"
+
 GSEASON_SUMMARY_DIR = PARQUET_DIR / "summary" / "gseason"
 logger = logging.getLogger(__name__)
 
@@ -119,7 +131,7 @@ def merge_all_loggers(year: int) -> pd.DataFrame:
         return pd.DataFrame()
     merged = pd.concat(frames, axis=1)
     merged = merged.loc[:, ~merged.columns.duplicated()]
-    merged = merged.loc[merged.index.year == year]
+    merged = restrict_to_year(merged, year)
     return merged
 
 
@@ -160,3 +172,17 @@ def load_gseason_df(
         unit_system=unit_system,
     )
 
+def restrict_to_year(df: pd.DataFrame, year: int) -> pd.DataFrame:
+    df = df.copy()
+
+    # Make sure the index is a tz-naive DatetimeIndex
+    idx = pd.DatetimeIndex(pd.to_datetime(df.index, errors="coerce"))
+    df = df.loc[idx.notna()]
+    idx = pd.DatetimeIndex(df.index)  # re-create after dropping NaT
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)   # remove timezone
+    df.index = idx
+
+    # String slice by year → always a DataFrame
+    out = df.loc[str(year)]
+    return cast(pd.DataFrame, out)

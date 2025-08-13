@@ -84,10 +84,6 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     console.log("🔖 trace names →", plotData.data.map(t => t.name));
     console.log("🔧 trace types →", plotData.data.map(t => t.type));
 
-    // 12) Optionally drop irrigation‐volume trace
-    plotData.data = plotData.data.filter(
-      t => t.name !== "Irrigation Volume (000 gal)"
-    );
 
     console.log("📊 final data →", plotData.data);
     console.log("📊 final layout →", plotData.layout);

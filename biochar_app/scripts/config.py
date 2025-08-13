@@ -20,6 +20,8 @@ GRANULARITIES = [
     ("gseason", None),      # growing-season summary
 ]
 
+IRR_COLOR = "rgba(160, 82, 45, 0.55)"  # semi-transparent sienna
+
 ms_per_day = 24 * 3600 * 1000
 bar_width_map = {
     "15min": 15 * 60 * 1000,

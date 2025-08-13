@@ -7,17 +7,25 @@ import json
 from plotly.utils import PlotlyJSONEncoder
 import logging
 
+# at the top of plot_utils.py
+from typing import TYPE_CHECKING, Any, List, Optional
+
+if TYPE_CHECKING:
+    from biochar_app.scripts.routes import PeriodSpec
+
 logger = logging.getLogger(__name__)
 
 from biochar_app.scripts.config import (PRECIP_COLS, DATA_PROCESSED_DIR, bar_width_map, label_name_mapping,
    sensor_depth_mapping,
+logger_location_mapping,
     TRACE_CHOICES,
     variable_name_abbrev,
     UNIT_CONVERSIONS,
+    IRR_COLOR,
 )
 
 from biochar_app.scripts.plot_helpers import (
-    sanitize_json,
+   #sanitize_json,
     compute_global_min_max,
     common_xaxis_config,
     common_yaxis_config,
@@ -29,16 +37,7 @@ from biochar_app.scripts.plot_helpers import (
     common_legend_config,
 )
 
-from datetime import datetime, timedelta
-
-from biochar_app.scripts.config import (
-    sensor_depth_mapping, logger_location_mapping,
-    variable_name_abbrev, label_name_mapping
-)
-from biochar_app.scripts.plot_helpers import (
-    common_yaxis_config, common_yaxis2_config,
-    common_legend_config
-)
+#from datetime import datetime, timedelta
 
 
 def init_time_figure(
@@ -76,11 +75,10 @@ def add_raw_traces(
         abort(400, f"No raw columns for {variable}, {strip}, {logger_location}")
 
     x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-    scale = 100 if variable == "VWC" else 1
 
     for col in y_cols:
         meta = parse_sensor_column(col, unit_system)
-        y_series = df[col].astype(float) * scale
+        y_series = df[col].astype(float)
         fig.add_trace(go.Scatter(
             x=x_vals,
             y=y_series.tolist(),
@@ -164,65 +162,68 @@ def add_irrigation_shapes(
     year: int,
     unit_system: str,
     sum_only: bool = False,
-    periods: Optional[List[dict]] = None,
+    periods: Optional[List[Any]] = None,           # PeriodSpec-ish (has .start/.end/.label)
+    category_labels: Optional[List[str]] = None,   # x-axis category labels (strings)
 ) -> None:
-    events = load_irrigation_events(strip, year)
-    conv = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
+    """
+    Draw irrigation:
+      • sum_only=True  -> one vertical dotted line per period at the *category* position,
+                          with "### k gal/k L" annotation above the plot.
+      • sum_only=False -> one vertical line per event on a date axis.
+      • Always adds a dummy legend entry matching the dotted line style.
+    """
+    events_df = load_irrigation_events(strip, year)
+    recs = events_df.to_dict(orient="records")
 
-    # Normalize to list-of‐dicts
-    if isinstance(events, pd.DataFrame):
-        recs = events.to_dict(orient="records")
-    else:
-        try:
-            recs = json.loads(events) if isinstance(events, str) else list(events)
-        except:
-            recs = []
+    conv     = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
+    unit_lbl = "k L" if unit_system == "metric" else "k gal"
 
-    # Summed‐per‐period
     if sum_only and periods:
-        for p in periods:
-            try:
-                start = pd.to_datetime(p["start"])
-                end   = pd.to_datetime(p["end"])
-            except:
+        # use category positions, not domain fractions
+        labels = category_labels or [
+            (getattr(p, "label", None) or str(i + 1)) for i, p in enumerate(periods)
+        ]
+
+        for i, p in enumerate(periods):
+            start_ts = pd.to_datetime(getattr(p, "start", None))
+            end_ts   = pd.to_datetime(getattr(p, "end", None))
+            if pd.isna(start_ts) or pd.isna(end_ts):
                 continue
 
-            vols = []
+            total = 0.0
             for ev in recs:
                 ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
-                if not pd.isna(ts) and start <= ts <= end:
-                    try:
-                        vols.append(float(ev.get("volume_gal")))
-                    except:
-                        pass
-            if not vols:
-                continue
+                if pd.isna(ts) or not (start_ts <= ts <= end_ts):
+                    continue
+                try:
+                    total += float(ev.get("volume_gal", 0))
+                except (TypeError, ValueError):
+                    pass
 
-            total = sum(vols)
+            if total <= 0:
+                continue
             if unit_system == "metric":
                 total = conv(total)
-                unit  = "k L"
-            else:
-                unit  = "k gal"
 
+            cat = labels[i]  # categorical x position
+            # vertical dotted line at the *category*, spanning the full plot height
             fig.add_shape(
                 type="line",
-                x0=start, x1=start,
-                y0=0,     y1=1,
-                yref="paper",
+                xref="x", x0=cat, x1=cat,
+                yref="paper", y0=0, y1=1,
                 line=dict(color="sienna", dash="dot", width=2),
             )
+            # “### k gal/k L” above the plot, centered over the same category
             fig.add_annotation(
-                x=start,
-                y=1.02,
-                yref="paper",
-                text=f"{total/1000:.0f} {unit}",
+                xref="x", x=cat,
+                yref="paper", y=1.02,
+                text=f"{total/1000:.0f} {unit_lbl}",
                 showarrow=False,
                 font=dict(size=10, color="sienna"),
             )
 
-    # Per‐event fallback
     elif not sum_only:
+        # date-time axis case
         for ev in recs:
             ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
             if pd.isna(ts):
@@ -230,32 +231,28 @@ def add_irrigation_shapes(
 
             fig.add_shape(
                 type="line",
-                x0=ts, x1=ts,
-                y0=0,  y1=1,
-                yref="paper",
+                xref="x", x0=ts, x1=ts,
+                yref="paper", y0=0, y1=1,
                 line=dict(color="sienna", dash="dot", width=2),
             )
-            try:
-                vol = float(ev.get("volume_gal"))
-            except:
-                continue
 
+            try:
+                vol = float(ev.get("volume_gal", 0))
+            except (TypeError, ValueError):
+                continue
             if unit_system == "metric":
                 vol = conv(vol)
-                unit = "k L"
-            else:
-                unit = "k gal"
 
             fig.add_annotation(
                 x=ts,
                 y=1.02,
                 yref="paper",
-                text=f"{vol/1000:.0f} {unit}",
+                text=f"{vol/1000:.0f} {unit_lbl}",
                 showarrow=False,
                 font=dict(size=10, color="sienna"),
             )
 
-    # Dummy legend trace
+    # Dummy legend entry that matches the dotted line style
     legend_label = get_unit_aware_label("irrigation", unit_system)
     fig.add_trace(go.Scatter(
         x=[None], y=[None],
@@ -274,8 +271,7 @@ def configure_primary_yaxis(
     unit_system: str,
     kind: str,
 ) -> None:
-    scale = 100 if (kind == "raw" and variable == "VWC") else 1
-    scaled = df[y_cols].astype(float) * scale
+    scaled = df[y_cols].astype(float)
     gmin, gmax = compute_global_min_max(scaled, y_cols)
 
     fig.update_layout(
@@ -306,7 +302,6 @@ def make_raw_figure(
 
     human_var = get_unit_aware_label(variable, unit_system)
     fig = go.Figure()
-    scale = 100 if variable == "VWC" else 1
     y_cols: List[str] = []
 
     # sensor traces
@@ -317,7 +312,7 @@ def make_raw_figure(
                 continue
             y_cols.append(col)
             x = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-            y = (df[col].astype(float) * scale).tolist()
+            y = df[col].astype(float).tolist()
             fig.add_trace(go.Scatter(
                 x=x, y=y, mode="lines", name=names[unit_system], line=dict(width=2)
             ))
@@ -328,7 +323,7 @@ def make_raw_figure(
                 continue
             y_cols.append(col)
             x = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-            y = (df[col].astype(float) * scale).tolist()
+            y = df[col].astype(float).tolist()
             fig.add_trace(go.Scatter(
                 x=x, y=y, mode="lines", name=loc_name, line=dict(width=2)
             ))
@@ -462,156 +457,184 @@ def make_raw_gseason_figure(
 ) -> Dict[str, Any]:
     """
     Raw growing‐season bar chart:
-      - precip‐bars on y2
-      - sensor‐bars on y1
-      - irrigation‐sum lines + annotation
-      - dummy irrigation bar on y2 for the legend
+      - precipitation bars on y2
+      - sensor bars on y1
+      - irrigation‐sum vertical lines + annotations (aligned to category)
+      - dummy irrigation trace so it appears in the legend
+      - verbose logging of y2 stats for debugging
     """
-
-    # 1) build category labels
     labels = [f"{p.label}\n{p.start}-{p.end}" for p in periods]
     fig = go.Figure()
 
-    # 2) precipitation bars on y2
+    # --- Precip on y2 (only shown for VWC)
     precip_col = "precip_in" if unit_system == "us" else "precip_mm"
-    if variable == "VWC" and precip_col in df.columns:
+    have_precip = (variable == "VWC") and (precip_col in df.columns)
+
+    precip_vals = None
+    if have_precip:
+        # Force numeric and log what we got
+        precip_vals = pd.to_numeric(df[precip_col], errors="coerce").astype(float)
+        try:
+            from math import isnan
+            vals_for_log = [None if (v is None or pd.isna(v)) else float(v) for v in precip_vals.tolist()]
+        except Exception:
+            vals_for_log = precip_vals.tolist()
+        logger.info("🌧️ G-season precip (%s) → %s", precip_col, vals_for_log)
+        if len(vals_for_log) == len(labels):
+            logger.info("🌧️ per-period precip (label → value): %s",
+                        list(zip(labels, vals_for_log)))
+
         fig.add_trace(go.Bar(
             x=labels,
-            y=df[precip_col].tolist(),
+            y=precip_vals.tolist(),
             name=label_name_mapping["precip"][unit_system],
             marker=dict(color="LightSteelBlue"),
             yaxis="y2",
             offsetgroup="0",
             opacity=0.6,
+            hovertemplate="Precip: %{y:.2f}" + (" in" if unit_system == "us" else " mm"),
         ))
 
-    # 3) sensor bars on y1
-    human_var   = label_name_mapping[variable][unit_system]
-    abbrev      = variable_name_abbrev[variable]
-    legend_pref = f"{abbrev}, {{}}"
+    # --- Sensor bars on y1
+    human_var  = label_name_mapping[variable][unit_system]
+    abbrev     = variable_name_abbrev[variable]
+    legend_fmt = f"{abbrev}, {{}}"
 
     if trace_option == "depths":
         for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
             col = f"{variable}_{d}_raw_{strip}_{logger_location}"
-            if col not in df.columns:
+            if col not in df:
                 continue
             fig.add_trace(go.Bar(
                 x=labels,
-                y=df[col].tolist(),
-                name=legend_pref.format(depth_map[unit_system]),
+                y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
+                name=legend_fmt.format(depth_map[unit_system]),
                 offsetgroup=str(idx),
             ))
     else:
         for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
             col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
-            if col not in df.columns:
+            if col not in df:
                 continue
             fig.add_trace(go.Bar(
                 x=labels,
-                y=df[col].tolist(),
-                name=legend_pref.format(loc_label),
+                y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
+                name=legend_fmt.format(loc_label),
                 offsetgroup=str(idx),
             ))
 
-    # 4) irrigation‐sum vertical lines + annotation
-    evs      = load_irrigation_events(strip, year).to_dict(orient="records")
-    conv     = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
-    unit_lbl = "k L" if unit_system == "metric" else "k gal"
+    # --- Irrigation lines + annotations (VWC only)
+    if variable == "VWC":
+        evs      = load_irrigation_events(strip, year).to_dict(orient="records")
+        conv     = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
+        unit_lbl = "k L" if unit_system == "metric" else "k gal"
 
-    for i, p in enumerate(periods):
-        start_ts = pd.to_datetime(p.start)
-        end_ts   = pd.to_datetime(p.end)
-        total = sum(
-            float(ev.get("volume_gal", 0))
-            for ev in evs
-            if start_ts <= pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce") <= end_ts
-        )
-        if total:
+        for i, p in enumerate(periods):
+            start_ts = pd.to_datetime(getattr(p, "start", None))
+            end_ts   = pd.to_datetime(getattr(p, "end", None))
+            if pd.isna(start_ts) or pd.isna(end_ts):
+                continue
+
+            total = 0.0
+            for ev in evs:
+                ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
+                if pd.isna(ts) or not (start_ts <= ts <= end_ts):
+                    continue
+                try:
+                    total += float(ev.get("volume_gal", 0))
+                except (TypeError, ValueError):
+                    pass
+
+            if total <= 0:
+                continue
             if unit_system == "metric":
                 total = conv(total)
-            frac = i / (len(periods) - 1) if len(periods) > 1 else 0.5
+
+            cat = labels[i]
+
             fig.add_shape(
                 type="line",
-                xref="x domain", x0=frac, x1=frac,
-                yref="paper",     y0=0,     y1=1,
-                line=dict(color="Sienna", dash="dot", width=2),
+                xref="x", x0=cat, x1=cat,
+                yref="paper", y0=0, y1=1,
+                line=dict(color=IRR_COLOR, dash="dot", width=2),
             )
             fig.add_annotation(
-                xref="x domain", x=frac,
-                yref="paper",    y=1.02,
+                xref="x", x=cat,
+                yref="paper", y=1.08,          # a bit higher to clear legend
                 text=f"{total/1000:.0f} {unit_lbl}",
                 showarrow=False,
-                font=dict(size=10, color="Sienna"),
+                font=dict(size=10, color="sienna"),
             )
 
-    # 5) dummy zero‐height bar on y2 so “Irrigation” appears in legend
-    fig.add_trace(go.Bar(
-        x=labels,
-        y=[0] * len(labels),
-        name=label_name_mapping["irrigation"][unit_system],
-        marker=dict(color="Sienna"),
-        yaxis="y2",
-        offsetgroup=str(len(periods) + 1),
-    ))
+        # Dummy legend entry (use NaN so it doesn’t render a point)
+        legend_label = get_unit_aware_label("irrigation", unit_system)
+        fig.add_trace(go.Scatter(
+            x=[labels[0]],
+            y=[float("nan")],
+            mode="lines",
+            line=dict(color=IRR_COLOR, dash="dot", width=2),
+            name=legend_label,
+            showlegend=True,
+            hoverinfo="skip",
+            legendgroup="irrigation",
+        ))
 
-    # 6) layout including explicit y2 axis
+    # --- Layout & axis scaling
+    primary_min = df.filter(like=f"{variable}_").min(numeric_only=True).min()
+    primary_max = df.filter(like=f"{variable}_").max(numeric_only=True).max()
+
+    # Build y2 config with a sane range and readable ticks
+    y2_cfg: dict[str, Any] = {
+        **common_yaxis2_config(unit_system),
+        "overlaying": "y",
+        "side": "right",
+        "tickmode": "auto",
+        "nticks": 5,
+    }
+
+    if have_precip:
+        pmin = float(np.nanmin(precip_vals.values))
+        pmax = float(np.nanmax(precip_vals.values))
+        if not np.isfinite(pmin):
+            pmin = 0.0
+        if not np.isfinite(pmax) or pmax <= 0:
+            pmax = 0.1
+
+        top = pmax * 1.15
+        y2_cfg["range"] = (0.0, top)  # tuple is fine; type-hint avoids PyCharm warning
+        y2_cfg["tickformat"] = ".4f" if pmax < 0.01 else ".2f"
+        y2_cfg["hoverformat"] = y2_cfg["tickformat"]
+
     fig.update_layout(
         barmode="group",
         bargap=0.2,
         bargroupgap=0.1,
         title={"text": f"Raw Growing-Season Means for {human_var} in {strip}, {year}", "x": 0.5},
         xaxis={
-            "title":    "Season",
-            "type":     "category",
+            "title": "Season",
+            "type": "category",
             "showline": True,
-            "linecolor":"black",
-            "linewidth":1,
+            "linecolor": "black",
+            "linewidth": 1,
         },
         yaxis={
-            **common_yaxis_config(
-                kind="raw",
-                variable=variable,
-                unit_system=unit_system,
-                global_min=df.filter(like=f"{variable}_").min(numeric_only=True).min(),
-                global_max=df.filter(like=f"{variable}_").max(numeric_only=True).max(),
-            ),
+            **common_yaxis_config("raw", variable, unit_system, primary_min, primary_max),
             "title": human_var,
         },
-        yaxis2={
-            **common_yaxis2_config(unit_system),
-            "overlaying": "y",
-            "side":       "right",
-        },
-        legend=common_legend_config("Legend"),
+        yaxis2=y2_cfg,
+        legend=dict(
+            **common_legend_config("Legend"),
+            bgcolor="rgba(255,255,255,0.65)",  # translucent legend background
+            bordercolor="rgba(0,0,0,0.15)",
+            borderwidth=1
+        ),
         template="plotly_white",
-        margin={"l":60, "r":20, "t":60, "b":40},
+        margin={"l": 60, "r": 20, "t": 70, "b": 40},  # extra top space for irrigation labels
         height=400,
     )
 
-    # 7) finally, autoscale only the primary (y1) axis
-    if trace_option == "depths":
-        ycols = [
-            f"{variable}_{d}_raw_{strip}_{logger_location}"
-            for d in sensor_depth_mapping
-            if f"{variable}_{d}_raw_{strip}_{logger_location}" in df.columns
-        ]
-    else:
-        ycols = [
-            f"{variable}_{depth}_raw_{strip}_{loc}"
-            for loc in logger_location_mapping
-            if f"{variable}_{depth}_raw_{strip}_{loc}" in df.columns
-        ]
-
-    configure_primary_yaxis(
-        fig=fig,
-        df=df,
-        y_cols=ycols,
-        variable=variable,
-        unit_system=unit_system,
-        kind="raw",
-    )
-
     return prepare_plot_for_json(fig)
+
 
 def make_ratio_gseason_figure(
     *,

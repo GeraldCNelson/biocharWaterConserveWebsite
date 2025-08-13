@@ -204,28 +204,18 @@ def common_yaxis_config(
     return axis_cfg
 
 def common_yaxis2_config(unit_system: str = "us") -> dict[str, Any]:
-    """
-    Build a yaxis2 configuration dict for Plotly’s secondary axis
-    (precipitation), overlayed on the right.
-    """
-    # choose label based on units
     unit_label = "mm" if unit_system == "metric" else "inches"
-
     return {
-        # axis title
         "title": {"text": f"Precipitation ({unit_label})"},
-        # overlay on the primary y
         "overlaying": "y",
-        # show on the right side
         "side": "right",
-        # don’t draw grid lines for this axis
         "showgrid": False,
         "showline": True,
         "linecolor": "black",
         "linewidth": 1,
-        # always start at zero
         "rangemode": "tozero",
-        "tickformat": ".0f",
+        "tickformat": ".1f",
+        "nticks": 5,
     }
 
 
