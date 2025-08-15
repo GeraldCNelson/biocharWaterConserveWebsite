@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Tuple, Optional, Union
 from flask import abort
 import json
 from plotly.utils import PlotlyJSONEncoder
 import logging
 
+from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
 # at the top of plot_utils.py
 from typing import TYPE_CHECKING, Any, List, Optional
 
@@ -463,7 +464,10 @@ def make_raw_gseason_figure(
       - dummy irrigation trace so it appears in the legend
       - verbose logging of y2 stats for debugging
     """
-    labels = [f"{p.label}\n{p.start}-{p.end}" for p in periods]
+    # --- Normalize periods -> list[dict] with keys: code,label,start,end (start/end are MM-DD)
+    norm_periods = periods_to_list_of_dicts(periods or [])
+    labels = [f"{p['label']}\n{p['start']}-{p['end']}" for p in norm_periods]
+
     fig = go.Figure()
 
     # --- Precip on y2 (only shown for VWC)
@@ -475,7 +479,6 @@ def make_raw_gseason_figure(
         # Force numeric and log what we got
         precip_vals = pd.to_numeric(df[precip_col], errors="coerce").astype(float)
         try:
-            from math import isnan
             vals_for_log = [None if (v is None or pd.isna(v)) else float(v) for v in precip_vals.tolist()]
         except Exception:
             vals_for_log = precip_vals.tolist()
@@ -524,17 +527,27 @@ def make_raw_gseason_figure(
             ))
 
     # --- Irrigation lines + annotations (VWC only)
-    if variable == "VWC":
+    if variable == "VWC" and norm_periods:
         evs      = load_irrigation_events(strip, year).to_dict(orient="records")
         conv     = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
         unit_lbl = "k L" if unit_system == "metric" else "k gal"
 
-        for i, p in enumerate(periods):
-            start_ts = pd.to_datetime(getattr(p, "start", None))
-            end_ts   = pd.to_datetime(getattr(p, "end", None))
-            if pd.isna(start_ts) or pd.isna(end_ts):
-                continue
+        # Build absolute timestamps for each period (handles wrap-around)
+        start_end_pairs: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
+        for p in norm_periods:
+            s = str(p["start"]); e = str(p["end"])
+            try:
+                sm = int(s[:2]); em = int(e[:2])
+            except Exception:
+                sm = em = 1  # fallback (won't wrap)
+            start_year = year - 1 if sm > em else year
+            end_year   = year
+            start_ts = pd.Timestamp(f"{start_year}-{s}")
+            # end inclusive to end-of-day
+            end_ts   = pd.Timestamp(f"{end_year}-{e}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            start_end_pairs.append((start_ts, end_ts))
 
+        for (start_ts, end_ts), cat in zip(start_end_pairs, labels):
             total = 0.0
             for ev in evs:
                 ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
@@ -549,8 +562,6 @@ def make_raw_gseason_figure(
                 continue
             if unit_system == "metric":
                 total = conv(total)
-
-            cat = labels[i]
 
             fig.add_shape(
                 type="line",
@@ -601,7 +612,7 @@ def make_raw_gseason_figure(
             pmax = 0.1
 
         top = pmax * 1.15
-        y2_cfg["range"] = (0.0, top)  # tuple is fine; type-hint avoids PyCharm warning
+        y2_cfg["range"] = (0.0, top)
         y2_cfg["tickformat"] = ".4f" if pmax < 0.01 else ".2f"
         y2_cfg["hoverformat"] = y2_cfg["tickformat"]
 
@@ -624,17 +635,16 @@ def make_raw_gseason_figure(
         yaxis2=y2_cfg,
         legend=dict(
             **common_legend_config("Legend"),
-            bgcolor="rgba(255,255,255,0.65)",  # translucent legend background
+            bgcolor="rgba(255,255,255,0.65)",
             bordercolor="rgba(0,0,0,0.15)",
             borderwidth=1
         ),
         template="plotly_white",
-        margin={"l": 60, "r": 20, "t": 70, "b": 40},  # extra top space for irrigation labels
+        margin={"l": 60, "r": 20, "t": 70, "b": 40},
         height=400,
     )
 
     return prepare_plot_for_json(fig)
-
 
 def make_ratio_gseason_figure(
     *,

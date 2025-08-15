@@ -85,7 +85,7 @@ class PakbusConfig:
 # )
 
 PAKBUS = PakbusConfig(
-    host=os.getenv("PAKBUS_HOST", "2605:59c0:3000:dfef:ea9c:25ff:fed5:5928"),
+    host=os.getenv("PAKBUS_HOST", "2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd"),
     port=int(os.getenv("PAKBUS_PORT", 6785)),
     base_id=int(os.getenv("PAKBUS_BASE_ID", 4093)),
     logger_ids=list(range(2, 14)),

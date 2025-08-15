@@ -2,15 +2,17 @@ import os
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, cast, Any
 from datetime import datetime
+from collections.abc import Mapping
 
 from biochar_app.scripts.config import PARQUET_DIR, DEFAULT_GSEASON_PERIODS, DATA_RAW_DIR
-from biochar_app.scripts.gseason_utils import compute_seasons
+from biochar_app.scripts.gseason import compute_seasons
 from dataclasses import dataclass
 from typing import List
 from biochar_app.scripts.weather_runtime import load_weather_range
 from biochar_app.scripts.config import UNIT_CONVERSIONS
+from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
 
 @dataclass
 class PeriodSpec:
@@ -134,43 +136,75 @@ def merge_all_loggers(year: int) -> pd.DataFrame:
     merged = restrict_to_year(merged, year)
     return merged
 
-
-
 def load_gseason_df(
     year: int,
-    periods: list[dict],
-    precip_col: str = "precip_in",
+    periods: Any,
     unit_system: str = "us",
     use_ratios: bool = False,
 ) -> pd.DataFrame:
     """
     Load growing‐season aggregated data for `year`.
 
-    If periods is empty:
-      - loads summary/gseason/{year}_gseason.parquet  (use_ratios=False)
-      - or summary/gseason/{year}_gseason_ratios.parquet  (use_ratios=True)
+    If `periods` is empty:
+      - loads summary/gseason/{year}_gseason.parquet        (use_ratios=False)
+      - or summary/gseason/{year}_gseason_ratios.parquet    (use_ratios=True)
 
-    Otherwise, slices the raw 15-min data via compute_seasons().
+    Otherwise:
+      - normalizes PeriodSpec / mappings -> list[dict]
+      - builds the mapping shape compute_seasons expects
+      - slices the raw 15-min data via compute_seasons() (unit-agnostic)
+      - ensures both precip_in and precip_mm exist
+      - adds 'precip' + 'precip_unit' presentation columns per unit_system
     """
-    # 1) If no custom periods, load the on-disk summary (raw or ratios).
+    # 1) If no custom periods, load on-disk summary (raw or ratios)
     if not periods:
-        fn_raw = GSEASON_SUMMARY_DIR / f"{year}_gseason.parquet"
+        fn_raw   = GSEASON_SUMMARY_DIR / f"{year}_gseason.parquet"
         fn_ratio = GSEASON_SUMMARY_DIR / f"{year}_gseason_ratios.parquet"
         fn = fn_ratio if use_ratios else fn_raw
-        return pd.read_parquet(fn)
+        df = pd.read_parquet(fn)
+    else:
+        # 2) Normalize PeriodSpec / dict / mapping → list[dict]
+        periods_list = periods_to_list_of_dicts(periods)
 
-    # 2) Otherwise, slice the 15-min data:
-    df_15min = load_logger_year(year, "15min")
-    df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
-    df_15min = df_15min.set_index("timestamp", drop=False)
+        # 3) Convert to mapping shape for compute_seasons:
+        #    { code: {"label": str, "start": "MM-DD", "end": "MM-DD"} }
+        period_map = {
+            p["code"]: {"label": p["label"], "start": p["start"], "end": p["end"]}
+            for p in periods_list
+        }
 
-    return compute_seasons(
-        df=df_15min,
-        periods=periods,
-        precip_col=precip_col,
-        include_precip=True,
-        unit_system=unit_system,
-    )
+        # 4) Load 15-min logger data and ensure a DatetimeIndex
+        df_15min = load_logger_year(year, "15min")
+        df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
+        df_15min = df_15min.set_index("timestamp", drop=False)
+
+        # 5) Compute seasonal rows (sums precip, means others)
+        df = compute_seasons(
+            df=df_15min,
+            year=year,
+            periods=period_map,
+            include_precip=True,
+        )
+
+    # 6) Ensure both precip columns exist, then add presentation alias
+    has_in = "precip_in" in df.columns
+    has_mm = "precip_mm" in df.columns
+    if has_in and not has_mm:
+        df["precip_mm"] = pd.to_numeric(df["precip_in"], errors="coerce") * 25.4
+    elif has_mm and not has_in:
+        df["precip_in"] = pd.to_numeric(df["precip_mm"], errors="coerce") / 25.4
+    elif not has_in and not has_mm:
+        df["precip_in"] = pd.NA
+        df["precip_mm"] = pd.NA
+
+    if unit_system == "metric":
+        df["precip"] = df["precip_mm"]
+        df["precip_unit"] = "mm"
+    else:
+        df["precip"] = df["precip_in"]
+        df["precip_unit"] = "in"
+
+    return df
 
 def restrict_to_year(df: pd.DataFrame, year: int) -> pd.DataFrame:
     df = df.copy()

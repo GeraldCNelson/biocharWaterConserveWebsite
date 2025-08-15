@@ -1,208 +1,110 @@
-import os
-import json
-import logging
+"""
+Growing-season core utilities.
+
+Provides:
+  • compute_seasons(...) – build per-period rows from a time-indexed DataFrame
+      - MEANS for non-precip variables
+      - SUM for precip increments (precip_in / precip_mm)
+  • assign_gseason_periods(...) – tag a timestamp with a season code
+"""
+
+from typing import Mapping, Any
 import pandas as pd
-from datetime import datetime
-from pathlib import Path
-from typing import Dict
-
-from biochar_app.scripts.gseason_utils import compute_seasons, assign_gseason_periods
-
-from biochar_app.scripts.config import (
-    DATA_PROCESSED_DIR,
-    VARIABLES,
-    STRIPS,
-    DEPTHS,
-    DEFAULT_GSEASON_PERIODS,
-    YEARS,
-    PRECIP_COLS,
-)
-
-from biochar_app.scripts.routes_utils import load_logger_year
-
-# Generate growing season summary statistics(min, mean, m
-# ax, std) for each growing season period in a year
-def generate_gseason_summary(
-    year: int,
-    periods: dict[str, dict[str, str]] | None = None,
-    overwrite: bool = False,
-) -> None:
-    """
-    Generate and persist growing-season summary for a given year.
-
-    This function delegates the work to compute_seasons(), which:
-      - loads the 15-minute logger data for `year`
-      - applies each period in `periods` (defaulting to GSEASON_PERIODS)
-      - computes raw and ratio statistics per variable/strip/depth
-      - writes out a JSON file named gseason_summary_{year}.json
-      - logs progress and respects the `overwrite` flag
-
-    Args:
-        year: calendar year to summarize.
-        periods: mapping of period codes to { label, start, end }; if None,
-                 uses the default GSEASON_PERIODS from config.
-        overwrite: if True, regenerate even if the output JSON already exists.
-    """
-    compute_seasons(year=year, periods=periods or GSEASON_PERIODS, overwrite=overwrite)
+from biochar_app.scripts.config import DEFAULT_GSEASON_PERIODS
 
 
-def compute_summary_statistics(df, variable: str, strip: str, depth: str):
-    """
-    Compute summary statistics for raw and ratio values filtered by variable, strip, and depth.
-    Returns two dictionaries: raw_stats and ratio_stats.
-    """
-    if not variable or not strip or not depth or df is None or df.empty:
-        return {}, {}
-
-    df = df.copy()
-    raw_stats = {}
-    ratio_stats = {}
-
-    # Build expected prefixes
-    raw_prefix = f"{variable}_{depth}_raw_{strip}_"
-    ratio_prefixes = [
-        f"{variable}_{depth}_ratio_S1_S2_",
-        f"{variable}_{depth}_ratio_S3_S4_"
-    ]
-
-    # ✅ Compute RAW stats
-    raw_cols = [col for col in df.columns if col.startswith(raw_prefix)]
-    for col in raw_cols:
-        series = df[col].dropna()
-        if not series.empty:
-            raw_stats[col] = {
-                "min": round(series.min(), 4),
-                "mean": round(series.mean(), 4),
-                "max": round(series.max(), 4),
-                "std": round(series.std(), 4),
-            }
-
-    # ✅ Compute RATIO stats
-    for prefix in ratio_prefixes:
-        for col in df.columns:
-            if col.startswith(prefix):
-                series = df[col].dropna()
-                if not series.empty:
-                    ratio_stats[col] = {
-                        "min": round(series.min(), 4),
-                        "mean": round(series.mean(), 4),
-                        "max": round(series.max(), 4),
-                        "std": round(series.std(), 4),
-                    }
-
-    return raw_stats, ratio_stats
+def _slice_and_mean(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+    """Column-wise mean of df[start:end] (inclusive). Assumes DatetimeIndex."""
+    mask = (df.index >= start) & (df.index <= end)
+    return df.loc[mask].mean(numeric_only=True)
 
 
-def get_flat_gseason_summary(year: int) -> pd.DataFrame:
-    """
-    Flatten the nested dict into a DataFrame with columns:
-      period_code, variable, strip, depth, location,
-      plus raw_… statistics and ratio_… statistics all as separate columns.
-    """
-    nested = load_or_generate_gseason_summary(year)
-    records = []
-
-    for period_code, by_var in nested.items():
-        # by_var is e.g. { "VWC": {"S1_D1": {...}, "S1_D2": {...}, …}, "EC": {…}, … }
-        for var, by_strip_depth in by_var.items():
-            # by_strip_depth is e.g. {"S1_D1": { "raw_statistics": {...}, "ratio_statistics": {...} }, …}
-            for strip_depth, stats in by_strip_depth.items():
-                strip, depth = strip_depth.split("_D", 1)
-                # raw first
-                raw_stats = stats.get("raw_statistics", {})
-                for col_name, metrics in raw_stats.items():
-                    # e.g. col_name = "VWC_1_raw_S1_T"
-                    *_, loc = col_name.rsplit("_", 1)
-                    rec = {
-                        "period_code": period_code,
-                        "variable":    var,
-                        "strip":       strip,
-                        "depth":       depth,
-                        "location":    loc,
-                    }
-                    rec.update({ f"raw_{k}": v for k, v in metrics.items() })
-                    records.append(rec)
-
-                # then ratio
-                ratio_stats = stats.get("ratio_statistics", {})
-                for col_name, metrics in ratio_stats.items():
-                    *_, loc = col_name.rsplit("_", 1)
-                    rec = {
-                        "period_code": period_code,
-                        "variable":    var,
-                        "strip":       strip,
-                        "depth":       depth,
-                        "location":    loc,
-                    }
-                    rec.update({ f"ratio_{k}": v for k, v in metrics.items() })
-                    records.append(rec)
-    return pd.DataFrame.from_records(records)
-
-
-def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict:
-    """
-    Load the nested JSON summary (period → variable → strip_depth → stats).
-    Returns the raw dict, not a DataFrame.
-    """
-    summary_path = Path(DATA_PROCESSED_DIR) / f"gseason_summary_{year}.json"
-    if not summary_path.exists() or overwrite:
-        # avoid circular imports at module‐load time
-        generate_gseason_summary(year, overwrite=overwrite)
-    with summary_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def format_gseason_label(code):
-    period = GSEASON_PERIODS.get(code)
-    if not period:
-        return code.replace("_", " ")  # fallback
-
-    month_abbr = lambda date_str: datetime.strptime(date_str, "%m-%d").strftime("%b")
-    start_month = month_abbr(period["start"])
-    end_month = month_abbr(period["end"])
-    label = period["label"]
-    return f"{label} Season Summary ({start_month}–{end_month})"
-
-
-def calculate_gseason_precip(
+def compute_seasons(
     df: pd.DataFrame,
     year: int,
-    unit_system: str,
+    periods: Mapping[str, Mapping[str, Any]] = DEFAULT_GSEASON_PERIODS,
+    *,
+    include_precip: bool = True,
 ) -> pd.DataFrame:
     """
-    For each growing‐season period, sum up precipitation in the correct units
-    and return a DataFrame with columns:
-       period_code, start, end, precip
+    Compute one row per custom period.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Must have a DatetimeIndex in local (naive) America/Denver, and contain
+        either 'precip_in' or 'precip_mm' if include_precip=True.
+        Precip values must be **increments** (e.g., 5-min), already cleaned (-999→NaN→0, negatives→0).
+        If a 'timestamp' column exists, it will be set as index.
+    year : int
+        Calendar year to which seasonal windows are anchored.
+    periods : mapping
+        DEFAULT_GSEASON_PERIODS-like dict: { code: {"label": str, "start": "MM-DD", "end": "MM-DD"} }
+    include_precip : bool
+        If True, sum the precip increments for each window.
+
+    Returns
+    -------
+    DataFrame with one row per period (code, label, start, end, precip?, plus MEANs of other columns).
     """
-    # pick the right precip column already in your gseason‐df
-    precip_col = f"precip_{PRECIP_COLS[unit_system]}"
-    if precip_col not in df.columns:
-        return pd.DataFrame(columns=["period_code","start","end","precip"])
+    if "timestamp" in df.columns:
+        df = df.set_index(pd.to_datetime(df["timestamp"], errors="coerce")).drop(columns=["timestamp"])
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError("compute_seasons: df must be indexed by DatetimeIndex or contain a 'timestamp' column.")
 
-    # tag each row with its season code
-    temp = df[["timestamp", precip_col]].dropna().copy()
-    temp["period_code"] = temp["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
-    temp = temp[temp["period_code"].notna()]
+    have_precip_in = "precip_in" in df.columns
+    have_precip_mm = "precip_mm" in df.columns
+    precip_col = "precip_in" if have_precip_in else ("precip_mm" if have_precip_mm else None)
 
-    # sum by period
-    out = (
-        temp
-        .groupby("period_code", as_index=False)[precip_col]
-        .sum()
-        .rename(columns={precip_col:"precip"})
-    )
+    out_rows = []
+    for code, spec in periods.items():
+        sm, sd = map(int, spec["start"].split("-"))
+        em, ed = map(int, spec["end"].split("-"))
 
-    # attach start/end timestamps
-    starts, ends = {}, {}
-    for code, period in GSEASON_PERIODS.items():
-        sm, _ = map(int, period["start"].split("-"))
-        em, _ = map(int, period["end"].split("-"))
-        start_year = year-1 if sm>em else year
+        # Resolve window for this calendar year (wrap-aware, e.g., Nov–Feb)
+        start_year = year - 1 if sm > em else year
         end_year   = year
-        starts[code] = pd.Timestamp(f"{start_year}-{period['start']}")
-        ends[code]   = (pd.Timestamp(f"{end_year}-{period['end']}")
-                        + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
-    out["start"] = out["period_code"].map(starts)
-    out["end"]   = out["period_code"].map(ends)
+        start = pd.Timestamp(f"{start_year}-{spec['start']}")
+        end   = pd.Timestamp(f"{end_year}-{spec['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
-    return out
+        # MEAN of all non-precip columns
+        means = _slice_and_mean(df.drop(columns=[precip_col], errors="ignore"), start, end).to_dict()
+
+        row = {
+            "code":  code,
+            "label": spec.get("label", code.replace("_", " ")),
+            "start": start,
+            "end":   end,
+        }
+        row.update(means)
+
+        # SUM of precip increments over the window
+        if include_precip and precip_col is not None:
+            ser = pd.to_numeric(df[precip_col], errors="coerce").fillna(0.0).clip(lower=0.0)
+            mask = (df.index >= start) & (df.index <= end)
+            row[precip_col] = float(ser.loc[mask].sum())
+
+        out_rows.append(row)
+
+    return pd.DataFrame(out_rows)
+
+
+def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
+    """
+    Return the period code in DEFAULT_GSEASON_PERIODS that contains timestamp `ts`.
+    Handles wrap-around windows (e.g., Nov–Feb maps to the given `year`).
+    """
+    ts = pd.to_datetime(ts)
+    for code, period in DEFAULT_GSEASON_PERIODS.items():
+        sm, sd = map(int, period["start"].split("-"))
+        em, ed = map(int, period["end"].split("-"))
+
+        start_year = year - 1 if sm > em else year
+        end_year   = year
+
+        start = pd.Timestamp(f"{start_year}-{period['start']}")
+        end   = pd.Timestamp(f"{end_year}-{period['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+        if start <= ts <= end:
+            return code
+    return None
