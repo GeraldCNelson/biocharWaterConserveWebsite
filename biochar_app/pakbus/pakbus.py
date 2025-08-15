@@ -1366,8 +1366,8 @@ def filedownload(s, DstNodeId, SrcNodeId, FileName, FileData, SecurityCode = 0x0
 
         try:
             RespCode = msg['RespCode']
-            # End loop if response code <> 0
-            if RespCode <> 0:
+            # End loop if response code not equal to 0
+            if RespCode != 0:
                 break
             # Append file data
             FileOffset += Swath
@@ -1460,7 +1460,7 @@ def collect_data(s, DstNodeId, SrcNodeId, TableDef, TableName, FieldNames = [], 
     # Get table number
     tablenbr = get_TableNbr(TableDef, TableName)
     if tablenbr is None:
-        raise StandardError('table %s not found in table definition' % TableName)
+        raise Exception(f"table {TableName} not found in table definition")
 
     # Get table definition signature
     tabledefsig = TableDef[tablenbr - 1]['Signature']
@@ -1533,7 +1533,7 @@ def open_socket(Host, Port = 6785, Timeout = 30):
         af, socktype, proto, canonname, sa = res
         try:
             s = socket.socket(af, socktype, proto)
-        except socket.error, msg:
+            except socket.error as msg:
             s = None
             continue
         try:

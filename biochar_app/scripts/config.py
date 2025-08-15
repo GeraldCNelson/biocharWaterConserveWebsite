@@ -70,6 +70,23 @@ DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))  # 
 DEFAULT_LAG_MINUTES = 30  # Delay before current time to ensure data availability
 
 # PakBus settings all in one place
+
+
+def _parse_ids(s: str) -> List[int]:
+    """
+    Supports '2-13' or '2,3,5-7'. Defaults to an empty list on bad input.
+    """
+    out: list[int] = []
+    for part in s.replace(" ", "").split(","):
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            out.extend(range(int(a), int(b) + 1))
+        else:
+            out.append(int(part))
+    return out
+
 @dataclass(frozen=True)
 class PakbusConfig:
     host: str
@@ -77,19 +94,13 @@ class PakbusConfig:
     base_id: int
     logger_ids: List[int]
 
-# PAKBUS = PakbusConfig(
-#     host=os.getenv("PAKBUS_HOST", "2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD"),
-#     port=int(os.getenv("PAKBUS_PORT", 6785)),
-#     base_id=int(os.getenv("PAKBUS_BASE_ID", 4093)),
-#     logger_ids=list(range(2, 14)),
-# )
-
 PAKBUS = PakbusConfig(
     host=os.getenv("PAKBUS_HOST", "2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd"),
     port=int(os.getenv("PAKBUS_PORT", 6785)),
     base_id=int(os.getenv("PAKBUS_BASE_ID", 4094)),
     logger_ids=list(range(2, 14)),
 )
+
 
 # Weather data constants
 COAG_STATION = "frt03"

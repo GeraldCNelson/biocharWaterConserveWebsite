@@ -13,7 +13,6 @@ Key points:
 from __future__ import annotations
 
 import logging
-import re
 import shutil
 import socket
 import subprocess
@@ -23,9 +22,6 @@ from typing import Iterator, Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import pylink
-from pylink import TCPLink as _OrigTCPLink
-import pycampbellcr1000.device as device_mod
 from pycampbellcr1000 import CR1000
 from pycampbellcr1000.exceptions import NoDeviceException
 
@@ -35,78 +31,14 @@ from biochar_app.scripts.config import (
     DEFAULT_TABLE,
     DEFAULT_LAG_MINUTES,
 )
+# Use the shared IPv6 link + URL override implementation
+from biochar_app.pakbus.link import install_url_override, open_pakbus_link
 
-ROUTER_ID = 1  # CR800 PakBus ID
+# Install pakbus://[IPv6]:port URL override once per process
+install_url_override()
 
-# ----------------------------------------------------------------------------
-# IPv6 TCP link that understands IPv6 literals cleanly
-# ----------------------------------------------------------------------------
-class IPv6TCPLink(_OrigTCPLink):
-    """
-    TCPLink that connects to an IPv6 literal without gethostbyname() IPv4 pitfalls.
-    Idempotent open(): if already connected, it returns immediately.
-    """
-    def __init__(self, host: str, port: int, timeout: float | None = None):
-        self._socket: Optional[socket.socket] = None
-        self._is_ipv6_literal = ":" in host
-        self._v6_addr: Optional[tuple[str, int, int, int]] = None
-
-        if self._is_ipv6_literal:
-            self.host = host
-            self.port = port
-            self.timeout = timeout or 10.0
-            self._v6_addr = (host, port, 0, 0)
-        else:
-            super().__init__(host, port, timeout)
-
-    def open(self):
-        if self._socket is not None:
-            return self
-
-        if self._is_ipv6_literal and self._v6_addr is not None:
-            logging.debug(f"Opening IPv6 socket to {self._v6_addr!r}")
-            s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            s.settimeout(self.timeout)
-            try:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            except Exception:
-                pass
-            s.connect(self._v6_addr)
-            self._socket = s
-            return self
-
-        logging.debug(f"Opening default TCPLink to {self.address!r}")
-        return super().open()
-
-    def close(self):
-        if self._socket:
-            try:
-                self._socket.close()
-            except Exception:
-                pass
-            finally:
-                self._socket = None
-        else:
-            try:
-                super().close()
-            except Exception:
-                pass
-
-# ----------------------------------------------------------------------------
-# URL override: pakbus://[IPv6]:port  →  IPv6TCPLink
-# ----------------------------------------------------------------------------
-_original_link_from_url = pylink.link_from_url
-
-def _link_from_url_override(url: str):
-    m = re.match(r'(?i)^\s*pakbus://\[(?P<host>[^]]+)]:(?P<port>\d+)\s*$', url)
-    if m:
-        host, port = m.group("host"), int(m.group("port"))
-        logging.debug(f"PakBus IPv6 override: host={host}, port={port}")
-        return IPv6TCPLink(host, port)
-    return _original_link_from_url(url)
-
-# Apply override for both pylink and pycampbellcr1000
-pylink.link_from_url = device_mod.link_from_url = _link_from_url_override
+# CR800 (router) PakBus ID; default to 1 if not present in config
+ROUTER_ID = getattr(PAKBUS, "router_id", 1)
 
 # ----------------------------------------------------------------------------
 # Logging (DEBUG as requested)
@@ -115,7 +47,6 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logging.getLogger("pylink").setLevel(logging.DEBUG)
 logging.getLogger("pycampbellcr1000").setLevel(logging.DEBUG)
 
 # ----------------------------------------------------------------------------
@@ -124,6 +55,7 @@ logging.getLogger("pycampbellcr1000").setLevel(logging.DEBUG)
 def ping6(host: str) -> bool:
     """
     ICMPv6 probe (macOS: ping6 or ping -6). Returns True on any reply.
+    Advisory only; many networks rate-limit ICMPv6.
     """
     logging.info(f"Pinging IPv6 host [{host}]...")
     if shutil.which("ping6"):
@@ -157,24 +89,6 @@ def quick_port_check_ipv6(host: str, port: int, timeout: float = 3.0) -> tuple[b
         return False, f"timeout: {e}"
     except OSError as e:
         return False, f"oserror: {e}"
-
-# ----------------------------------------------------------------------------
-# Single-socket context manager
-# ----------------------------------------------------------------------------
-@contextmanager
-def open_pakbus_link(host: str, port: int, connect_timeout=5, read_timeout=10):
-    """
-    Open one TCP/IPv6 PakBus link and keep it open for the whole batch.
-    """
-    link = IPv6TCPLink(host, port, timeout=max(connect_timeout, read_timeout))
-    link.open()
-    try:
-        yield link
-    finally:
-        try:
-            link.close()
-        except Exception:
-            pass
 
 # ----------------------------------------------------------------------------
 # Data helpers
@@ -217,12 +131,12 @@ def fetch_batch(table: str, hours: int, tz_name: str) -> Iterator[tuple[int, pd.
     start, stop = _compute_window(hours, tz_name)
     logging.info(f"Fetching window {start.isoformat()} → {stop.isoformat()} (table={table})")
 
+    # Single shared socket to the CR800 for the whole batch
     with open_pakbus_link(host, port) as link:
         # Wake up router once (optional)
         try:
             router = CR1000(link, dest_addr=ROUTER_ID, src_addr=base_id)
             try:
-                # Some builds expose get_attention(), others just react to the pings we do later.
                 router.pakbus.get_attention()
             except Exception:
                 pass
@@ -231,7 +145,7 @@ def fetch_batch(table: str, hours: int, tz_name: str) -> Iterator[tuple[int, pd.
 
         for dest_id in PAKBUS.logger_ids:
             try:
-                # IMPORTANT: construct inside try so NoDeviceException doesn’t crash the run
+                # Construct inside try so NoDeviceException doesn’t crash the run
                 dev = CR1000(link, dest_addr=dest_id, src_addr=base_id)
 
                 # Optional: best-effort to read clock
