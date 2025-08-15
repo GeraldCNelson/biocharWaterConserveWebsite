@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 
 from biochar_app.scripts.routes_utils import load_gseason_df
 #from biochar_app.scripts.utils import parse_filenames
-from biochar_app.scripts.routes_utils import load_logger_year, merge_all_loggers, load_summary_df
-from biochar_app.scripts.gseason import compute_summary_statistics, get_flat_gseason_summary
+from biochar_app.scripts.routes_utils import load_logger_year, merge_all_loggers, load_summary_df, periods_to_list_of_dicts
+from biochar_app.scripts.gseason_utils import compute_summary_statistics, get_flat_gseason_summary
 #from biochar_app.scripts.plot_helpers import sanitize_json, convert_units_for_download
 from biochar_app.scripts.plot_utils import (
     make_raw_figure,
@@ -35,7 +35,7 @@ from biochar_app.scripts.config import (
     DEFAULT_LOGGER_LOCATION,
     DEFAULT_GRANULARITY,
     YEARS,
-    DEFAULT_GSEASON_PERIODS,
+    #DEFAULT_GSEASON_PERIODS,
     PLOT_BASED_ON_OPTIONS,
     TRACE_OPTION_MAP,
     sensor_depth_mapping,
@@ -134,49 +134,54 @@ class PlotRequest(BaseModel):
     depth: str
     traceOption: str
     unitSystem: str
-
-
     periods: Optional[List[PeriodSpec]] = Field(
-        None,
+        default=None,
         description="Custom G-season periods",
-        example=[{"code":"Q1","label":"Winter","start":"2023-11-01","end":"2024-02-28"}]
+        json_schema_extra={
+            "examples": [
+                {"code": "Q1", "label": "Winter", "start": "2023-11-01", "end": "2024-02-28"}
+            ]
+        },
     )
-    class Config:
-        validate_by_name = True
+
+    # If you're on Pydantic v2, prefer model_config over inner Config (see note below)
+    # from pydantic import ConfigDict
+    # model_config = ConfigDict(validate_assignment=True)
 
 
 @api_router.post("/plot_raw")
 async def api_plot_raw(req: PlotRequest):
-    year      = req.year
-    gran      = req.granularity.lower()
-    var       = req.variable
-    strip     = req.strip
-    loc       = req.loggerLocation
-    depth     = req.depth
-    unit      = req.unitSystem
+    year        = req.year
+    gran        = req.granularity.lower()
+    var         = req.variable
+    strip       = req.strip
+    logger_loc  = req.loggerLocation
+    depth       = req.depth
+    unit        = req.unitSystem
     trace_option = TRACE_OPTION_MAP[req.traceOption]
-    start     = req.startDate
-    end       = req.endDate
+    start       = req.startDate
+    end         = req.endDate
 
     # ---- growing-season / custom ----
     if gran == "gseason":
-        # grab any custom period specs
-        periods = req.periods or []
+        # Normalize any PeriodSpec / mapping → list[dict]
+        periods_raw  = req.periods or []
+        periods_list = periods_to_list_of_dicts(periods_raw)
 
-        # load the precomputed or on-the-fly gseason DataFrame
+        # Load seasonal dataframe (compute once, unit-agnostic; adds precip alias)
         df_gseason = load_gseason_df(
-            year       = year,
-            periods    = periods,
-            unit_system= unit,
+            year        = year,
+            periods     = periods_list,   # normalized list[dict]
+            unit_system = unit,
         )
 
-        # pass periods into the g-season figure builder
+        # Build the figure using the SAME normalized periods
         fig = make_raw_gseason_figure(
             df              = df_gseason,
-            periods         = periods,
+            periods         = periods_list,   # use normalized periods here too
             variable        = var,
             strip           = strip,
-            logger_location = loc,
+            logger_location = logger_loc,
             depth           = int(depth),
             unit_system     = unit,
             year            = year,
@@ -189,12 +194,12 @@ async def api_plot_raw(req: PlotRequest):
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    # restrict to the user’s window
+    # Restrict to the user’s requested window
     df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
-    # ensure there’s at least one non-empty series to plot
+    # Ensure there’s at least one non-empty series to plot
     if trace_option == "depths":
-        expected = [f"{var}_{d}_raw_{strip}_{loc}" for d in sensor_depth_mapping]
+        expected = [f"{var}_{d}_raw_{strip}_{logger_loc}" for d in sensor_depth_mapping]
     else:
         expected = [f"{var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
 
@@ -206,23 +211,23 @@ async def api_plot_raw(req: PlotRequest):
             400,
             detail=(
                 f"No valid data to plot for {var!r} @ strip={strip!r}, "
-                f"loc={loc!r}, depth={depth!r} between {start} and {end}. "
+                f"loc={logger_loc!r}, depth={depth!r} between {start} and {end}. "
                 f"Found columns: {present}"
-            )
+            ),
         )
 
     fig = make_raw_figure(
-        df               = df,
-        year             = year,
-        variable         = var,
-        strip            = strip,
-        granularity      = gran,
-        logger_location  = loc,
-        depth            = depth,
-        trace_option     = TRACE_OPTION_MAP[req.traceOption],
-        unit_system      = unit,
-        start            = start,
-        end              = end,
+        df              = df,
+        year            = year,
+        variable        = var,
+        strip           = strip,
+        granularity     = gran,
+        logger_location = logger_loc,
+        depth           = depth,
+        trace_option    = trace_option,
+        unit_system     = unit,
+        start           = start,
+        end             = end,
     )
     return JSONResponse(fig)
 
@@ -230,7 +235,7 @@ async def api_plot_raw(req: PlotRequest):
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
     year, gran = req.year, req.granularity.lower()
-    var, strip, loc = req.variable, req.strip, req.loggerLocation
+    var, strip, logger_loc = req.variable, req.strip, req.loggerLocation
     depth, unit = int(req.depth), req.unitSystem
     start, end = req.startDate, req.endDate
 
@@ -248,7 +253,7 @@ async def api_plot_ratio(req: PlotRequest):
             periods         = periods,
             variable        = var,
             strip           = strip,
-            logger_location = loc,
+            logger_location = logger_loc,
             depth           = depth,
             unit_system     = unit,
             year            = year,
@@ -265,7 +270,7 @@ async def api_plot_ratio(req: PlotRequest):
         df               = df,
         variable         = var,
         strip            = strip,
-        logger_location  = loc,
+        logger_location  = logger_loc,
         unit_system      = unit,
         granularity      = gran,
         year             = year,
@@ -380,7 +385,7 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
 
     start = data.get("startDate")
     end = data.get("endDate")
-    unit_system = data.get("unitSystem", "us")
+    #unit_system = data.get("unitSystem", "us")
 
     # 3) Load the DataFrame
     try:

@@ -2,30 +2,32 @@
 """
 client.py — Fetch recent records from Campbell loggers via PakBus/TCP over IPv6.
 
-Changes vs your previous version:
-- No global DNS monkey-patching (safer for the process).
-- Clean IPv6 TCPLink that handles pakbus://[IPv6]:port URLs.
-- Fixed regex (no redundant escapes).
-- Robust ping6 helper (macOS/Linux) + explicit TCP preflight.
-- Clear errors if the port is closed/refused.
+Key points:
+- DEBUG logging enabled.
+- Reuses a single IPv6 TCP socket to the CR800 for the whole batch.
+- Pulls host/port/base_id/logger_ids from config.PAKBUS.
+- Handles NoDeviceException when instantiating CR1000 per logger ID (won’t crash).
+- ICMPv6 ping is advisory; TCP preflight is the hard gate.
 """
 
 from __future__ import annotations
 
-import re
-import socket
 import logging
+import re
 import shutil
+import socket
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from typing import Iterator, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pylink
 from pylink import TCPLink as _OrigTCPLink
 import pycampbellcr1000.device as device_mod
 from pycampbellcr1000 import CR1000
+from pycampbellcr1000.exceptions import NoDeviceException
 
 from biochar_app.scripts.config import (
     PAKBUS,
@@ -34,38 +36,46 @@ from biochar_app.scripts.config import (
     DEFAULT_LAG_MINUTES,
 )
 
+ROUTER_ID = 1  # CR800 PakBus ID
+
 # ----------------------------------------------------------------------------
-# IPv6 TCP link that understands pakbus://[IPv6]:port (no global monkeypatch)
+# IPv6 TCP link that understands IPv6 literals cleanly
 # ----------------------------------------------------------------------------
 class IPv6TCPLink(_OrigTCPLink):
     """
-    TCPLink that connects to an IPv6 literal without triggering gethostbyname().
+    TCPLink that connects to an IPv6 literal without gethostbyname() IPv4 pitfalls.
+    Idempotent open(): if already connected, it returns immediately.
     """
     def __init__(self, host: str, port: int, timeout: float | None = None):
-        # Always set _socket early so __del__ is safe
         self._socket: Optional[socket.socket] = None
         self._is_ipv6_literal = ":" in host
         self._v6_addr: Optional[tuple[str, int, int, int]] = None
 
         if self._is_ipv6_literal:
-            # Bypass parent's __init__, set essentials manually
             self.host = host
             self.port = port
             self.timeout = timeout or 10.0
             self._v6_addr = (host, port, 0, 0)
         else:
-            # For hostnames or IPv4, do the normal init
             super().__init__(host, port, timeout)
 
     def open(self):
+        if self._socket is not None:
+            return self
+
         if self._is_ipv6_literal and self._v6_addr is not None:
-            logging.info(f"Opening IPv6 socket to {self._v6_addr!r}")
+            logging.debug(f"Opening IPv6 socket to {self._v6_addr!r}")
             s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             s.settimeout(self.timeout)
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            except Exception:
+                pass
             s.connect(self._v6_addr)
             self._socket = s
             return self
-        # Non-IPv6: let original logic handle it
+
+        logging.debug(f"Opening default TCPLink to {self.address!r}")
         return super().open()
 
     def close(self):
@@ -74,13 +84,13 @@ class IPv6TCPLink(_OrigTCPLink):
                 self._socket.close()
             except Exception:
                 pass
-            self._socket = None
+            finally:
+                self._socket = None
         else:
             try:
                 super().close()
             except Exception:
                 pass
-
 
 # ----------------------------------------------------------------------------
 # URL override: pakbus://[IPv6]:port  →  IPv6TCPLink
@@ -88,11 +98,10 @@ class IPv6TCPLink(_OrigTCPLink):
 _original_link_from_url = pylink.link_from_url
 
 def _link_from_url_override(url: str):
-    # Use plain ']' outside the class; inside [^]] it must remain unescaped.
     m = re.match(r'(?i)^\s*pakbus://\[(?P<host>[^]]+)]:(?P<port>\d+)\s*$', url)
     if m:
         host, port = m.group("host"), int(m.group("port"))
-        logging.info(f"PakBus IPv6 override: host={host}, port={port}")
+        logging.debug(f"PakBus IPv6 override: host={host}, port={port}")
         return IPv6TCPLink(host, port)
     return _original_link_from_url(url)
 
@@ -100,13 +109,13 @@ def _link_from_url_override(url: str):
 pylink.link_from_url = device_mod.link_from_url = _link_from_url_override
 
 # ----------------------------------------------------------------------------
-# Logging configuration
+# Logging (DEBUG as requested)
 # ----------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logging.getLogger("pylink").setLevel(logging.INFO)
+logging.getLogger("pylink").setLevel(logging.DEBUG)
 logging.getLogger("pycampbellcr1000").setLevel(logging.DEBUG)
 
 # ----------------------------------------------------------------------------
@@ -150,104 +159,122 @@ def quick_port_check_ipv6(host: str, port: int, timeout: float = 3.0) -> tuple[b
         return False, f"oserror: {e}"
 
 # ----------------------------------------------------------------------------
-# Data fetching
+# Single-socket context manager
 # ----------------------------------------------------------------------------
-def fetch_all_loggers(
-    base_url: str,
-    table: str,
-    hours: int,
-    tz_name: str,
-    dest_addr: int,
-    src_addr: int,
-) -> Iterator[pd.DataFrame]:
+@contextmanager
+def open_pakbus_link(host: str, port: int, connect_timeout=5, read_timeout=10):
     """
-    Yield pages (DataFrame) from CR1000.get_data_generator(table, start, stop).
-    Uses TCP preflight as the hard gate; ICMPv6 is advisory only.
+    Open one TCP/IPv6 PakBus link and keep it open for the whole batch.
     """
-    host = PAKBUS.host
-    port = PAKBUS.port
+    link = IPv6TCPLink(host, port, timeout=max(connect_timeout, read_timeout))
+    link.open()
+    try:
+        yield link
+    finally:
+        try:
+            link.close()
+        except Exception:
+            pass
 
-    # --- Hard gate: TCP preflight (what we actually need) ---
-    ok, why = quick_port_check_ipv6(host, port)
-    if not ok:
-        logging.error(
-            f"TCP check failed for [{host}]:{port} → {why}. "
-            "If this used to work, verify the CR800/NL module is listening on this port, "
-            "and that the IPv6/route hasn’t changed."
-        )
-        raise SystemExit(1)
-
-    # Advisory only: ICMPv6 often rate-limited; never hard-fail on ping
-    if not ping6(host):
-        logging.warning("ICMPv6 ping had no reply; proceeding since TCP is reachable.")
-
-    # Time window
+# ----------------------------------------------------------------------------
+# Data helpers
+# ----------------------------------------------------------------------------
+def _compute_window(hours: int, tz_name: str) -> tuple[datetime, datetime]:
     tz = tz_name if isinstance(tz_name, ZoneInfo) else ZoneInfo(tz_name)
     now = datetime.now(tz)
     stop = now - timedelta(minutes=DEFAULT_LAG_MINUTES)
     start = stop - timedelta(hours=hours)
     if start >= stop:
-        logging.error(f"Bad time window: start {start} >= stop {stop}")
-        raise SystemExit(1)
-    logging.info(f"Fetching from {start.isoformat()} to {stop.isoformat()}")
+        raise ValueError(f"Bad time window: start {start} >= stop {stop}")
+    return start, stop
 
-    # Open device/link (our URL override handles IPv6 literal)
-    device = CR1000.from_url(
-        base_url,
-        dest_addr=dest_addr,
-        src_addr=src_addr,
-    )
-
-    device.link.open()
-    try:
-        try:
-            now_logger = device.gettime()
-            logging.info(f"Logger clock: {now_logger}")
-        except Exception as exc:
-            logging.warning(f"Could not read logger clock: {exc!r}")
-
-        for idx, page in enumerate(device.get_data_generator(table, start, stop), start=1):
-            logging.info(f"Received page {idx}: {len(page)} rows")
-            yield page
-    finally:
-        # Always close the link so later runs don't inherit stale sockets
-        try:
-            device.link.close()
-        except Exception:
-            pass
+def _fetch_window(dev: CR1000, table: str, start: datetime, stop: datetime) -> Iterator[pd.DataFrame]:
+    for page in dev.get_data_generator(table, start, stop):
+        yield page
 
 # ----------------------------------------------------------------------------
-# CLI entrypoint
+# Batch fetch using one socket
+# ----------------------------------------------------------------------------
+def fetch_batch(table: str, hours: int, tz_name: str) -> Iterator[tuple[int, pd.DataFrame]]:
+    """
+    Keep one IPv6/TCP socket to the CR800 open and walk all logger IDs.
+    Yields (logger_id, DataFrame) pages.
+    """
+    host = PAKBUS.host
+    port = PAKBUS.port
+    base_id = PAKBUS.base_id
+
+    # Hard gate: TCP preflight
+    ok, why = quick_port_check_ipv6(host, port)
+    if not ok:
+        logging.error(f"TCP check failed for [{host}]:{port} → {why}")
+        raise SystemExit(1)
+
+    # Advisory: ping6
+    if not ping6(host):
+        logging.warning("ICMPv6 ping had no reply; proceeding since TCP is reachable.")
+
+    start, stop = _compute_window(hours, tz_name)
+    logging.info(f"Fetching window {start.isoformat()} → {stop.isoformat()} (table={table})")
+
+    with open_pakbus_link(host, port) as link:
+        # Wake up router once (optional)
+        try:
+            router = CR1000(link, dest_addr=ROUTER_ID, src_addr=base_id)
+            try:
+                # Some builds expose get_attention(), others just react to the pings we do later.
+                router.pakbus.get_attention()
+            except Exception:
+                pass
+        except Exception as exc:
+            logging.warning(f"Router attention failed: {exc!r} — continuing.")
+
+        for dest_id in PAKBUS.logger_ids:
+            try:
+                # IMPORTANT: construct inside try so NoDeviceException doesn’t crash the run
+                dev = CR1000(link, dest_addr=dest_id, src_addr=base_id)
+
+                # Optional: best-effort to read clock
+                try:
+                    clk = dev.gettime()
+                    logging.debug(f"Logger {dest_id} clock: {clk}")
+                except Exception:
+                    pass
+
+                for page in _fetch_window(dev, table, start, stop):
+                    yield dest_id, page
+
+            except NoDeviceException:
+                logging.warning(f"Logger {dest_id}: NoDeviceException (no route/response). Skipping.")
+                continue
+            except Exception as e:
+                logging.exception(f"Logger {dest_id}: error while fetching: {e}")
+                continue
+
+# ----------------------------------------------------------------------------
+# CLI
 # ----------------------------------------------------------------------------
 def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Fetch historical data from Campbell CR1000 dataloggers",
+        description="Fetch historical data from Campbell dataloggers via CR800 router"
     )
     parser.add_argument("--table", default=DEFAULT_TABLE, help="Table to fetch")
     parser.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="Hours back")
     parser.add_argument(
-        "--timezone", default=str(ZoneInfo("UTC")), help="IANA timezone (e.g., America/Denver)"
+        "--timezone",
+        default=str(ZoneInfo("UTC")),
+        help="IANA timezone (e.g., America/Denver)",
     )
     args = parser.parse_args()
 
-    base_url = f"pakbus://[{PAKBUS.host}]:{PAKBUS.port}"
-
     any_output = False
-    for logger_id in PAKBUS.logger_ids:
-        logging.info(f"Fetching logger {logger_id}")
-        for record in fetch_all_loggers(
-            base_url=base_url,
-            table=args.table,
-            hours=args.hours,
-            tz_name=args.timezone,
-            dest_addr=logger_id,
-            src_addr=PAKBUS.base_id,
-        ):
-            for row in record.to_dict(orient="records"):
-                print({"logger_id": logger_id, **row})
-                any_output = True
+    for logger_id, df in fetch_batch(table=args.table, hours=args.hours, tz_name=args.timezone):
+        logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
+        for row in df.to_dict(orient="records"):
+            print({"logger_id": logger_id, **row})
+            any_output = True
 
     if not any_output:
         logging.warning("No data returned from any logger.")
