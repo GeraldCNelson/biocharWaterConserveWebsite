@@ -1,35 +1,58 @@
 #!/usr/bin/env python3
-"""
+r"""
 cr200_client.py — Collect data from CR200-series loggers through a CR800 (PakBus/TCP over IPv6)
-Uses the lightweight PyPak (pakbus.py) you have in your repo.
+
+This version **does not** use GetTableDefs (0x16). Instead, it builds a *manual* table
+definition for Table1 based on your CRBasic program and then uses BMP5 CollectData
+(0x09) "by time range" with a routed header (DstPhy=router).
 
 Requirements:
-  - Your existing pakbus/pakbus.py on PYTHONPATH
   - pandas
+  - biochar_app.pakbus.cr200_client_utils (Python 3.13-safe helpers)
 
-Notes:
-  - We connect to the CR800 via IPv6 TCP at port 6785 and let it route to leaf IDs.
-  - We try a few common filenames to retrieve table definitions (CR200s expose them as a
-    “file” over BMP5/File Upload): e.g., "TableDef", "TABLEDEF", "#TABLEDEF".
-  - Pass the IPv6 address WITHOUT brackets (i.e. 2605:...:1ddd)
+Examples
+--------
+# quick hello/diag to confirm routing works
+python -m biochar_app.pakbus.cr200_client --station S2B --diag
+
+# fetch last 6 hours from S2B Table1 via routed CollectData
+python -m biochar_app.pakbus.cr200_client --station S2B --table Table1 --hours 6 --router 1
+
+# same, but verbose parsing + try little-endian fallback if needed (automatic)
+python -m biochar_app.pakbus.cr200_client --station S2B --table Table1 --hours 6 --router 1 --diag
 """
-
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Tuple, Dict, Any, List
+from typing import Iterable, Dict, Any, List, Optional, Tuple, Sequence
 
 import pandas as pd
 
-# import your PyPak
-from biochar_app.pakbus import pakbus as pb
+# PakBus helpers (modernized)
+from biochar_app.pakbus.cr200_client_utils import (
+    open_socket,
+    ping_node,
+    send,               # low-level send frame
+    wait_pkt,           # wait for pkt (handles Please Wait, Hello auto-reply, etc.)
+    pakbus_hdr,         # build a custom header (used for routed packets)
+    pkt_collectdata_cmd,
+    msg_collectdata_response,
+    parse_collectdata,
+    nsec_to_time,
+    time_to_nsec,
+    nsec_base,
+    nsec_tick,
+)
 
-# import your config container
+# Config (router host, ids, etc.)
 from biochar_app.scripts.config import (
     PAKBUS,
     DEFAULT_TABLE,
     DEFAULT_HOURS,
+    STATION_BY_ID,
+    ID_BY_STATION,
 )
 
 # -------- logging ----------
@@ -40,153 +63,290 @@ logging.basicConfig(
 log = logging.getLogger("cr200_client")
 
 
-# ---------- helpers ----------
-TABLEDEF_CANDIDATES = [
-    "TableDef", "TABLEDEF", "#TABLEDEF", "TDF", "TABLEDEFS", "TABLEDEF.DAT"
-]
+# ------------------------------- Manual schema -------------------------------
 
-def _open_router_socket(host: str, port: int, timeout: int = 15):
+def _manual_tabledef_table1() -> List[Dict[str, Any]]:
     """
-    Open a TCP socket to the CR800 PakBus/TCP service.
-    IMPORTANT: pass IPv6 literal WITHOUT [] brackets.
-    """
-    s = pb.open_socket(host, Port=port, Timeout=timeout)
-    if not s:
-        raise RuntimeError(f"Could not open PakBus TCP socket to [{host}]:{port}")
-    return s
+    Build a synthetic TableDef for Table1 (based on the CRBasic you provided).
 
-def _fetch_tabledef_raw(s, leaf_id: int, base_id: int) -> bytes:
-    """
-    Try multiple common file names to grab the table definitions blob.
-    Returns raw bytes; raises if none work.
-    """
-    last_err = None
-    for name in TABLEDEF_CANDIDATES:
-        try:
-            data, rc = pb.fileupload(s, DstNodeId=leaf_id, SrcNodeId=base_id, FileName=name)
-            if rc == 0 and data:
-                log.info(f"Leaf {leaf_id}: got table definitions via {name!r} ({len(data)} bytes).")
-                return data
-            else:
-                log.debug(f"Leaf {leaf_id}: {name!r} returned rc={rc}, length={len(data) if data else 0}.")
-        except Exception as e:
-            last_err = e
-            log.debug(f"Leaf {leaf_id}: {name!r} failed: {e!r}")
-    raise RuntimeError(f"Leaf {leaf_id}: failed to retrieve table definitions. Last error: {last_err!r}")
+    Fields (11):
+      BattV_Min,
+      VWC_1_Avg, EC_1_Avg, T_1_Avg,
+      VWC_2_Avg, EC_2_Avg, T_2_Avg,
+      VWC_3_Avg, EC_3_Avg, T_3_Avg
 
-def _collect_since(
+    We start with IEEE4B (big-endian float) types; if parsing fails, we retry with IEEE4L.
+    """
+    # helper to construct one field entry
+    def fld(name: bytes, ftype: str = "IEEE4B") -> Dict[str, Any]:
+        return {
+            "ReadOnly": 0,
+            "FieldType": ftype,   # will be swapped to IEEE4L on fallback
+            "FieldName": name,
+            "AliasName": [],
+            "Processing": b"",
+            "Units": b"",
+            "Description": b"",
+            "BegIdx": 0,
+            "Dimension": 1,
+            "SubDim": [],
+        }
+
+    fields_be = [
+        fld(b"BattV_Min"),
+        fld(b"VWC_1_Avg"), fld(b"EC_1_Avg"),  fld(b"T_1_Avg"),
+        fld(b"VWC_2_Avg"), fld(b"EC_2_Avg"),  fld(b"T_2_Avg"),
+        fld(b"VWC_3_Avg"), fld(b"EC_3_Avg"),  fld(b"T_3_Avg"),
+    ]
+
+    table = {
+        "Header": {
+            "TableName": b"Table1",
+            "TableSize": 0,                 # unknown; not needed for parsing
+            "TimeType": 0,                  # not used here
+            "TblTimeInto": (0, 0),          # not used here
+            "TblInterval": (900, 0),        # 15 minutes * 60 = 900 seconds
+        },
+        "Fields": fields_be,
+        "Signature": 0,                     # we don't have the real signature
+    }
+    return [table]
+
+
+def _tabledef_swap_endian(tdefs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Clone a tabledef list but swap IEEE4B <-> IEEE4L for all fields.
+    """
+    import copy
+    td = copy.deepcopy(tdefs)
+    for t in td:
+        for f in t.get("Fields", []):
+            if f.get("FieldType") == "IEEE4B":
+                f["FieldType"] = "IEEE4L"
+            elif f.get("FieldType") == "IEEE4L":
+                f["FieldType"] = "IEEE4B"
+    return td
+
+
+# ------------------------------- Collect helpers -----------------------------
+
+def _collect_since_routed(
     s,
+    *,
+    router: int,
     leaf_id: int,
     base_id: int,
     tabledef: List[Dict[str, Any]],
     table_name: str,
-    hours: int,
-) -> Iterable[Dict[str, Any]]:
+    start_utc: datetime,
+    stop_utc: datetime,
+    timeout: float = 20.0,
+) -> List[Dict[str, Any]]:
     """
-    Collect records from the given table for the past N hours.
-    For CR200, CollectMode=0x05 (by last N records) is often simplest;
-    but we'll prefer CollectMode=0x07 (by time range) if table has an interval.
-    We’ll translate time window to PakBus NSec and request by time.
+    Send a routed BMP5 CollectData (0x09) for [start_utc, stop_utc] using our synthetic tabledef.
+    We set TableNbr=1 (Table1) and TableDefSig=0 (unknown). The device *may* accept 0.
+
+    Returns a flat list of record dicts (with TimeOfRec converted to ISO).
     """
-    # Find table entry to see if it’s interval-based
-    tbl = next((t for t in tabledef if t["Header"]["TableName"] == table_name), None)
-    if not tbl:
-        raise RuntimeError(f"Leaf {leaf_id}: table {table_name!r} not found in definitions.")
+    # Only Table1 for now
+    if table_name != "Table1":
+        raise RuntimeError("This manual path currently supports only Table1")
 
-    interval = tbl["Header"]["TblInterval"]  # (sec, nsec)
-    now_utc = datetime.now(timezone.utc)
-    start_utc = now_utc - timedelta(hours=hours)
+    # Table1 is #1 in our synthetic def
+    table_nbr = 1
+    tabledef_sig = tabledef[table_nbr - 1]["Signature"]
 
-    # CR200 expects NSec tuples wrt epoch (1990-01-01). Use helpers from pakbus.py
-    start_nsec = pb.time_to_nsec(start_utc.timestamp(), epoch=pb.nsec_base, tick=pb.nsec_tick)
-    stop_nsec  = pb.time_to_nsec(now_utc.timestamp(),   epoch=pb.nsec_base, tick=pb.nsec_tick)
+    # PakBus NSec range
+    start_nsec = time_to_nsec(start_utc.timestamp(), epoch=nsec_base, tick=nsec_tick)
+    stop_nsec  = time_to_nsec(stop_utc.timestamp(),   epoch=nsec_base, tick=nsec_tick)
 
-    collect_mode = 0x07  # by time range
-    P1, P2 = start_nsec, stop_nsec
-
-    rec_frags, more = pb.collect_data(
-        s,
-        DstNodeId=leaf_id,
-        SrcNodeId=base_id,
-        TableDef=tabledef,
-        TableName=table_name,
-        FieldNames=[],                # all fields
-        CollectMode=collect_mode,
-        P1=P1, P2=P2,
+    # Build a *non-routed* pkt first
+    body_pkt, tn = pkt_collectdata_cmd(
+        DstNodeId=leaf_id, SrcNodeId=base_id,
+        TableNbr=table_nbr, TableDefSig=tabledef_sig,
+        FieldNbr=(), CollectMode=0x07,  # by time range
+        P1=start_nsec, P2=stop_nsec,    # [(sec,nsec), (sec,nsec)]
+        SecurityCode=0x0000,
     )
 
-    # Flatten to dicts
+    # Replace header with a *routed* header (DstPhy=router)
+    routed_hdr = pakbus_hdr(
+        DstNodeId=leaf_id, SrcNodeId=base_id,
+        HiProtoCode=0x01,             # BMP5 app
+        ExpMoreCode=0, LinkState=0, Priority=0, HopCnt=0,
+        DstPhyAddr=router, SrcPhyAddr=base_id,
+    )
+    pkt = routed_hdr + body_pkt[8:]   # reuse body (starts at byte 8)
+    send(s, pkt)
+
+    # Wait for response and parse minimally
+    _hdr, msg = wait_pkt(
+        s, DstNodeId=base_id, SrcNodeId=leaf_id, TranNbr=tn, timeout=timeout
+    )
+    if not msg:
+        raise RuntimeError("No CollectData response (timeout).")
+
+    # Decode response stubs (RespCode + payload)
+    msg = msg_collectdata_response(msg)
+    rc = msg.get("RespCode", 0xFF)
+    if rc != 0:
+        raise RuntimeError(f"CollectData returned RespCode={rc}")
+
+    data = msg.get("RecData", b"")
+    # We’ll decode with provided tabledef; if that fails, caller can retry with endian swap
+    rec_frags, _more = parse_collectdata(data, tabledef, FieldNbr=())
+    out_rows: List[Dict[str, Any]] = []
     for frag in rec_frags:
         for rec in frag.get("RecFrag", []):
-            # Convert logger NSec time to ISO8601
             t_nsec = rec.get("TimeOfRec")
+            ts_iso = None
             if t_nsec:
-                ts = pb.nsec_to_time(t_nsec, epoch=pb.nsec_base, tick=pb.nsec_tick)
+                ts = nsec_to_time(t_nsec, epoch=nsec_base, tick=nsec_tick)
                 ts_iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
-            else:
-                ts_iso = None
-            row = {"logger_id": leaf_id, "table": table_name, "rec": rec["RecNbr"], "time": ts_iso}
+            row = {"rec": rec.get("RecNbr"), "time": ts_iso}
             row.update(rec.get("Fields", {}))
-            yield row
+            out_rows.append(row)
+    return out_rows
 
-def fetch_cr200_batch(
-    table: str = DEFAULT_TABLE,
-    hours: int = DEFAULT_HOURS,
+
+# ------------------------------ Public function ------------------------------
+
+def fetch_one_leaf(
+    leaf_id: int,
+    *,
+    table: str,
+    hours: int,
+    station_code: Optional[str] = None,
+    list_files_only: bool = False,
+    prefix: Optional[str] = None,
+    datafile_override: Optional[str] = None,
+    diag: bool = False,
+    router: int = 1,
 ) -> Iterable[pd.DataFrame]:
     """
-    Connect once to the CR800 and iterate all CR200 leaf IDs.
-    Yields DataFrames with rows for each logger.
+    Connect to the router and work with a single *leaf* (endpoint).
+
+    Current strategy (no GetTableDefs):
+      - Synthesize Table1 schema from CRBasic
+      - Send BMP5 CollectData (time range) with routed header
+      - Try IEEE4B, then fallback to IEEE4L
+
+    list_files_only / prefix / datafile_override are accepted for CLI compatibility,
+    but file listing / file upload aren’t effective on your CR200X setup (rc=14).
     """
+    del list_files_only, prefix, datafile_override  # unused in this path
+
     host = PAKBUS.host
     port = PAKBUS.port
     base_id = PAKBUS.base_id
 
-    log.info(f"Connecting to CR800 at [{host}]:{port}")
-    with _open_router_socket(host, port) as s:
-        # Optional: tell the router we’re here (PakBus hello). Some networks don’t require it.
+    if table != "Table1":
+        raise SystemExit("This manual path currently supports only --table Table1")
+
+    log.info("Connecting to CR800 at [%s]:%s", host, port)
+    with open_socket(host, Port=port, Timeout=15) as s:
+        # Warm-up routed hello (verifies that router->leaf route is active)
+        hello = ping_node(s, DstNodeId=leaf_id, SrcNodeId=base_id, RouterPhyAddr=router)
+        if diag:
+            log.info("[diag] hello leaf %s via router %s: %s", leaf_id, router, hello)
+        if not hello:
+            log.warning("Leaf %s: no hello response via router %s.", leaf_id, router)
+            return
+
+        now_utc = datetime.now(timezone.utc)
+        start_utc = now_utc - timedelta(hours=hours)
+
+        # Manual schema from CRBasic
+        tdef_be = _manual_tabledef_table1()
+
+        # Try big-endian first
         try:
-            pb.ping_node(s, DstNodeId=PAKBUS.router_id, SrcNodeId=base_id)
-        except Exception:
-            pass
-
-        for leaf in PAKBUS.logger_ids:
+            rows = _collect_since_routed(
+                s,
+                router=router, leaf_id=leaf_id, base_id=base_id,
+                tabledef=tdef_be, table_name="Table1",
+                start_utc=start_utc, stop_utc=now_utc,
+                timeout=20.0,
+            )
+        except Exception as e_be:
+            if diag:
+                log.debug("CollectData with IEEE4B failed: %r (retry IEEE4L)", e_be)
+            # Retry with little-endian floats
+            tdef_le = _tabledef_swap_endian(tdef_be)
             try:
-                # Quick hello to the leaf (verifies route)
-                hello = pb.ping_node(s, DstNodeId=leaf, SrcNodeId=base_id)
-                if not hello:
-                    log.warning(f"Leaf {leaf}: no hello response; skipping.")
-                    continue
+                rows = _collect_since_routed(
+                    s,
+                    router=router, leaf_id=leaf_id, base_id=base_id,
+                    tabledef=tdef_le, table_name="Table1",
+                    start_utc=start_utc, stop_utc=now_utc,
+                    timeout=20.0,
+                )
+            except Exception as e_le:
+                log.warning("CollectData failed with both endian assumptions: %r", e_le)
+                return
 
-                raw = _fetch_tabledef_raw(s, leaf_id=leaf, base_id=base_id)
-                tabledef = pb.parse_tabledef(raw)
+        if not rows:
+            log.warning("Leaf %s: no rows returned in range.", leaf_id)
+            return
 
-                rows = list(_collect_since(s, leaf, base_id, tabledef, table, hours))
-                if not rows:
-                    log.info(f"Leaf {leaf}: no rows.")
-                    continue
+        # Normalize bytes->str for column names; build DataFrame
+        df = pd.DataFrame(rows)
+        yield df
 
-                df = pd.DataFrame(rows)
-                yield df
 
-            except Exception as e:
-                log.exception(f"Leaf {leaf}: error during collection: {e}")
-                continue
-
+# ----------------------------------- CLI -------------------------------------
 
 def main():
     import argparse
-    p = argparse.ArgumentParser(description="Collect recent data from CR200 leaves via CR800 (IPv6 PakBus/TCP)")
-    p.add_argument("--table", default=DEFAULT_TABLE, help="Table to collect (e.g., Table1)")
-    p.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="How many hours back")
+    p = argparse.ArgumentParser(description="Collect recent data from a single CR200 leaf via CR800 (IPv6 PakBus/TCP)")
+    p.add_argument("--table", default=DEFAULT_TABLE, help="Table to collect (currently only 'Table1' supported)")
+    p.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="How many hours back (CollectData time range)")
+    p.add_argument("--leaf", type=int, help="PakBus node ID of the leaf (e.g., 7 for S2B)")
+    p.add_argument("--station", help="Station code (e.g., S2B). Overrides --leaf if both provided.")
+    p.add_argument("--router", type=int, default=1, help="Router PakBus physical addr (default 1)")
+    p.add_argument("--diag", action="store_true", help="Verbose diagnostics")
     args = p.parse_args()
 
-    any_rows = False
-    for df in fetch_cr200_batch(table=args.table, hours=args.hours):
-        for rec in df.to_dict(orient="records"):
-            print(rec)
-            any_rows = True
-    if not any_rows:
-        log.warning("No data returned from any CR200 leaf.")
+    # Resolve target leaf/station
+    station_code: Optional[str] = None
+    leaf_id: Optional[int] = None
+    if args.station:
+        station_code = args.station.strip().upper()
+        leaf_id = ID_BY_STATION.get(station_code)
+        if not leaf_id:
+            raise SystemExit(f"Unknown station code {station_code!r}. Valid: {sorted(ID_BY_STATION.keys())}")
+    elif args.leaf:
+        leaf_id = int(args.leaf)
+        station_code = STATION_BY_ID.get(leaf_id)
+    else:
+        raise SystemExit("You must supply either --station or --leaf.")
 
-if __name__ == "__main__":
-    main()
+    if args.table != "Table1":
+        raise SystemExit("This manual path currently supports only --table Table1")
+
+    any_rows = False
+    for df in fetch_one_leaf(
+        leaf_id,
+        table=args.table,
+        hours=args.hours,
+        station_code=station_code,
+        diag=args.diag,
+        router=args.router,
+    ):
+        # Print a few human-friendly rows
+        cols = ["time", "rec", "BattV_Min", "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
+                "VWC_2_Avg", "EC_2_Avg", "T_2_Avg",
+                "VWC_3_Avg", "EC_3_Avg", "T_3_Avg"]
+        have = [c for c in cols if c in df.columns]
+        for rec in df[have].head(25).to_dict(orient="records"):
+            print(rec)
+        any_rows = True
+
+    if not any_rows:
+        log.warning("No data returned.")
+
+
+__all__ = [
+    "main",
+    "fetch_one_leaf",
+]

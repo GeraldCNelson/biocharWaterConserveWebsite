@@ -5,7 +5,7 @@ from math import pi
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 
 STRIPS = ["S1", "S2", "S3", "S4"]
 VARIABLES = ["VWC", "EC", "T", "SWC"]
@@ -70,7 +70,23 @@ DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))  # 
 DEFAULT_LAG_MINUTES = 30  # Delay before current time to ensure data availability
 
 # PakBus settings all in one place
+STATION_BY_ID: Dict[int, str] = {
+    1: "CR800",
+    2: "S1T",
+    3: "S1M",
+    4: "S1B",
+    5: "S2T",
+    6: "S2M",
+    7: "S2B",
+    8: "S3T",
+    9: "S3M",
+    10: "S3B",
+    11: "S4T",
+    12: "S4M",
+    13: "S4B",
+}
 
+ID_BY_STATION: Dict[str, int] = {v: k for k, v in STATION_BY_ID.items()}
 
 def _parse_ids(s: str) -> List[int]:
     """
