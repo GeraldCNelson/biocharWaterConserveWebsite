@@ -1,0 +1,40 @@
+# config/sites.yaml
+gateway:
+  # how we reach the CR800 base (PakBus router)
+  host: "http://[2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD]"
+  pakbus_id: 1              # CR800 PakBus ID (router)
+  security_code: null       # or integer if used
+  timezone: "UTC"
+
+defaults:
+  table: "Table1"
+  program_signature: "CR206X_STANDARD_V1"   # arbitrary label we expect
+  sample_period: "15min"                    # used by resampling/trust checks
+
+leaves:
+  - name: S1T
+    pakbus_id: 2
+  - name: S1M
+    pakbus_id: 3
+  - name: S1B
+    pakbus_id: 4
+  - name: S2T
+    pakbus_id: 5
+  - name: S2M
+    pakbus_id: 6
+  - name: S2B
+    pakbus_id: 7
+  - name: S3T
+    pakbus_id: 8
+  - name: S3M
+    pakbus_id: 9
+  - name: S3B
+    pakbus_id: 10
+  - name: S4T
+    pakbus_id: 11
+  - name: S4M
+    pakbus_id: 12
+  - name: S4B
+    pakbus_id: 13
+#                 - name: S5M
+#                 pakbus_id: 14
