@@ -1,0 +1,39 @@
+ASUS IPv6 Firewall Allow Rule for Remote Admin
+==============================================
+
+1. Enable IPv6 Firewall:
+   - Go to: Advanced Settings > Firewall > IPv6 Firewall
+   - Set: Enable IPv6 Firewall = ON
+
+2. Add Rule:
+
+   Source IP:        2600:6c67:207f:a2cf::/64
+                     (replace with your trusted home/mobile IPv6 prefix — /64 is standard)
+
+   Destination IP:   ::/0
+                     (means “this router” / all addresses)
+
+   Protocol:         TCP
+
+   Destination Port: 8443
+
+   Action:           Accept / Allow
+
+3. Save & Apply:
+   - Ensure this rule is ABOVE any “deny all” default rule.
+
+4. Effect:
+   - From within the allowed /64, you can reach:
+       https://biochar.asuscomm.com:8443
+   - Everyone else will be blocked.
+
+5. To Check Your Source IPv6 Prefix (/64):
+   On macOS:
+     ipconfig getifaddr en0
+     (or: networksetup -getinfo Wi-Fi)
+
+   On Linux:
+     ifconfig
+     (look for inet6 address starting with 2600:...)
+
+   Take the first 4 blocks of the address (the /64 prefix).
