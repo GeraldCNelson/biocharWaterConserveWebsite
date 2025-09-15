@@ -1,0 +1,3 @@
+decoded_rows=0
+reason=no plausible 10-float rows found; reply may be ACK/empty or request not honored
+suggestion: try --last-n 441 or 461

@@ -1,0 +1,10 @@
+leaf,table,request_mode,min_n,max_n,count
+S1M,1,last_n,77,192,24
+S1T,1,last_n,297,297,1
+S2B,1,last_n,144,354,42
+S2M,1,last_n,365,1015,128
+S2T,1,last_n,451,1101,125
+S3B,1,last_n,540,1220,134
+S3M,1,last_n,1135,1190,12
+S4B,1,last_n,25375,25555,37
+S4T,1,last_n,540,655,23

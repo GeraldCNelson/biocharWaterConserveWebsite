@@ -4,10 +4,22 @@
 # Origin: derived from Dietrich Feist’s PyPak (GPL), trimmed and modernized.
 # License: GPLv2+ (inherits the original PyPak license terms).
 #
-# Notes:
-# - Provides framing/signature, header encode/decode, Hello, Collect Data,
-#   TableDef parsing, BMP5 GetTableDefs (0x16/0x17), FileUpload, and socket helper.
-# - All high-level calls accept RouterPhyAddr (int) to force routing via CR800.
+# Protocol notes:
+# - Hello (PakCtrl):         HiProtoCode = 0x00
+# - BMP5 GetTableDefs 0x16:  HiProtoCode = 0x01  → response 0x17
+# - BMP5 CollectData 0x09:   HiProtoCode = 0x01  → response 0x89
+# - BMP5 FileUpload 0x0F:    HiProtoCode = 0x05
+#
+# This module implements:
+#   - Framing/quoting/signature (0xBD/0xBC)
+#   - Hello
+#   - BMP5 GetTableDefs + parser
+#   - BMP5 CollectData (builder + exact parser using TableDefs)
+#   - FileUpload (optional)
+#   - Time helpers (CR basic epoch 1990-01-01 with (sec,nsec))
+#   - Convenience wrappers for common tasks
+#
+# All high-level calls accept RouterPhyAddr to route through an intermediary (e.g., CR800).
 
 from __future__ import annotations
 
@@ -17,7 +29,6 @@ import math
 import socket
 import struct
 import time
-from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 log = logging.getLogger("pakbus.utils")
@@ -30,6 +41,9 @@ Header = Dict[str, int]
 Message = Dict[str, Any]
 
 # ----------------------------- Data type map ---------------------------------
+# Campbell type codes (subset used by CR2xx/CR8xx).  Names here are "logical" and
+# map to a decode format. We keep both big-endian (B) and little-endian (L) IEEE
+# where necessary; most CR systems use IEEE4B for floats in tables.
 
 datatype: Dict[str, Dict[str, Any]] = {
     "Byte":   {"code": 1,  "fmt": "B",   "size": 1},
@@ -38,28 +52,41 @@ datatype: Dict[str, Dict[str, Any]] = {
     "Int1":   {"code": 4,  "fmt": "b",   "size": 1},
     "Int2":   {"code": 5,  "fmt": ">h",  "size": 2},
     "Int4":   {"code": 6,  "fmt": ">l",  "size": 4},
-    "FP2":    {"code": 7,  "fmt": ">H",  "size": 2},
-    "FP3":    {"code": 15, "fmt": "3s",  "size": 3},
-    "FP4":    {"code": 8,  "fmt": "4s",  "size": 4},
-    "IEEE4B": {"code": 9,  "fmt": ">f",  "size": 4},
-    "IEEE8B": {"code": 18, "fmt": ">d",  "size": 8},
+
+    # Campbell packed FP types (rare in modern tables but still supported)
+    "FP2":    {"code": 7,  "fmt": ">H",  "size": 2},       # special decode
+    "FP3":    {"code": 15, "fmt": "3s",  "size": 3},       # raw bytes (not decoded here)
+    "FP4":    {"code": 8,  "fmt": "4s",  "size": 4},       # raw bytes (not decoded here)
+
+    "IEEE4B": {"code": 9,  "fmt": ">f",  "size": 4},       # 32-bit float, big-endian
+    "IEEE8B": {"code": 18, "fmt": ">d",  "size": 8},       # 64-bit float, big-endian
+
+    "Bool":   {"code": 10, "fmt": "B",   "size": 1},       # general boolean byte
     "Bool8":  {"code": 17, "fmt": "B",   "size": 1},
-    "Bool":   {"code": 10, "fmt": "B",   "size": 1},
     "Bool2":  {"code": 27, "fmt": ">H",  "size": 2},
     "Bool4":  {"code": 28, "fmt": ">L",  "size": 4},
-    "Sec":    {"code": 12, "fmt": ">l",  "size": 4},
-    "USec":   {"code": 13, "fmt": "6s",  "size": 6},
-    "NSec":   {"code": 14, "fmt": ">2l", "size": 8},
-    "ASCII":  {"code": 11, "fmt": "s",   "size": None},
-    "ASCIIZ": {"code": 16, "fmt": "s",   "size": None},
+
+    # Time encodings
+    "Sec":    {"code": 12, "fmt": ">l",  "size": 4},       # seconds (signed)
+    "USec":   {"code": 13, "fmt": "6s",  "size": 6},       # rarely used here
+    "NSec":   {"code": 14, "fmt": ">2l", "size": 8},       # (secs, nsecs)
+
+    # Strings
+    "ASCII":  {"code": 11, "fmt": "s",   "size": None},    # fixed length provided by caller
+    "ASCIIZ": {"code": 16, "fmt": "s",   "size": None},    # NUL-terminated
+
+    # Unused legacy little-endian aliases (kept for tabledef completeness)
     "Short":  {"code": 19, "fmt": "<h",  "size": 2},
     "Long":   {"code": 20, "fmt": "<l",  "size": 4},
     "UShort": {"code": 21, "fmt": "<H",  "size": 2},
     "ULong":  {"code": 22, "fmt": "<L",  "size": 4},
     "IEEE4L": {"code": 24, "fmt": "<f",  "size": 4},
     "IEEE8L": {"code": 25, "fmt": "<d",  "size": 8},
-    "SecNano":{"code": 23, "fmt": "<2l", "size": 8},
+    "SecNano":{"code": 23, "fmt": "<2l", "size": 8},       # not used by CR2xx/CR8xx BMP5
 }
+
+# Reverse lookup from code → logical name
+code_to_type: Dict[int, str] = {spec["code"]: name for name, spec in datatype.items()}
 
 # ----------------------- Transaction numbering (8-bit) -----------------------
 
@@ -164,9 +191,19 @@ def pakbus_hdr(
 # ----------------------------- Encode / decode -------------------------------
 
 def decode_bin(Types: Sequence[str], buff: BytesLike, length: int = 1) -> Tuple[List[Any], int]:
+    """
+    Decode a sequence of BMP5 field types from a bytes-like buffer.
+    """
+    data = bytes(buff)
+    data_len = len(data)
     offset = 0
     values: List[Any] = []
-    data = bytes(buff)
+
+    def _require(n: int) -> None:
+        if offset + n > data_len:
+            raise ValueError(
+                f"decode_bin: need {n} more bytes at {offset}, only {data_len - offset} remain"
+            )
 
     for Type in Types:
         spec = datatype[Type]
@@ -176,26 +213,34 @@ def decode_bin(Types: Sequence[str], buff: BytesLike, length: int = 1) -> Tuple[
         if Type == "ASCIIZ":
             nul = data.find(b"\x00", offset)
             if nul < 0:
-                raise ValueError("ASCIIZ: missing terminator")
+                raise ValueError("ASCIIZ: missing NUL terminator")
             value: Any = data[offset:nul]
             used = (nul - offset) + 1
+
         elif Type == "ASCII":
+            if length <= 0:
+                raise ValueError("ASCII: non-positive length")
+            _require(int(length))
             used = int(length)
             value = data[offset:offset + used]
+
         elif Type == "FP2":
-            used = 2
+            _require(2); used = 2
             (raw,) = struct.unpack_from(fmt, data, offset)
             mant = raw & 0x1FFF
             exp = (raw >> 13) & 0x3
             sign = (raw >> 15) & 0x1
-            value = (-1) ** sign * float(mant) / (10 ** exp)
+            value = (-1.0 if sign else 1.0) * float(mant) / (10 ** exp)
+
         elif Type == "NSec":
-            used = 8
+            _require(8); used = 8
             s1, s2 = struct.unpack_from(fmt, data, offset)
             value = (int(s1), int(s2))
+
         else:
             if size is None:
                 raise ValueError(f"Unhandled variable-sized type {Type}")
+            _require(int(size))
             used = int(size)
             if "s" in fmt:
                 (value,) = struct.unpack_from(f"{used}s", data, offset)
@@ -229,7 +274,7 @@ def encode_bin(Types: Sequence[str], Values: Sequence[Any]) -> bytes:
             s1, s2 = value  # type: ignore[misc]
             out += struct.pack(fmt, int(s1), int(s2))
         elif Type == "FP2":
-            raise NotImplementedError("Encoding FP2 not required for our use")
+            raise NotImplementedError("Encoding FP2 not required here")
         else:
             if isinstance(value, (bytes, bytearray, memoryview)) and size and "s" in fmt:
                 out += struct.pack(f"{int(size)}s", bytes(value))
@@ -273,7 +318,7 @@ def pkt_hello_cmd(
     VerifyIntv: int = 1800,
 ) -> Tuple[bytes, int]:
     tn = new_tran_nbr()
-    hdr = pakbus_hdr(DstNodeId, SrcNodeId, 0x0)
+    hdr = pakbus_hdr(DstNodeId, SrcNodeId, 0x0)  # PakCtrl
     msg = encode_bin(["Byte", "Byte", "Byte", "Byte", "UInt2"], [0x09, tn, IsRouter, HopMetric, VerifyIntv])
     return hdr + msg, tn
 
@@ -302,7 +347,7 @@ def wait_pkt(
             continue
         hdr, msg = decode_pkt(rcv)
         last_hdr, last_msg = hdr, msg
-        # match the directed pair (Dst<-Src) and transaction
+        # match reversed direction and matching TranNbr
         if hdr.get("DstNodeId") == DstNodeId and hdr.get("SrcNodeId") == SrcNodeId and msg.get("TranNbr") == TranNbr:
             return hdr, msg
     return last_hdr, last_msg
@@ -317,18 +362,24 @@ def ping_node(
 ) -> Message:
     pkt, tn = pkt_hello_cmd(DstNodeId, SrcNodeId)
     if RouterPhyAddr is not None:
-        # replace header to route via CR800 (DstPhy=router)
-        hdr = pakbus_hdr(
+        hdr_bytes = pakbus_hdr(
             DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, HiProtoCode=0x0,
             DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
             ExpMoreCode=0, LinkState=0, Priority=0, HopCnt=0,
         )
-        pkt = hdr + pkt[8:]
+        pkt = hdr_bytes + pkt[8:]
     send(s, pkt)
     _hdr, msg = wait_pkt(s, DstNodeId=SrcNodeId, SrcNodeId=DstNodeId, TranNbr=tn, timeout=timeout)
     return msg
 
 # ---------------------- BMP5: Collect Data & Table Defs ----------------------
+
+# CollectData modes (byte after SecurityCode):
+#   0x04  MostRecent (P1 = N records)
+#   0x05  RecNoRange  (P1 = begin_rec)
+#   0x06  RecNoRange  (P1 = begin_rec, P2 = end_rec)
+#   0x07  DateRange   (P1 = (sec,nsec) begin, P2 = (sec,nsec) end)
+#   0x08  DateToNewest(P1 = begin (sec,nsec), P2 ignored or (sec,nsec) per fw)
 
 def pkt_collectdata_cmd(
     DstNodeId: int,
@@ -336,42 +387,65 @@ def pkt_collectdata_cmd(
     TableNbr: int,
     TableDefSig: int,
     FieldNbr: Sequence[int] = (),
-    CollectMode: int = 0x05,
-    P1: int | Tuple[int, int] = 0,
+    CollectMode: int = 0x04,
+    P1: int | Tuple[int, int] = 1,
     P2: int | Tuple[int, int] = 0,
     SecurityCode: int = 0x0000,
 ) -> Tuple[bytes, int]:
     tn = new_tran_nbr()
-    hdr = pakbus_hdr(DstNodeId, SrcNodeId, 0x1)
-    msg = encode_bin(["Byte", "Byte", "UInt2", "Byte"], [0x09, tn, SecurityCode, CollectMode])
-    msg += encode_bin(["UInt2", "UInt2"], [TableNbr, TableDefSig])
 
-    if CollectMode in (0x04, 0x05):
-        msg += encode_bin(["UInt4"], [int(P1)])  # last N or from record
-    elif CollectMode in (0x06, 0x08):
-        msg += encode_bin(["UInt4", "UInt4"], [int(P1), int(P2)])
+    # BMP5 header
+    hdr_bytes = pakbus_hdr(DstNodeId, SrcNodeId, 0x1)
+
+    # 0x09 request
+    msg = encode_bin(["Byte", "Byte", "UInt2", "Byte"], [0x09, tn, SecurityCode, CollectMode])
+    msg += encode_bin(["UInt2", "UInt2"], [TableNbr, TableDefSig & 0xFFFF])
+
+    # Mode parameters
+    if CollectMode == 0x04:
+        msg += encode_bin(["UInt4"], [int(P1)])  # most recent N
+    elif CollectMode == 0x05:
+        msg += encode_bin(["UInt4"], [int(P1)])  # from record#
+    elif CollectMode == 0x06:
+        msg += encode_bin(["UInt4", "UInt4"], [int(P1), int(P2)])  # rec range
     elif CollectMode == 0x07:
-        # time range
         p1 = P1 if isinstance(P1, tuple) else (0, 0)
         p2 = P2 if isinstance(P2, tuple) else (0, 0)
-        msg += encode_bin(["NSec", "NSec"], [p1, p2])
+        msg += encode_bin(["NSec", "NSec"], [p1, p2])  # time range
+    elif CollectMode == 0x08:
+        p1 = P1 if isinstance(P1, tuple) else (0, 0)
+        msg += encode_bin(["NSec"], [p1])              # date → newest
+    else:
+        pass
 
+    # Field list (UInt2 numbers 1..N, terminated by 0)
     fieldlist = list(FieldNbr) + [0]
     msg += encode_bin(["UInt2"] * len(fieldlist), fieldlist)
-    return hdr + msg, tn
+
+    return hdr_bytes + msg, tn
 
 def msg_collectdata_response(msg: Message) -> Message:
-    off = 2
-    (resp,), used = decode_bin(["Byte"], msg["raw"][off:])  # type: ignore[index]
-    off += used
+    raw = msg.get("raw", b"")
+    if not raw or len(raw) < 3:
+        msg["RespCode"] = 0x0E
+        msg["RecData"]  = b""
+        return msg
+    (resp,), used = decode_bin(["Byte"], raw[2:])
     msg["RespCode"] = int(resp)
-    msg["RecData"] = msg["raw"][off:]  # type: ignore[index]
+    if msg["RespCode"] != 0:
+        log.warning("CollectData RC=%02x (%d bytes payload)", msg["RespCode"], len(msg.get("RecData", b"")))
+    msg["RecData"]  = raw[2 + used:]
     return msg
 
 def parse_tabledef(raw: BytesLike) -> List[Dict[str, Any]]:
+    """
+    Parse Table Definitions blob from 0x17 response into a structured list.
+    """
     out: List[Dict[str, Any]] = []
     data = bytes(raw)
     offset = 0
+
+    # The blob starts with a flags/version byte we can ignore (consume)
     _, used = decode_bin(["Byte"], data[offset:])
     offset += used
 
@@ -384,16 +458,16 @@ def parse_tabledef(raw: BytesLike) -> List[Dict[str, Any]]:
         offset += used
         tblhdr["TableName"], tblhdr["TableSize"], tblhdr["TimeType"], tblhdr["TblTimeInto"], tblhdr["TblInterval"] = vals
 
+        # Fields loop
         while True:
-            (fieldtype,), used = decode_bin(["Byte"], data[offset:])
+            (fieldtype_byte,), used = decode_bin(["Byte"], data[offset:])
             offset += used
-            if fieldtype == 0:
+            if fieldtype_byte == 0:
                 break
 
-            fld: Dict[str, Any] = {"ReadOnly": int(fieldtype) >> 7}
-            ft_code = int(fieldtype) & 0x7F
-            ft_name: Any = next((name for name, spec in datatype.items() if spec["code"] == ft_code), ft_code)
-            fld["FieldType"] = ft_name
+            fld: Dict[str, Any] = {"ReadOnly": int(fieldtype_byte) >> 7}
+            ft_code = int(fieldtype_byte) & 0x7F
+            fld["FieldType"] = code_to_type.get(ft_code, ft_code)
 
             (fname,), used = decode_bin(["ASCIIZ"], data[offset:])
             offset += used
@@ -408,9 +482,9 @@ def parse_tabledef(raw: BytesLike) -> List[Dict[str, Any]]:
                 aliases.append(alias)
             fld["AliasName"] = aliases
 
-            vals, used = decode_bin(["ASCIIZ", "ASCIIZ", "ASCIIZ", "UInt4", "UInt4"], data[offset:])
+            vals2, used = decode_bin(["ASCIIZ", "ASCIIZ", "ASCIIZ", "UInt4", "UInt4"], data[offset:])
             offset += used
-            fld["Processing"], fld["Units"], fld["Description"], fld["BegIdx"], fld["Dimension"] = vals
+            fld["Processing"], fld["Units"], fld["Description"], fld["BegIdx"], fld["Dimension"] = vals2
 
             subdims: List[int] = []
             while True:
@@ -423,77 +497,109 @@ def parse_tabledef(raw: BytesLike) -> List[Dict[str, Any]]:
 
             fields.append(fld)
 
-        tblsig = calc_sig_for(data[start:offset])
+        # 16-bit signature across this table block
+        tblsig = calc_sig_for(data[start:offset]) & 0xFFFF
         out.append({"Header": tblhdr, "Fields": fields, "Signature": int(tblsig)})
 
     return out
 
 def parse_collectdata(raw: BytesLike, tabledef: List[Dict[str, Any]], FieldNbr: Sequence[int] = ()) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Parse the payload from a 0x89 response using the given table definition.
+    """
     data = bytes(raw)
     offset = 0
     recdata: List[Dict[str, Any]] = []
 
     while offset < len(data) - 1:
         frag: Dict[str, Any] = {}
+
         vals, used = decode_bin(["UInt2", "UInt4"], data[offset:])
         offset += used
         table_nbr, beg_rec = int(vals[0]), int(vals[1])
         frag["TableNbr"] = table_nbr
         frag["BegRecNbr"] = beg_rec
-        frag["TableName"] = tabledef[table_nbr - 1]["Header"]["TableName"]
 
-        (isoffset,), used = decode_bin(["Byte"], data[offset:])
-        frag["IsOffset"] = int(isoffset) >> 7
+        # Resolve table name
+        tname = tabledef[table_nbr - 1]["Header"]["TableName"]
+        if isinstance(tname, (bytes, bytearray)):
+            tname = tname.decode("ascii", "ignore")
+        frag["TableName"] = tname
 
-        if frag["IsOffset"]:
+        # Offset flag + embedded info
+        (isoffset_byte,), used = decode_bin(["Byte"], data[offset:])
+        offset += used
+        isoffset = int(isoffset_byte) >> 7
+        frag["IsOffset"] = isoffset
+
+        if isoffset:
             (byteoffset,), used = decode_bin(["UInt4"], data[offset:])
             offset += used
             frag["ByteOffset"] = int(byteoffset) & 0x7FFFFFFF
             frag["NbrOfRecs"] = None
-            frag["RecFrag"] = data[offset:-1]
+            frag["RecFrag"] = data[offset:-1]  # raw remainder
             offset = len(data) - 1
         else:
             (nbrecs,), used = decode_bin(["UInt2"], data[offset:])
             offset += used
             frag["NbrOfRecs"] = int(nbrecs) & 0x7FFF
-            frag["ByteOffset"] = None
 
+            # If table has a fixed interval, server may send base time once
             interval = tabledef[table_nbr - 1]["Header"]["TblInterval"]
-            if interval == (0, 0):
-                timeofrec: Optional[Tuple[int, int]] = None
-            else:
-                (timeofrec,), used = decode_bin(["NSec"], data[offset:])
+            has_fixed = (interval != (0, 0))
+            base_time: Optional[Tuple[int, int]] = None
+
+            if has_fixed:
+                (base_time,), used = decode_bin(["NSec"], data[offset:])
                 offset += used
 
-            frag["RecFrag"] = []
+            # Field list to decode
             fields = list(FieldNbr) if FieldNbr else list(range(1, len(tabledef[table_nbr - 1]["Fields"]) + 1))
 
+            frag_rows: List[Dict[str, Any]] = []
             for n in range(frag["NbrOfRecs"]):  # type: ignore[arg-type]
-                record: Dict[str, Any] = {"RecNbr": beg_rec + n}
+                rec: Dict[str, Any] = {"RecNbr": beg_rec + n}
 
-                if timeofrec:
-                    interval_s, interval_n = interval
-                    record["TimeOfRec"] = (timeofrec[0] + n * int(interval_s), timeofrec[1] + n * int(interval_n))
+                if has_fixed and base_time is not None:
+                    (bsec, bnsec) = base_time
+                    (isec, insec) = interval
+                    sec = bsec + n * int(isec)
+                    nsec = bnsec + n * int(insec)
+                    if nsec >= 1_000_000_000:
+                        carry = nsec // 1_000_000_000
+                        sec += carry
+                        nsec -= carry * 1_000_000_000
+                    rec["TimeOfRec"] = (sec, nsec)
                 else:
                     (tor,), used = decode_bin(["NSec"], data[offset:])
                     offset += used
-                    record["TimeOfRec"] = tor
+                    rec["TimeOfRec"] = tor
 
-                values_map: Dict[Any, Any] = {}
-                for field in fields:
-                    meta = tabledef[table_nbr - 1]["Fields"][field - 1]
-                    fname = meta["FieldName"].decode("ascii", "ignore") if isinstance(meta["FieldName"], (bytes, bytearray)) else meta["FieldName"]
+                values_map: Dict[str, Any] = {}
+                for fn in fields:
+                    meta = tabledef[table_nbr - 1]["Fields"][fn - 1]
+                    fname_raw = meta["FieldName"]
+                    fname = fname_raw.decode("ascii", "ignore") if isinstance(fname_raw, (bytes, bytearray)) else str(fname_raw)
                     ftype = meta["FieldType"]
                     dim = int(meta["Dimension"])
+
                     if ftype == "ASCII":
                         (val,), used = decode_bin([ftype], data[offset:], length=dim)
+                        try:
+                            val = val.decode("ascii", "ignore")
+                        except Exception:
+                            pass
                     else:
                         vals2, used = decode_bin([ftype] * dim, data[offset:])
                         val = vals2 if dim > 1 else vals2[0]
+
                     offset += used
                     values_map[fname] = val
-                record["Fields"] = values_map
-                frag["RecFrag"].append(record)
+
+                rec["Fields"] = values_map
+                frag_rows.append(rec)
+
+            frag["RecFrag"] = frag_rows
 
         recdata.append(frag)
 
@@ -547,40 +653,27 @@ def get_tabledefs_bmp5(
     timeout: float = 10.0,
 ) -> bytes:
     """
-    BMP5 'GetTableDefs' for CR200/CR800 networks.
-
-    Handshake-first strategy:
-      1) If RouterPhyAddr is given, send a routed Hello (leaf <-> us) to
-         ensure the CR800 has an open/known route for the leaf.
-      2) Try two header flavors (the ones proven by your Hello tests),
-         and both flags (0x00, 0x01) for the 0x16 request.
-      3) Expect MsgType 0x17 response: [0x17, TranNbr, RespCode, <blob...>].
+    Fetch raw TableDefs using BMP5 0x16. If RouterPhyAddr is given, we route via
+    that physical address (e.g., CR800) but still target DstNodeId logically.
     """
-    # --- Step 0: polite Hello first (routed when router phy is provided) ---
+    # Polite Hello (helps routers open a route)
     try:
-        # ping_node already supports RouterPhyAddr; it builds the routed header for Hello.
-        _hello = ping_node(
-            s,
-            DstNodeId=DstNodeId,
-            SrcNodeId=SrcNodeId,
-            RouterPhyAddr=RouterPhyAddr,
-        )
-        # no strict check; some firmwares respond minimally
+        ping_node(s, DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, RouterPhyAddr=RouterPhyAddr, timeout=5.0)
     except Exception:
-        # If Hello fails we still try GetTableDefs; some devices are quirky
         pass
 
-    def _try_once(hdr_kwargs: Dict[str, Any], flags: int) -> Optional[bytes]:
+    def _try_once(hdr_opts: Dict[str, Any], flg: int) -> Optional[bytes]:
         tn = new_tran_nbr()
-        # MsgType 0x16 = GetTableDefs
-        payload = encode_bin(["Byte", "Byte", "Byte"], [0x16, tn, flags])
-        hdr = pakbus_hdr(
+        body = encode_bin(["Byte", "Byte", "Byte"], [0x16, tn, flg])  # 0x16 req
+
+        hdr_bytes = pakbus_hdr(
             DstNodeId=DstNodeId,
             SrcNodeId=SrcNodeId,
-            HiProtoCode=0x00,  # PakCtrl / BMP shell
-            **hdr_kwargs,
+            HiProtoCode=0x01,  # BMP5
+            **hdr_opts,
         )
-        send(s, hdr + payload)
+
+        send(s, hdr_bytes + body)
         _hdr, msg = wait_pkt(
             s,
             DstNodeId=SrcNodeId,
@@ -588,69 +681,67 @@ def get_tabledefs_bmp5(
             TranNbr=tn,
             timeout=timeout,
         )
-        if not msg:
-            return None
-        if msg.get("MsgType") != 0x17:
+        if not msg or msg.get("MsgType") != 0x17:
             return None
         raw = msg.get("raw", b"")
         if len(raw) < 3:
             return None
-        resp_code = raw[2]
-        blob = raw[3:]
-        if resp_code == 0 and blob:
-            return blob
+        resp = raw[2]
+        blob_bytes = raw[3:]
+        if resp == 0 and blob_bytes:
+            return blob_bytes
         return None
 
     tries: List[Tuple[Dict[str, Any], int]] = []
 
-    # Routed header flavors (these matched your Hello traces)
     if RouterPhyAddr is not None:
+        hdr_A = dict(
+            ExpMoreCode=0x1, LinkState=0x9, Priority=0x1, HopCnt=0x0,
+            DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
+        )
         hdr_B = dict(
-            ExpMoreCode=0x1,
-            LinkState=0x9,
-            Priority=0x1,
-            HopCnt=0x0,
-            DstPhyAddr=RouterPhyAddr,
-            SrcPhyAddr=SrcNodeId,
+            ExpMoreCode=0x2, LinkState=0xA, Priority=0x1, HopCnt=0x0,
+            DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
         )
-        hdr_C = dict(
-            ExpMoreCode=0x2,
-            LinkState=0xA,
-            Priority=0x1,
-            HopCnt=0x0,
-            DstPhyAddr=RouterPhyAddr,
-            SrcPhyAddr=SrcNodeId,
-        )
-        for hdr in (hdr_B, hdr_C):
+        for hdr_opts in (hdr_A, hdr_B):
             for flg in (0x00, 0x01):
-                tries.append((hdr, flg))
+                tries.append((hdr_opts, flg))
 
-    # Fallback: direct physical addressing (some setups allow this)
-    hdr_direct: Dict[str, Any] = {}
+    # direct physical (some setups permit)
     for flg in (0x00, 0x01):
-        tries.append((hdr_direct, flg))
+        tries.append(({}, flg))
 
-    last = None
-    for hdr_kwargs, flags in tries:
-        last = (hdr_kwargs, flags)
+    last_try: Optional[Tuple[Dict[str, Any], int]] = None
+    for hdr_opts, flg in tries:
+        last_try = (hdr_opts, flg)
         try:
-            blob = _try_once(hdr_kwargs, flags)
+            blob = _try_once(hdr_opts, flg)
         except ConnectionResetError:
-            # Peer reset; bail out early (caller can reopen socket)
             raise
         if blob:
             return blob
 
-    raise RuntimeError(f"GetTableDefs failed: last_try={last!r}")
+    raise RuntimeError(f"GetTableDefs failed; last_try={last_try!r}")
 
-# ---- Collect data convenience (routed) ----
+# ---- Convenience: get & parse defs, collect, flatten ------------------------
+
+def ensure_tabledefs(
+    s: socket.socket,
+    *,
+    DstNodeId: int,
+    SrcNodeId: int,
+    RouterPhyAddr: Optional[int] = None,
+    timeout: float = 10.0,
+) -> List[Dict[str, Any]]:
+    raw = get_tabledefs_bmp5(s, DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, RouterPhyAddr=RouterPhyAddr, timeout=timeout)
+    return parse_tabledef(raw)
 
 def _get_table_number(tabledef: List[Dict[str, Any]], table_name: str) -> Optional[int]:
     for i, t in enumerate(tabledef, start=1):
         name = t.get("Header", {}).get("TableName")
         if isinstance(name, (bytes, bytearray)):
             name = name.decode("ascii", "ignore")
-        if name == table_name:
+        if str(name) == table_name:
             return i
     return None
 
@@ -662,64 +753,211 @@ def collect_data(
     TableDef: List[Dict[str, Any]],
     TableName: str,
     FieldNames: Sequence[str] = (),
-    CollectMode: int = 0x05,
+    CollectMode: int = 0x04,
     P1: Any = 1,
     P2: Any = 0,
     SecurityCode: int = 0x0000,
     RouterPhyAddr: Optional[int] = None,
     timeout: float = 20.0,
+    TableDefSigOverride: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Send CollectData and parse response into record fragments using TableDef.
+
+    Returns:
+        (records, more) where `records` is a list of parsed record fragments and
+        `more` is the device's "more data available" flag.
+
+    Raises:
+        RuntimeError on protocol / device errors (e.g., RC != 0), with rich context.
+    """
+    # --- Resolve table number and signature ---
     tablenbr = _get_table_number(TableDef, TableName)
     if tablenbr is None:
         raise RuntimeError(f"table {TableName!r} not found in table definition")
-    tabledefsig = int(TableDef[tablenbr - 1]["Signature"])
 
-    # map names -> field numbers (optional)
+    try:
+        if TableDefSigOverride is not None:
+            tabledefsig = int(TableDefSigOverride) & 0xFFFF
+        else:
+            tabledefsig = int(TableDef[tablenbr - 1]["Signature"]) & 0xFFFF
+    except Exception as e:
+        raise RuntimeError(
+            f"Unable to resolve table signature for table {TableName!r} (tablenbr={tablenbr}): {e}"
+        ) from e
+
+    # --- Optional field selection (map names -> field numbers) ---
     fieldnbr: List[int] = []
     if FieldNames:
         wanted = list(FieldNames)
-        for fn in range(1, len(TableDef[tablenbr - 1]["Fields"]) + 1):
-            fieldname = TableDef[tablenbr - 1]["Fields"][fn - 1]["FieldName"]
+        fields = TableDef[tablenbr - 1].get("Fields", [])
+        for fn in range(1, len(fields) + 1):
+            fieldname = fields[fn - 1].get("FieldName")
             if isinstance(fieldname, (bytes, bytearray)):
-                fieldname = fieldname.decode("ascii", "ignore")
-            try:
-                idx = wanted.index(fieldname)
-            except ValueError:
-                continue
-            fieldnbr.append(fn)
-            del wanted[idx]
-            if not wanted:
-                break
+                try:
+                    fieldname = fieldname.decode("ascii", "ignore")
+                except Exception:
+                    fieldname = repr(fieldname)
+            if fieldname in wanted:
+                fieldnbr.append(fn)
+                try:
+                    wanted.remove(fieldname)
+                except ValueError:
+                    pass
+                if not wanted:
+                    break
+        if wanted:  # names requested but not found
+            raise RuntimeError(
+                f"Some requested FieldNames not found in {TableName!r}: {wanted}"
+            )
 
-    pkt, tn = pkt_collectdata_cmd(
+    # --- Build CollectData command packet ---
+    pkt, tran_nbr = pkt_collectdata_cmd(
         DstNodeId, SrcNodeId, tablenbr, tabledefsig,
-        FieldNbr=fieldnbr, CollectMode=CollectMode, P1=P1, P2=P2, SecurityCode=SecurityCode
+        FieldNbr=fieldnbr,
+        CollectMode=CollectMode, P1=P1, P2=P2, SecurityCode=SecurityCode
     )
 
-    # Route via router if provided (swap header only)
+    # --- Wrap in link header if routing through CR800 router ---
     if RouterPhyAddr is not None:
-        hdr = pakbus_hdr(
+        hdr_bytes = pakbus_hdr(
             DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, HiProtoCode=0x01,
             DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
             ExpMoreCode=0, LinkState=0, Priority=0, HopCnt=0,
         )
-        pkt = hdr + pkt[8:]
+        # Replace the link-layer header section with our routed header
+        pkt = hdr_bytes + pkt[8:]
 
+    # --- Send and await response ---
     send(s, pkt)
-    _hdr, msg = wait_pkt(s, DstNodeId=SrcNodeId, SrcNodeId=DstNodeId, TranNbr=tn, timeout=timeout)
-    if not msg:
-        return [], False
-    msg = msg_collectdata_response(msg)
-    recs, more = parse_collectdata(msg["RecData"], TableDef, FieldNbr=fieldnbr)
-    return recs, more
+    _hdr, raw_msg = wait_pkt(
+        s,
+        DstNodeId=SrcNodeId,    # responses swap src/dst
+        SrcNodeId=DstNodeId,
+        TranNbr=tran_nbr,
+        timeout=timeout
+    )
+    if not raw_msg:
+        # No response at all
+        raise RuntimeError(
+            f"CollectData timeout/no response (dst={DstNodeId}, src={SrcNodeId}, "
+            f"router={RouterPhyAddr}, table={TableName!r}, mode=0x{CollectMode:02X}, "
+            f"P1={P1}, P2={P2}, sig=0x{tabledefsig:04X})"
+        )
 
-# ---- File Upload (routed) ----
+    # --- Parse high-level CollectData response (extract RC, RecData, More, etc.) ---
+    msg = msg_collectdata_response(raw_msg)
+    rc = int(msg.get("RC", 0)) & 0xFF
+
+    # If device signaled an error, raise a clear, contextual exception
+    if rc != 0:
+        raise RuntimeError(
+            f"CollectData RC=0x{rc:02X} (dst={DstNodeId}, src={SrcNodeId}, router={RouterPhyAddr}, "
+            f"table={TableName!r}#{tablenbr}, sig=0x{tabledefsig:04X}, mode=0x{CollectMode:02X}, "
+            f"P1={P1}, P2={P2})"
+        )
+
+    # --- Extract record payload and "more" flag ---
+    recdata: bytes = msg.get("RecData", b"") or b""
+    more_flag = bool(msg.get("More", False))
+
+    # It's valid to have zero rows (e.g., empty window) with RC==0; return empty set cleanly.
+    if len(recdata) == 0:
+        return [], more_flag
+
+    # --- Decode records safely, with rich error context on failure ---
+    try:
+        recs, more_from_payload = parse_collectdata(recdata, TableDef, FieldNbr=fieldnbr)
+        # Prefer the explicit "More" flag if present; fall back to parser's.
+        more = bool(more_flag or more_from_payload)
+        return recs, more
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to decode CollectData payload (len={len(recdata)} bytes) for "
+            f"table={TableName!r}#{tablenbr}, sig=0x{tabledefsig:04X}, "
+            f"mode=0x{CollectMode:02X}, P1={P1}, P2={P2}. Error: {e}"
+        ) from e
+
+def collect_by_time(
+    s: socket.socket,
+    *,
+    DstNodeId: int,
+    SrcNodeId: int,
+    TableDef: List[Dict[str, Any]],
+    TableName: str,
+    BeginUnixUTC: float,
+    EndUnixUTC: float,
+    FieldNames: Sequence[str] = (),
+    RouterPhyAddr: Optional[int] = None,
+    timeout: float = 20.0,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Convenience: CollectData by time range (inclusive start, exclusive end).
+    """
+    p1 = time_to_nsec(BeginUnixUTC)
+    p2 = time_to_nsec(EndUnixUTC)
+    return collect_data(
+        s,
+        DstNodeId=DstNodeId, SrcNodeId=SrcNodeId,
+        TableDef=TableDef, TableName=TableName,
+        FieldNames=FieldNames,
+        CollectMode=0x07, P1=p1, P2=p2,
+        RouterPhyAddr=RouterPhyAddr, timeout=timeout,
+    )
+
+def collect_most_recent(
+    s: socket.socket,
+    *,
+    DstNodeId: int,
+    SrcNodeId: int,
+    TableDef: List[Dict[str, Any]],
+    TableName: str,
+    Count: int = 1,
+    FieldNames: Sequence[str] = (),
+    RouterPhyAddr: Optional[int] = None,
+    timeout: float = 20.0,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Convenience: most recent Count records from TableName.
+    """
+    return collect_data(
+        s,
+        DstNodeId=DstNodeId, SrcNodeId=SrcNodeId,
+        TableDef=TableDef, TableName=TableName,
+        FieldNames=FieldNames,
+        CollectMode=0x04, P1=int(Count),
+        RouterPhyAddr=RouterPhyAddr, timeout=timeout,
+    )
+
+def flatten_records(rec_frags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Flatten parsed fragments into a simple list of row dicts:
+      { "TableName": ..., "RecNbr": ..., "TimeOfRec": (sec,nsec), **fields }
+    """
+    out: List[Dict[str, Any]] = []
+    for frag in rec_frags:
+        tname = frag.get("TableName")
+        rows = frag.get("RecFrag", [])
+        if isinstance(rows, list):
+            for r in rows:
+                flat = {
+                    "TableName": tname,
+                    "RecNbr": r.get("RecNbr"),
+                    "TimeOfRec": r.get("TimeOfRec"),
+                }
+                flds = r.get("Fields", {})
+                if isinstance(flds, dict):
+                    flat.update(flds)
+                out.append(flat)
+    return out
+
+# ---- File Upload (optional) ----
 
 def msg_fileupload_response(msg: Message) -> Message:
     # [MsgType, TranNbr, RespCode, FileOffset(4), FileData...]
     raw = msg.get("raw", b"")
     if len(raw) < 7:
-        msg["RespCode"] = 0x0E  # general error
+        msg["RespCode"] = 0x0E
         msg["RecData"] = b""
         return msg
     resp, _fileoff = raw[2], struct.unpack(">L", raw[3:7])[0]
@@ -735,46 +973,91 @@ def fileupload(
     FileName: str,
     SecurityCode: int = 0x0000,
     RouterPhyAddr: Optional[int] = None,
-    timeout: float = 10.0,
+    timeout: float = 12.0,
 ) -> Tuple[bytes, int]:
     """
-    Read a whole file from the logger. Returns (data, RespCode).
+    Robust FileUpload (BMP5 0x0F). Tries multiple header flavors and a couple
+    of filename variants to accommodate CR200↔CR800 quirks.
+
+    Returns: (file_data, RespCode). RespCode==0 on success.
     """
-    file_data = bytearray()
-    file_offset = 0
-    tn: Optional[int] = None
+    def _hdr_variants():
+        # If routing through CR800, try the two routed header styles we’ve seen work,
+        # then a simple routed header. Otherwise fall back to direct.
+        if RouterPhyAddr is not None:
+            yield dict(ExpMoreCode=0x1, LinkState=0x9, Priority=0x1, HopCnt=0x0,
+                       DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
+            yield dict(ExpMoreCode=0x2, LinkState=0xA, Priority=0x1, HopCnt=0x0,
+                       DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
+            yield dict(ExpMoreCode=0x0, LinkState=0x0, Priority=0x0, HopCnt=0x0,
+                       DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
+        # As a last resort, try direct physical addressing (some setups accept it)
+        yield dict(ExpMoreCode=0x0, LinkState=0x0, Priority=0x0, HopCnt=0x0)
 
-    while True:
-        # Build BMP5 FileUpload request (0x0F)
-        if tn is None:
+    # Try a couple of common filename spellings on CR2xx
+    filenames: List[str] = [FileName]
+    if FileName.upper().startswith("CPU:"):
+        base = FileName.split(":", 1)[1]
+        if base not in filenames:
+            filenames.append(base)          # "Table1.dat"
+    else:
+        prefixed = f"CPU:{FileName}"
+        if prefixed not in filenames:
+            filenames.insert(0, prefixed)   # "CPU:Table1.dat" first
+
+    # Helper to read chunks with a specific header flavor
+    def _try_one(req_name: str, hdr_opts: Dict[str, Any]) -> Tuple[bytes, int]:
+        file_data = bytearray()
+        file_offset = 0
+
+        while True:
             tn = new_tran_nbr()
-        else:
-            tn = new_tran_nbr()
+            body = encode_bin(
+                ["Byte", "Byte", "UInt2", "ASCIIZ", "UInt4", "Byte"],
+                [0x0F, tn, SecurityCode, req_name.encode("ascii", "ignore"),
+                 file_offset, 0x00]  # keep-open flag
+            )
+            hdr_bytes = pakbus_hdr(
+                DstNodeId=DstNodeId,
+                SrcNodeId=SrcNodeId,
+                HiProtoCode=0x05,  # BMP5 File Control
+                **hdr_opts
+            )
+            try:
+                send(s, hdr_bytes + body)
+                _hdr, msg = wait_pkt(
+                    s,
+                    DstNodeId=SrcNodeId,
+                    SrcNodeId=DstNodeId,
+                    TranNbr=tn,
+                    timeout=timeout,
+                )
+            except (ConnectionResetError, TimeoutError):
+                # Give up this header flavor
+                return bytes(file_data), 0x0E  # general error
 
-        name_b = FileName.encode("ascii", "ignore")
-        body = encode_bin(
-            ["Byte", "Byte", "UInt2", "ASCIIZ", "UInt4", "Byte"],
-            [0x0F, tn, SecurityCode, name_b, file_offset, 0x00],  # keep open
-        )
-        hdr = pakbus_hdr(
-            DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, HiProtoCode=0x05,
-            DstPhyAddr=(RouterPhyAddr if RouterPhyAddr is not None else DstNodeId),
-            SrcPhyAddr=SrcNodeId,
-            ExpMoreCode=0, LinkState=0, Priority=0, HopCnt=0,
-        )
-        send(s, hdr + body)
+            if not msg:
+                return bytes(file_data), 0x0E
 
-        _hdr, msg = wait_pkt(s, DstNodeId=SrcNodeId, SrcNodeId=DstNodeId, TranNbr=tn, timeout=timeout)
-        if not msg:
-            return bytes(file_data), 0x0E
-        msg = msg_fileupload_response(msg)
-        rc = int(msg.get("RespCode", 0x0E))
-        chunk = msg.get("RecData", b"")
-        if rc == 0 and chunk:
-            file_data += chunk
-            file_offset += len(chunk)
-            continue
-        return bytes(file_data), rc
+            msg = msg_fileupload_response(msg)
+            rc_val = int(msg.get("RespCode", 0x0E))
+            chunk = msg.get("RecData", b"")
+            if rc_val == 0 and chunk:
+                file_data += chunk
+                file_offset += len(chunk)
+                # Continue until device returns rc!=0 or empty chunk
+                continue
+            return bytes(file_data), rc_val
+
+    # Try all combinations until one succeeds
+    last_rc = 0x0E
+    for candidate in filenames:
+        for hdr_opts in _hdr_variants():
+            data, rc_val = _try_one(candidate, hdr_opts)
+            if rc_val == 0 and data:
+                return data, 0
+            last_rc = rc_val
+    return b"", last_rc
 
 # alias for compatibility with old code
 pkt_hello_response = msg_hello
@@ -785,11 +1068,13 @@ __all__ = [
     # hello + routing
     "pkt_hello_cmd", "ping_node",
     # table/collect
-    "pkt_collectdata_cmd", "msg_collectdata_response", "parse_tabledef", "parse_collectdata",
+    "get_tabledefs_bmp5", "parse_tabledef",
+    "pkt_collectdata_cmd", "msg_collectdata_response", "parse_collectdata",
+    "ensure_tabledefs", "collect_data", "collect_by_time", "collect_most_recent", "flatten_records",
     # time helpers
     "nsec_to_time", "time_to_nsec", "nsec_base", "nsec_tick",
     # sockets
     "open_socket",
-    # new BMP5 GetTableDefs + routed collect/file
-    "get_tabledefs_bmp5", "collect_data", "fileupload",
+    # file upload
+    "fileupload",
 ]

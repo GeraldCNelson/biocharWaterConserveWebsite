@@ -1,0 +1,8 @@
+time_utc=2025-08-25T23:53:01.741510+00:00
+host=2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd
+port=6785
+template_len=31
+variant_len=31
+frames_rx=3
+prelude_count=2
+anchor_used=1124936305
