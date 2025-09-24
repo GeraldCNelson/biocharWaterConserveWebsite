@@ -4,7 +4,7 @@ Generic CR206X fetch via CR800 PakBus/TCP router.
 
 - Loads routing + defaults from config/sites.yaml (by --site).
 - Fetches last-N records from <table> using PakBus Collect*.
-- Verifies:
+- Verifies (when not in fallback mode):
   (1) Program signature via Public.ProgramSignature (or ProgSig)
   (2) Table definition hash vs a baseline in _trust_logs/
 - Appends to: biochar_app/pakbus/bdFiles/out_fetch/<SITE>_<TABLE>_decoded.csv
@@ -17,6 +17,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pandas as pd
 import yaml
@@ -46,6 +47,23 @@ def load_cfg(path: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
+def normalize_host(h: str) -> str:
+    """
+    Accepts hostnames, IPv6 with or without brackets, or full URLs,
+    and returns a host suitable for socket/TCP.
+    """
+    h = (h or "").strip()
+    if "://" in h:
+        parsed = urlparse(h)
+        if parsed.hostname:
+            h = parsed.hostname
+        else:
+            h = h.split("://", 1)[-1]
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1].strip()
+    return h
+
+
 def compute_tdef_hash(tdef) -> str:
     """
     Build a stable hash from table definition (field name/type/size/order).
@@ -53,7 +71,8 @@ def compute_tdef_hash(tdef) -> str:
     items = []
     for f in tdef.fields:
         items.append((f.name, getattr(f, "data_type", None), getattr(f, "size", None)))
-    payload = json.dumps({"table": tdef.name, "fields": items}, separators=(",", ":"), ensure_ascii=True)
+    payload = json.dumps({"table": tdef.name, "fields": items},
+                         separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
@@ -73,7 +92,8 @@ def iso_utc(ts) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
-def read_public_signature(link: Link, leaf: Node, expect_field_names=("ProgramSignature", "ProgSig")) -> str | None:
+def read_public_signature(link: Link, leaf: Node,
+                          expect_field_names=("ProgramSignature", "ProgSig")) -> str | None:
     """
     Try to read signature from Public table.
     """
@@ -86,7 +106,9 @@ def read_public_signature(link: Link, leaf: Node, expect_field_names=("ProgramSi
             if not target:
                 return None
             # Fetch newest record from Public
-            rec_rsp = link.send_and_wait(CollectRecord(node=leaf, table_name="Public", recno=-1), timeout=6.0)
+            rec_rsp = link.send_and_wait(
+                CollectRecord(node=leaf, table_name="Public", recno=-1), timeout=6.0
+            )
             if not rec_rsp or getattr(rec_rsp, "data", None) is None:
                 return None
             row = rec_rsp.data
@@ -125,46 +147,67 @@ def append_dedupe_csv(out_path: Path, df_new: pd.DataFrame, key="TimestampUTC") 
 def fetch_last_n(host: str, port: int, base_addr: int, leaf_addr: int, table: str, n: int, *,
                  expect_prog_sig: str | None,
                  site: str,
-                 timeout: float = 6.0) -> pd.DataFrame:
+                 timeout: float = 6.0,
+                 force_fallback: bool = False,
+                 fallback_fields: list[str] | None = None) -> pd.DataFrame:
     """
     Connect TCP->CR800 (base) and route to CR206X (leaf). Use CollectData/CollectRecord.
-    Also performs the two verifications (program signature + table hash).
+    If GetTableDef is disabled/fails or --force-fallback is set, we use the supplied
+    fallback_fields (TOA5 order) to drive output column ordering and skip TableDef hashing.
     """
-    transport = TcpTransport(host=host, port=port, timeout=timeout)
+    transport = TcpTransport(host=normalize_host(host), port=port, timeout=timeout)
     link = Link(transport)
     base = Node(address=base_addr, link=link, is_router=True)
     leaf = Node(address=leaf_addr, link=link, parent=base)  # routed via base
 
     link.start()
     try:
-        # --- Verification 1: program signature ---
+        # --- Verification 1: program signature (best-effort) ---
         actual_sig = read_public_signature(link, leaf)
         if expect_prog_sig:
             if actual_sig is None:
-                print(f"[WARN] {site}: Public.ProgramSignature not readable; expected '{expect_prog_sig}'.", file=sys.stderr)
-            elif str(actual_sig) != str(expect_prog_sig):
-                print(f"[WARN] {site}: ProgramSignature mismatch: device='{actual_sig}' expected='{expect_prog_sig}'.", file=sys.stderr)
-
-        # --- Get table definition ---
-        gtd = GetTableDef(node=leaf, table_name=table)
-        rsp = link.send_and_wait(gtd, timeout=timeout)
-        if rsp is None or not getattr(rsp, "tables", None):
-            raise RuntimeError(f"Unable to get table definition for {table} (leaf {leaf_addr})")
-
-        tdef = rsp.tables[0]
-        fields = [f.name for f in tdef.fields]
-
-        # --- Verification 2: table hash ---
-        tdef_hash = compute_tdef_hash(tdef)
-        hash_file = TRUST_DIR / f"{site}_{table}.tdef.sha1"
-        if hash_file.exists():
-            known = hash_file.read_text().strip()
-            if known != tdef_hash:
-                print(f"[WARN] {site}: TableDef hash changed! known={known[:8]}.. new={tdef_hash[:8]}..  (schema drift?)",
+                print(f"[WARN] {site}: Public.ProgramSignature not readable; expected '{expect_prog_sig}'.",
                       file=sys.stderr)
-        else:
-            # establish baseline
-            hash_file.write_text(tdef_hash + "\n")
+            elif str(actual_sig) != str(expect_prog_sig):
+                print(f"[WARN] {site}: ProgramSignature mismatch: device='{actual_sig}' expected='{expect_prog_sig}'.",
+                      file=sys.stderr)
+
+        fields: list[str] | None = None
+        doing_fallback = bool(force_fallback)
+
+        # --- Try to get table definition unless forced to fallback ---
+        if not force_fallback:
+            try:
+                gtd = GetTableDef(node=leaf, table_name=table)
+                rsp = link.send_and_wait(gtd, timeout=timeout)
+                if rsp and getattr(rsp, "tables", None):
+                    tdef = rsp.tables[0]
+                    fields = [f.name for f in tdef.fields]
+                    # Verification 2: table hash (only when we actually got a def)
+                    tdef_hash = compute_tdef_hash(tdef)
+                    hash_file = TRUST_DIR / f"{site}_{table}.tdef.sha1"
+                    if hash_file.exists():
+                        known = hash_file.read_text().strip()
+                        if known != tdef_hash:
+                            print(
+                                f"[WARN] {site}: TableDef hash changed! known={known[:8]}.. new={tdef_hash[:8]}..",
+                                file=sys.stderr
+                            )
+                    else:
+                        hash_file.write_text(tdef_hash + "\n")
+                else:
+                    doing_fallback = True
+            except Exception as e:
+                print(f"[WARN] {site}: GetTableDef failed ({e}); using fallback fields.", file=sys.stderr)
+                doing_fallback = True
+
+        if doing_fallback:
+            if not fallback_fields:
+                raise RuntimeError(
+                    f"{site}: fallback requested but no field list provided "
+                    "(add defaults.fields to config/sites.yaml)"
+                )
+            fields = list(fallback_fields)
 
         # --- Collect last-N records (Prefer CollectData) ---
         rows = []
@@ -189,19 +232,20 @@ def fetch_last_n(host: str, port: int, base_addr: int, leaf_addr: int, table: st
             rows = tmp[::-1]
 
         if not rows:
-            return pd.DataFrame(columns=["TimestampUTC"] + fields)
+            return pd.DataFrame(columns=["TimestampUTC"] + (fields or []))
 
-        # Normalize to DF
+        # Normalize to DF with known column order
         recs = []
         for row in rows:
             if isinstance(row, dict):
                 ts = row.get("time") or row.get("Timestamp") or row.get("timestamp")
-                vals = [row.get(k) for k in fields]
+                # Dicts can include extra keys; keep only the known schema order
+                vals = [(row.get(k) if k in row else None) for k in (fields or [])]
             else:
                 seq = list(row)
                 ts = seq[0]
-                vals = seq[1:1 + len(fields)]
-            recs.append({"TimestampUTC": iso_utc(ts), **dict(zip(fields, vals))})
+                vals = seq[1:1 + len(fields or [])]
+            recs.append({"TimestampUTC": iso_utc(ts), **dict(zip(fields or [], vals))})
 
         df = pd.DataFrame.from_records(recs)
         df = df.drop_duplicates(subset=["TimestampUTC"], keep="last").sort_values("TimestampUTC").reset_index(drop=True)
@@ -219,6 +263,8 @@ def main():
     ap.add_argument("--config", default="config/sites.yaml", help="Path to YAML config")
     ap.add_argument("--table", default="Table1", help="Table name (default Table1)")
     ap.add_argument("--num", type=int, default=200, help="How many recent records to fetch")
+    ap.add_argument("--force-fallback", action="store_true",
+                    help="Skip GetTableDef and use defaults.fields from config for schema")
     # Optional overrides (rarely needed)
     ap.add_argument("--host", help="Override CR800 host/IP")
     ap.add_argument("--port", type=int, help="Override CR800 PakBus/TCP port")
@@ -230,8 +276,8 @@ def main():
     defaults = cfg.get("defaults", {})
     gw = cfg.get("gateway", {})
 
+    # Derive connection from config when not overridden
     if args.leaf is None or args.host is None or args.base is None or args.port is None:
-        # populate from config by --site
         leaves = {s["name"]: s for s in cfg.get("leaves", [])}
         if args.site not in leaves:
             print(f"[ERROR] site '{args.site}' not found in {args.config}", file=sys.stderr)
@@ -245,6 +291,7 @@ def main():
         host, port, base, leaf = args.host, args.port, args.base, args.leaf
 
     expect_prog_sig = defaults.get("program_signature")
+    fallback_fields = defaults.get("fields")  # added in config
 
     df = fetch_last_n(
         host=host,
@@ -255,6 +302,8 @@ def main():
         n=args.num,
         expect_prog_sig=expect_prog_sig,
         site=args.site,
+        force_fallback=args.force_fallback,
+        fallback_fields=fallback_fields,
     )
 
     out = OUT_DIR / f"{args.site}_{args.table}_decoded.csv"

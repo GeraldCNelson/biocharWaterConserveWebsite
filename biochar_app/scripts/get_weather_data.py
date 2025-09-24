@@ -1,15 +1,11 @@
-import os
 import logging
 logger = logging.getLogger(__name__)
 import requests
 from io import StringIO
 import pandas as pd
-from datetime import datetime
 from pathlib import Path
 
 from biochar_app.scripts.config import (
-    DATA_RAW_DIR,
-    DATA_PROCESSED_DIR,
     COLLECT_PERIOD,
     COAG_STATION,
     COAGMET_VARIABLE_MAP,

@@ -1,15 +1,25 @@
-# config/sites.yaml
 gateway:
-  # how we reach the CR800 base (PakBus router)
   host: "http://[2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD]"
-  pakbus_id: 1              # CR800 PakBus ID (router)
-  security_code: null       # or integer if used
+  pakbus_id: 1
+  security_code: null
   timezone: "UTC"
 
 defaults:
   table: "Table1"
-  program_signature: "CR206X_STANDARD_V1"   # arbitrary label we expect
-  sample_period: "15min"                    # used by resampling/trust checks
+  program_signature: "CR206X_STANDARD_V1"
+  sample_period: "15min"
+  # <-- add this block (TOA5 field order)
+  fields:
+    - BattV_Min
+    - VWC_1_Avg
+    - EC_1_Avg
+    - T_1_Avg
+    - VWC_2_Avg
+    - EC_2_Avg
+    - T_2_Avg
+    - VWC_3_Avg
+    - EC_3_Avg
+    - T_3_Avg
 
 leaves:
   - name: S1T
@@ -36,5 +46,42 @@ leaves:
     pakbus_id: 12
   - name: S4B
     pakbus_id: 13
-#                 - name: S5M
-#                 pakbus_id: 14
+
+    loggers:
+      - name: local_cr206x
+        pakbus_id: 13         # from the trace (4093->13); adjust if yours differs
+        baud: 9600
+        poll:
+          # Decide what we actually download from THIS logger
+          - id: 2             # Table1 (15-min normals)
+            name: Table1
+            sig: 0x2C79
+            fields: # enforce TOA5 order for our parquet writer
+              - BattV_Min
+              - VWC_1_Avg
+              - EC_1_Avg
+              - T_1_Avg
+              - VWC_2_Avg
+              - EC_2_Avg
+              - T_2_Avg
+              - VWC_3_Avg
+              - EC_3_Avg
+              - T_3_Avg
+          # Optional: keep but don't store (debugging / health)
+          - id: 1             # Status
+            name: Status
+            sig: 0xB075
+            store: false      # we can flip to true if we want it later
+          - id: 3             # Table2 (12-hr)
+            name: Table2
+            sig: 0x3F98
+            store: false
+          - id: 4             # Table3 (24-hr)
+            name: Table3
+            sig: 0x8556
+            store: false
+        # If/when we choose to poll Public:
+        #   - id: <to be discovered>
+        #     name: Public
+        #     sig: <discover from trace>
+        #     store: false
