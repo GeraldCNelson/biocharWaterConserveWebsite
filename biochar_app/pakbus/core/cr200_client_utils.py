@@ -28,6 +28,7 @@ import logging
 import math
 import socket
 import struct
+import errno
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -61,7 +62,7 @@ datatype: Dict[str, Dict[str, Any]] = {
     "IEEE4B": {"code": 9,  "fmt": ">f",  "size": 4},       # 32-bit float, big-endian
     "IEEE8B": {"code": 18, "fmt": ">d",  "size": 8},       # 64-bit float, big-endian
 
-    "Bool":   {"code": 10, "fmt": "B",   "size": 1},       # general boolean byte
+    "Bool":   {"code": 10, "fmt": "B",   "size": 1},
     "Bool8":  {"code": 17, "fmt": "B",   "size": 1},
     "Bool2":  {"code": 27, "fmt": ">H",  "size": 2},
     "Bool4":  {"code": 28, "fmt": ">L",  "size": 4},
@@ -138,12 +139,23 @@ def send(sock: socket.socket, pkt: BytesLike) -> None:
     sock.sendall(b"\xBD" + frame + b"\xBD")
 
 def _recv_byte(sock: socket.socket) -> int:
-    b = sock.recv(1)
+    """
+    Receive exactly one byte and return it as an int (0..255).
+    Raises TimeoutError on socket timeout; raises RuntimeError on EOF.
+    """
+    try:
+        b = sock.recv(1)
+    except socket.timeout:
+        raise TimeoutError("socket recv timeout")
     if not b:
-        raise TimeoutError("Socket closed while reading.")
+        raise RuntimeError("socket closed while reading")
     return b[0]
 
 def recv(sock: socket.socket) -> Optional[bytes]:
+    """
+    Receive one framed PakBus packet (bytes) or None if signature check fails.
+    Uses _recv_byte() which returns ints, making FRAME comparisons correct.
+    """
     # sync to first FRAME
     byte: Optional[int] = None
     while byte != FRAME:
@@ -165,15 +177,15 @@ def recv(sock: socket.socket) -> Optional[bytes]:
 # ------------------------------ Packet header --------------------------------
 
 def pakbus_hdr(
-    DstNodeId: int,
-    SrcNodeId: int,
-    HiProtoCode: int,
-    ExpMoreCode: int = 0x0,
-    LinkState: int = 0x0,
-    Priority: int = 0x0,
-    HopCnt: int = 0x0,
-    DstPhyAddr: Optional[int] = None,
-    SrcPhyAddr: Optional[int] = None,
+        DstNodeId: int,
+        SrcNodeId: int,
+        HiProtoCode: int,
+        ExpMoreCode: int = 0x0,
+        LinkState: int = 0x0,
+        Priority: int = 0x0,
+        HopCnt: int = 0x0,
+        DstPhyAddr: Optional[int] = None,
+        SrcPhyAddr: Optional[int] = None,
 ) -> bytes:
     # Default physical == logical if not specified
     if DstPhyAddr is None:
@@ -186,7 +198,7 @@ def pakbus_hdr(
         ((ExpMoreCode & 0x3) << 14) | ((Priority & 0x3) << 12) | (SrcPhyAddr & 0xFFF),
         ((HiProtoCode & 0xF) << 12) | (DstNodeId & 0xFFF),
         ((HopCnt & 0xF) << 12) | (SrcNodeId & 0xFFF),
-    )
+        )
 
 # ----------------------------- Encode / decode -------------------------------
 
@@ -311,11 +323,11 @@ def decode_pkt(pkt: BytesLike) -> Tuple[Header, Message]:
 # ----------------------------- PakCtrl: Hello --------------------------------
 
 def pkt_hello_cmd(
-    DstNodeId: int,
-    SrcNodeId: int,
-    IsRouter: int = 0x00,
-    HopMetric: int = 0x02,
-    VerifyIntv: int = 1800,
+        DstNodeId: int,
+        SrcNodeId: int,
+        IsRouter: int = 0x00,
+        HopMetric: int = 0x02,
+        VerifyIntv: int = 1800,
 ) -> Tuple[bytes, int]:
     tn = new_tran_nbr()
     hdr = pakbus_hdr(DstNodeId, SrcNodeId, 0x0)  # PakCtrl
@@ -328,37 +340,80 @@ def msg_hello(msg: Message) -> Message:
     return msg
 
 def wait_pkt(
-    s: socket.socket,
-    DstNodeId: int,
-    SrcNodeId: int,
-    TranNbr: int,
-    timeout: float = 5.0,
+        s: socket.socket,
+        DstNodeId: int,
+        SrcNodeId: int,
+        TranNbr: int,
+        timeout: float = 5.0,
 ) -> Tuple[Header, Message]:
-    end_by = time.time() + max(0.1, timeout)
+    """
+    Wait for a PakBus packet matching the expected Src/Dst/TranNbr.
+    Returns (hdr, msg) upon match; if the deadline expires, returns the last
+    decoded (hdr, msg) seen (which may be empty dicts) so callers can decide
+    how to proceed.
+
+    Notes:
+    - Uses a monotonic deadline (robust to system clock changes).
+    - Applies a short per-iteration socket timeout slice so recv() never
+      blocks for the full timeout in one call.
+    """
+    total_timeout = max(0.1, float(timeout))
+    slice_timeout = 1.0  # seconds per recv slice; adjusted down near deadline
+
+    deadline = time.monotonic() + total_timeout
     last_hdr: Header = {}
     last_msg: Message = {}
-    s.settimeout(max(0.1, timeout))
-    while time.time() < end_by:
+
+    try:
+        s.settimeout(min(slice_timeout, total_timeout))
+    except Exception:
+        pass
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return last_hdr, last_msg
+
         try:
-            rcv = recv(s)
-        except socket.timeout:
+            s.settimeout(max(0.05, min(slice_timeout, remaining)))
+        except Exception:
+            pass
+
+        try:
+            rcv = recv(s)  # framed packet or None
+        except (socket.timeout, TimeoutError):
             continue
+        except InterruptedError:
+            continue
+        except OSError as e:
+            if getattr(e, "errno", None) in (errno.EINTR, errno.EAGAIN, errno.EWOULDBLOCK):
+                continue
+            raise
+
         if not rcv:
             continue
-        hdr, msg = decode_pkt(rcv)
+
+        try:
+            hdr, msg = decode_pkt(rcv)
+        except Exception:
+            continue
+
         last_hdr, last_msg = hdr, msg
-        # match reversed direction and matching TranNbr
-        if hdr.get("DstNodeId") == DstNodeId and hdr.get("SrcNodeId") == SrcNodeId and msg.get("TranNbr") == TranNbr:
+
+        if (
+            hdr.get("DstNodeId") == DstNodeId
+            and hdr.get("SrcNodeId") == SrcNodeId
+            and msg.get("TranNbr") == TranNbr
+        ):
             return hdr, msg
-    return last_hdr, last_msg
 
 def ping_node(
-    s: socket.socket,
-    *,
-    DstNodeId: int,
-    SrcNodeId: int,
-    RouterPhyAddr: Optional[int] = None,
-    timeout: float = 5.0,
+        s: socket.socket,
+        *,
+        DstNodeId: int,
+        SrcNodeId: int,
+        RouterPhyAddr: Optional[int] = None,
+        timeout: float = 5.0,
 ) -> Message:
     pkt, tn = pkt_hello_cmd(DstNodeId, SrcNodeId)
     if RouterPhyAddr is not None:
@@ -382,15 +437,15 @@ def ping_node(
 #   0x08  DateToNewest(P1 = begin (sec,nsec), P2 ignored or (sec,nsec) per fw)
 
 def pkt_collectdata_cmd(
-    DstNodeId: int,
-    SrcNodeId: int,
-    TableNbr: int,
-    TableDefSig: int,
-    FieldNbr: Sequence[int] = (),
-    CollectMode: int = 0x04,
-    P1: int | Tuple[int, int] = 1,
-    P2: int | Tuple[int, int] = 0,
-    SecurityCode: int = 0x0000,
+        DstNodeId: int,
+        SrcNodeId: int,
+        TableNbr: int,
+        TableDefSig: int,
+        FieldNbr: Sequence[int] = (),
+        CollectMode: int = 0x04,
+        P1: int | Tuple[int, int] = 1,
+        P2: int | Tuple[int, int] = 0,
+        SecurityCode: int = 0x0000,
 ) -> Tuple[bytes, int]:
     tn = new_tran_nbr()
 
@@ -620,26 +675,33 @@ def time_to_nsec(timestamp: float, epoch: int = nsec_base, tick: float = nsec_ti
 
 # ------------------------------ High-level utils -----------------------------
 
-def open_socket(host: str, Port: int = 6785, Timeout: float = 30.0) -> Optional[socket.socket]:
+def open_socket(host: str, *, Port: int = 6785, Timeout: float = 20.0) -> Optional[socket.socket]:
+    """
+    Open a TCP socket to the CR800 (router) host:Port.
+    Tries all address families returned by getaddrinfo and returns the first
+    connected socket with Timeout applied. Returns None if all attempts fail.
+    """
     try:
+        # family, type, proto, canonname, sockaddr
         infos = socket.getaddrinfo(host, Port, socket.AF_UNSPEC, socket.SOCK_STREAM)
-    except socket.gaierror:
-        return None
+    except Exception:
+        infos = []
 
-    for af, socktype, proto, _canon, sa in infos:
-        s = None
+    for fam, typ, proto, _canon, sa in infos:
+        sock: Optional[socket.socket] = None
         try:
-            s = socket.socket(af, socktype, proto)
-            s.settimeout(Timeout)
-            s.connect(sa)
-            return s
-        except Exception:
-            if s:
-                try:
-                    s.close()
-                except Exception:
-                    pass
+            sock = socket.socket(fam, typ, proto)
+            sock.settimeout(float(Timeout))
+            sock.connect(sa)
+            return sock  # success
+        except BaseException:
+            try:
+                if sock is not None:
+                    sock.close()
+            except Exception:
+                pass
             continue
+
     return None
 
 # ---- BMP5 GetTableDefs (0x16 -> 0x17) ----
@@ -652,35 +714,20 @@ def get_tabledefs_bmp5(
     RouterPhyAddr: Optional[int] = None,
     timeout: float = 10.0,
 ) -> bytes:
-    """
-    Fetch raw TableDefs using BMP5 0x16. If RouterPhyAddr is given, we route via
-    that physical address (e.g., CR800) but still target DstNodeId logically.
-    """
-    # Polite Hello (helps routers open a route)
     try:
-        ping_node(s, DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, RouterPhyAddr=RouterPhyAddr, timeout=5.0)
+        ping_node(s, DstNodeId=DstNodeId, SrcNodeId=SrcNodeId,
+                  RouterPhyAddr=RouterPhyAddr, timeout=5.0)
     except Exception:
         pass
 
-    def _try_once(hdr_opts: Dict[str, Any], flg: int) -> Optional[bytes]:
+    def _try_once(hdr_opt: Dict[str, Any], flag_byte: int) -> Optional[bytes]:
         tn = new_tran_nbr()
-        body = encode_bin(["Byte", "Byte", "Byte"], [0x16, tn, flg])  # 0x16 req
-
-        hdr_bytes = pakbus_hdr(
-            DstNodeId=DstNodeId,
-            SrcNodeId=SrcNodeId,
-            HiProtoCode=0x01,  # BMP5
-            **hdr_opts,
-        )
-
+        body = encode_bin(["Byte", "Byte", "Byte"], [0x16, tn, flag_byte])
+        hdr_bytes = pakbus_hdr(DstNodeId=DstNodeId, SrcNodeId=SrcNodeId,
+                               HiProtoCode=0x01, **hdr_opt)
         send(s, hdr_bytes + body)
-        _hdr, msg = wait_pkt(
-            s,
-            DstNodeId=SrcNodeId,
-            SrcNodeId=DstNodeId,
-            TranNbr=tn,
-            timeout=timeout,
-        )
+        _hdr, msg = wait_pkt(s, DstNodeId=SrcNodeId, SrcNodeId=DstNodeId,
+                             TranNbr=tn, timeout=timeout)
         if not msg or msg.get("MsgType") != 0x17:
             return None
         raw = msg.get("raw", b"")
@@ -688,36 +735,24 @@ def get_tabledefs_bmp5(
             return None
         resp = raw[2]
         blob_bytes = raw[3:]
-        if resp == 0 and blob_bytes:
-            return blob_bytes
-        return None
+        return blob_bytes if resp == 0 and blob_bytes else None
 
     tries: List[Tuple[Dict[str, Any], int]] = []
-
     if RouterPhyAddr is not None:
-        hdr_A = dict(
-            ExpMoreCode=0x1, LinkState=0x9, Priority=0x1, HopCnt=0x0,
-            DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
-        )
-        hdr_B = dict(
-            ExpMoreCode=0x2, LinkState=0xA, Priority=0x1, HopCnt=0x0,
-            DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId,
-        )
-        for hdr_opts in (hdr_A, hdr_B):
-            for flg in (0x00, 0x01):
-                tries.append((hdr_opts, flg))
-
-    # direct physical (some setups permit)
-    for flg in (0x00, 0x01):
-        tries.append(({}, flg))
+        hdr_A = dict(ExpMoreCode=0x1, LinkState=0x9, Priority=0x1, HopCnt=0x0,
+                     DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
+        hdr_B = dict(ExpMoreCode=0x2, LinkState=0xA, Priority=0x1, HopCnt=0x0,
+                     DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
+        for hdr_opt in (hdr_A, hdr_B):
+            for flag_byte in (0x00, 0x01):
+                tries.append((hdr_opt, flag_byte))
+    for flag_byte in (0x00, 0x01):
+        tries.append(({}, flag_byte))
 
     last_try: Optional[Tuple[Dict[str, Any], int]] = None
-    for hdr_opts, flg in tries:
-        last_try = (hdr_opts, flg)
-        try:
-            blob = _try_once(hdr_opts, flg)
-        except ConnectionResetError:
-            raise
+    for hdr_opt, flag_byte in tries:
+        last_try = (hdr_opt, flag_byte)
+        blob = _try_once(hdr_opt, flag_byte)
         if blob:
             return blob
 
@@ -726,12 +761,12 @@ def get_tabledefs_bmp5(
 # ---- Convenience: get & parse defs, collect, flatten ------------------------
 
 def ensure_tabledefs(
-    s: socket.socket,
-    *,
-    DstNodeId: int,
-    SrcNodeId: int,
-    RouterPhyAddr: Optional[int] = None,
-    timeout: float = 10.0,
+        s: socket.socket,
+        *,
+        DstNodeId: int,
+        SrcNodeId: int,
+        RouterPhyAddr: Optional[int] = None,
+        timeout: float = 10.0,
 ) -> List[Dict[str, Any]]:
     raw = get_tabledefs_bmp5(s, DstNodeId=DstNodeId, SrcNodeId=SrcNodeId, RouterPhyAddr=RouterPhyAddr, timeout=timeout)
     return parse_tabledef(raw)
@@ -746,20 +781,20 @@ def _get_table_number(tabledef: List[Dict[str, Any]], table_name: str) -> Option
     return None
 
 def collect_data(
-    s: socket.socket,
-    *,
-    DstNodeId: int,
-    SrcNodeId: int,
-    TableDef: List[Dict[str, Any]],
-    TableName: str,
-    FieldNames: Sequence[str] = (),
-    CollectMode: int = 0x04,
-    P1: Any = 1,
-    P2: Any = 0,
-    SecurityCode: int = 0x0000,
-    RouterPhyAddr: Optional[int] = None,
-    timeout: float = 20.0,
-    TableDefSigOverride: Optional[int] = None,
+        s: socket.socket,
+        *,
+        DstNodeId: int,
+        SrcNodeId: int,
+        TableDef: List[Dict[str, Any]],
+        TableName: str,
+        FieldNames: Sequence[str] = (),
+        CollectMode: int = 0x04,
+        P1: Any = 1,
+        P2: Any = 0,
+        SecurityCode: int = 0x0000,
+        RouterPhyAddr: Optional[int] = None,
+        timeout: float = 20.0,
+        TableDefSigOverride: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Send CollectData and parse response into record fragments using TableDef.
@@ -847,7 +882,7 @@ def collect_data(
 
     # --- Parse high-level CollectData response (extract RC, RecData, More, etc.) ---
     msg = msg_collectdata_response(raw_msg)
-    rc = int(msg.get("RC", 0)) & 0xFF
+    rc = int(msg.get("RespCode", 0)) & 0xFF  # FIX: use RespCode
 
     # If device signaled an error, raise a clear, contextual exception
     if rc != 0:
@@ -879,17 +914,17 @@ def collect_data(
         ) from e
 
 def collect_by_time(
-    s: socket.socket,
-    *,
-    DstNodeId: int,
-    SrcNodeId: int,
-    TableDef: List[Dict[str, Any]],
-    TableName: str,
-    BeginUnixUTC: float,
-    EndUnixUTC: float,
-    FieldNames: Sequence[str] = (),
-    RouterPhyAddr: Optional[int] = None,
-    timeout: float = 20.0,
+        s: socket.socket,
+        *,
+        DstNodeId: int,
+        SrcNodeId: int,
+        TableDef: List[Dict[str, Any]],
+        TableName: str,
+        BeginUnixUTC: float,
+        EndUnixUTC: float,
+        FieldNames: Sequence[str] = (),
+        RouterPhyAddr: Optional[int] = None,
+        timeout: float = 20.0,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Convenience: CollectData by time range (inclusive start, exclusive end).
@@ -906,16 +941,16 @@ def collect_by_time(
     )
 
 def collect_most_recent(
-    s: socket.socket,
-    *,
-    DstNodeId: int,
-    SrcNodeId: int,
-    TableDef: List[Dict[str, Any]],
-    TableName: str,
-    Count: int = 1,
-    FieldNames: Sequence[str] = (),
-    RouterPhyAddr: Optional[int] = None,
-    timeout: float = 20.0,
+        s: socket.socket,
+        *,
+        DstNodeId: int,
+        SrcNodeId: int,
+        TableDef: List[Dict[str, Any]],
+        TableName: str,
+        Count: int = 1,
+        FieldNames: Sequence[str] = (),
+        RouterPhyAddr: Optional[int] = None,
+        timeout: float = 20.0,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Convenience: most recent Count records from TableName.
@@ -975,15 +1010,7 @@ def fileupload(
     RouterPhyAddr: Optional[int] = None,
     timeout: float = 12.0,
 ) -> Tuple[bytes, int]:
-    """
-    Robust FileUpload (BMP5 0x0F). Tries multiple header flavors and a couple
-    of filename variants to accommodate CR200↔CR800 quirks.
-
-    Returns: (file_data, RespCode). RespCode==0 on success.
-    """
     def _hdr_variants():
-        # If routing through CR800, try the two routed header styles we’ve seen work,
-        # then a simple routed header. Otherwise fall back to direct.
         if RouterPhyAddr is not None:
             yield dict(ExpMoreCode=0x1, LinkState=0x9, Priority=0x1, HopCnt=0x0,
                        DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
@@ -991,73 +1018,57 @@ def fileupload(
                        DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
             yield dict(ExpMoreCode=0x0, LinkState=0x0, Priority=0x0, HopCnt=0x0,
                        DstPhyAddr=RouterPhyAddr, SrcPhyAddr=SrcNodeId)
-        # As a last resort, try direct physical addressing (some setups accept it)
         yield dict(ExpMoreCode=0x0, LinkState=0x0, Priority=0x0, HopCnt=0x0)
 
-    # Try a couple of common filename spellings on CR2xx
     filenames: List[str] = [FileName]
     if FileName.upper().startswith("CPU:"):
         base = FileName.split(":", 1)[1]
         if base not in filenames:
-            filenames.append(base)          # "Table1.dat"
+            filenames.append(base)
     else:
         prefixed = f"CPU:{FileName}"
         if prefixed not in filenames:
-            filenames.insert(0, prefixed)   # "CPU:Table1.dat" first
+            filenames.insert(0, prefixed)
 
-    # Helper to read chunks with a specific header flavor
-    def _try_one(req_name: str, hdr_opts: Dict[str, Any]) -> Tuple[bytes, int]:
+    def _try_one(req_name: str, hdr_opt: Dict[str, Any]) -> Tuple[bytes, int]:
         file_data = bytearray()
         file_offset = 0
-
         while True:
             tn = new_tran_nbr()
             body = encode_bin(
                 ["Byte", "Byte", "UInt2", "ASCIIZ", "UInt4", "Byte"],
                 [0x0F, tn, SecurityCode, req_name.encode("ascii", "ignore"),
-                 file_offset, 0x00]  # keep-open flag
+                 file_offset, 0x00]
             )
-            hdr_bytes = pakbus_hdr(
-                DstNodeId=DstNodeId,
-                SrcNodeId=SrcNodeId,
-                HiProtoCode=0x05,  # BMP5 File Control
-                **hdr_opts
-            )
+            hdr_bytes = pakbus_hdr(DstNodeId=DstNodeId, SrcNodeId=SrcNodeId,
+                                   HiProtoCode=0x05, **hdr_opt)
             try:
                 send(s, hdr_bytes + body)
-                _hdr, msg = wait_pkt(
-                    s,
-                    DstNodeId=SrcNodeId,
-                    SrcNodeId=DstNodeId,
-                    TranNbr=tn,
-                    timeout=timeout,
-                )
+                _hdr, msg = wait_pkt(s, DstNodeId=SrcNodeId, SrcNodeId=DstNodeId,
+                                     TranNbr=tn, timeout=timeout)
             except (ConnectionResetError, TimeoutError):
-                # Give up this header flavor
-                return bytes(file_data), 0x0E  # general error
+                return bytes(file_data), 0x0E
 
             if not msg:
                 return bytes(file_data), 0x0E
 
             msg = msg_fileupload_response(msg)
-            rc_val = int(msg.get("RespCode", 0x0E))
+            resp_code = int(msg.get("RespCode", 0x0E))
             chunk = msg.get("RecData", b"")
-            if rc_val == 0 and chunk:
+            if resp_code == 0 and chunk:
                 file_data += chunk
                 file_offset += len(chunk)
-                # Continue until device returns rc!=0 or empty chunk
                 continue
-            return bytes(file_data), rc_val
+            return bytes(file_data), resp_code
 
-    # Try all combinations until one succeeds
-    last_rc = 0x0E
+    last_resp = 0x0E
     for candidate in filenames:
-        for hdr_opts in _hdr_variants():
-            data, rc_val = _try_one(candidate, hdr_opts)
-            if rc_val == 0 and data:
+        for hdr_opt in _hdr_variants():
+            data, resp_code = _try_one(candidate, hdr_opt)
+            if resp_code == 0 and data:
                 return data, 0
-            last_rc = rc_val
-    return b"", last_rc
+            last_resp = resp_code
+    return b"", last_resp
 
 # alias for compatibility with old code
 pkt_hello_response = msg_hello
