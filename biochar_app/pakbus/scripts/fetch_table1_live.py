@@ -25,7 +25,7 @@ LOGGER_IDS = config.PAKBUS.logger_ids
 DEFAULT_TABLE = config.DEFAULT_TABLE  # "Table1"
 DEFAULT_COUNT = 10                    # fetch last 10 records
 DEFAULT_START_REC = 0xFFFF            # start at newest (logger will clamp)
-TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "data" / "pc400_table1_templates.csv"
+TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "pakbus_data" / "pc400_table1_templates.csv"
 
 def read_templates(path: Path) -> list[bytes]:
     """
