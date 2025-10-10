@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Example output files
+examples/*.dat
+examples/*.csv
+CR206X*.dat
+CR206X*.csv
+datalogger_output.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+!.env.txt
+
+# Data files (keep raw data but not processed)
+biochar_app/data-processed/*.csv
+biochar_app/data-processed/*.zip
