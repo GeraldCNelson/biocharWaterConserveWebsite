@@ -1,0 +1,24 @@
+# Requirements for CR206X Data Logger Access
+# 
+# This file contains optional dependencies for accessing Campbell Scientific
+# CR206X data loggers. These are not required for the main website functionality.
+#
+# Install with: pip install -r requirements-cr206x.txt
+
+# Core data processing (required)
+pandas>=2.0.0
+
+# For serial port communication (RS-232)
+# Install if you need direct serial connection to loggers
+pyserial>=3.5
+
+# For PakBus protocol communication
+# Install if you need network or advanced protocol access
+# Note: This library may require additional setup
+# See: https://github.com/StefanUlbrich/pycampbellcr1000
+# pycampbellcr1000>=0.4.0
+
+# Alternative: Campbell Scientific's official SDKs
+# LoggerNet SDK (commercial, Windows only)
+# PC400 software (free, GUI-based)
+# Available at: https://www.campbellsci.com/software
