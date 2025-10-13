@@ -7,9 +7,9 @@ Usage
 from pakbus.link import install_url_override, pakbus_url, open_pakbus_link
 from pycampbellcr1000 import CR1000
 
-install_url_override()  # once at process start (e.g., in client main)
-
+install_url_override()  # once at process start
 base = pakbus_url(PAKBUS.host, PAKBUS.port)
+# CR1000.from_url uses our override under the hood:
 dev = CR1000.from_url(base, dest_addr=2, src_addr=PAKBUS.base_id)
 
 # Or if you want an explicit socket you control:
@@ -18,34 +18,53 @@ with open_pakbus_link(PAKBUS.host, PAKBUS.port) as link:
     dev = CR1000(link, dest_addr=2, src_addr=PAKBUS.base_id)
     # ... use dev ...
 """
-
 from __future__ import annotations
 
 import logging
 import re
 import socket
+import urllib.parse
 from contextlib import contextmanager
 from typing import Optional, Iterator
 
 import pylink
-from pylink import TCPLink as _OrigTCPLink
-import pycampbellcr1000.device as device_mod
+from pylink.link import SerialLink, UDPLink, TCPLink
+
+def link_from_url(url: str):
+    """
+    Parse a URL into the appropriate pylink.Link class:
+      - tcp://host:port    → TCPLink(host, port)
+      - udp://host:port    → UDPLink(host, port)
+      - serial:///dev/...  → SerialLink(device)
+    """
+    p = urllib.parse.urlparse(url)
+    scheme = p.scheme.lower()
+    if scheme == "tcp":
+        # Default PakBus TCP port is 6785
+        return TCPLink(p.hostname, p.port or 6785)
+    elif scheme == "udp":
+        # Default PakBus UDP port is 6785
+        return UDPLink(p.hostname, p.port or 6785)
+    elif scheme in ("serial", "file"):
+        return SerialLink(p.path)
+    else:
+        raise ValueError(f"Unsupported link scheme: {p.scheme!r}")
+
+# Fallback to our own URL factory
+_pylink_link_from_url = link_from_url
 
 __all__ = [
+    "link_from_url",
     "IPv6TCPLink",
     "install_url_override",
     "pakbus_url",
     "open_pakbus_link",
 ]
 
-# -----------------------------------------------------------------------------
-# IPv6-capable TCP link
-# -----------------------------------------------------------------------------
-class IPv6TCPLink(_OrigTCPLink):
+
+class IPv6TCPLink(TCPLink):
     """
-    A TCPLink that can connect directly to an IPv6 literal without DNS.
-    - Idempotent open(): safe to call repeatedly.
-    - Optional TCP keepalive for long/latent links (e.g., satellite/NAT).
+    A TCPLink subclass that can connect directly to an IPv6 literal without DNS.
     """
 
     def __init__(
@@ -55,7 +74,6 @@ class IPv6TCPLink(_OrigTCPLink):
         timeout: float | None = None,
         tcp_keepalive: bool = True,
     ):
-        # Parent's __init__ tries IPv4 resolution; we bypass when it's a v6 literal.
         self._socket: Optional[socket.socket] = None
         self._is_ipv6_literal = ":" in host
         self._v6_addr: Optional[tuple[str, int, int, int]] = None
@@ -70,7 +88,6 @@ class IPv6TCPLink(_OrigTCPLink):
             super().__init__(host, port, timeout)
 
     def open(self):
-        # Idempotent: if already open, return self
         if self._socket is not None:
             return self
 
@@ -87,8 +104,7 @@ class IPv6TCPLink(_OrigTCPLink):
             self._socket = s
             return self
 
-        # Fall back to stock behavior for hostnames/IPv4
-        logging.debug(f"Opening default pylink TCP socket to {getattr(self, 'address', (self.host, self.port))!r}")
+        logging.debug(f"Opening default pylink TCP to {(self.host, self.port)!r}")
         return super().open()
 
     def close(self):
@@ -98,44 +114,42 @@ class IPv6TCPLink(_OrigTCPLink):
             finally:
                 self._socket = None
         else:
-            # Let pylink close its own socket if it created one
             try:
                 super().close()
             except Exception:
                 pass
 
-# -----------------------------------------------------------------------------
-# URL override: pakbus://[IPv6]:port  →  IPv6TCPLink
-# -----------------------------------------------------------------------------
-_original_link_from_url = pylink.link_from_url
 
+# Regex for pakbus://[IPv6]:port
 _IPV6_PAKBUS_RE = re.compile(
-    r'(?i)^\s*pakbus://\[(?P<host>[^]]+)]:(?P<port>\d+)\s*$'
+    r"(?i)^pakbus://\[(?P<host>[^]]+)]:(?P<port>\d+)$"
 )
 
-def _link_from_url_override(url: str):
-    m = _IPV6_PAKBUS_RE.match(url)
+def _link_override(url: str):
+    m = _IPV6_PAKBUS_RE.match(url.strip())
     if m:
         host, port = m.group("host"), int(m.group("port"))
-        logging.info(f"PakBus IPv6 override active → host={host}, port={port}")
+        logging.info(f"PakBus IPv6 override → host={host}, port={port}")
         return IPv6TCPLink(host, port)
-    # Otherwise, defer to original (hostnames/IPv4, serial, etc.)
-    return _original_link_from_url(url)
+    return _pylink_link_from_url(url)
+
 
 def install_url_override() -> None:
     """
-    Install the IPv6 URL hook into both pylink and pycampbellcr1000.
+    Override pylink and pycampbellcr1000 URL factory to support IPv6.
     Call this once at startup.
     """
-    pylink.link_from_url = _link_from_url_override
-    device_mod.link_from_url = _link_from_url_override
+    # Defer importing device_mod so link.py has finished loading
+    import pycampbellcr1000.device as device_mod
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
+    pylink.link_from_url              = _link_override
+    device_mod.link_from_url          = _link_override
+
+
 def pakbus_url(host: str, port: int) -> str:
-    """Build a pakbus URL with an IPv6 literal."""
+    """Construct a pakbus:// URL for IPv6 hosts."""
     return f"pakbus://[{host}]:{port}"
+
 
 @contextmanager
 def open_pakbus_link(
@@ -144,9 +158,6 @@ def open_pakbus_link(
     connect_timeout: float = 10.0,
     tcp_keepalive: bool = True,
 ) -> Iterator[IPv6TCPLink]:
-    """
-    Context manager that opens/closes a single IPv6 PakBus TCP link.
-    """
     link = IPv6TCPLink(host, port, timeout=connect_timeout, tcp_keepalive=tcp_keepalive)
     link.open()
     try:
