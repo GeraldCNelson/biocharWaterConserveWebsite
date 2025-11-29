@@ -1,5 +1,7 @@
 // static/js/main.js
 
+import { FALLBACK_UNIT_SYSTEM } from "./config.js";
+
 // 1) debugging & logging
 import { debugLog, debugGroup } from "./plots.js";
 
@@ -8,25 +10,23 @@ import { loadMarkdownContent } from "./markdown.js";
 
 // 3) all your UI controls (dropdowns, handlers, etc.)
 import {
-  fetchDefaultsAndOptions,
-  updateDepthLabels,
-  handleTraceOptionChange,
-  populateAllDropdowns,
-  initializeMainDatepickers,
-  updateStartAndEndDatesFromYear,
-} from "./ui_controls.js";
-
-// 4) datepicker & date‐range helpers
-import {
   initializeUpdateButtons,
   setupUnitToggleHandlers,
   getAllDropdownIds,
 } from "./control_panel.js";
 
+import{
+    fetchDefaultsAndOptions,
+    populateAllDropdowns,
+    initializeMainDatepickers,
+    updateDepthLabels,
+    updateStartAndEndDatesFromYear,
+} from "./ui_controls.js";
+
 // 5) main plotting routines
 import {
   renderMainPlots,
-  waitForAllDropdowns
+  waitForAllDropdowns,
 } from "./plot_utils.js";
 
 // 6) summary‐table updater
@@ -50,24 +50,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 1) Fetch defaults & options from the server
   const options = await fetchDefaultsAndOptions();
   if (!options) return;
-  window.unitSystem      = options.defaults.unitSystem || "us";
+
+  // ✅ use backend default, fall back to US if missing
   window.dropdownOptions = options;
 
-  // 2) Populate all the dropdowns and wire up control-panel buttons
-  populateAllDropdowns(options, window.unitSystem);
-  setupUnitToggleHandlers(options);
-  initializeUpdateButtons();
+// Decide initial unit system from backend (falls back to "us")
+const backendUnitDefault = options.defaults?.unitSystem || "us";
+window.unitSystem = backendUnitDefault;
+
+// 2) Populate all the dropdowns and wire up control-panel buttons
+populateAllDropdowns(options);
+setupUnitToggleHandlers(options);   // pass the full options object
+initializeUpdateButtons();
 
   // 3) Wait until every dropdown is in the DOM & initialized by Bootstrap
   await waitForAllDropdowns(getAllDropdownIds());
   await new Promise(requestAnimationFrame);
 
   // 4) Seed defaults into the main & summary inputs
-  for (const [key, value] of Object.entries(options.defaults)) {
-    const mainEl    = document.getElementById(`main-${key}`);
-    const summaryEl = document.getElementById(`summary-${key}`);
-    if (mainEl)    mainEl.value    = value;
-    if (summaryEl) summaryEl.value = value;
+  if (options.defaults) {
+    for (const [key, value] of Object.entries(options.defaults)) {
+      const mainEl    = document.getElementById(`main-${key}`);
+      const summaryEl = document.getElementById(`summary-${key}`);
+      if (mainEl)    mainEl.value    = value;
+      if (summaryEl) summaryEl.value = value;
+    }
   }
 
   // 5) Initialize the date-pickers on the main tab
@@ -80,38 +87,35 @@ document.addEventListener("DOMContentLoaded", async () => {
       updateStartAndEndDatesFromYear(e.target.value)
     );
 
-  // 7) Swap unit labels if the US/Metric toggle is flipped
+  // 7) Make sure the depth labels match the current unit system
   updateDepthLabels(window.unitSystem);
 
   debugGroup("🎛️ Dropdown defaults & mappings", () => {
-    console.table(options.defaults);
-    console.table(
-      Object.entries(window.depthMapping).map(([depth, map]) => ({
-        Depth: depth,
-        US: map.us,
-        Metric: map.metric,
-      }))
-    );
+    console.table(options.defaults || {});
+    if (window.depthMapping) {
+      console.table(
+        Object.entries(window.depthMapping).map(([depth, map]) => ({
+          Depth: depth,
+          US: map.us,
+          Metric: map.metric,
+        }))
+      );
+    }
   });
 
-  // 8) Wire up trace-option switch (depth vs logger location vs strip)
-  document
-    .getElementById("main-traceOption")
-    ?.addEventListener("change", handleTraceOptionChange);
-  debugLog("🛠️ Trace-Option handler attached.");
-
-  // 9) If “Main Data Display” is already active on load, render immediately
+  // 8) If “Main Data Display” is already active on load, render immediately
   const mainTabLink = document.querySelector('a[href="#main"]');
   if (mainTabLink?.classList.contains("active")) {
     await renderMainPlots();
   }
-  // 10) Re-render Main plots whenever that tab is shown
+
+  // 9) Re-render Main plots whenever that tab is shown
   mainTabLink?.addEventListener("shown.bs.tab", renderMainPlots);
 
-  // 11) Kick off the summary statistics table
+  // 10) Kick off the summary statistics table
   updateSummaryStatistics();
 
-  // 12) Load all markdown snippets into their modals
+  // 11) Load all markdown snippets into their containers/modals
   debugLog("📖 Loading markdown snippets…");
   await Promise.all(
     Object.entries(MARKDOWN_FILES).map(([id, path]) =>
@@ -120,12 +124,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
   debugLog("✅ Application initialized.");
 
-// 13) Initialize the Custom Season editor (partial is already in the DOM)
-const gseasonContent = document.getElementById("gseason-content");
-if (gseasonContent) {
-  // grab the config blob you rendered into window.CUSTOM_GSEASON_CONFIG
-  const cfg = window.CUSTOM_GSEASON_CONFIG;
-  // now call it with a single object:
-  initCustomGseason(cfg);
-}
+  // 12) Initialize the Custom Season editor (if present)
+  const gseasonContent = document.getElementById("gseason-content");
+  if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
+    initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
+  }
 });

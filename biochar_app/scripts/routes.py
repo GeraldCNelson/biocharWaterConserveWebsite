@@ -1,3 +1,84 @@
+"""
+================================================================================
+routes.py — API Endpoints & Orchestration for Biochar Dashboard
+================================================================================
+
+This module defines the HTTP API used by the web front end (Main Data Display,
+Custom Season, Summary Statistics, and markdown-based tabs).
+
+Responsibilities:
+    • Accept JSON payloads from the UI (year, variable, strip, depth, logger
+      location, granularity, unitSystem, custom-season periods, etc.).
+    • Load and cache logger + weather data from Parquet (via helper utilities).
+    • Filter by year, date range, variable, strip, depth, and granularity.
+    • Call plot_utils.py to build Plotly figures and return them as JSON.
+    • Call summary/aggregation utilities to build summary tables.
+    • Handle CSV/ZIP downloads for raw, ratio, and summary data.
+    • Serve markdown/HTML content for Introduction, Experiment Design,
+      Technical Details, and modal “Directions” content.
+
+------------------------------------------------------------------------------
+DATA FLOW OVERVIEW
+------------------------------------------------------------------------------
+Front end (JavaScript):
+    → /api/get_defaults_and_options
+        – Returns years, variable lists, strip/depth/logger mappings, and
+          default date ranges.
+
+    → /api/plot_raw
+        – Builds raw plots for the Main Data Display tab.
+        – Uses make_raw_figure(...) from plot_utils.py.
+
+    → /api/plot_ratio
+        – Builds strip-ratio plots (S1/S2, S3/S4) for Main Data Display.
+        – Uses make_ratio_figure(...).
+
+    → /api/plot_raw_gseason, /api/plot_ratio_gseason
+        – Growing-season variants with categorical x-axis (custom seasons).
+
+    → /api/get_summary_stats
+        – Returns summary statistics for summary tables, including
+          growing-season accordion structures.
+
+    → /download_trace_data, /download_summary_data
+        – Generate CSV/ZIP downloads (raw, ratio, or combined).
+
+    → /markdown/<page_name>
+        – Serve pre-processed markdown or HTML for content tabs.
+
+------------------------------------------------------------------------------
+UNIT SYSTEM HANDLING
+------------------------------------------------------------------------------
+All backend data are stored in **US units**. Each route:
+    • Accepts a unitSystem flag ("us" or "metric") from the front end.
+    • Loads Parquet data in US units.
+    • Delegates to plotting helpers (convert_units, get_unit_aware_label, etc.)
+      so that:
+          – Numeric values and y-axis labels are converted for display.
+          – Downloads respect the selected unit system.
+
+------------------------------------------------------------------------------
+CACHING & PERFORMANCE
+------------------------------------------------------------------------------
+• Logger data are typically cached in memory keyed by (year, granularity)
+  using helper functions (e.g., load_logger_data(...) in utils.py) to avoid
+  repeated disk reads for interactive sessions.
+
+• Weather summaries are loaded from pre-computed Parquet (ETL pipeline) and
+  reused across multiple requests.
+
+------------------------------------------------------------------------------
+MAINTENANCE NOTES
+------------------------------------------------------------------------------
+• Keep routes thin: all business logic for plotting and unit handling should
+  live in plot_utils.py / plot_helpers.py / summary utilities.
+• When adding new endpoints:
+      – Reuse existing filter/validation logic where possible.
+      – Update JavaScript modules to include the new endpoints and payloads.
+• When adding new variables or unit systems:
+      – Ensure routes pass unitSystem through to all downstream helpers.
+------------------------------------------------------------------------------
+"""
 import os
 import re
 import glob
@@ -151,16 +232,20 @@ class PlotRequest(BaseModel):
 
 @api_router.post("/plot_raw")
 async def api_plot_raw(req: PlotRequest):
-    year        = req.year
-    gran        = req.granularity.lower()
-    var         = req.variable
-    strip       = req.strip
-    logger_loc  = req.loggerLocation
-    depth       = req.depth
-    unit        = req.unitSystem
+    year         = req.year
+    gran         = req.granularity.lower()
+    var          = req.variable               # what the user selected: "VWC","T","EC","SWC"
+    strip        = req.strip
+    logger_loc   = req.loggerLocation
+    depth        = req.depth
+    unit         = req.unitSystem
     trace_option = TRACE_OPTION_MAP[req.traceOption]
-    start       = req.startDate
-    end         = req.endDate
+    start        = req.startDate
+    end          = req.endDate
+
+    # For SWC, the underlying numeric columns are still VWC_*_raw_*.
+    # For all other variables, the source variable is just `var`.
+    source_var = "VWC" if var == "SWC" else var
 
     # ---- growing-season / custom ----
     if gran == "gseason":
@@ -199,14 +284,24 @@ async def api_plot_raw(req: PlotRequest):
 
     # Ensure there’s at least one non-empty series to plot
     if trace_option == "depths":
-        expected = [f"{var}_{d}_raw_{strip}_{logger_loc}" for d in sensor_depth_mapping]
+        # one trace per depth at a single logger_location
+        expected = [
+            f"{source_var}_{d}_raw_{strip}_{logger_loc}"
+            for d in sensor_depth_mapping
+        ]
     else:
-        expected = [f"{var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
+        # one trace per logger_location at a fixed depth
+        expected = [
+            f"{source_var}_{depth}_raw_{strip}_{lkey}"
+            for lkey in logger_location_mapping
+        ]
 
     present   = [c for c in expected if c in df.columns]
     non_empty = [c for c in present  if df[c].notna().any()]
 
     if not non_empty:
+        # Note: we still report the *display* variable (var),
+        # not the underlying source_var, in the error message.
         raise HTTPException(
             400,
             detail=(
@@ -219,7 +314,7 @@ async def api_plot_raw(req: PlotRequest):
     fig = make_raw_figure(
         df              = df,
         year            = year,
-        variable        = var,
+        variable        = var,          # keep SWC here so titles/labels are correct
         strip           = strip,
         granularity     = gran,
         logger_location = logger_loc,

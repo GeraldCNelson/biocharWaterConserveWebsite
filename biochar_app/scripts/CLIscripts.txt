@@ -1,0 +1,128 @@
+from biochar_app.pakbus.pakbus_data.catalog import Catalog
+tdf = Catalog("biochar_app/pakbus/pakbus_data/bdFiles/catalog/CSU_3depths.tdf")
+sig = tdf.tablesigs["Table1"]
+
+python -m biochar_app.pakbus.scripts.fetch_table1_live\
+  --addr 2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd\
+  --port 6785\
+  --hello\
+  --pre-hex "90 01 0f fd 73 d3"\
+  --leaf 3\
+  --table-id 1\
+  --count 1\
+  --out latest_leaf3_table1.bin\
+  --debug\
+  --dump-frames
+  
+  
+  python -m biochar_app.pakbus.scripts.fetch_table1_live\
+  --addr 2605:59C0:30F3:2500:2CFF:FE02:1DDD\
+  --port 6785\
+  --hello\
+  --pre-hex   "90 01 0f fd 73 d3"\ 
+  --router-hex "a0 01 6f fd 10 03 ff d0"\   
+  --inner-hex  "2c 03 00 00 00 01 00 ff ff 01 00"\ 
+  --count 1\
+  --out latest_leaf3_table1.bin\
+  --debug\
+  --dump-frames
+  
+  python -m biochar_app.pakbus.scripts.run_triggers_pull \
+  --triggers triggers.txt \
+  --addr 2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --hello \
+  --pre-hex "90 01 0f fd 73 d3"
+  
+  
+ python -m biochar_app.pakbus.scripts.loop_27b_tx_pull \
+  --addr     2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port     6785 \
+  --hello \
+  --pre-hex  "90 01 0f fd 73 d3" \
+  --only     s4m_9630 s4m_9640 s4m_9640 s4m_9660 \
+  --out-dir  pulls_S4M
+
+
+s2b_9c60 s2b_9c70 s2b_9c80 s2b_9c90 s2b_9ca0 s2b_9cb0 s2b_9cc0 s2b_9cd0 s2b_9ce0 s2b_9cf0 s2b_9d00 s2b_9d10 s2b_9d20
+
+python -m biochar_app.pakbus.scripts.loop_27b_tx_pull \
+   --only s1t_92f0 \
+   --out-dir test_leaf \
+   --port    6785 \
+   --addr     2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD 
+ 
+ 
+ python -m biochar_app.pakbus.scripts.fetch_leaf_records \
+  --host 2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port 6785 \
+  --router 1 \
+  --src 4903 \
+  --leaf 2 \
+  --tdf-file biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
+  --table Table1 \
+  --num 1 \
+  --collect-mode mostrecent \
+  --output leaf2_table1.csv
+  
+  python -m biochar_app.pakbus.scripts.serial_collect_tail \
+  --addr 2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port 6785 \
+  --hello \
+  --tx-hex bd90010ffd73d3bd   # that’s the HELLO frame
+  
+  python -m biochar_app.pakbus.scripts.probe_and_pull \
+  --addr 2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port 6785 \
+  --hello \
+  --pre-hex "90 01 0f fd 73 d3" \
+  --probe-reads 2 \
+  --probe-read-gap-ms 200 \
+  --probe-tx-gap-ms 1000 \
+  --probe-idle-timeout 5 \
+  --out ping.csv \
+  --rx-hex-log ping_dump.hex
+  
+  python -m biochar_app.pakbus.scripts.fetch_leaf_records \
+  --host        2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port        6785 \
+  --router      1           \
+  --src         1           \
+  --leaf        2           \
+  --tdf-file    biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
+  --table       Table1      \
+  --collect-mode lastn      \
+  --num         1           \
+  --output      leaf2_Table1_lastn.csv
+  
+  python -m biochar_app.pakbus.scripts.fetch_leaf_records \
+  --host     2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port     6785 \
+  --router   1 \
+  --src      1 \
+  --leaf     2 \
+  --tdf-file biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
+  --table    Table1 \
+  --collect-mode auto \
+  --num      1 \
+  --output   leaf2_Table1_auto.csv
+  
+  python -m biochar_app.pakbus.scripts.fetch_leaf_records \
+  --host     2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \ 
+  --port     6785 \
+  --router   1    \
+  --src      4093 \
+  --leaf     2    \
+  --tdf-file biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
+  --table    Table1 \
+  --collect-mode mostrecent \
+  --num      1    \
+  --output   leaf2_Table1_latest.csv
+  
+python -m biochar_app.pakbus.scripts.loop_27b_tx_pull \
+  --addr   2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD \
+  --port   6785 \
+  --hello \
+  --only   s1t_92f0 \
+  --seek-after-sig 16 \
+  --endian "<" \
+  --out-dir leaf2_latest

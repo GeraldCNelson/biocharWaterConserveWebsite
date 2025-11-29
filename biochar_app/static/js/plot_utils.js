@@ -116,10 +116,11 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
         b: plotData.layout?.margin?.b ?? 50,
       }
     };
-    const plotConfig = {
-      displayModeBar: !isMobileDevice(),
-      responsive:     false,
-    };
+        const plotConfig = {
+          displayModeBar: false,   // hide the toolbar entirely
+          displaylogo:   false,    // remove Plotly logo
+          responsive:     false,
+        };
     await Plotly.newPlot(container, plotData.data, layout, plotConfig);
     Plotly.Plots.resize(container);
   }

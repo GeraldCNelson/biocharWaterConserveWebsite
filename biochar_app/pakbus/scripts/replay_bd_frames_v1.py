@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
 import argparse, socket, time, binascii, sys, pathlib
+from biochar_app.pakbus.utils.crc import crc16_x25
 
 HELLO = bytes.fromhex("bd 90 01 0f fd 73 d3 c2 d6 bd")
 
 def hexd(b: bytes) -> str: return " ".join(f"{x:02x}" for x in b)
-
-def crc16_modbus(data: bytes) -> int:
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            crc = ((crc >> 1) ^ 0xA001) if (crc & 1) else (crc >> 1)
-    return crc & 0xFFFF
-
-def parse_bd_frame(frame: bytes):
-    """Return inner payload if BD/CRC are valid else None."""
-    if len(frame) < 5 or frame[0] != 0xBD or frame[-1] != 0xBD:
-        return None
-    inner = frame[1:-3]
-    crc_hi, crc_lo = frame[-3], frame[-2]
-    if ((crc16_modbus(inner) >> 8) & 0xFF, crc16_modbus(inner) & 0xFF) != (crc_hi, crc_lo):
-        return None
-    return inner
 
 def classify_inner(inner: bytes) -> str:
     if not inner: return "empty"

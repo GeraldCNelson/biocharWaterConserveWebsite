@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import List
 from biochar_app.scripts.weather_runtime import load_weather_range
 from biochar_app.scripts.config import UNIT_CONVERSIONS
-from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
+from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts, add_gseason_precip_from_daily
 
 @dataclass
 class PeriodSpec:
@@ -143,25 +143,37 @@ def load_gseason_df(
     use_ratios: bool = False,
 ) -> pd.DataFrame:
     """
-    Load growing‐season aggregated data for `year`.
+    Load growing-season aggregated data for `year`.
 
     If `periods` is empty:
       - loads summary/gseason/{year}_gseason.parquet        (use_ratios=False)
       - or summary/gseason/{year}_gseason_ratios.parquet    (use_ratios=True)
+      - and uses DEFAULT_GSEASON_PERIODS for seasonal precip windows.
 
     Otherwise:
       - normalizes PeriodSpec / mappings -> list[dict]
       - builds the mapping shape compute_seasons expects
       - slices the raw 15-min data via compute_seasons() (unit-agnostic)
+      - then attaches seasonal precip sums from *daily* weather parquet
+        via add_gseason_precip_from_daily()
+
+    In all cases:
       - ensures both precip_in and precip_mm exist
       - adds 'precip' + 'precip_unit' presentation columns per unit_system
     """
-    # 1) If no custom periods, load on-disk summary (raw or ratios)
+    # ------------------------------------------------------------------
+    # 1) Load the base growing-season dataframe (raw or ratios)
+    # ------------------------------------------------------------------
     if not periods:
+        # Use precomputed seasonal parquet + the *default* period definitions
         fn_raw   = GSEASON_SUMMARY_DIR / f"{year}_gseason.parquet"
         fn_ratio = GSEASON_SUMMARY_DIR / f"{year}_gseason_ratios.parquet"
         fn = fn_ratio if use_ratios else fn_raw
         df = pd.read_parquet(fn)
+
+        # For precip, we want to use the default period definitions
+        period_source = DEFAULT_GSEASON_PERIODS
+
     else:
         # 2) Normalize PeriodSpec / dict / mapping → list[dict]
         periods_list = periods_to_list_of_dicts(periods)
@@ -169,7 +181,11 @@ def load_gseason_df(
         # 3) Convert to mapping shape for compute_seasons:
         #    { code: {"label": str, "start": "MM-DD", "end": "MM-DD"} }
         period_map = {
-            p["code"]: {"label": p["label"], "start": p["start"], "end": p["end"]}
+            p["code"]: {
+                "label": p["label"],
+                "start": p["start"],
+                "end":   p["end"],
+            }
             for p in periods_list
         }
 
@@ -178,17 +194,34 @@ def load_gseason_df(
         df_15min["timestamp"] = pd.to_datetime(df_15min["timestamp"], errors="coerce")
         df_15min = df_15min.set_index("timestamp", drop=False)
 
-        # 5) Compute seasonal rows (sums precip, means others)
+        # 5) Compute seasonal rows (means of sensors, but we'll override precip)
         df = compute_seasons(
             df=df_15min,
             year=year,
             periods=period_map,
-            include_precip=True,
+            include_precip=True,   # safe to leave True; we'll reattach from daily
         )
 
-    # 6) Ensure both precip columns exist, then add presentation alias
+        # For precip windows, we want the *custom* periods the user supplied
+        period_source = periods
+
+    # ------------------------------------------------------------------
+    # 2) Attach seasonal precip sums from daily weather parquet
+    #    - this ensures precip_in / precip_mm are based on daily weather,
+    #      not whatever happened inside compute_seasons().
+    # ------------------------------------------------------------------
+    df = add_gseason_precip_from_daily(
+        df_gs=df,
+        year=year,
+        periods_raw=period_source,
+    )
+
+    # ------------------------------------------------------------------
+    # 3) Ensure both precip columns exist, then add presentation alias
+    # ------------------------------------------------------------------
     has_in = "precip_in" in df.columns
     has_mm = "precip_mm" in df.columns
+
     if has_in and not has_mm:
         df["precip_mm"] = pd.to_numeric(df["precip_in"], errors="coerce") * 25.4
     elif has_mm and not has_in:
@@ -197,6 +230,7 @@ def load_gseason_df(
         df["precip_in"] = pd.NA
         df["precip_mm"] = pd.NA
 
+    # Presentation columns used by the plotting code
     if unit_system == "metric":
         df["precip"] = df["precip_mm"]
         df["precip_unit"] = "mm"

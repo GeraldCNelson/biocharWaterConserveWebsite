@@ -18,10 +18,10 @@ FIELDS = [
 
 # Reasonable field ranges for plausibility checks
 RANGES = {
-  "BattV_Min": (9.0, 16.0),
-  "VWC_1_Avg": (0.0, 0.6), "VWC_2_Avg": (0.0, 0.6), "VWC_3_Avg": (0.0, 0.6),
-  "EC_1_Avg":  (0.0, 5.0), "EC_2_Avg":  (0.0, 5.0), "EC_3_Avg":  (0.0, 5.0),
-  "T_1_Avg":   (-40.0, 60.0), "T_2_Avg": (-40.0, 60.0), "T_3_Avg": (-40.0, 60.0),
+    "BattV_Min": (9.0, 16.0),
+    "VWC_1_Avg": (0.0, 0.6), "VWC_2_Avg": (0.0, 0.6), "VWC_3_Avg": (0.0, 0.6),
+    "EC_1_Avg":  (0.0, 5.0), "EC_2_Avg":  (0.0, 5.0), "EC_3_Avg":  (0.0, 5.0),
+    "T_1_Avg":   (-40.0, 60.0), "T_2_Avg": (-40.0, 60.0), "T_3_Avg": (-40.0, 60.0),
 }
 
 EPOCH_1990 = datetime.datetime(1990, 1, 1, tzinfo=datetime.timezone.utc)
@@ -74,23 +74,34 @@ def find_best_table1(b: bytes) -> tuple[int, datetime.datetime, list[float]] | N
     """
     Scan a bounded window for (epoch BE + 10 float32 BE) and pick the single best hit.
     We limit scanning to offsets [scan_start .. scan_end) to avoid false positives.
+
+    Returns:
+        (offset, timestamp_utc, values)  or  None if no plausible record was found.
     """
     n = len(b)
     # Heuristic window covering all offsets we've seen (19, 64) and some margin.
     scan_start = 16
     scan_end   = min(n, 256)
 
-    best = None  # (score_tuple, offset, ts_dt, vals)
-    for i in range(scan_start, max(scan_start, scan_end - (4 + 4*10))):
+    best: tuple[tuple[int, float], int, datetime.datetime, list[float]] | None = None
+    # best = (score_tuple, offset, ts_dt, vals)
+    # where score_tuple = (good_value_count, -penalty)
+
+    # We need room for 4 bytes epoch + 10 * 4 byte float32
+    min_span = 4 + 4 * 10
+
+    for i in range(scan_start, max(scan_start, scan_end - min_span)):
         try:
             sec = struct.unpack_from(">I", b, i)[0]
         except struct.error:
             continue
+
         ts = plausible_timestamp(sec)
         if ts is None:
             continue
+
         try:
-            vals = list(struct.unpack_from(">" + "f"*10, b, i + 4))
+            vals = list(struct.unpack_from(">" + "f" * 10, b, i + 4))
         except struct.error:
             continue
 
@@ -105,8 +116,11 @@ def find_best_table1(b: bytes) -> tuple[int, datetime.datetime, list[float]] | N
 
     if best is None:
         return None
-    _, off, ts, vals = best
-    return off, ts, vals
+
+    _, off, ts_dt, vals = best
+    # IMPORTANT: we no longer try to decode a "record number" here.
+    # We only return offset + timestamp + sensor values.
+    return off, ts_dt, vals
 
 def main():
     per_rows_total = 0
@@ -124,7 +138,7 @@ def main():
             print(f"[SKIP] {p.name}: no valid Table1 record found")
             continue
 
-        off, ts, vals = found
+        off, ts, vals = found[:3]
         iso = ts.isoformat().replace("+00:00", "Z")
 
         # write per-frame CSV (ONE clean record per file)

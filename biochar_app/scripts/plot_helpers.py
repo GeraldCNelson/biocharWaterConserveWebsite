@@ -1,10 +1,96 @@
+"""
+================================================================================
+plot_helpers.py — Shared Plotting Helpers & Unit-Aware Utilities
+================================================================================
+
+This module contains low-level helpers used by plot_utils.py and the API routes
+to build Plotly figures in a consistent, unit-aware way.
+
+It is the central place for:
+    • x-axis configuration (date vs. category; growing-season handling)
+    • y-axis configuration for raw vs. ratio plots
+    • secondary y-axis config for precipitation overlays
+    • legend layout and styling
+    • global min/max range computation for dynamic y-axis limits
+    • sensor-column parsing (depth, strip, logger location, etc.)
+    • unit-aware label generation and numeric unit conversions
+    • irrigation event loading for overlays and seasonal summaries
+
+------------------------------------------------------------------------------
+DATA & UNIT ASSUMPTIONS
+------------------------------------------------------------------------------
+• All logger and weather Parquet data are stored in **US customary units**:
+      – Soil & air temperature: °F
+      – Precipitation: inches
+      – Irrigation volume: gallons
+      – SWC volumes: gallons (with L pre-computed in ETL where needed)
+
+• convert_units(df, unit_system) is meant for **display-time conversions only**.
+  It inspects column names and applies UNIT_CONVERSIONS from config.py:
+
+      unit_system == "metric":
+          – Fahrenheit → Celsius
+          – Inches → millimeters
+          – Gallons → liters
+          – SWC depth/volume conversions where appropriate
+
+  The underlying Parquet files remain unchanged.
+
+• get_unit_aware_label(variable, unit_system) uses label_name_mapping from
+  config.py and performs lightweight unit-string substitution when necessary
+  (e.g., “(°F)” → “(°C)”, “(inches)” → “(mm)”).
+
+------------------------------------------------------------------------------
+KEY FUNCTIONS
+------------------------------------------------------------------------------
+• common_xaxis_config(...)
+      – Builds consistent x-axis config for all time-based plots.
+
+• common_yaxis_config(kind, variable, unit_system, global_min, global_max)
+      – Computes y-axis styling + range for raw vs ratio plots.
+
+• common_yaxis2_config(unit_system)
+      – Standardized y2 config for precipitation overlays.
+
+• common_legend_config(title)
+      – Legend styling (position, background, font) reused across views.
+
+• compute_global_min_max(df, columns)
+      – Robust min/max for auto-scaling primary y-axis.
+
+• parse_sensor_column(col, unit_system)
+      – Parses standardized column names like
+        “VWC_1_raw_S1_T” → depth, strip, logger location, etc.
+
+• convert_units(df, unit_system)
+      – Applies unit-system conversions for plotting and downloads.
+
+• load_irrigation_events(strip, year)
+      – Returns a DataFrame of irrigation events used by overlays in plots.
+
+------------------------------------------------------------------------------
+MAINTENANCE NOTES
+------------------------------------------------------------------------------
+• Any new variables or units should be reflected in:
+      – label_name_mapping
+      – UNIT_CONVERSIONS
+      – convert_units() column-name logic
+
+• plot_helpers.py should remain free of any routing or I/O logic; it is strictly
+  a utility layer shared by multiple plotting entry points.
+------------------------------------------------------------------------------
+"""
 
 import os
+import math
+import re
+import logging
+from datetime import datetime, date
+from pathlib import Path
+from typing import Any, Optional, Tuple, Dict, Sequence
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, date
-from typing import Any, Optional, Tuple, Dict,Sequence
-import re
 from flask import abort
 from fastapi import HTTPException
 
@@ -19,20 +105,59 @@ from biochar_app.scripts.config import (
     DEFAULT_GSEASON_PERIODS,
 )
 
+logger = logging.getLogger(__name__)
+
+# Path to the master irrigation workbook
+IRRIGATION_WORKBOOK_PATH = Path("biochar_app/data-raw/biochar-data-master.xlsx")
+GALLONS_PER_ACRE_FT = 325_851.0  # gallons per acre-foot
+
+# cache: year -> cleaned irrigation DataFrame
+_IRRIGATION_SHEETS_CACHE: dict[int, pd.DataFrame] = {}
+# Cached ExcelFile (loaded once at import / first use)
+_IRRIGATION_XLS: Optional[pd.ExcelFile] = None
+# Optional cache for (year, group) → DataFrame of events
+_IRRIGATION_CACHE: dict[tuple[int, str], pd.DataFrame] = {}
+
+# Each logical unit category in UNIT_CONVERSIONS["us_to_metric"]
+# is mapped to a list of rules that decide whether a DataFrame column
+# belongs to that category.
+COLUMN_CATEGORY_RULES = {
+    "temp": [
+        # Logger temperatures: T_1_raw_S1_T, T_2_raw...
+        lambda col: col.startswith("T_"),
+
+        # Weather temp columns: temp_air_degF, soil_temp_6in_degF
+        lambda col: ("temp" in col) and col.endswith("degF"),
+    ],
+    "precip": [
+        # e.g. precip_in_15min, precip_in_daily
+        lambda col: "precip_in" in col,
+    ],
+    "irrigation": [
+        # e.g. irrigation_volume_gal, volume_gal_2024
+        lambda col: "volume_gal" in col,
+    ],
+    # SWC is not applied to columns; handled inside SWC calc only
+}
+
+
+# ---------------------------------------------------------------------------
+# JSON sanitization
+# ---------------------------------------------------------------------------
 
 def sanitize_json(obj: Any) -> Any:
     """
     Recursively walk through `obj` and convert everything into plain Python primitives
-    that Flask’s `jsonify` can handle:
+    that Flask/FastAPI JSON can handle:
       - pd.Timestamp → ISO string
-      - datetime/date   → ISO string
-      - NumPy scalar    → native Python scalar
-      - NumPy array     → Python list
-      - dict            → sanitize each key/value
-      - list/tuple      → sanitize each element
-      - any other type  → str(obj)
+      - datetime/date → ISO string
+      - NumPy scalar  → native Python scalar
+      - NumPy array   → Python list
+      - dict          → sanitize each key/value
+      - list/tuple    → sanitize each element
+      - any other type→ str(obj)
     """
-    # Already‐safe primitives
+    # Already-safe primitives
     if obj is None or isinstance(obj, (str, bool, int, float)):
         return obj
 
@@ -52,7 +177,7 @@ def sanitize_json(obj: Any) -> Any:
     if isinstance(obj, np.ndarray):
         return obj.tolist()
 
-    # dict → sanitize each key‐value
+    # dict → sanitize each key-value
     if isinstance(obj, dict):
         new_dict: dict[str, Any] = {}
         for k, v in obj.items():
@@ -67,6 +192,11 @@ def sanitize_json(obj: Any) -> Any:
 
     # Fallback: string repr
     return str(obj)
+
+
+# ---------------------------------------------------------------------------
+# Global min / max helpers
+# ---------------------------------------------------------------------------
 
 def compute_global_min_max(
     df: pd.DataFrame, cols: list[str]
@@ -105,31 +235,68 @@ def compute_global_min_max(
     return min_val, max_val
 
 
-def common_xaxis_config(
-    granularity: str,
-    start: Optional[str] = None,
-    end:   Optional[str] = None,
-) -> Dict[str, Any]:
+# ---------------------------------------------------------------------------
+# Axis configs
+# ---------------------------------------------------------------------------
+
+def common_xaxis_config(granularity: str, start: str, end: str) -> Dict[str, Any]:
     """
-    Build the common x-axis config for time series.
-    If granularity == "gseason", we leave it as a free date axis.
-    Otherwise, if start/end are provided, we set a fixed range.
+    Shared x-axis config.
+
+    If the requested window is exactly a single calendar year
+    (YYYY-01-01 .. YYYY-12-31), use month ticks:
+
+      Jan\\nYYYY, Feb, Mar, ..., Nov, Dec\\nYYYY
+
+    Otherwise, let Plotly pick ticks automatically.
     """
     cfg: Dict[str, Any] = {
-        "title":    "Date",
-        "showgrid": True,
-        "type":     "date",
-        "tickformat": "%b %Y",
-        "tickmode":   "linear",
-        "dtick":      "M1",
-        "showline":   True,
-        "linecolor":  "black",
-        "linewidth":  1,
+        "title": "Date",
+        "type": "date",
+        "showline": True,
+        "linecolor": "black",
+        "linewidth": 1,
+        "rangeslider": {"visible": False},
     }
-    # only set a numeric range if it's not gseason
-    if granularity.lower() != "gseason" and start and end:
-        # Plotly wants an array of two strings here
-        cfg["range"] = [start, end]
+
+    try:
+        start_ts = pd.to_datetime(start)
+        end_ts = pd.to_datetime(end)
+    except Exception:
+        # fall back to simple date axis
+        return cfg
+
+    is_full_year = (
+        start_ts.month == 1 and start_ts.day == 1 and
+        end_ts.month == 12 and end_ts.day == 31 and
+        start_ts.year == end_ts.year
+    )
+
+    if not is_full_year:
+        return cfg
+
+    year = start_ts.year
+
+    # Month starts: Jan 1, Feb 1, ..., Dec 1
+    month_starts = pd.date_range(f"{year}-01-01", f"{year}-12-01", freq="MS")
+
+    tickvals = month_starts
+    ticktext = []
+    for dt in month_starts:
+        if dt.month in (1, 12):
+            # Jan\n2025 , Dec\n2025
+            ticktext.append(dt.strftime("%b\n%Y"))
+        else:
+            ticktext.append(dt.strftime("%b"))
+
+    cfg.update(
+        {
+            "tickmode": "array",
+            "tickvals": tickvals,
+            "ticktext": ticktext,
+            "tickangle": 0,
+        }
+    )
     return cfg
 
 
@@ -141,16 +308,15 @@ def common_yaxis_config(
         global_max: Optional[float],
 ) -> Dict[str, Any]:
     """
-    Build a yaxis (or yaxis2) config dict for Plotly.
+    Build a yaxis config dict for Plotly.
     Raises a clear HTTP 400 if the data range is invalid.
     """
     # 1) Make sure we actually have numbers
 
-    # 1) Missing entirely?
     if global_min is None:
-        raise HTTPException(400, f"Cannot build y-axis: global_min is None")
+        raise HTTPException(400, "Cannot build y-axis: global_min is None")
     if global_max is None:
-        raise HTTPException(400, f"Cannot build y-axis: global_max is None")
+        raise HTTPException(400, "Cannot build y-axis: global_max is None")
 
     # 2) Reject any NaN or infinite values
     if not np.isfinite(global_min) or not np.isfinite(global_max):
@@ -162,8 +328,8 @@ def common_yaxis_config(
 
     # 3) Look up human label …
     full_label = (
-            label_name_mapping.get(variable, {}).get(unit_system)
-            or variable.replace("_", " ").title()
+        label_name_mapping.get(variable, {}).get(unit_system)
+        or variable.replace("_", " ").title()
     )
 
     # 4) Split into title text + suffix
@@ -203,7 +369,11 @@ def common_yaxis_config(
 
     return axis_cfg
 
-def common_yaxis2_config(unit_system: str = "us") -> dict[str, Any]:
+
+def common_yaxis2_config(unit_system: str = "us") -> Dict[str, Any]:
+    """
+    Secondary y-axis config for precipitation overlays.
+    """
     unit_label = "mm" if unit_system == "metric" else "inches"
     return {
         "title": {"text": f"Precipitation ({unit_label})"},
@@ -213,79 +383,115 @@ def common_yaxis2_config(unit_system: str = "us") -> dict[str, Any]:
         "showline": True,
         "linecolor": "black",
         "linewidth": 1,
+
+        # Keep precip non-negative and grounded at zero
         "rangemode": "tozero",
-        "tickformat": ".1f",
+        "constrain": "range",
+        "zeroline": False,
+
+        # Units formatting
+        "tickformat": ".2f",
         "nticks": 5,
     }
 
 
-def common_legend_config(title: str = "Legend") -> dict[str, Any]:
+def common_legend_config(title: str) -> Dict[str, Any]:
     """
-    Always put the legend in the top‐right.
+    Shared legend styling for all plots.
+    Slightly transparent background so bars/lines are visible under it.
     """
     return {
-        "title":      {"text": title, "side": "top"},
+        "title": {"text": title},
         "orientation": "v",
-        "yanchor":    "top",
-        "y":          1.02,
-        "xanchor":    "right",
-        "x":          1,
+        "x": 1.02,
+        "y": 1.0,
+        "xanchor": "left",
+        "yanchor": "top",
+        "bgcolor": "rgba(255,255,255,0.65)",
+        "bordercolor": "rgba(0,0,0,0.15)",
+        "itemsizing": "constant",
     }
 
+
+# ---------------------------------------------------------------------------
+# Labels & unit-aware text
+# ---------------------------------------------------------------------------
 
 def get_unit_aware_label(variable: str, unit_system: str) -> str:
     """
     Given a “variable key” (e.g. "T" or "VWC" or "precip_in" or "irrigation"),
-    and a unit_system ("us" or "metric"), return the correct axis‐label text
+    and a unit_system ("us" or "metric"), return the correct axis-label text
     from label_name_mapping (falling back if needed).
     """
     label = label_name_mapping.get(variable, variable)
     if isinstance(label, dict):
         return label.get(unit_system, variable)
 
-    # If the value is just a string (not a dict), then do a best‐guess replacement:
+    # If the value is just a string (not a dict), then do a best-guess replacement:
     if unit_system == "metric":
         return (
             label
             .replace("(°F)", "(°C)")
-            .replace("(inches)", "(cm)")
-            .replace("(in)", "(cm)")
+            .replace("(inches)", "(mm)")
             .replace("(in)", "(mm)")
         )
     return label
 
-def convert_units_for_download(df: pd.DataFrame, unit_system: str) -> pd.DataFrame:
+
+# ---------------------------------------------------------------------------
+# Unit conversions for display
+# ---------------------------------------------------------------------------
+
+def convert_units(df: pd.DataFrame, unit_system: str) -> pd.DataFrame:
     """
-    Scan through the entire DataFrame’s columns (e.g., if they contain “T_…_degF”
-    or “precip_in” or “gallons” in their name) and convert each column
-    into metric (if unit_system=="metric"). Used for the “Download Data” endpoint.
+    Return a *copy* of df with values converted for display.
+
+    Assumptions:
+      - Logger soil temps T_*_raw_* are stored in °F.
+      - VWC columns are already in %, EC in dS/m, etc.
+      - Weather data already contains both temp_air_degF and temp_air_degC,
+        so we do **not** touch those here.
+
+    Currently this only converts soil temperature when unit_system == "metric".
+    It is safe to call for any variable.
     """
-    df_converted = df.copy()
     if unit_system != "metric":
-        return df_converted
+        # US is the storage format; nothing to do.
+        return df
 
-    conv_map = UNIT_CONVERSIONS.get("us_to_metric", {})
+    df_conv = df.copy()
+    to_c = UNIT_CONVERSIONS["us_to_metric"]["temp"]
 
-    for col in df_converted.columns:
-        # e.g. all “temp_air_degF” → apply “temp” conversion
-        if (
-            ("temp_air_degF" in col or "soil_temp_2in_degF" in col or
-             "soil_temp_6in_degF" in col or col.startswith("T_"))
-            and "temp" in conv_map
-        ):
-            df_converted[col] = df_converted[col].apply(conv_map["temp"])
+    # Soil temperature columns look like: T_1_raw_S1_T, T_2_raw_S3_M, etc.
+    t_cols = [c for c in df_conv.columns if c.startswith("T_") and "_raw_" in c]
 
-        # precipitation columns, e.g. “precip_in”
-        elif "precip_in" in col and "precip" in conv_map:
-            df_converted[col] = df_converted[col].apply(conv_map["precip"])
+    for col in t_cols:
+        df_conv[col] = pd.to_numeric(df_conv[col], errors="coerce").apply(to_c)
 
-        # irrigation columns: we only ever have “volume_gal” in the CSV; convert to “000 L”
-        elif "volume_gal" in col and "irrigation" in conv_map:
-            df_converted[col] = df_converted[col].apply(conv_map["irrigation"])
+    return df_conv
 
-    return df_converted
+
+# ---------------------------------------------------------------------------
+# Sensor column parsing
+# ---------------------------------------------------------------------------
 
 def parse_sensor_column(col: str, unit_system: str) -> dict[str, str]:
+    """
+    Parse standardized sensor column names into human labels.
+
+    Examples
+    --------
+    "VWC_1_raw_S1_T" →
+        var_code   = "VWC"
+        depth_code = "1"
+        strip_code = "S1"
+        loc_code   = "T"
+
+    "VWC_1_ratio_S1_S2_T" →
+        var_code   = "VWC"
+        depth_code = "1"
+        ratio of strip1/strip2, at loc_code "T"
+    """
     parts = col.split("_")
     var_code   = parts[0]
     depth_code = parts[1]
@@ -313,30 +519,468 @@ def parse_sensor_column(col: str, unit_system: str) -> dict[str, str]:
         "logger_location": human_loc,
     }
 
+
+# ---------------------------------------------------------------------------
+# Irrigation workbook & overlays
+# ---------------------------------------------------------------------------
+
+def _get_irrigation_workbook() -> Optional[pd.ExcelFile]:
+    """
+    Lazily load and cache the irrigation Excel workbook.
+    Returns None if the file does not exist.
+    """
+    global _IRRIGATION_XLS
+
+    if _IRRIGATION_XLS is not None:
+        return _IRRIGATION_XLS
+
+    if not IRRIGATION_WORKBOOK_PATH.exists():
+        logger.warning(
+            "Irrigation workbook %s not found; skipping irrigation overlays.",
+            IRRIGATION_WORKBOOK_PATH,
+        )
+        return None
+
+    _IRRIGATION_XLS = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH)
+    logger.info(
+        "Loaded irrigation workbook %s with sheets: %s",
+        IRRIGATION_WORKBOOK_PATH,
+        ", ".join(_IRRIGATION_XLS.sheet_names),
+    )
+    return _IRRIGATION_XLS
+
+
+def _clean_irrigation_column(name: str) -> str:
+    """
+    Normalize Excel column names from the irrigation workbook
+    into safe, lower_snake_case tokens.
+    """
+    return (
+        str(name)
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace(".", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("#", "num")
+        .replace("/", "_")
+    )
+
+
+def _find_irrigation_sheet_name(xls: pd.ExcelFile, year: int) -> Optional[str]:
+    """
+    Given an ExcelFile, find the sheet that corresponds to the requested year,
+    e.g. '2023 IRRIGATION ' or '2024 IRRIGATION'.
+    """
+    target = str(year)
+    for sheet in xls.sheet_names:
+        s_clean = str(sheet).strip()
+        if target in s_clean and "IRRIGATION" in s_clean.upper():
+            return sheet
+    return None
+
+
+def _load_irrigation_sheet(year: int) -> pd.DataFrame:
+    """
+    Load and clean the irrigation sheet for a given year, with caching.
+    Also performs a gallon <-> acre-ft consistency check (legacy diagnostic).
+    """
+    # cached?
+    if year in _IRRIGATION_SHEETS_CACHE:
+        return _IRRIGATION_SHEETS_CACHE[year]
+
+    if not os.path.exists(IRRIGATION_WORKBOOK_PATH):
+        logger.warning(
+            "Irrigation workbook %s not found; skipping overlays.",
+            IRRIGATION_WORKBOOK_PATH,
+        )
+        df_empty = pd.DataFrame()
+        _IRRIGATION_SHEETS_CACHE[year] = df_empty
+        return df_empty
+
+    xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
+    sheet_name = _find_irrigation_sheet_name(xls, year)
+    if sheet_name is None:
+        logger.warning(
+            "No irrigation sheet found for year %s in %s",
+            year,
+            IRRIGATION_WORKBOOK_PATH,
+        )
+        df_empty = pd.DataFrame()
+        _IRRIGATION_SHEETS_CACHE[year] = df_empty
+        return df_empty
+
+    logger.info(
+        "Loaded irrigation sheet %r for year %s from %s",
+        sheet_name,
+        year,
+        IRRIGATION_WORKBOOK_PATH,
+    )
+
+    df = xls.parse(sheet_name=sheet_name)
+    df.columns = [_clean_irrigation_column(c) for c in df.columns]
+
+    # Coerce dates and drop non-data rows (totals, notes, etc.)
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df[df["date"].notna()].copy()
+
+    # Legacy diagnostic check (using original gal_used_x_100 / acre_ft_used)
+    if "gal_used_x_100" in df.columns and "acre_ft_used" in df.columns:
+        vol = pd.to_numeric(df["gal_used_x_100"], errors="coerce")
+        af = pd.to_numeric(df["acre_ft_used"], errors="coerce")
+        mask = vol.notna() & af.notna() & (af > 0)
+
+        if mask.any():
+            expected = af[mask] * GALLONS_PER_ACRE_FT
+            rel_diff = (vol[mask] - expected).abs() / expected
+            max_diff = float(rel_diff.max())
+            if max_diff > 0.05:
+                logger.warning(
+                    "Irrigation gallon vs acre-ft mismatch in %s (year %s): "
+                    "max relative difference ~ %.1f%%",
+                    sheet_name,
+                    year,
+                    max_diff * 100,
+                )
+    _IRRIGATION_SHEETS_CACHE[year] = df
+    return df
+
+
+def _reconcile_irrigation_gallons(
+    df: pd.DataFrame,
+    year: int,
+    group: str,
+    gallons_col: str = "gallons",
+    acreft_col: str = "acre_ft",
+    rel_tol: float = 0.15,
+) -> None:
+    """
+    Ensure gallons and acre-feet are consistent, with a special case for
+    the “all four strips at once” event.
+
+    Behavior
+    --------
+    - For each row with finite gallons & acre_ft:
+        expected = acre_ft * GALLONS_PER_ACRE_FT
+        ratio    = actual / expected
+
+      * If 1.9 <= ratio <= 2.1:
+          -> Treat as “all four strips recorded on one meter”
+             and auto-halves gallons in place.
+          -> Log an INFO message.
+
+      * Else if relative error > rel_tol (default 15%):
+          -> Keep values as-is but log a WARNING (true mismatch).
+
+      * Else:
+          -> Values are close enough; do nothing.
+    """
+    if gallons_col not in df.columns or acreft_col not in df.columns:
+        logger.debug(
+            "reconcile_irrigation_gallons: %s %d missing %r or %r; skipping.",
+            group,
+            year,
+            gallons_col,
+            acreft_col,
+        )
+        return
+
+    halved_rows: list[str] = []
+    mismatch_rows: list[str] = []
+
+    gallons = pd.to_numeric(df[gallons_col], errors="coerce")
+    acre_ft = pd.to_numeric(df[acreft_col], errors="coerce")
+
+    for idx, (gal, af) in enumerate(zip(gallons, acre_ft)):
+        if not (math.isfinite(gal) and math.isfinite(af)) or af <= 0:
+            continue
+
+        expected = af * GALLONS_PER_ACRE_FT
+        if expected <= 0:
+            continue
+
+        ratio = gal / expected
+        err = abs(gal - expected) / expected
+
+        # Special case: approx 2× gallons vs acre-ft (4 strips on one meter)
+        if 1.9 <= ratio <= 2.1:
+            corrected = gal / 2.0
+            df.at[df.index[idx], gallons_col] = corrected
+            date_val = df.get("date", pd.Series(index=df.index, dtype="datetime64[ns]")).iloc[idx]
+            if isinstance(date_val, pd.Timestamp):
+                datestr = date_val.date().isoformat()
+            else:
+                datestr = str(date_val)
+            halved_rows.append(
+                f"{datestr} (gal={gal:.1f} → {corrected:.1f}, "
+                f"expected≈{expected:.1f})"
+            )
+            continue
+
+        # Otherwise, log real mismatches beyond tolerance
+        if err > rel_tol:
+            date_val = df.get("date", pd.Series(index=df.index, dtype="datetime64[ns]")).iloc[idx]
+            if isinstance(date_val, pd.Timestamp):
+                datestr = date_val.date().isoformat()
+            else:
+                datestr = str(date_val)
+            mismatch_rows.append(
+                f"{datestr} (gal={gal:.1f}, af={af:.6f}, "
+                f"expected≈{expected:.1f}, err={err*100:.1f}%)"
+            )
+
+    if halved_rows:
+        logger.info(
+            "🔁 Irrigation %s %d: detected ~2× gallon/acre-ft cases; "
+            "auto-halved gallons on %d row(s):\n  %s",
+            group,
+            year,
+            len(halved_rows),
+            "\n  ".join(halved_rows),
+        )
+
+    if mismatch_rows:
+        logger.warning(
+            "⚠️ Irrigation %s %s: gallon/acre-ft mismatches beyond %.0f%%:\n%s",
+            group,
+            year,
+            rel_tol * 100,
+            "\n".join(mismatch_rows),
+        )
+
+
 def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     """
-    Reads biochar_app/data-processed/Harmonized_Irrigation_Data_{year}.csv,
-    parses start_time/end_time/gallons, filters by west/east group,
-    fixes any overnight events (end < start), and returns a DataFrame with
-    columns: start, end, volume_gal (gal).
+    Load irrigation events for a given strip + year from the master workbook.
+
+    Returns DataFrame with:
+        start (Timestamp), end (Timestamp), volume_gal (float)
     """
-    path = f"biochar_app/data-processed/Harmonized_Irrigation_Data_{year}.csv"
-    if not os.path.exists(path):
-        return pd.DataFrame(columns=["start", "end", "volume_gal"])
 
-    df = pd.read_csv(path)
-    df["start"]       = pd.to_datetime(df["start_time"], format="%m/%d/%y %H:%M")
-    df["end"]         = pd.to_datetime(df["end_time"],   format="%m/%d/%y %H:%M")
-    df["volume_gal"]  = pd.to_numeric(df["gallons"], errors="coerce").fillna(0)
+    # Map strip → group
+    group = "west" if strip in ("S1", "S2") else "east"
 
-    # Filter by strip group: west=S1/S2, east=S3/S4
-    group = "west" if strip in ["S1", "S2"] else "east"
-    df = df[df["location"] == group].copy()
+    # Cache check
+    cache_key = (year, group)
+    if cache_key in _IRRIGATION_CACHE:
+        return _IRRIGATION_CACHE[cache_key].copy()
 
-    # Fix overnight events
-    mask = df["end"] < df["start"]
-    if mask.any():
-        df.loc[mask, "end"] += pd.Timedelta(days=1)
+    # Load workbook
+    xls = _get_irrigation_workbook()
+    if xls is None:
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
 
-    return df.loc[:, ["start", "end", "volume_gal"]].copy()
+    # Identify correct worksheet
+    target_prefix = f"{year}"
+    sheet_name: Optional[str] = None
+    for s in xls.sheet_names:
+        s_clean = str(s).strip()
+        if target_prefix in s_clean and "IRRIGATION" in s_clean.upper():
+            sheet_name = s
+            break
 
+    if sheet_name is None:
+        logger.warning(
+            "No irrigation sheet found for year %s. Sheets available: %s",
+            year,
+            xls.sheet_names,
+        )
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
+
+    df_raw = xls.parse(sheet_name=sheet_name)
+    if df_raw.empty:
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
+
+    # ------------------------------
+    # Normalize column names
+    # ------------------------------
+    rename_map: dict[str, str] = {}
+    for col in df_raw.columns:
+        c = str(col).strip().upper()
+
+        if c.startswith("DATE"):
+            rename_map[col] = "date"
+        elif "STRIP" in c:
+            rename_map[col] = "strip_id"
+        elif c.startswith("LOCATION"):
+            rename_map[col] = "location"
+        elif "TIME ON" in c or ("START" in c and "METER" not in c):
+            rename_map[col] = "time_on"
+        elif "TIME OFF" in c or ("END" in c and "METER" not in c):
+            rename_map[col] = "time_off"
+        elif "GAL. USED" in c:
+            rename_map[col] = "gallons"
+        elif "ACRE FT" in c:
+            rename_map[col] = "acre_ft"
+
+    df = df_raw.rename(columns=rename_map)
+
+    # Drop duplicate columns if any were renamed to same thing
+    if df.columns.duplicated().any():
+        dup_cols = df.columns[df.columns.duplicated()].tolist()
+        logger.warning(
+            "Duplicate irrigation columns after rename: %s; keeping first occurrence(s).",
+            dup_cols,
+        )
+        df = df.loc[:, ~df.columns.duplicated()]
+
+    # Required columns
+    if "date" not in df or ("gallons" not in df and "acre_ft" not in df):
+        logger.warning(
+            "Irrigation sheet %s missing essential columns. Found: %s",
+            sheet_name,
+            list(df.columns),
+        )
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
+
+    # ------------------------------
+    # Determine west/east group
+    # ------------------------------
+    def infer_group(row: pd.Series) -> str:
+        loc = str(row.get("location", "")).strip().lower()
+        if loc in {"west", "w"}:
+            return "west"
+        if loc in {"east", "e"}:
+            return "east"
+
+        strip_id = str(row.get("strip_id", "")).strip()
+        if strip_id.startswith(("1", "2")):
+            return "west"
+        if strip_id.startswith(("3", "4")):
+            return "east"
+
+        return "unknown"
+
+    df["group"] = df.apply(infer_group, axis=1)
+    df = df[df["group"] == group].copy()
+
+    if df.empty:
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
+
+    # ------------------------------
+    # Build datetime start/end
+    # ------------------------------
+
+    # DATE column → normalized YYYY-MM-DD
+    date_str = (
+        pd.to_datetime(df["date"], errors="coerce")
+        .dt.strftime("%Y-%m-%d")
+    )
+
+    # REQUIRED: time_on / time_off must exist
+    if "time_on" not in df or "time_off" not in df:
+        logger.warning(
+            "Year %s irrigation sheet lacks TIME ON / TIME OFF columns. Columns available: %s",
+            year,
+            list(df.columns),
+        )
+        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
+
+    # Handle possible duplicate-column issue where df["time_on"] → DataFrame
+    time_on_raw = df["time_on"]
+    if isinstance(time_on_raw, pd.DataFrame):
+        logger.warning(
+            "Multiple 'time_on' columns detected for year %s; using first one. Subcolumns: %s",
+            year,
+            list(time_on_raw.columns),
+        )
+        time_on_raw = time_on_raw.iloc[:, 0]
+
+    time_off_raw = df["time_off"]
+    if isinstance(time_off_raw, pd.DataFrame):
+        logger.warning(
+            "Multiple 'time_off' columns detected for year %s; using first one. Subcolumns: %s",
+            year,
+            list(time_off_raw.columns),
+        )
+        time_off_raw = time_off_raw.iloc[:, 0]
+
+    time_on = time_on_raw.astype(str).str.strip()
+    time_off = time_off_raw.astype(str).str.strip()
+
+    # First try seconds, then fallback HH:MM
+    start = pd.to_datetime(
+        date_str + " " + time_on,
+        format="%Y-%m-%d %H:%M:%S",
+        errors="coerce",
+    )
+    start = start.fillna(
+        pd.to_datetime(
+            date_str + " " + time_on,
+            format="%Y-%m-%d %H:%M",
+            errors="coerce",
+        )
+    )
+
+    end = pd.to_datetime(
+        date_str + " " + time_off,
+        format="%Y-%m-%d %H:%M:%S",
+        errors="coerce",
+    )
+    end = end.fillna(
+        pd.to_datetime(
+            date_str + " " + time_off,
+            format="%Y-%m-%d %H:%M",
+            errors="coerce",
+        )
+    )
+
+    # ------------------------------
+    # Gallons & acre-ft
+    # ------------------------------
+    df["gallons"] = pd.to_numeric(df.get("gallons", np.nan), errors="coerce")
+    df["acre_ft"] = pd.to_numeric(df.get("acre_ft", np.nan), errors="coerce")
+
+    # Reconcile gallons vs acre-ft, including the special “4 strips at once” case
+    _reconcile_irrigation_gallons(df, year=year, group=group)
+
+    # Back-fill gallons if missing but acre-ft is present
+    missing_gal = df["gallons"].isna() & df["acre_ft"].notna()
+    if missing_gal.any():
+        df.loc[missing_gal, "gallons"] = (
+            df.loc[missing_gal, "acre_ft"] * GALLONS_PER_ACRE_FT
+        )
+
+    gallons = df["gallons"]
+
+    # ------------------------------
+    # Build final table
+    # ------------------------------
+    events = pd.DataFrame(
+        {"start": start, "end": end, "volume_gal": gallons}
+    )
+
+    # Overnight events fix
+    overnight = (events["end"] < events["start"]) & events["end"].notna()
+    if overnight.any():
+        events.loc[overnight, "end"] += pd.Timedelta(days=1)
+
+    # Remove unusable rows
+    events = events[
+        events["start"].notna()
+        & events["end"].notna()
+        & events["volume_gal"].notna()
+        & (events["volume_gal"] > 0)
+    ].copy()
+
+    events.sort_values("start", inplace=True)
+    events.reset_index(drop=True, inplace=True)
+
+    # Cache final result
+    _IRRIGATION_CACHE[cache_key] = events
+
+    return events.copy()

@@ -1,31 +1,104 @@
+#!/usr/bin/env python3
+"""
+get_weather_data.py
+
+Fetch CoAgMet 5-minute weather data for a given year and return a
+clean 15-minute-aggregated DataFrame for use by etl.py.
+
+This version is deliberately **stateless** for ETL/backfill:
+  - It ignores any existing cache and always fetches the entire year:
+        [year-01-01, min(year-12-31, now)] in DEFAULT_TIMEZONE
+  - It does NOT append incrementally; incremental logic can be added
+    later in a separate updater script.
+
+Pipeline:
+
+  - Use the CoAgMet API to request data for COAG_STATION at COLLECT_PERIOD
+    with fields given in COAGMET_VARIABLE_MAP.
+  - CSV format (with header=yes) typically has:
+      * Row 1: column names, e.g.
+            Station,"Date and Time","Air Temp",RH,Dewpoint,"Vapor Pressure",
+            "Solar Rad","Liquid Precip","Wind","Wind Dir",
+            "5cm Soil Temp","15cm Soil Temp"
+      * Row 2: units / metadata, e.g.
+            id,"date time","deg F","%",...
+      * Rows 3+: data rows.
+  - We:
+      * Let pandas use the first row as the header.
+      * Skip the units row.
+      * Immediately rename the timestamp column ("Date and Time" / "DateTime")
+        to "timestamp".
+      * Subset to "timestamp" + the human-readable names corresponding to
+        COAGMET_VARIABLE_MAP keys.
+      * Rename those to internal base names ("temp_air", "precip", etc.).
+      * Apply unit-aware final labels (e.g. "temp_air_degF", "precip_in").
+      * Normalize timestamps to naive DEFAULT_TIMEZONE.
+      * Resample to 15-minute intervals:
+            - precip columns summed
+            - all other columns averaged
+      * Return a DataFrame with:
+            timestamp (naive DEFAULT_TIMEZONE),
+            one column per weather variable (final unit-suffixed name).
+
+For details on CoAgMet’s URL & CSV format, see:
+    https://coagmet.colostate.edu/data/url-builder
+
+Example "latest" URL from the builder:
+    https://coagmet.colostate.edu/data/latest/frt03.csv?header=yes&dateFmt=iso&tz=utc
+"""
+
 import logging
-logger = logging.getLogger(__name__)
-import requests
 from io import StringIO
+
 import pandas as pd
-from pathlib import Path
+import requests
 
 from biochar_app.scripts.config import (
     COLLECT_PERIOD,
     COAG_STATION,
     COAGMET_VARIABLE_MAP,
-    DEFAULT_UNITS,
-    US_UNITS,
-    METRIC_UNITS,
     DEFAULT_TIMEZONE,
-    PARQUET_DIR,
+    DEFAULT_UNITS,
+    PARQUET_DIR,  # used to detect whether logger data exists for the year
 )
 
-# our base 5-min column names
+logger = logging.getLogger(__name__)
+
+# Internal base 5-min column names (before unit suffix)
 BASE_COLUMNS = list(COAGMET_VARIABLE_MAP.values())
+
+# Map CoAgMet "field codes" (used in &fields=) to the *header names* that appear in CSV.
+# Derived from your logs' "Available columns":
+# ['Station', 'Date and Time', 'Air Temp', 'RH', 'Dewpoint', 'Vapor Pressure',
+#  'Solar Rad', 'Liquid Precip', 'Wind', 'Wind Dir', '5cm Soil Temp', '15cm Soil Temp']
+RAW_HEADER_MAP = {
+    "t": "Air Temp",
+    "rh": "RH",
+    "dewpt": "Dewpoint",
+    "vp": "Vapor Pressure",
+    "solarRad": "Solar Rad",
+    # 5-minute increment precip field:
+    "precip": "Liquid Precip",
+    "windSpeed": "Wind",
+    "windDir": "Wind Dir",
+    "st5cm": "5cm Soil Temp",
+    "st15cm": "15cm Soil Temp",
+}
 
 
 def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
     """
-    Build a fresh mapping from the raw 15-min column names (e.g. "soil_temp_5cm",
-    "precip") to the final column names with proper unit suffixes (e.g. "_inches"
-    or "_mm", and converting "5cm" → "2in" when needed).
+    Build a mapping from base 15-min column names
+    (e.g. "soil_temp_5cm", "precip") to final column names
+    with proper unit suffixes (e.g. "_in" or "_mm"), and
+    convert 5 cm / 15 cm soil depths to 2 in / 6 in when using US units.
+
+    Returns:
+        dict[base_name, final_name]
+        e.g. "temp_air" -> "temp_air_degF", "precip" -> "precip_in"
     """
+    from biochar_app.scripts.config import US_UNITS, METRIC_UNITS
+
     unit_map = US_UNITS if units == "us" else METRIC_UNITS
     final_map: dict[str, str] = {}
 
@@ -34,7 +107,7 @@ def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
             continue
 
         label = base_name
-        # convert soil‐temp depths for US units
+        # convert soil-temp depths for US units
         if units == "us":
             if base_name == "soil_temp_5cm":
                 label = "soil_temp_2in"
@@ -53,77 +126,126 @@ def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
 
 def fetch_weather_data(year: int) -> pd.DataFrame:
     """
-    Incrementally fetch CoAgMet data **from the last cached weather timestamp**
-    up to **right now**, appending into the cache.
+    Fetch a full year of CoAgMet weather data for `year` and return a
+    15-minute-aggregated DataFrame.
 
-    Changes vs prior:
-      - Treat -999 as NA; coerce all numeric; clip negative precip to 0 (5-min increments).
-      - Never fetch earlier than Jan 1 <year>.
-      - Normalize timestamps to naive America/Denver (to match logger convention).
-      - Guard against empty pulls and missing columns.
+    This function does NOT use or maintain any cache. It is designed
+    specifically for the historical ETL script (etl.py), where it is
+    acceptable to re-fetch the full year.
+
+    Returns:
+        DataFrame with columns:
+            - "timestamp" (naive in DEFAULT_TIMEZONE)
+            - weather variables with final unit-suffixed names
+              (e.g. "temp_air_degF", "precip_in", "soil_temp_2in_degF", ...)
     """
-    cache_dir  = Path(PARQUET_DIR) / "weather"
-    cache_file = cache_dir / f"{year}_weather.parquet"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    # 1) Load existing cache (if any)
-    if cache_file.exists():
-        df_cache = pd.read_parquet(cache_file)
-        df_cache["timestamp"] = pd.to_datetime(df_cache["timestamp"], errors="coerce")
-        df_cache = df_cache.dropna(subset=["timestamp"]).sort_values("timestamp")
-        last_cache_ts = df_cache["timestamp"].max() if not df_cache.empty else None
-    else:
-        df_cache = pd.DataFrame(
-            columns=["timestamp"] + list(get_weather_column_labels(DEFAULT_UNITS).values())
-        )
-        last_cache_ts = None
-
-    # 2) If we have no logger file yet, just return what we have
-    logger_file = Path(PARQUET_DIR) / str(year) / f"{year}_raw_logger.parquet"
+    # If we don't have logger data for this year, just return empty;
+    # etl.py will skip weather summaries silently.
+    logger_file = PARQUET_DIR / str(year) / f"{year}_raw_logger.parquet"
     if not logger_file.exists():
-        return df_cache.reset_index(drop=True)
+        logger.warning(
+            "No logger parquet found for %s; skipping weather fetch.", year
+        )
+        return pd.DataFrame(columns=["timestamp"])
 
-    # 3) Decide fetch window (never before Jan 1 of target year)
-    start_fallback = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE)
-    if last_cache_ts is not None:
-        # cache is naive; interpret as Denver-local then bump by 1 minute
-        start_ts = last_cache_ts.tz_localize(DEFAULT_TIMEZONE) + pd.Timedelta(minutes=1)
-        start_ts = max(start_ts, start_fallback)
-    else:
-        start_ts = start_fallback
-
+    # Determine time window for the year in DEFAULT_TIMEZONE
+    start_ts = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE)
+    year_end = pd.Timestamp(f"{year}-12-31 23:59", tz=DEFAULT_TIMEZONE)
     now_ts = pd.Timestamp.now(tz=DEFAULT_TIMEZONE).floor("min")
-    if start_ts >= now_ts:
-        # Nothing new to fetch; return cache
-        return df_cache.reset_index(drop=True)
+    end_ts = min(year_end, now_ts)
+
+    if start_ts >= end_ts:
+        logger.warning("Start >= end for weather fetch in %s; returning empty.", year)
+        return pd.DataFrame(columns=["timestamp"])
 
     start_iso = start_ts.strftime("%Y-%m-%dT%H:%M")
-    end_iso   = now_ts.strftime("%Y-%m-%dT%H:%M")
+    end_iso = end_ts.strftime("%Y-%m-%dT%H:%M")
 
-    # 4) Pull CSV
+    # Build URL and fetch CSV
+    #
+    # URL builder reference:
+    #   https://coagmet.colostate.edu/data/url-builder
+    fields_param = ",".join(COAGMET_VARIABLE_MAP.keys())
     url = (
         f"https://coagmet.colostate.edu/data/{COLLECT_PERIOD}/{COAG_STATION}.csv"
-        f"?header=yes&fields={','.join(COAGMET_VARIABLE_MAP.keys())}"
+        f"?header=yes"
+        f"&fields={fields_param}"
         f"&from={start_iso}&to={end_iso}"
         f"&tz=co&units={DEFAULT_UNITS}&dateFmt=iso"
     )
+
+    logger.info("Fetching CoAgMet weather CSV from %s", url)
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
 
-    # Use names so we fully control the header row parsing; treat -999 as NA
-    df_new = pd.read_csv(
+    # Read CSV using first row as header, skip the units row,
+    # and disable low_memory chunking to avoid mixed-type warnings.
+    df_raw = pd.read_csv(
         StringIO(resp.text),
-        skiprows=2,
+        header=0,           # first row is header
+        skiprows=[1],       # second row is units; treat it as non-data
         na_values=["-999", -999, "-999.0"],
-        names=["timestamp"] + list(COAGMET_VARIABLE_MAP.values()),
-        parse_dates=["timestamp"],
+        low_memory=False,
     )
 
-    if df_new.empty:
-        return df_cache.reset_index(drop=True)
+    if df_raw.empty:
+        logger.warning("CoAgMet returned empty CSV for %s.", year)
+        return pd.DataFrame(columns=["timestamp"])
 
-    # 5) Normalize timestamps to naive America/Denver (match logger convention)
-    #    Incoming timestamps are ISO local; localize then drop tz.
+    # Normalize the timestamp column name right away
+    if "Date and Time" in df_raw.columns:
+        df_raw.rename(columns={"Date and Time": "timestamp"}, inplace=True)
+    elif "DateTime" in df_raw.columns:
+        df_raw.rename(columns={"DateTime": "timestamp"}, inplace=True)
+    else:
+        raise ValueError(
+            f"Could not find a timestamp column in CoAgMet CSV. "
+            f"Columns: {list(df_raw.columns)}"
+        )
+
+    # Build list of header names we want for weather fields
+    header_names = []
+    for key in COAGMET_VARIABLE_MAP.keys():
+        if key not in RAW_HEADER_MAP:
+            raise ValueError(f"Missing RAW_HEADER_MAP entry for CoAgMet field '{key}'")
+        header_names.append(RAW_HEADER_MAP[key])
+
+    wanted_cols = ["timestamp"] + header_names
+    missing_cols = [c for c in wanted_cols if c not in df_raw.columns]
+    if missing_cols:
+        raise ValueError(
+            f"CoAgMet CSV missing expected columns {missing_cols}. "
+            f"Available columns: {list(df_raw.columns)}"
+        )
+
+    df_new = df_raw[wanted_cols].copy()
+
+    # Rename:
+    #   "timestamp" stays "timestamp"
+    #   human-readable names -> internal base names (temp_air, precip, etc.)
+    rename_map = {"timestamp": "timestamp"}
+    for key, base_name in COAGMET_VARIABLE_MAP.items():
+        raw_header = RAW_HEADER_MAP[key]  # e.g. "Air Temp"
+        rename_map[raw_header] = base_name
+
+    df_new.rename(columns=rename_map, inplace=True)
+
+    # Parse timestamp with explicit ISO-like format
+    # (CoAgMet dateFmt=iso yields strings like "2025-11-19T16:30")
+    df_new["timestamp"] = pd.to_datetime(
+        df_new["timestamp"],
+        format="%Y-%m-%dT%H:%M",
+        errors="coerce",
+    )
+
+    # Drop rows with bad timestamps
+    df_new = df_new.dropna(subset=["timestamp"]).sort_values("timestamp")
+
+    if df_new.empty:
+        logger.warning("All timestamps invalid in CoAgMet CSV for %s.", year)
+        return pd.DataFrame(columns=["timestamp"])
+
+    # Localize to DEFAULT_TIMEZONE and drop tz info (naive)
     df_new["timestamp"] = (
         df_new["timestamp"]
         .dt.tz_localize(DEFAULT_TIMEZONE, ambiguous="NaT", nonexistent="shift_forward")
@@ -131,42 +253,40 @@ def fetch_weather_data(year: int) -> pd.DataFrame:
     )
     df_new = df_new.dropna(subset=["timestamp"]).sort_values("timestamp")
 
-    # 6) Coerce numerics; fix precip: increments, NA->0, negatives->0
-    #    After this block, we can safely resample with sum/mean.
-    for c in df_new.columns:
-        if c == "timestamp":
+    # Coerce data columns to numeric
+    for col in df_new.columns:
+        if col == "timestamp":
             continue
-        df_new[c] = pd.to_numeric(df_new[c], errors="coerce")
+        df_new[col] = pd.to_numeric(df_new[col], errors="coerce")
 
-    # Rename to standardized snake_case labels FIRST so we know precip col name
-    df_new.rename(columns=get_weather_column_labels(DEFAULT_UNITS), inplace=True)
+    # Rename base names to final unit-aware labels
+    label_map = get_weather_column_labels(DEFAULT_UNITS)
+    df_new.rename(columns=label_map, inplace=True)
 
-    precip_col = "precip_in" if "precip_in" in df_new.columns else None
-    if precip_col is None:
-        # Allow projects that use metric labels directly
-        precip_col = "precip_mm" if "precip_mm" in df_new.columns else None
-
-    if precip_col is not None:
+    # Make sure precip is non-negative
+    precip_col = (
+        "precip_in" if "precip_in" in df_new.columns
+        else "precip_mm" if "precip_mm" in df_new.columns
+        else None
+    )
+    if precip_col:
         df_new[precip_col] = df_new[precip_col].fillna(0.0).clip(lower=0.0)
 
-    # 7) Resample to 15-min in local naive time
-    df_new = (
+    # ----- 15-minute resample -----
+    # Build agg map EXCLUDING 'timestamp', since it becomes the index.
+    data_cols = [c for c in df_new.columns if c != "timestamp"]
+    agg_map = {
+        c: ("sum" if c.startswith("precip") else "mean")
+        for c in data_cols
+    }
+
+    df_15 = (
         df_new
         .set_index("timestamp")
         .resample("15min")
-        .agg({col: ("sum" if col.startswith("precip") else "mean") for col in df_new.columns})
+        .agg(agg_map)
         .round(3)
         .reset_index()
     )
 
-    # 8) Append to cache, dedupe, sort, and write back
-    df_combined = pd.concat([df_cache, df_new], ignore_index=True)
-    df_combined = df_combined.drop_duplicates("timestamp").sort_values("timestamp")
-
-    # Optional: enforce year boundary if you keep one cache per year
-    start_year = pd.Timestamp(f"{year}-01-01 00:00")
-    end_year   = pd.Timestamp(f"{year}-12-31 23:59:59.999")
-    df_combined = df_combined[(df_combined["timestamp"] >= start_year) & (df_combined["timestamp"] <= end_year)]
-
-    df_combined.to_parquet(cache_file, index=False)
-    return df_combined.reset_index(drop=True)
+    return df_15

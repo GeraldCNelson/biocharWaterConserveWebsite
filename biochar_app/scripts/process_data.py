@@ -24,8 +24,24 @@ from biochar_app.scripts.config import (
     VALUE_COLS_2024_PLUS,
     DEFAULT_GSEASON_PERIODS
 )
-from biochar_app.scripts.gseason import load_or_generate_gseason_summary
+from biochar_app.scripts.gseason_utils import load_or_generate_gseason_summary
 
+def safe_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd.Series:
+    """
+    Compute num / denom but avoid blow-ups when denom ≈ 0.
+
+    Any |denom| < eps is treated as NaN so the ratio is NaN there too.
+    Also removes ±inf values if they slip through.
+    """
+    denom_safe = denom.astype(float).copy()
+    # mask small denominators
+    small = denom_safe.abs() < eps
+    denom_safe[small] = np.nan
+
+    ratio = num.astype(float) / denom_safe
+    # clean up any infinities just in case
+    ratio = ratio.replace([np.inf, -np.inf], np.nan)
+    return ratio
 
 def rename_logger_columns(df, logger_name):
     """
@@ -179,6 +195,7 @@ def calculate_ratios(df):
                     out = f"{var}_{d}_ratio_{s1}_{s2}_{loc}"
                     if c1 in df.columns and c2 in df.columns:
                         df[out] = df[c1] / df[c2]
+                        df[out] = safe_ratio(df[c1], df[c2])
                     else:
                         df[out] = pd.NA
     return df

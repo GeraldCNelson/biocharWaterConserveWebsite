@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse, socket, time, sys
+from biochar_app.pakbus.utils.frame import bd_frame, bd_wrap
+from biochar_app.pakbus.utils.hex import hexdump, parse_hex_bytes
 
 def parse_hex_stream(s: str) -> bytes:
     s = s.strip().replace(" ", "").replace("\n","").replace("\t","")
@@ -27,19 +29,6 @@ def recv_all_quiet(sock: socket.socket, first_timeout=2.0, grace=1.5) -> bytes:
             end = time.time() + grace
     return bytes(buf)
 
-def hexdump(b: bytes) -> str:
-    return " ".join(f"{x:02x}" for x in b)
-
-def crc16_modbus(data: bytes) -> bytes:
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return bytes([(crc >> 8) & 0xFF, crc & 0xFF])
 
 def main():
     ap = argparse.ArgumentParser(description="Replay multiple BD-framed packets from capture.")
@@ -70,7 +59,7 @@ def main():
 
     # send hello (wrap with BD + CRC16)
     inner = parse_hex_stream(args.hello)
-    frame = bytes([0xBD]) + inner + crc16_modbus(inner) + bytes([0xBD])
+    frame = bd_wrap(inner)
     time.sleep(args.pre_wait_ms/1000.0)
     s.sendall(frame)
     print(f"[TX] hello {len(frame)}B: {hexdump(frame)}")

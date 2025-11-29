@@ -28,43 +28,17 @@ import struct
 import sys
 import time
 from typing import List, Tuple, Optional
+from biochar_app.pakbus.utils.frame import (
+    bd_frame,
+    bd_strip,
+    bd_wrap,
+    bd_unwrap,
+    split_bd_frames,
+    recv_until_quiet,
+)
 
+from biochar_app.pakbus.utils.hex import parse_hex_bytes, hexdump
 # ---------- utils ----------
-
-def hexdump(b: bytes) -> str:
-    return " ".join(f"{x:02x}" for x in b)
-
-def parse_hex_bytes(s: str) -> bytes:
-    s = (s or "").strip().replace(" ", "").replace("_", "")
-    if len(s) % 2:
-        raise ValueError("hex string must have even length")
-    return bytes.fromhex(s)
-
-def crc16_modbus(data: bytes) -> int:
-    """CRC-16/Modbus (poly 0xA001), init 0xFFFF, reflected, out XOR 0."""
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if (crc & 1) != 0:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return crc & 0xFFFF
-
-def bd_wrap(inner: bytes) -> bytes:
-    crc = crc16_modbus(inner)
-    return bytes([0xBD]) + inner + bytes([(crc >> 8) & 0xFF, crc & 0xFF, 0xBD])
-
-def bd_unwrap(frame: bytes) -> Optional[bytes]:
-    if len(frame) < 4 or frame[0] != 0xBD or frame[-1] != 0xBD:
-        return None
-    inner = frame[1:-3]
-    hi, lo = frame[-3], frame[-2]
-    calc = crc16_modbus(inner)
-    if hi != ((calc >> 8) & 0xFF) or lo != (calc & 0xFF):
-        return None
-    return inner
 
 def recv_some(sock: socket.socket, timeout: float) -> bytes:
     sock.settimeout(timeout)
@@ -73,34 +47,6 @@ def recv_some(sock: socket.socket, timeout: float) -> bytes:
     except socket.timeout:
         return b""
 
-def recv_until_quiet(sock: socket.socket, first_timeout: float, grace_ms: int) -> bytes:
-    buf = bytearray()
-    chunk = recv_some(sock, first_timeout)
-    if chunk:
-        buf += chunk
-        end = time.time() + grace_ms / 1000.0
-        while time.time() < end:
-            chunk = recv_some(sock, 0.05)
-            if chunk:
-                buf += chunk
-                end = time.time() + grace_ms / 1000.0
-    return bytes(buf)
-
-def split_bd_frames(buf: bytes) -> List[bytes]:
-    frames = []
-    cur = bytearray()
-    in_frame = False
-    for b in buf:
-        if not in_frame:
-            if b == 0xBD:
-                cur = bytearray([0xBD])
-                in_frame = True
-        else:
-            cur.append(b)
-            if b == 0xBD:
-                frames.append(bytes(cur))
-                in_frame = False
-    return frames
 
 # ---------- request builder ----------
 
@@ -152,7 +98,7 @@ def main():
         def to_int(x: str) -> int:
             x = x.strip().lower()
             return int(x, 16) if x.startswith("0x") or any(c in x for c in "abcdef") else int(x)
-        return (to_int(a), to_int(b))
+        return to_int(a), to_int(b)
 
     pairs = [parse_pair(t) for t in args.pairs.split(",") if t.strip()]
     if not pairs:

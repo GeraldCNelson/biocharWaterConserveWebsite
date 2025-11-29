@@ -1,159 +1,77 @@
 #!/usr/bin/env python3
 """
-Fetch Campbell PakBus Table 1 (last record or range) from a logger.
+fetch_table1_live.py
 
-Adds durable logging & artifact dumps:
-  - Each run writes to pakbus_runs/YYYYmmdd_HHMMSS/
-  - session.log captures all console output
-  - hello.raw, hello_reply.raw: raw TCP bytes around hello
-  - read_reply.raw: raw TCP bytes for the table read reply
-  - (optional) BD frame dumps + inner payloads
+Fetch Campbell PakBus Table 1 (last record or range) from a logger,
+either by building a read‐command from leaf/table‐ID, or by replaying
+a raw BD frame from a PCAP, or by sending a user-supplied INNER payload
+(with optional router header).
 
-It defaults to the simple, PC400-like style seen in your pcap:
-  - client hello inner bytes: 90 01 0f fd 73 d3
-  - no router header mirroring in first app frame
-  - TRAN fixed at 0x90 (not explicitly carried in our simple frame)
-
-Example:
-  python -m biochar_app.pakbus.scripts.fetch_table1_live \\
-    --addr 2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd --port 6785 \\
-    --timeout 20 --debug \\
-    --pre-hex '90 01 0f fd 73 d3' --pre-wait-ms 600 \\
-    --leaf 3 --table-id 0x0001 --start-rec 0xFFFF --count 0x0001 \\
-    --post-recv-grace-ms 1500 --auto --dump-frames
+HELLO is PC400‐style (BD+inner+BD, no CRC).  Reads use X.25‐CRC.
 """
 
+from __future__ import annotations
+
 import argparse
-import binascii
 import logging
 import os
 import socket
-import struct
 import sys
 import time
 from datetime import datetime
-from typing import Optional, Tuple, List
 
-# ------------------------
-# Utilities
-# ------------------------
+from biochar_app.pakbus.utils.frame import (
+    bd_frame,        # wraps inner→BD…CRC16-X.25…BD
+    bd_strip,
+    split_bd_frames,
+    recv_until_quiet,
+)
+from biochar_app.pakbus.utils.hex import parse_hex_bytes, hexdump
 
-def hexdump(b: bytes) -> str:
-    return " ".join(f"{x:02x}" for x in b)
 
-def parse_hex_bytes(s: str) -> bytes:
-    s = s.strip().replace(" ", "").replace("_", "")
-    if len(s) % 2:
-        raise ValueError("hex string must have even length")
-    return bytes.fromhex(s)
+# ---------------------------------------------------------------------------
+def bd_hello(inner: bytes) -> bytes:
+    """
+    Wrap a raw HELLO inner payload in BD markers, no CRC (PC400 style):
+      BD <inner> BD
+    """
+    if not isinstance(inner, (bytes, bytearray)):
+        raise TypeError("bd_hello(inner) expects bytes or bytearray")
+    return b"\xBD" + bytes(inner) + b"\xBD"
 
-def crc16_modbus(data: bytes) -> int:
-    """CRC-16/Modbus (poly 0xA001), returns 0..0xFFFF"""
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return crc
 
-def bd_frame(inner: bytes) -> bytes:
-    """Wrap inner payload into BD ... CRC CRC BD (CRC big-endian)."""
-    crc = crc16_modbus(inner)
-    crc_hi = (crc >> 8) & 0xFF
-    crc_lo = crc & 0xFF
-    return bytes([0xBD]) + inner + bytes([crc_hi, crc_lo, 0xBD])
-
-def is_bd_framed(b: bytes) -> bool:
-    return len(b) >= 4 and b[0] == 0xBD and b[-1] == 0xBD
-
-def bd_strip(frame: bytes) -> Optional[bytes]:
-    if not is_bd_framed(frame):
-        return None
-    inner = frame[1:-3]
-    crc_hi, crc_lo = frame[-3], frame[-2]
-    crc_calc = crc16_modbus(inner)
-    if crc_hi != ((crc_calc >> 8) & 0xFF) or crc_lo != (crc_calc & 0xFF):
-        return None
-    return inner
-
-def recv_some(sock: socket.socket, timeout: float) -> bytes:
-    sock.settimeout(timeout)
-    try:
-        return sock.recv(65535)
-    except socket.timeout:
-        return b""
-
-def recv_until_quiet(sock: socket.socket, first_timeout: float, grace_ms: int) -> bytes:
-    """Read until no more data comes for 'grace_ms' after first byte(s)."""
-    buf = bytearray()
-    chunk = recv_some(sock, first_timeout)
-    buf += chunk
-    if not chunk:
-        return bytes(buf)
-    end_by = time.time() + (grace_ms / 1000.0)
-    while time.time() < end_by:
-        chunk = recv_some(sock, 0.050)
-        if chunk:
-            buf += chunk
-            end_by = time.time() + (grace_ms / 1000.0)
-    return bytes(buf)
-
-def split_bd_frames(stream: bytes) -> List[bytes]:
-    frames: List[bytes] = []
-    cur = bytearray()
-    in_frame = False
-    for b in stream:
-        if not in_frame:
-            if b == 0xBD:
-                cur = bytearray([0xBD])
-                in_frame = True
-        else:
-            cur.append(b)
-            if b == 0xBD:
-                frames.append(bytes(cur))
-                in_frame = False
-    return frames
-
-# ------------------------
-# PakBus helpers (minimal)
-# ------------------------
-
+# ---------------------------------------------------------------------------
 def make_read_table1(leaf: int, table_id: int, start_rec: int, count: int) -> bytes:
     """
-    Build the PC400-style 11-byte 'read table 1' inner payload observed in pcap:
-
-      2C <leaf> 00 00 00 01 00 FF FF 01 00
+    Build the 11-byte PC400‐style read payload:
+      2C <leaf> 00 00 <table_id_hi> <table_id_lo> 00 <start_hi> <start_lo> <count> 00
     """
     return bytes([
         0x2C,
         leaf & 0xFF,
-        0x00, 0x00,            # two zeros
-        0x00, 0x01,            # table id = 0x0001 (big-endian)
-        0x00,                  # single 0x00
-        0xFF, 0xFF,            # start_rec = 0xFFFF
-        0x01,                  # count = 1
-        0x00,                  # trailing option byte
+        0x00, 0x00,
+        (table_id >> 8) & 0xFF, table_id & 0xFF,
+        0x00,
+        (start_rec >> 8) & 0xFF, start_rec & 0xFF,
+        count & 0xFF,
+        0x00,
     ])
 
-# ------------------------
-# Logging setup
-# ------------------------
 
-def setup_run_dir(base_dir: str) -> str:
+# ---------------------------------------------------------------------------
+def setup_run_dir(base: str) -> str:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = os.path.join(base_dir, f"pakbus_run_{ts}")
-    os.makedirs(run_dir, exist_ok=True)
-    return run_dir
+    path = os.path.join(base, f"pakbus_run_{ts}")
+    os.makedirs(path, exist_ok=True)
+    return path
+
 
 def setup_logging(run_dir: str, verbose: bool):
-    log_path = os.path.join(run_dir, "session.log")
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logf = os.path.join(run_dir, "session.log")
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
 
-    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh = logging.FileHandler(logf, encoding="utf-8")
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 
@@ -161,26 +79,10 @@ def setup_logging(run_dir: str, verbose: bool):
     ch.setLevel(logging.DEBUG if verbose else logging.INFO)
     ch.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 
-    logger.handlers.clear()
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-
+    root.handlers[:] = [fh, ch]
     logging.info("Run dir: %s", run_dir)
-    logging.info("Logging to: %s", log_path)
+    logging.info("Logging to: %s", logf)
 
-# ------------------------
-# Core flow
-# ------------------------
-
-def send_bd(sock: socket.socket, inner: bytes, label: str, run_dir: str, fname: str):
-    frame = bd_frame(inner)
-    logging.debug("sending %s (%d bytes): %s", label, len(frame), hexdump(frame))
-    sock.sendall(frame)
-    try:
-        with open(os.path.join(run_dir, fname), "wb") as f:
-            f.write(frame)
-    except Exception as e:
-        logging.warning("Could not save %s frame to %s: %s", label, fname, e)
 
 def connect_ipv6(addr: str, port: int, timeout: float) -> socket.socket:
     s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
@@ -188,141 +90,169 @@ def connect_ipv6(addr: str, port: int, timeout: float) -> socket.socket:
     s.connect((addr, port))
     return s
 
+
+def send_pkt(sock: socket.socket, pkt: bytes, label: str, run_dir: str, fname: str):
+    logging.debug("→ [%s] %d bytes → %s", label, len(pkt), hexdump(pkt))
+    sock.sendall(pkt)
+    try:
+        with open(os.path.join(run_dir, fname), "wb") as f:
+            f.write(pkt)
+    except Exception as e:
+        logging.warning("Could not save %s to %s: %s", label, fname, e)
+
+
+# ---------------------------------------------------------------------------
 def run(args) -> int:
     run_dir = setup_run_dir(args.log_dir)
-    setup_logging(run_dir, verbose=args.debug)
+    setup_logging(run_dir, args.debug)
 
-    # Prep hello inner bytes
+    # parse HELLO inner
     pre = parse_hex_bytes(args.pre_hex)
-    logging.debug("hello inner payload (len=%d): %s", len(pre), hexdump(pre))
+    logging.debug("HELLO inner  : %s", hexdump(pre))
 
-    # Connect
+    # parse optional router header & raw TX or inner payload
+    router = parse_hex_bytes(args.router_hex) if args.router_hex else b""
+    tx_raw = parse_hex_bytes(args.tx_hex) if args.tx_hex else None
+
+    inner_src = args.inner_hex
+    if not inner_src and args.inner_file:
+        try:
+            with open(args.inner_file, "r", encoding="utf-8") as f:
+                inner_src = f.read()
+        except FileNotFoundError:
+            logging.error("--inner-file not found: %s", args.inner_file)
+            return 2
+
+    # connect
     logging.debug("connecting to [%s]:%d …", args.addr, args.port)
     sock = connect_ipv6(args.addr, args.port, args.timeout)
 
-    # Small wait before hello (PC400-like pacing)
-    if args.pre_wait_ms > 0:
-        time.sleep(args.pre_wait_ms / 1000.0)
+    # HELLO handshake
+    if args.hello:
+        if args.pre_wait_ms > 0:
+            time.sleep(args.pre_wait_ms / 1000.0)
+        pkt = bd_hello(pre)
+        send_pkt(sock, pkt, "HELLO", run_dir, "hello.tx")
+        hello_reply = recv_until_quiet(sock, args.timeout, args.post_recv_grace_ms)
+        with open(os.path.join(run_dir, "hello_reply.raw"), "wb") as f:
+            f.write(hello_reply)
+        frames = split_bd_frames(hello_reply)
+        logging.debug("received %d bytes → %d BD frames", len(hello_reply), len(frames))
+        if frames:
+            logging.debug("HELLO↩︎ frame[0]: %s", hexdump(frames[0]))
+    else:
+        logging.info("Skipping HELLO (--hello not set)")
 
-    # Send hello
-    send_bd(sock, pre, "hello", run_dir, "hello.tx")
-
-    # Read hello reply
-    reply_raw = recv_until_quiet(sock, args.timeout, args.post_recv_grace_ms)
-    with open(os.path.join(run_dir, "hello_reply.raw"), "wb") as f:
-        f.write(reply_raw)
-
-    frames = split_bd_frames(reply_raw)
-    logging.debug("received %d bytes; parsed %d BD-framed chunk(s)", len(reply_raw), len(frames))
-    if frames:
-        logging.debug("hello-reply candidate frame 0: %s", hexdump(frames[0]))
-
-    # Auto inference (simple vs router header). We stick to simple given your traces.
-    if args.auto:
-        if len(frames) == 0 or len(frames[0]) <= 18:
-            logging.info("[auto] inferring simple style: no router header; TRAN=0x90")
+    # build/send data‐read
+    if tx_raw is not None:
+        cmd_pkt = tx_raw
+        logging.debug("Using raw TX-hex (skipping inner/build path)")
+    else:
+        if inner_src:
+            inner_payload = router + parse_hex_bytes(inner_src)
+            logging.debug("read inner (user) : %s", hexdump(inner_payload))
         else:
-            logging.info("[auto] (conservative) using router header; TRAN=0x90 (not implemented)")
+            inner_payload = router + make_read_table1(
+                args.leaf, args.table_id, args.start_rec, args.count
+            )
+            logging.debug("read inner (built): %s", hexdump(inner_payload))
 
-    # Build first app frame (simple style)
-    read_inner = make_read_table1(args.leaf, args.table_id, args.start_rec, args.count)
-    logging.debug("read inner payload: %s", hexdump(read_inner))
+        cmd_pkt = bd_frame(inner_payload)
 
-    # Gap between hello and read
-    if args.inter_gap_ms > 0:
-        time.sleep(args.inter_gap_ms / 1000.0)
+    send_pkt(sock, cmd_pkt, "READ", run_dir, "read.tx")
 
-    # Send read
-    send_bd(sock, read_inner, "table1/read", run_dir, "read.tx")
-
-    # Receive reply
+    # collect reply
     data = recv_until_quiet(sock, args.timeout, args.post_recv_grace_ms)
     with open(os.path.join(run_dir, "read_reply.raw"), "wb") as f:
         f.write(data)
 
     if not data:
         logging.error("No bytes in reply to read request.")
+        logging.info("Artifacts in %s", run_dir)
         return 3
 
-    r_frames = split_bd_frames(data)
-    if not r_frames:
-        logging.error("No BD frames found in reply buffer.")
+    frames = split_bd_frames(data)
+    if not frames:
+        logging.error("No BD frames found in reply.")
+        logging.info("Artifacts in %s", run_dir)
         return 4
 
-    logging.debug("got %d reply frame(s).", len(r_frames))
-
-    # Dump frames (optional)
+    logging.debug("got %d BD reply frame(s)", len(frames))
     if args.dump_frames:
-        for i, fr in enumerate(r_frames):
-            fp = os.path.join(run_dir, f"reply_{i:02d}.bd")
-            with open(fp, "wb") as f:
+        for i, fr in enumerate(frames):
+            with open(os.path.join(run_dir, f"reply_{i:02d}.bd"), "wb") as f:
                 f.write(fr)
             inner = bd_strip(fr)
-            if inner:
+            if inner is not None:
                 with open(os.path.join(run_dir, f"reply_{i:02d}.inner"), "wb") as f:
                     f.write(inner)
 
-    # Print up to 4 frames to console/log for visibility
-    for i, fr in enumerate(r_frames[:4]):
+    # log first few
+    for i, fr in enumerate(frames[:4]):
         inner = bd_strip(fr)
-        logging.debug("reply[%d] %dB: %s", i, len(fr), hexdump(fr))
+        logging.debug("↩ frame[%d] %dB: %s", i, len(fr), hexdump(fr))
         if inner is None:
-            logging.debug("          (CRC mismatch)")
+            logging.debug("    (CRC mismatch)")
         else:
-            logging.debug("          inner %dB: %s", len(inner), hexdump(inner))
+            logging.debug("    inner %dB: %s", len(inner), hexdump(inner))
 
-    # Optionally write first valid inner to a file
+    # write first valid inner to out file
     if args.out:
-        for fr in r_frames:
+        for fr in frames:
             inner = bd_strip(fr)
-            if inner:
-                out_path = os.path.join(run_dir, args.out) if not os.path.isabs(args.out) else args.out
+            if inner is not None:
+                out_path = args.out if os.path.isabs(args.out) else os.path.join(run_dir, args.out)
                 with open(out_path, "wb") as f:
                     f.write(inner)
-                logging.info("[OK] wrote first inner payload to: %s", out_path)
+                logging.info("[OK] wrote inner to %s", out_path)
                 break
 
-    logging.info("Artifacts in: %s", run_dir)
+    logging.info("Artifacts in %s", run_dir)
     return 0
 
-# ------------------------
-# CLI
-# ------------------------
 
+# ---------------------------------------------------------------------------
 def _build_argparser():
     p = argparse.ArgumentParser(
-        description="Fetch Table 1 from a PakBus logger (PC400-style simple framing) with durable logging."
+        description="Fetch PakBus Table1 via HELLO + BD frame (built, user inner, or replayed)"
     )
-    p.add_argument("--addr", required=True, help="IPv6 address of logger")
-    p.add_argument("--port", type=int, default=6785, help="TCP port (default 6785)")
-    p.add_argument("--timeout", type=float, default=20.0, help="socket timeout (s)")
-    p.add_argument("--debug", action="store_true", help="verbose console output")
-    p.add_argument("--pre-hex", required=True,
-                   help="hello inner hex BYTES (no BD/CRC), e.g. '90 01 0f fd 73 d3'")
-    p.add_argument("--pre-wait-ms", type=int, default=400, help="sleep before hello (ms)")
-    p.add_argument("--inter-gap-ms", type=int, default=150, help="gap between hello and read (ms)")
-    p.add_argument("--post-recv-grace-ms", type=int, default=1200,
-                   help="keep receiving for this long after first bytes (ms)")
-    p.add_argument("--auto", action="store_true",
-                   help="infer simple style from hello reply (defaults to simple PC400-style)")
-    # read parameters
-    p.add_argument("--leaf", type=int, default=3, help="PakBus leaf address (default 3)")
-    p.add_argument("--table-id", type=lambda x: int(x, 0), default=0x0001,
-                   help="Table id (default 0x0001)")
-    p.add_argument("--start-rec", type=lambda x: int(x, 0), default=0xFFFF,
-                   help="Start record (default 0xFFFF = last)")
-    p.add_argument("--count", type=lambda x: int(x, 0), default=0x0001,
-                   help="Record count (default 0x0001)")
-    # output / logging
-    p.add_argument("--out", help="Write first good inner reply to this file (saved inside run dir unless absolute path)")
-    p.add_argument("--log-dir", default="pakbus_runs", help="Base directory for run artifacts")
-    p.add_argument("--dump-frames", action="store_true", help="Dump each BD reply and inner to files")
+    p.add_argument("--addr",      required=True)
+    p.add_argument("--port",      type=int, default=6785)
+    p.add_argument("--timeout",   type=float, default=20.0)
+    p.add_argument("--debug",     action="store_true")
+    p.add_argument("--log-dir",   default="pakbus_runs")
+
+    # HELLO
+    p.add_argument("--hello",       action="store_true")
+    p.add_argument("--pre-hex",     required=True)
+    p.add_argument("--pre-wait-ms", type=int, default=400)
+    p.add_argument("--post-recv-grace-ms", type=int, default=1200)
+
+    # routing/raw-TX
+    p.add_argument("--router-hex", default="")
+    p.add_argument("--tx-hex",     default="")
+
+    # user-supplied inner
+    p.add_argument("--inner-hex",  default="")
+    p.add_argument("--inner-file", default="")
+
+    # leaf/table
+    p.add_argument("--leaf",     type=int, default=3)
+    p.add_argument("--table-id", type=lambda x: int(x, 0), default=2)
+    p.add_argument("--start-rec",type=lambda x: int(x, 0), default=0xFFFF)
+    p.add_argument("--count",    type=lambda x: int(x, 0), default=1)
+
+    # output
+    p.add_argument("--out")
+    p.add_argument("--dump-frames", action="store_true")
+
     return p
+
 
 def main(argv=None):
     args = _build_argparser().parse_args(argv)
-    rc = run(args)
-    sys.exit(rc)
+    sys.exit(run(args))
+
 
 if __name__ == "__main__":
     main()

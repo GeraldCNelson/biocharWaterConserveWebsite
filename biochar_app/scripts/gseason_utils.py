@@ -21,6 +21,7 @@ from biochar_app.scripts.config import (
     DEFAULT_GSEASON_PERIODS,
     PRECIP_COLS,   # e.g., {"us": "in", "metric": "mm"}
     PARQUET_DIR,
+    UNIT_CONVERSIONS,
 )
 
 from collections.abc import Mapping
@@ -324,62 +325,73 @@ def format_gseason_label(code: str) -> str:
     return f"{label} Season Summary ({start_month}–{end_month})"
 
 
-def calculate_gseason_precip(
-    df5min_weather: pd.DataFrame,
+def add_gseason_precip_from_daily(
+    df_gs: pd.DataFrame,
     year: int,
-    unit_system: str,
+    periods_raw,
 ) -> pd.DataFrame:
     """
-    Sum precipitation (5‑min increments) per growing‑season period.
+    Attach seasonal precip sums to the growing-season dataframe.
 
-    Parameters
-    ----------
-    df5min_weather : DataFrame
-        Must contain 'timestamp' and either 'precip_in' (US) or 'precip_mm' (metric).
-        Values are **increments** per 5‑min step (after cleaning: -999→NaN→0, negatives clipped to 0).
-    year : int
-    unit_system : str
-        "us" or "metric"; selects the precip column via PRECIP_COLS.
-
-    Returns
-    -------
-    DataFrame with columns [period_code, start, end, precip]
+    - Reads daily weather from:
+        PARQUET_DIR/summary/weather/daily/{year}_daily.parquet
+    - For each growing-season period, sums daily `precip_in`
+      over the full window (handling wrap-around seasons).
+    - Writes *new* columns on df_gs:
+        - `precip_in`
+        - `precip_mm` (derived from the same inches)
     """
-    precip_col = f"precip_{PRECIP_COLS[unit_system]}"
-    if precip_col not in df5min_weather.columns:
-        return pd.DataFrame(columns=["period_code", "start", "end", "precip"])
 
-    temp = (
-        df5min_weather[["timestamp", precip_col]]
-        .dropna(subset=["timestamp"])
-        .copy()
+    # 1) Normalize periods → list[dict] with keys: code,label,start,end
+    periods = periods_to_list_of_dicts(periods_raw or [])
+
+    # 2) Load daily weather
+    daily_path = (
+        Path(PARQUET_DIR)
+        / "summary"
+        / "weather"
+        / "daily"
+        / f"{year}_daily.parquet"
     )
+    dfw = pd.read_parquet(daily_path)
+    dfw["timestamp"] = pd.to_datetime(dfw["timestamp"], errors="coerce")
+    dfw = dfw.set_index("timestamp").sort_index()
 
-    # Tag each timestamp with its seasonal code for the target year
-    temp["period_code"] = temp["timestamp"].apply(lambda ts: assign_gseason_periods(pd.to_datetime(ts), year))
-    temp = temp[temp["period_code"].notna()]
+    conv_in_to_mm = UNIT_CONVERSIONS["us_to_metric"]["precip"]
 
-    # SUM the 5‑min increments by period
-    out = (
-        temp
-        .groupby("period_code", as_index=False)[[precip_col]]  # double brackets -> DataFrame
-        .sum()
-        .rename(columns={precip_col: "precip"})
-    )
+    precip_in_sums = []
+    precip_mm_sums = []
 
-    # Attach reference start/end stamps (wrap-aware)
-    starts, ends = {}, {}
-    for code, period in DEFAULT_GSEASON_PERIODS.items():
-        sm, _ = map(int, period["start"].split("-"))
-        em, _ = map(int, period["end"].split("-"))
-        start_year = year - 1 if sm > em else year
-        end_year   = year
-        starts[code] = pd.Timestamp(f"{start_year}-{period['start']}")
-        ends[code]   = pd.Timestamp(f"{end_year}-{period['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    for p in periods:
+        start_mmdd = str(p["start"])  # e.g. "11-01"
+        end_mmdd   = str(p["end"])    # e.g. "04-30"
 
-    out["start"] = out["period_code"].map(starts)
-    out["end"]   = out["period_code"].map(ends)
-    return out
+        sm, sd = map(int, start_mmdd.split("-"))
+        em, ed = map(int, end_mmdd.split("-"))
+
+        # wrap-around if start month > end month (e.g. Nov→Apr)
+        if sm > em:
+            start_ts = pd.Timestamp(year - 1, sm, sd)
+            end_ts   = pd.Timestamp(year, em, ed)
+        else:
+            start_ts = pd.Timestamp(year, sm, sd)
+            end_ts   = pd.Timestamp(year, em, ed)
+
+        # inclusive end-of-day (important)
+        end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+        mask = (dfw.index >= start_ts) & (dfw.index <= end_ts)
+        total_in = float(dfw.loc[mask, "precip_in"].sum())
+
+        precip_in_sums.append(total_in)
+        precip_mm_sums.append(conv_in_to_mm(total_in))
+
+    # 3) Attach to the g-season dataframe (assumes same row order)
+    df_gs = df_gs.copy()
+    df_gs["precip_in"] = precip_in_sums
+    df_gs["precip_mm"] = precip_mm_sums
+
+    return df_gs
 
 # Normalize PeriodSpec / mappings → list of simple dicts for seasons
 def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:

@@ -24,14 +24,16 @@ export const dropdownConfigs = {
 };
 
 /**
- * 1) Fetch the JSON of defaults & options from your Flask/Django API.
+ * 1) Fetch the JSON of defaults & options from your API.
  */
 export async function fetchDefaultsAndOptions() {
   console.log("📡 Fetching default values and dropdown options...");
   try {
     const response = await fetch("/api/get_defaults_and_options");
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status} – ${response.statusText}`);
+      throw new Error(
+        `Server error: ${response.status} – ${response.statusText}`
+      );
     }
     const options = await response.json();
     console.log("✅ Parsed JSON response:", options);
@@ -40,13 +42,15 @@ export async function fetchDefaultsAndOptions() {
     }
 
     // Persist for later modules
-    window.dropdownOptions        = options;
-    window.depthMapping           = options.depthMapping;
-    window.loggerLocationMapping  = options.loggerLocations.reduce(
+    window.dropdownOptions = options;
+    window.depthMapping    = options.depthMapping;
+    window.loggerLocationMapping = options.loggerLocations.reduce(
       (m, o) => ({ ...m, [o.value]: o.label }),
       {}
     );
-    window.variableNameMapping    = options.variableNameMapping || {};
+    window.variableNameMapping = options.variableNameMapping || {};
+
+    console.log("🧭 depthMapping from backend:", window.depthMapping);
 
     return options;
   } catch (err) {
@@ -59,7 +63,7 @@ export async function fetchDefaultsAndOptions() {
  * 2) Populate every <select> across both tabs using your mapping.
  *    We no longer sort — we respect the server’s order.
  */
-export function populateAllDropdowns(options, unitSystem) {
+export function populateAllDropdowns(options) {
   console.log("🔑 Populating dropdowns; sources =", Object.keys(options));
 
   ["main", "summary"].forEach((tab) => {
@@ -80,12 +84,12 @@ export function populateAllDropdowns(options, unitSystem) {
         "label" in list[0]
       ) {
         // object form
-        values = list.map(item => item.value);
-        labels = list.map(item => item.label);
+        values = list.map((item) => item.value);
+        labels = list.map((item) => item.label);
       } else {
         // primitive form
         values = list;
-        labels = list.map(item => String(item));
+        labels = list.map((item) => String(item));
       }
 
       console.log(`[${tab}] ${id}:`, values, labels);
@@ -97,7 +101,12 @@ export function populateAllDropdowns(options, unitSystem) {
 /**
  * Helper to fill a single <select> with <option>s.
  */
-export function populateDropdown(elementId, values, defaultValue, labelMapping = {}) {
+export function populateDropdown(
+  elementId,
+  values,
+  defaultValue,
+  labelMapping = {}
+) {
   const selectEl = document.getElementById(elementId);
   if (!selectEl) {
     console.warn(`⚠️ Dropdown not found: ${elementId}`);
@@ -105,38 +114,38 @@ export function populateDropdown(elementId, values, defaultValue, labelMapping =
   }
 
   const defStr = String(defaultValue);
-  const html = values.map((v, idx) => {
-    const val = String(v);
-    let label;
-    if (Array.isArray(labelMapping)) {
-      label = labelMapping[idx] ?? val;
-    } else {
-      label = labelMapping[val] ?? val;
-    }
-    const sel = (val === defStr) ? " selected" : "";
-    return `<option value="${val}"${sel}>${label}</option>`;
-  }).join("");
+  const html = values
+    .map((v, idx) => {
+      const val = String(v);
+      let label;
+      if (Array.isArray(labelMapping)) {
+        label = labelMapping[idx] ?? val;
+      } else {
+        label = labelMapping[val] ?? val;
+      }
+      const sel = val === defStr ? " selected" : "";
+      return `<option value="${val}"${sel}>${label}</option>`;
+    })
+    .join("");
 
   selectEl.innerHTML = html;
 }
 
 /**
- * Read current selections from the DOM for a given tab.
- */
-// ui_controls.js
-
-/**
  * Collects all of the controls for the given tab, and if on the Main tab
- * with granularity="custom", also pulls in your custom‐season rows.
- *
- * @param {"main"|"summary"|...} tab
- * @returns {Object} filters
+ * with granularity="gseason", also pulls in your custom‐season rows.
  */
 export function getSelectedFilters(tab) {
   const keys = [
-    "year", "startDate", "endDate",
-    "variable", "strip", "granularity",
-    "loggerLocation", "depth", "traceOption"
+    "year",
+    "startDate",
+    "endDate",
+    "variable",
+    "strip",
+    "granularity",
+    "loggerLocation",
+    "depth",
+    "traceOption",
   ];
 
   // 1) collect all the simple dropdown/text values
@@ -148,15 +157,15 @@ export function getSelectedFilters(tab) {
 
   // 2) if we're on Main + “Growing Season”, scrape all your .period-row cards
   if (tab === "main" && filters.granularity === "gseason") {
-    const periods = Array.from(
-      document.querySelectorAll(".period-row")
-    ).map(row => {
-      const code  = row.dataset.code;
-      const label = row.querySelector(".period-label")?.value;
-      const start = row.querySelector(".period-start")?.value;
-      const end   = row.querySelector(".period-end")?.value;
-      return { code, label, start, end };
-    });
+    const periods = Array.from(document.querySelectorAll(".period-row")).map(
+      (row) => {
+        const code  = row.dataset.code;
+        const label = row.querySelector(".period-label")?.value;
+        const start = row.querySelector(".period-start")?.value;
+        const end   = row.querySelector(".period-end")?.value;
+        return { code, label, start, end };
+      }
+    );
     filters.periods = periods;
   }
 
@@ -164,20 +173,69 @@ export function getSelectedFilters(tab) {
 }
 
 /**
- * When user flips between “us”/“metric”, relabel the depth dropdown.
+ * Update the depth dropdown labels on both tabs
+ * based on window.depthMapping and the current unit system.
+ *
+ * depthMapping is expected to look like:
+ * {
+ *   "1": { us: "6 inches",  metric: "15 cm" },
+ *   "2": { us: "12 inches", metric: "30 cm" },
+ *   "3": { us: "18 inches", metric: "45 cm" }
+ * }
  */
 export function updateDepthLabels(unitSystem) {
-  const depthSelect = document.getElementById("main-depth");
-  if (!depthSelect || !window.depthMapping) return;
-  Array.from(depthSelect.options).forEach(opt => {
-    const map = window.depthMapping[opt.value];
-    if (map) opt.text = map[unitSystem] ?? opt.text;
+  console.log("🔁 [updateDepthLabels] unitSystem =", unitSystem);
+  console.log("🔁 [updateDepthLabels] depthMapping =", window.depthMapping);
+
+  if (!window.depthMapping) {
+    console.warn("[updateDepthLabels] ❗ window.depthMapping is missing");
+    return;
+  }
+
+  // Use the class shared by both Main & Summary depth selects
+  const selects = document.querySelectorAll("select.depth-dropdown");
+  if (!selects.length) {
+    console.warn(
+      "[updateDepthLabels] ⚠️ No <select class='depth-dropdown'> elements found"
+    );
+    return;
+  }
+
+  selects.forEach((select) => {
+    console.log(
+      `[updateDepthLabels] Updating select#${select.id} with ${select.options.length} options`
+    );
+
+    Array.from(select.options).forEach((opt, idx) => {
+      // Prefer the option value as the key; fall back to 1-based index
+      const rawValue = opt.value;
+      const key =
+        rawValue && window.depthMapping[rawValue]
+          ? rawValue
+          : String(idx + 1);
+
+      const mapping = window.depthMapping[key];
+
+      if (mapping && mapping[unitSystem]) {
+        const oldText = opt.text;
+        const newText = mapping[unitSystem];
+        opt.text = newText;
+        console.log(
+          `[updateDepthLabels]  • ${select.id}: option index=${idx}, key=${key}, ` +
+            `old="${oldText}" → new="${newText}"`
+        );
+      } else {
+        console.log(
+          `[updateDepthLabels]  • ${select.id}: no mapping for key=${key} ` +
+            `under unitSystem=${unitSystem}`
+        );
+      }
+    });
   });
 }
 
 /**
  * Wire up the two main‐tab date inputs.
- * We switch to native HTML5 `<input type="date">` instead of flatpickr.
  */
 export function initializeMainDatepickers() {
   if (!window.dropdownOptions?.defaults) return;
@@ -219,9 +277,8 @@ export function updateStartAndEndDatesFromYear(year) {
 }
 
 /**
- * Placeholder for handling the "traceOption" change.
- * (Bring in your existing logic here or import it if defined elsewhere.)
+ * Placeholder for traceOption logic (kept so imports don’t break).
  */
 export function handleTraceOptionChange(event) {
-  // your existing code for switching trace‐modes goes here...
+  // Implement as needed if you change trace behaviour in the future.
 }

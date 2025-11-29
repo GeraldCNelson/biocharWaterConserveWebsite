@@ -1,3 +1,101 @@
+"""
+================================================================================
+config.py — Central Configuration, Paths, Mappings, and Unit Definitions
+================================================================================
+
+This module is the single source of truth for configuration values and
+mappings used throughout the Biochar Water Conservation project.
+
+It defines:
+    • File-system paths and data locations
+        – DATA_RAW_DIR, DATA_PROCESSED_DIR, PARQUET_DIR, markdown paths, etc.
+    • Year and granularity settings
+        – YEARS, DEFAULT_YEAR, GRANULARITIES, default date windows.
+    • Experiment layout
+        – STRIPS (S1–S4), LOGGER_LOCATIONS (T/M/B), sensor_depth_mapping.
+    • Variable names and labels
+        – variable_name_mapping (internal → human readable)
+        – variable_name_abbrev (VWC, T, EC, SWC, etc.)
+        – label_name_mapping (axis labels, with unit-aware variants).
+    • Growing-season configuration
+        – GSEASON_PERIODS with custom Q1/Q2/Q3 definitions (MM-DD ranges).
+    • Plot appearance parameters
+        – bar_width_map for precipitation bars.
+        – IRR_COLOR for irrigation overlays.
+    • Soil water content and depth weighting
+        – SWC_DEPTH_WEIGHTS and related depth constants.
+
+------------------------------------------------------------------------------
+UNIT SYSTEM DESIGN
+------------------------------------------------------------------------------
+All **stored data** are in US customary units:
+
+    • Soil & air temperature: °F
+    • Precipitation: inches
+    • Irrigation volume: gallons
+    • SWC volumes: gallons (with derived liters where needed)
+
+The front end may request either "us" or "metric" display modes. Conversions
+for plotting and downloads are driven by UNIT_CONVERSIONS:
+
+    UNIT_CONVERSIONS = {
+        "us_to_metric": {
+            "temp":      °F → °C,
+            "precip":    inches → mm,
+            "irrigation": gallons → liters,
+            "swc":       inches → cm (for depth / SWC-specific needs),
+        },
+        "metric_to_us": {
+            "temp":      °C → °F,
+            "precip":    mm → inches,
+            "irrigation": liters → gallons,
+            "swc":       cm → inches,
+        },
+    }
+
+Other modules (plot_helpers.py, plot_utils.py, etl.py, get_weather_data.py)
+import these conversion lambdas and apply them consistently for:
+    • Display-time numeric conversions (plots, tables, downloads).
+    • ETL-time conversions when needed for SWC volumes or derived metrics.
+
+------------------------------------------------------------------------------
+MAPPINGS & LABELS
+------------------------------------------------------------------------------
+Key dictionaries exported here include:
+
+    • sensor_depth_mapping
+          – Maps internal depth codes ("1", "2", "3") to human labels
+            in US + metric units (e.g., "6 inches" / "15 cm").
+
+    • logger_location_mapping
+          – "T", "M", "B" → "Top", "Middle", "Bottom".
+
+    • variable_name_mapping
+          – Internal variable keys ("VWC", "T", "EC", "SWC") to concise names.
+
+    • label_name_mapping
+          – Axis-label text (with units) for each variable and overlay type
+            (e.g., precip, irrigation, temp_air) in both unit systems.
+
+    • PRECIP_COLS
+          – Maps unit_system → underlying column name used for precip.
+
+------------------------------------------------------------------------------
+MAINTENANCE NOTES
+------------------------------------------------------------------------------
+• Any new variable should be added to:
+      – variable_name_mapping
+      – variable_name_abbrev
+      – label_name_mapping
+      – Any relevant depth/strip mappings.
+
+• When changing default years, paths, or growing-season definitions, this is
+  the primary place to edit.
+
+• Keep config.py free of heavy logic; it should expose constants and simple
+  helpers only, to avoid import cycles and keep tests fast.
+------------------------------------------------------------------------------
+"""
 import os
 import datetime
 from enum import Enum
@@ -31,7 +129,7 @@ bar_width_map = {
 }
 
 # Core default values
-DEFAULT_YEAR = 2024
+DEFAULT_YEAR = 2025
 DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
 DEFAULT_END_DATE = datetime.date(DEFAULT_YEAR, 12, 31).isoformat()
 TRACE_CHOICES = ["depths", "locations"]
@@ -44,7 +142,7 @@ DEFAULT_GRANULARITY = "daily"
 DATALOGGER_NAMES = ["S1T", "S1M", "S1B", "S2T", "S2M", "S2B", "S3T", "S3B", "S3M", "S4T", "S4M", "S4B"]
 
 # CoAgMet API units format ('m' for metric, 'us' for US)
-UNITS_CHOICES: tuple[str, ...] = ("us", "metric")
+UNITS_CHOICES: tuple[str, ...] = ("us", "metric", "imperial")
 DEFAULT_UNITS = "us"
 
 # trying out enums
