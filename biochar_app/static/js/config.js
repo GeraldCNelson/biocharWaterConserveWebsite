@@ -1,13 +1,19 @@
 // config.js
 
 // Mapping of DOM container IDs to markdown files served by the backend.
-export const MARKDOWN_FILES = {
-  "intro-content": "/markdown/intro.md",
-  "experiment-content": "/markdown/experimentDesign.md",
-  "tech-content": "/markdown/techDetails.md",
-  "modal-main-help": "/markdown/help_main.md",
-  "modal-summary-help": "/markdown/help_summary.md",
-};
+/**
+ * Fetch Markdown container-id → URL mapping from the backend.
+ *
+ * Source of truth is markdown_config.build_markdown_mapping() in Python.
+ */
+export async function fetchMarkdownFiles() {
+  const resp = await fetch("/api/markdown_files");
+  if (!resp.ok) {
+    console.error("❌ Failed to load markdown mapping, status", resp.status);
+    throw new Error("Failed to load markdown mapping");
+  }
+  return await resp.json();
+}
 
 // Simple debug flag for client-side logging.
 export const DEBUG =

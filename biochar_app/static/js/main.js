@@ -1,6 +1,17 @@
 // static/js/main.js
 
-import { FALLBACK_UNIT_SYSTEM } from "./config.js";
+import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
+
+import {
+  downloadTraceData,
+  downloadPlot,
+  downloadSummaryData,
+} from "./downloads.js";
+
+// ✅ Expose download helpers for inline onclick handlers in index.html
+window.downloadTraceData   = downloadTraceData;
+window.downloadPlot        = downloadPlot;
+window.downloadSummaryData = downloadSummaryData;
 
 // 1) debugging & logging
 import { debugLog, debugGroup } from "./plots.js";
@@ -15,12 +26,12 @@ import {
   getAllDropdownIds,
 } from "./control_panel.js";
 
-import{
-    fetchDefaultsAndOptions,
-    populateAllDropdowns,
-    initializeMainDatepickers,
-    updateDepthLabels,
-    updateStartAndEndDatesFromYear,
+import {
+  fetchDefaultsAndOptions,
+  populateAllDropdowns,
+  initializeMainDatepickers,
+  updateDepthLabels,
+  updateStartAndEndDatesFromYear,
 } from "./ui_controls.js";
 
 // 5) main plotting routines
@@ -35,63 +46,59 @@ import { updateSummaryStatistics } from "./tables.js";
 // 7) custom‐season setup
 import { initCustomGseason } from "./custom_gseason.js";
 
-// mapping of markdown‐injection points to files
-const MARKDOWN_FILES = {
-  "intro-content": "/markdown/intro.md",
-  "experiment-content": "/markdown/experimentDesign.md",
-  "tech-content": "/markdown/techDetails.md",
-  "modal-main-help": "/markdown/help_main.md",
-  "modal-summary-help": "/markdown/help_summary.md",
-};
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // ----------------------------------------------------
+  // 1) Core app initialization
+  // ----------------------------------------------------
   debugLog("🌐 Initializing application...");
 
-  // 1) Fetch defaults & options from the server
+  // Fetch defaults & options from the server
   const options = await fetchDefaultsAndOptions();
   if (!options) return;
 
-  // ✅ use backend default, fall back to US if missing
+  // Make options globally available if needed elsewhere
   window.dropdownOptions = options;
 
-// Decide initial unit system from backend (falls back to "us")
-const backendUnitDefault = options.defaults?.unitSystem || "us";
-window.unitSystem = backendUnitDefault;
+  // Normalize defaults into a local object
+  const defaults = options.defaults || {};
 
-// 2) Populate all the dropdowns and wire up control-panel buttons
-populateAllDropdowns(options);
-setupUnitToggleHandlers(options);   // pass the full options object
-initializeUpdateButtons();
+  // Decide initial unit system (backend → fallback to config)
+  window.unitSystem = defaults.unitSystem || FALLBACK_UNIT_SYSTEM;
 
-  // 3) Wait until every dropdown is in the DOM & initialized by Bootstrap
+  // Populate dropdowns and wire up control-panel buttons
+  populateAllDropdowns(options);
+  setupUnitToggleHandlers(options);
+  initializeUpdateButtons();
+
+  // Wait until all dropdowns exist & are initialized
   await waitForAllDropdowns(getAllDropdownIds());
   await new Promise(requestAnimationFrame);
 
-  // 4) Seed defaults into the main & summary inputs
-  if (options.defaults) {
-    for (const [key, value] of Object.entries(options.defaults)) {
-      const mainEl    = document.getElementById(`main-${key}`);
-      const summaryEl = document.getElementById(`summary-${key}`);
-      if (mainEl)    mainEl.value    = value;
-      if (summaryEl) summaryEl.value = value;
-    }
+  // Seed defaults into the main & summary inputs
+  for (const [key, value] of Object.entries(defaults)) {
+    const mainEl    = document.getElementById(`main-${key}`);
+    const summaryEl = document.getElementById(`summary-${key}`);
+    if (mainEl)    mainEl.value    = value;
+    if (summaryEl) summaryEl.value = value;
   }
 
-  // 5) Initialize the date-pickers on the main tab
+  // Initialize the date-pickers on the main tab
   initializeMainDatepickers();
 
-  // 6) Reset date range when the year changes
+  // Reset date range when the year changes
   document
     .getElementById("main-year")
     ?.addEventListener("change", (e) =>
       updateStartAndEndDatesFromYear(e.target.value)
     );
 
-  // 7) Make sure the depth labels match the current unit system
+  // Make sure the depth labels match the current unit system
   updateDepthLabels(window.unitSystem);
 
+  // Debug summary of defaults & depth mapping
   debugGroup("🎛️ Dropdown defaults & mappings", () => {
-    console.table(options.defaults || {});
+    console.table(defaults);
     if (window.depthMapping) {
       console.table(
         Object.entries(window.depthMapping).map(([depth, map]) => ({
@@ -103,30 +110,48 @@ initializeUpdateButtons();
     }
   });
 
-  // 8) If “Main Data Display” is already active on load, render immediately
+  // If “Main Data Display” is already active on load, render immediately
   const mainTabLink = document.querySelector('a[href="#main"]');
   if (mainTabLink?.classList.contains("active")) {
     await renderMainPlots();
   }
 
-  // 9) Re-render Main plots whenever that tab is shown
+  // Re-render Main plots whenever that tab is shown
   mainTabLink?.addEventListener("shown.bs.tab", renderMainPlots);
 
-  // 10) Kick off the summary statistics table
-  updateSummaryStatistics();
+  // Kick off the summary statistics table (async)
+  await updateSummaryStatistics();
 
-  // 11) Load all markdown snippets into their containers/modals
-  debugLog("📖 Loading markdown snippets…");
-  await Promise.all(
-    Object.entries(MARKDOWN_FILES).map(([id, path]) =>
-      loadMarkdownContent(id, path)
-    )
-  );
+  // ----------------------------------------------------
+  // 2) Load markdown snippets (from backend mapping)
+  // ----------------------------------------------------
+  debugLog("📖 Loading markdown mapping from backend…");
+  let markdownFiles = {};
+  try {
+    markdownFiles = await fetchMarkdownFiles();
+    debugLog("📄 Markdown mapping:", markdownFiles);
+  } catch (err) {
+    console.error("❌ Failed to fetch markdown mapping:", err);
+  }
+
+  if (markdownFiles && Object.keys(markdownFiles).length > 0) {
+    debugLog("📖 Loading markdown snippets…");
+    await Promise.all(
+      Object.entries(markdownFiles).map(([id, path]) =>
+        loadMarkdownContent(id, path)
+      )
+    );
+  } else {
+    console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
+  }
+
   debugLog("✅ Application initialized.");
 
-  // 12) Initialize the Custom Season editor (if present)
+  // ----------------------------------------------------
+  // 3) Initialize the Custom Season editor (if present)
+  // ----------------------------------------------------
   const gseasonContent = document.getElementById("gseason-content");
-  if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
-    initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
-  }
+if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
+  initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
+}
 });

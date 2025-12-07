@@ -1,0 +1,31 @@
+{# templates/_custom_gseason.html #}
+  <h2 id="gseason-heading">Custom Growing-Season Periods</h2>
+  <p>
+    The Main Data Display and Summary Results tabs provide results at
+    standard temporal aggregations — every 15 minutes, hourly, daily, and monthly.
+    This tab allows you to build your own aggregation period, called here the
+    <strong>growing season</strong> which can extend from before the anchor year
+    to after it. The growing season can have multiple periods as shown below
+    with some default values.
+  </p>
+  <p>
+    You can modify the time windows and period names below or just leave them as is.
+    You can also add new periods. In the next two tabs, you can choose an aggregation
+    to view, either a standard aggregation or the custom-built aggregation defined below.
+  </p>
+
+<!-- flex row for Anchor Year + Add button -->
+<div class="d-flex align-items-center mb-4">
+  <label for="anchor-year" class="me-3 fw-bold mb-0">Anchor Year</label>
+  <select id="anchor-year"
+          class="form-select form-select-sm me-3"
+          style="width: auto;">
+  </select>
+  <button id="add-period"
+          class="btn btn-outline-secondary btn-sm">
+    + Add Period
+  </button>
+</div>
+
+<!-- single-column list of period cards -->
+<div id="periods-container" class="row g-1 row-cols-1"></div>

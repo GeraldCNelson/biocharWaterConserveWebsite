@@ -8,6 +8,11 @@ export function getDropdownValue(id, parseAsInt = false) {
     return parseAsInt ? parseInt(value, 10) : value;
 }
 
+export function showAlert(message) {
+  console.warn("⚠️ ALERT:", message);
+  alert(message);
+}
+
 export function getInputValue(id) {
     const el = document.getElementById(id);
     return el ? el.value : "";

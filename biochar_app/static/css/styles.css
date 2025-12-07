@@ -3,7 +3,8 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%; /* Ensure full height is applied to root elements */
-    font-family: Arial, sans-serif;
+    /* Global default: serif, to match long-form content */
+    font-family: Georgia, "Times New Roman", serif;
 }
 
 /* Global Box Sizing */
@@ -15,7 +16,6 @@ html, body {
 #summary-table-container {
     margin-top: 15px;
     font-size: 0.875rem; /* Smaller font size (14px-ish) */
-
 }
 
 #summary-table-container h5 {
@@ -35,7 +35,8 @@ html, body {
     width: 100%;
 }
 
-.table th, .table td {
+.table th,
+.table td {
     text-align: center;  /* ✅ Center-align values */
     padding: 10px;
     border: 1px solid #ddd;
@@ -60,9 +61,9 @@ html, body {
 
 /* Default markdown layout for most screens */
 .container.markdown-container {
-  max-width: 100%;
-  margin: 0;
-  padding: 0 20px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 20px;
 }
 
 /* Compact and clean markdown styling */
@@ -70,43 +71,54 @@ html, body {
     font-family: Georgia, serif !important;
     font-size: 14px;
     line-height: 1.4;
+    /* If you want the shaded box back, uncomment:
     background-color: #f9f9f9;
     border-radius: 5px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 16px;  /* slightly tighter internal padding */
+    padding: 16px;
+    */
 }
 
+/* Ensure block elements behave nicely */
 .markdown-content figure,
-.markdown-content h2,
 .markdown-content h1,
+.markdown-content h2,
 .markdown-content p {
-  display: block;
-  width: 100%;
-  clear: both;
+    display: block;
+    width: 100%;
+    clear: both;
 }
 
+/* Images & figures
+   - Centered
+   - Slightly narrower than full-width so Figure 1 isn’t “wall-to-wall”
+*/
 .markdown-content img {
-  display: block;
-  margin: 0 auto;
+    display: block;
+    margin: 0 auto;
+    max-width: 75%;   /* 👈 tweak this (e.g., 70–80%) to taste */
+    height: auto;
 }
 
 .markdown-content figcaption {
-  text-align: center;
-  font-style: italic;
-  margin-top: 0.5em;
+    text-align: center;
+    font-style: italic;
+    margin-top: 0.5em;
 }
 
+/* Pandoc-generated comparison table for side-by-side figures */
 .markdown-content table {
-  display: table;
-  margin-left: auto;
-  margin-right: auto;
-  width: auto; /* ✅ Overrides Bootstrap's 100% width */
+    display: table;
+    margin-left: auto;
+    margin-right: auto;
+    width: auto; /* ✅ Overrides Bootstrap's 100% width */
 }
 
+/* Global table fallback */
 table {
-  display: table;
-  margin-left: auto;
-  margin-right: auto;
+    display: table;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 /* Match tab font to content */
@@ -114,33 +126,35 @@ table {
     font-family: Georgia, serif;
 }
 
-/* Headers */
+/* Headers – left-aligned with moderate spacing */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
     color: #333;
-    margin-top: 0.5rem;
-    margin-bottom: 0.3rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.35rem;
     text-align: left !important;
 }
 
-/* Paragraphs */
+/* Paragraphs – tighter vertical spacing than browser default */
 .markdown-content p {
     margin-top: 0;
-    margin-bottom: 0.4rem;  /* restore just enough vertical space */
+    margin-bottom: 0.45rem;
 }
 
-/* Lists */
+/* Lists – similar spacing to paragraphs */
 .markdown-content ul,
 .markdown-content ol {
     margin-top: 0;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.45rem;
     padding-left: 1.2rem;
 }
 
+/* Don’t completely nuke all margins inside markdown;
+   let the rules above control spacing. */
 .markdown-content * {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+    /* Remove big default top margins on headings etc., but don’t force 0 bottom */
+    margin-top: 0;
 }
 
 /* Tabs */
@@ -194,7 +208,6 @@ table {
     font-family: inherit;
 }
 
-
 /* ✅ Ensure uniform styling across inputs, dropdowns, and buttons */
 .control-panel select,
 .control-panel button,
@@ -223,11 +236,11 @@ table {
 
 /* Plot Panel Styling */
 .plot-panel {
-  flex-grow: 1;
-  flex-basis: 0;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 10px;
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 10px;
 }
 
 .graph-container:last-child {
@@ -251,19 +264,20 @@ table {
 }
 
 .plot-container {
-  width: 100%;
+    width: 100%;
 }
 
-#plot-1, #plot-2 {
- width: 100%;
-  height: 500px;
+#plot-1,
+#plot-2 {
+    width: 100%;
+    height: 500px;
 }
 
 /* Responsive Design */
 @media screen and (max-width: 768px) {
     .container {
         flex-direction: column; /* Stack control and plot panels vertically */
-        align-items: center; /* Ensure everything centers properly */
+        align-items: center;    /* Ensure everything centers properly */
     }
 
     .control-panel {
@@ -292,15 +306,7 @@ table {
     }
 }
 
-.markdown-container p,
-.markdown-container h1,
-.markdown-container h2,
-.markdown-container h3 {
-    margin-top: 0.5em;
-    margin-bottom: 0.5em;
-    line-height: 1.4;
-}
-
+/* Fine-tune markdown container padding */
 .markdown-container {
     padding: 10px 15px;
 }
@@ -332,23 +338,62 @@ button:hover {
 }
 
 figure {
-  display: block;
-  clear: both;
-  margin-top: 1em;
-  margin-bottom: 1em;
+    display: block;
+    clear: both;
+    margin-top: 1em;
+    margin-bottom: 1em;
 }
 
 figure img {
-  display: block;
-  margin: 0 auto;
+    display: block;
+    margin: 0 auto;
 }
 
 figcaption {
-  text-align: center;
-  font-style: italic;
+    text-align: center;
+    font-style: italic;
 }
 
 h2 {
+    display: block;
+    margin-top: 2em;
+}
+
+/* Narrower figures in markdown (e.g., Figure 1) */
+.markdown-content figure {
+  max-width: 65%;      /* tweak 60–70% to taste */
+  margin: 1.5em auto;  /* center, with some breathing room */
+}
+
+/* Images inside those figures fill the figure, not the full page */
+.markdown-content figure img {
   display: block;
-  margin-top: 2em;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Generic markdown images that are *not* in a figure */
+.markdown-content img {
+  display: block;
+  margin: 0.75em auto;
+  max-width: 70%;
+  height: auto;
+}
+
+/* Two-column figure layout for Figures 2 & 3 */
+.markdown-content table.side-by-side-figures {
+  margin: 1.5em auto;
+  width: auto;              /* don't stretch to 100% */
+  border-collapse: collapse;
+}
+
+.markdown-content table.side-by-side-figures th {
+  border: none;
+  padding: 0 1.5em;
+  text-align: center;
+}
+
+.markdown-content table.side-by-side-figures img {
+  max-width: 100%;
+  height: auto;
 }

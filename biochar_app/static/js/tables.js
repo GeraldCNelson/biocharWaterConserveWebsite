@@ -53,10 +53,10 @@ function renderSplitRatioTables(ratioStats, variable) {
         if (key.includes("S1_S2")) s1s2[trace] = values;
         else if (key.includes("S3_S4")) s3s4[trace] = values;
     }
-    const build = (label, group) => {
+const build = (label, group) => {
       return Object.keys(group).length
         ? `<h5>${label} Ratio</h5>${generateSummaryTable(group, variable)}`
-        : `<p class="text-muted">No ${label} ratio summary available.</p>`;
+        : `<p class="text-muted">${label}: Temperature based ratio summaries are not appropriate. See the Technical Details tab for an extended explanation.</p>`;
     };
     return build("S1/S2", s1s2) + build("S3/S4", s3s4);
 }

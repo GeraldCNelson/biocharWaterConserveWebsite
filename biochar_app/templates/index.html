@@ -38,6 +38,9 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="{{ url_for('static', path='js/vendor/marked.min.js') }}"></script>
 
+    <!-- markdown-it for client-side Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+
     <!-- Expose your custom‐season defaults into JS -->
     <script>
         window.CUSTOM_GSEASON_CONFIG = {
@@ -47,8 +50,26 @@
         };
     </script>
 
-    <!-- Finally: main.js (which imports custom_gseason.js) -->
+    <!-- Main ES module (imports markdown.js, plots.js, etc.) -->
     <script type="module" src="{{ url_for('static', path='js/main.js') }}"></script>
+
+    <!-- MathJax for rendering LaTeX in Markdown -->
+    <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["$", "$"], ["\\(", "\\)"]],
+        displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+        processEscapes: true
+      },
+      options: {
+        renderActions: {
+          addMenu: []
+        }
+      }
+    };
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 </head>
 
 <body>
@@ -255,92 +276,138 @@
                             Update Plots
                         </button>
 
-                        <div class="dropdown mb-2">
-                            <button class="btn btn-secondary w-100 dropdown-toggle"
-                                    type="button"
-                                    id="downloadDataDropdown"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                Download Data
-                            </button>
-                            <ul class="dropdown-menu w-100"
-                                aria-labelledby="downloadDataDropdown">
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadTraceData('raw')">
-                                        Raw Data (CSV)
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadTraceData('ratio')">
-                                        Ratio Data (CSV)
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadTraceData('all')">
-                                        All Data (CSV)
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
+                        <!-- Download controls + helper text -->
+                        <div class="d-flex flex-column">
+                            <!-- Data downloads -->
+                            <div class="dropdown mb-2">
+                                <button class="btn btn-secondary w-100 dropdown-toggle"
+                                        type="button"
+                                        id="downloadDataDropdown"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false">
+                                    Download Data
+                                </button>
+                                <ul class="dropdown-menu w-100"
+                                    aria-labelledby="downloadDataDropdown">
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadTraceData('raw'); return false;">
+                                            Raw Data (CSV)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadTraceData('ratio'); return false;">
+                                            Ratio Data (CSV)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadTraceData('all'); return false;">
+                                            All Data (CSV)
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
 
-                        <div class="dropdown mb-2">
-                            <button class="btn btn-secondary w-100 dropdown-toggle"
-                                    type="button"
-                                    id="downloadRawPlot"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                Download Raw Plot
-                            </button>
-                            <ul class="dropdown-menu w-100"
-                                aria-labelledby="downloadRawPlot">
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadPlot('raw','png')">
-                                        PNG
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadPlot('raw','jpeg')">
-                                        JPEG
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
+                            <!-- Raw plot downloads -->
+                            <div class="dropdown mb-2">
+                                <button class="btn btn-secondary w-100 dropdown-toggle"
+                                        type="button"
+                                        id="downloadRawPlot"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false">
+                                    Download Raw Plot
+                                </button>
+                                <ul class="dropdown-menu w-100"
+                                    aria-labelledby="downloadRawPlot">
+                                    <li><h6 class="dropdown-header">Match Screen Size</h6></li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('raw','png','screen'); return false;">
+                                            PNG (screen size)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('raw','jpeg','screen'); return false;">
+                                            JPEG (screen size)
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('raw','png','fixed'); return false;">
+                                            PNG (high-res)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('raw','jpeg','fixed'); return false;">
+                                            JPEG (high-res)
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
 
-                        <div class="dropdown">
-                            <button class="btn btn-secondary w-100 dropdown-toggle"
-                                    type="button"
-                                    id="downloadRatioPlot"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                Download Ratio Plot
-                            </button>
-                            <ul class="dropdown-menu w-100"
-                                aria-labelledby="downloadRatioPlot">
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadPlot('ratio','png')">
-                                        PNG
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item"
-                                       href="#"
-                                       onclick="downloadPlot('ratio','jpeg')">
-                                        JPEG
-                                    </a>
-                                </li>
-                            </ul>
+                            <!-- Ratio plot downloads -->
+                            <div class="dropdown mb-1">
+                                <button class="btn btn-secondary w-100 dropdown-toggle"
+                                        type="button"
+                                        id="downloadRatioPlot"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false">
+                                    Download Ratio Plot
+                                </button>
+                                <ul class="dropdown-menu w-100"
+                                    aria-labelledby="downloadRatioPlot">
+                                    <li><h6 class="dropdown-header">Match Screen Size</h6></li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('ratio','png','screen'); return false;">
+                                            PNG (screen size)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('ratio','jpeg','screen'); return false;">
+                                            JPEG (screen size)
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('ratio','png','fixed'); return false;">
+                                            PNG (high-res)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item"
+                                           href="#"
+                                           onclick="downloadPlot('ratio','jpeg','fixed'); return false;">
+                                            JPEG (high-res)
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <small class="text-muted">
+                                Downloaded files are saved by your web browser, usually in your
+                                <code>Downloads</code> folder. You can change this in your
+                                browser’s download or general settings.
+                            </small>
                         </div>
 
                     </div>
@@ -431,32 +498,44 @@
                             Update Summary
                         </button>
 
-                        <div class="dropdown">
-                            <button class="btn btn-secondary w-100 dropdown-toggle"
-                                    type="button"
-                                    id="downloadSummaryBtn"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                Download Summary
-                            </button>
-                            <ul class="dropdown-menu w-100"
-                                aria-labelledby="downloadSummaryBtn">
-                                <li>
-                                    <a class="dropdown-item" href="#" id="download-summary-raw">
-                                        Raw Summary (CSV)
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#" id="download-summary-ratio">
-                                        Ratio Summary (CSV)
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#" id="download-summary-all">
-                                        All Summary (CSV)
-                                    </a>
-                                </li>
-                            </ul>
+                        <!-- Summary download + helper text -->
+                        <div class="d-flex flex-column">
+                            <div class="dropdown mb-1">
+                                <button class="btn btn-secondary w-100 dropdown-toggle"
+                                        type="button"
+                                        id="downloadSummaryBtn"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false">
+                                    Download Summary
+                                </button>
+                                <ul class="dropdown-menu w-100"
+                                    aria-labelledby="downloadSummaryBtn">
+                                    <li>
+                                        <a class="dropdown-item" href="#"
+                                           id="download-summary-raw">
+                                            Raw Summary (CSV)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#"
+                                           id="download-summary-ratio">
+                                            Ratio Summary (CSV)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#"
+                                           id="download-summary-all">
+                                            All Summary (CSV)
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <small class="text-muted">
+                                Downloaded files are saved by your web browser, usually in your
+                                <code>Downloads</code> folder. You can change this in your
+                                browser’s download or general settings.
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -515,8 +594,8 @@
                 <h5 class="modal-title" id="infoModalSummaryLabel">
                     Directions: Summary Statistics
                 </h5>
-                <button type="button" class="btn-close"
-                        data-bs-dismiss="modal"></button>
+            <button type="button" class="btn-close"
+                    data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div id="modal-summary-help" class="markdown-container">
