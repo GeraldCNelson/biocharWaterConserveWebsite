@@ -1,6 +1,8 @@
-Directions for use of the options in the Main Data Display
+## Directions for use of the options in the Main Data Display
 
-The control panel (left side) has choices for
+The control panel (left side) has the following choices
+
+- Toggle between metric and US units
 
 - Use the dropdowns to filter year, variable, strip, logger location, and depth.
 
@@ -8,4 +10,4 @@ The control panel (left side) has choices for
 
 - Zooming or panning on one plot will sync the other.
 
-- Use the "Download Data" and "Download Plot" menus to export what you see.
+- Use the "Download Data" and "Download Raw and Ratio Plots" menus to export what you see.

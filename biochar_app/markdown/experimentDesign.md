@@ -11,8 +11,8 @@ The experiment began in Spring 2023 at the Fruita Research Station of Colorado S
 The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 46 ft wide and 280 ft long.
 
 <figure>
-  <img src="/static/images/biocharExperimentalDesign.jpg" alt="Layout of biochar plots" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
-  <figcaption style="text-align: center;"><p><em>Field experimental layout</em></p></figcaption>
+  <img src="/static/images/biocharExperimentalDesign.jpg" alt="Layout of biochar plots" title="Layout of biochar plots" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+  <figcaption style="text-align: center;"><p><em>Figure 1: Field experimental layout</em></p></figcaption>
 </figure>
 
 
@@ -29,8 +29,8 @@ Irrigation is applied to the east two rows (strips 3 and 4) roughly every two we
 The biochar used in this experiment is made from pistachio shells and was purchased from [VGrid Energy Systems](https://vgridenergy.com/), Camarillo, California. More details and chemical analysis results will be available in the Additional Information tab.
 
 <figure>
-  <img src="/static/images/biochar_closeup.jpg" alt="Closeup of biochar material" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
-  <figcaption style="text-align: center;"><p><em>Closeup image of biochar material</em></p></figcaption>
+  <img src="/static/images/biochar_closeup.jpg" alt="Closeup of biochar material" title="Closeup of biochar material" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+  <figcaption style="text-align: center;"><p><em>Figure 2: Closeup image of biochar material</em></p></figcaption>
 </figure>
 
 

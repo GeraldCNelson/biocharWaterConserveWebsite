@@ -19,7 +19,7 @@ This is an introduction to the project and the website. Here’s what you can ex
 Biochar is the solid material obtained from the thermochemical conversion of biomass in an oxygen-limited environment ([International Biochar Initiative](https://biochar-international.org/)). The surface area inside the biochar pores is approximately 2,000 ft/gram (about half a basketball court!). Its water holding capacity is up to 7 times the weight of the biochar (Figure 1).
 
 <figure>
-  <img src="/static/images/biocharMicro1.jpg" alt="Scanning electron microscope image of biochar" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+  <img src="/static/images/biocharMicro1.jpg" alt="Scanning electron microscope image of biochar" title="Scanning electron microscope image of biochar" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
   <figcaption style="text-align: center;"><p><em>Figure 1. Scanning electron microscope image of biochar</em></p></figcaption>
 </figure>
 
@@ -37,11 +37,21 @@ For those interested in chemistry, a bit of biological history is in order. Most
   <thead>
     <tr>
       <th>
-        <p><img src="/static/images/lignin_diagram.jpg" alt="Diagram showing lignin structure" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p>
+          <img src="/static/images/lignin_diagram.jpg"
+               alt="Diagram showing lignin structure"
+               title="Diagram showing lignin structure"
+               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+        </p>
         <p><em>Figure 2. Lignin chemical structure</em></p>
       </th>
       <th>
-        <p><img src="/static/images/biochar_diagram.jpg" alt="Diagram showing biochar chemical structure" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p>
+          <img src="/static/images/biochar_diagram.jpg"
+               alt="Diagram showing biochar chemical structure"
+               title="Diagram showing biochar chemical structure"
+               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+        </p>
         <p><em>Figure 3. Biochar chemical structure</em></p>
       </th>
     </tr>
