@@ -11,7 +11,7 @@ cramjam==2.11.0
 Cython==3.0.12
 et_xmlfile==2.0.0
 fastapi==0.116.0
-fastparquet @ git+https://github.com/dask/fastparquet@f4524139b64322dff2822e18182cdf4f52b7a51a
+fastparquet==2024.11.0
 Flask==3.1.0
 fsspec==2025.7.0
 h11==0.16.0
