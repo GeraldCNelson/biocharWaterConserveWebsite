@@ -395,23 +395,33 @@ def common_yaxis2_config(unit_system: str = "us") -> Dict[str, Any]:
     }
 
 
-def common_legend_config(title: str) -> Dict[str, Any]:
+def common_legend_config(title: str) -> dict:
     """
-    Shared legend styling for all plots.
-    Slightly transparent background so bars/lines are visible under it.
+    Standardized legend settings for all plots.
+    Makes the legend compact with minimal vertical spacing.
     """
-    return {
-        "title": {"text": title},
-        "orientation": "v",
-        "x": 1.02,
-        "y": 1.0,
-        "xanchor": "left",
-        "yanchor": "top",
-        "bgcolor": "rgba(255,255,255,0.65)",
-        "bordercolor": "rgba(0,0,0,0.15)",
-        "itemsizing": "constant",
-    }
+    return dict(
+        title=dict(text=title),
 
+        # Background / border
+        bgcolor="rgba(255, 255, 255, 0.9)",
+        bordercolor="rgba(0, 0, 0, 0.25)",
+        borderwidth=1,
+
+        # Position: vertical legend on the right
+        orientation="v",
+        x=1.02,
+        xanchor="left",
+        y=1.0,
+        yanchor="top",
+
+        # Compact look
+        font=dict(size=11),
+        itemsizing="constant",  # same box height for all entries
+        tracegroupgap=0,        # no extra gap between legend groups
+        itemwidth=30,           # narrower entry width → less wrapping
+        # no valign here; older stubs complain and it’s not essential
+    )
 
 # ---------------------------------------------------------------------------
 # Labels & unit-aware text
@@ -826,8 +836,8 @@ def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     # Drop duplicate columns if any were renamed to same thing
     if df.columns.duplicated().any():
         dup_cols = df.columns[df.columns.duplicated()].tolist()
-        logger.warning(
-            "Duplicate irrigation columns after rename: %s; keeping first occurrence(s).",
+        logger.info(
+            "Duplicate irrigation columns after rename: %s; keeping first occurrence(s). Should only happen in 2025.",
             dup_cols,
         )
         df = df.loc[:, ~df.columns.duplicated()]

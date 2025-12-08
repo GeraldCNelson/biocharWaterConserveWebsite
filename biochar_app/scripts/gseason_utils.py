@@ -14,6 +14,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
+import numpy as np
+
 
 from biochar_app.scripts.gseason import assign_gseason_periods  # core mapper
 from biochar_app.scripts.config import (
@@ -65,7 +67,7 @@ def generate_gseason_summary(
     if summary_path.exists() and not overwrite:
         return
 
-    # 1) load 15-min logger data for this year
+    # 1) load 15-min logger data for this year’s *growing season*
     parquet_15 = Path(PARQUET_DIR) / "summary" / "15min" / f"{year}_15min.parquet"
     if not parquet_15.exists():
         raise FileNotFoundError(f"Missing 15-min parquet: {parquet_15}")
@@ -76,11 +78,17 @@ def generate_gseason_summary(
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp"])
 
-    # Keep only this calendar year (parquet may contain edge rows)
-    df = df[(df["timestamp"].dt.year == year)]
+    # NOTE: we intentionally do *not* clamp to df["timestamp"].dt.year == year.
+    # The wrap-aware assign_gseason_periods(...) call below will assign
+    # Q1_Winter, Q2_Early_Growing, Q3_Peak_Harvest for the chosen "year"
+    # (e.g. 2025) even when part of Winter lives in the previous calendar year
+    # (e.g. Nov–Dec 2024). Rows that do NOT belong to any period for "year"
+    # will get NaN for period_code and be dropped.
 
     # 2) assign period_code to each row using wrap-aware mapper
-    df["period_code"] = df["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
+    df["period_code"] = df["timestamp"].apply(
+        lambda ts: assign_gseason_periods(ts, year)
+    )
     df = df[df["period_code"].notna()]
 
     if df.empty:
@@ -91,8 +99,12 @@ def generate_gseason_summary(
     # 3) discover variable/strip/depth from column names
     #    RAW:   VAR_DEPTH_raw_S?_?   e.g., VWC_1_raw_S1_T
     #    RATIO: VAR_DEPTH_ratio_S1_S2_?  or _S3_S4_?
-    raw_re   = re.compile(r"^(?P<var>[A-Z]+)_(?P<depth>\d)_raw_(?P<strip>S\d)_(?P<loc>[A-Z])$")
-    ratio_re = re.compile(r"^(?P<var>[A-Z]+)_(?P<depth>\d)_ratio_(?P<pair>S\d_S\d)_(?P<loc>[A-Z])$")
+    raw_re   = re.compile(
+        r"^(?P<var>[A-Z]+)_(?P<depth>\d)_raw_(?P<strip>S\d)_(?P<loc>[A-Z])$"
+    )
+    ratio_re = re.compile(
+        r"^(?P<var>[A-Z]+)_(?P<depth>\d)_ratio_(?P<pair>S\d_S\d)_(?P<loc>[A-Z])$"
+    )
 
     # 4) build nested accumulator
     nested: dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
@@ -117,11 +129,13 @@ def generate_gseason_summary(
                 var   = m.group("var")
                 depth = m.group("depth")
                 strip = m.group("strip")
-                logger_loc  = m.group("logger_loc")
+                # loc = m.group("loc")  # currently not used, but kept for clarity
                 key   = f"{strip}_D{depth}"
                 rs = stats(g[col])
                 if rs:
-                    slot = nested[pcode][var].setdefault(key, {"raw_statistics": {}, "ratio_statistics": {}})
+                    slot = nested[pcode][var].setdefault(
+                        key, {"raw_statistics": {}, "ratio_statistics": {}}
+                    )
                     slot["raw_statistics"][col] = rs
                 continue
 
@@ -130,11 +144,13 @@ def generate_gseason_summary(
                 var   = m.group("var")
                 depth = m.group("depth")
                 pair  = m.group("pair")   # S1_S2 or S3_S4
-                logger_loc  = m.group("logger_loc")
+                # loc = m.group("loc")    # currently not used
                 key   = f"{pair}_D{depth}"  # keep pairs separate from single-strip keys
                 rs = stats(g[col])
                 if rs:
-                    slot = nested[pcode][var].setdefault(key, {"raw_statistics": {}, "ratio_statistics": {}})
+                    slot = nested[pcode][var].setdefault(
+                        key, {"raw_statistics": {}, "ratio_statistics": {}}
+                    )
                     slot["ratio_statistics"][col] = rs
 
     # 6) write JSON
@@ -455,3 +471,135 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
 
         out.append({"code": code, "label": label, "start": start, "end": end})
     return out
+
+def add_gseason_irrigation_from_events(
+    df_gs: pd.DataFrame,
+    year: int,
+    strip: str,
+    periods_raw=None,
+) -> pd.DataFrame:
+    """
+    Attach seasonal irrigation totals to the growing-season dataframe.
+
+    Reads harmonized irrigation events from:
+        DATA_PROCESSED_DIR / f"Harmonized_Irrigation_Data_{year}.csv"
+
+    For each growing-season period, sums 'gallons' for the requested strip
+    over the period window (handling wrap-around seasons), and writes:
+
+        - irrigation_gal
+        - irrigation_kgal  (thousands of gallons, for labels/plot)
+
+    Assumes df_gs has one row per period, in the same order as periods_raw
+    (or DEFAULT_GSEASON_PERIODS if periods_raw is None).
+    """
+    periods = periods_to_list_of_dicts(periods_raw or DEFAULT_GSEASON_PERIODS)
+
+    irr_path = Path(DATA_PROCESSED_DIR) / f"Harmonized_Irrigation_Data_{year}.csv"
+    if not irr_path.exists():
+        # no irrigation file → just add NaNs to keep schema consistent
+        df_out = df_gs.copy()
+        df_out["irrigation_gal"] = np.nan
+        df_out["irrigation_kgal"] = np.nan
+        return df_out
+
+    irr = pd.read_csv(irr_path)
+    # adapt these column names if your CSV uses slightly different headings
+    # e.g., 'Strip', 'Gallons', 'start_timestamp', etc.
+    strip_col = "strip" if "strip" in irr.columns else "Strip"
+    gallons_col = "gallons" if "gallons" in irr.columns else "Gallons"
+    ts_col = "start_timestamp" if "start_timestamp" in irr.columns else "start"
+
+    irr[ts_col] = pd.to_datetime(irr[ts_col], errors="coerce")
+    irr = irr.dropna(subset=[ts_col])
+    irr = irr[irr[strip_col] == strip]
+
+    irrigation_totals = []
+
+    for p in periods:
+        start_mmdd = str(p["start"])  # e.g. "11-01"
+        end_mmdd   = str(p["end"])    # e.g. "04-30"
+
+        sm, sd = map(int, start_mmdd.split("-"))
+        em, ed = map(int, end_mmdd.split("-"))
+
+        # wrap-around if start month > end month (e.g. Nov→Apr)
+        if sm > em:
+            start_ts = pd.Timestamp(year - 1, sm, sd)
+            end_ts   = pd.Timestamp(year, em, ed)
+        else:
+            start_ts = pd.Timestamp(year, sm, sd)
+            end_ts   = pd.Timestamp(year, em, ed)
+
+        # inclusive end-of-day
+        end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+        mask = (irr[ts_col] >= start_ts) & (irr[ts_col] <= end_ts)
+        total_gal = float(pd.to_numeric(irr.loc[mask, gallons_col], errors="coerce").sum())
+        irrigation_totals.append(total_gal)
+
+    df_out = df_gs.copy()
+    df_out["irrigation_gal"] = irrigation_totals
+    df_out["irrigation_kgal"] = np.round(df_out["irrigation_gal"] / 1000.0, 3)
+
+    return df_out
+
+def build_gseason_frame_for_strip_depth(
+    year: int,
+    variable: str,
+    strip: str,
+    depth: str,
+) -> pd.DataFrame:
+    """
+    Build the 3-row dataframe used for gseason plots & CSV downloads
+    for a specific variable / strip / depth.
+
+    Columns will include:
+      - timestamp (period start)
+      - period_code
+      - period_label
+      - VWC/T/EC columns for the chosen strip/depth
+      - precip_in, precip_mm
+      - irrigation_gal, irrigation_kgal
+    """
+    # 1) Load logger gseason summary parquet
+    gseason_path = (
+        Path(PARQUET_DIR) / "summary" / "gseason" / f"{year}_gseason.parquet"
+    )
+    df_gs = pd.read_parquet(gseason_path)
+
+    # Your gseason parquet rows already correspond to DEFAULT_GSEASON_PERIODS
+    # in order. Add a timestamp column for convenience (we can use period_start).
+    df_gs = df_gs.copy()
+    df_gs["timestamp"] = pd.to_datetime(df_gs["period_start"], errors="coerce")
+
+    # 2) Keep only the columns relevant for this variable/strip/depth
+    # example col names: VWC_1_raw_S1_T, VWC_1_raw_S1_M, VWC_1_raw_S1_B
+    value_prefix = f"{variable}_{depth}_raw_{strip}_"
+    value_cols = [c for c in df_gs.columns if c.startswith(value_prefix)]
+
+    base_cols = ["timestamp", "period_code", "period_label"]
+    cols = base_cols + value_cols
+    df_gs = df_gs[cols]
+
+    # 3) Attach seasonal precipitation from daily weather
+    df_gs = add_gseason_precip_from_daily(
+        df_gs,
+        year=year,
+        periods_raw=DEFAULT_GSEASON_PERIODS,
+    )
+
+    # 4) Attach seasonal irrigation totals
+    df_gs = add_gseason_irrigation_from_events(
+        df_gs,
+        year=year,
+        strip=strip,
+        periods_raw=DEFAULT_GSEASON_PERIODS,
+    )
+
+    # 5) Final rounding for numeric columns
+    numeric_cols = df_gs.select_dtypes(include=["float", "int"]).columns
+    if len(numeric_cols) > 0:
+        df_gs[numeric_cols] = df_gs[numeric_cols].round(3)
+
+    return df_gs

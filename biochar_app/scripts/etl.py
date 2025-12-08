@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Full ETL (no growing-season calculations here):
+Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
   - Normalize timestamps to naive America/Denver (drop tzinfo; shift DST gaps forward)
   - Mask extreme placeholders → NaN
@@ -8,6 +8,7 @@ Full ETL (no growing-season calculations here):
   - Mask VWC > 150% → NaN
   - Compute SWC cylinder volumes & logger‐ratios
   - Resample to 15 min / hourly / daily / monthly; write Parquet + Parquet_ratios
+  - Build DEFAULT gseason summaries from daily data (with cross-year support)
   - Fetch CoAgMet 5 min weather; clean precip increments; write resampled Parquet
 """
 
@@ -19,7 +20,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from biochar_app.scripts.get_weather_data import fetch_weather_data  # or get_weather_data
+from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import (
     DATA_RAW_DIR,
     PARQUET_DIR,
@@ -31,6 +32,7 @@ from biochar_app.scripts.config import (
     GRANULARITIES,
     UNIT_CONVERSIONS,
     cylinder_volume_m3,
+    DEFAULT_GSEASON_PERIODS,
 )
 from utils import calculate_ratios  # ensure this exists in your project
 
@@ -56,6 +58,7 @@ def convert_soil_t_to_fahrenheit(df: pd.DataFrame) -> pd.DataFrame:
 
     logger.info(f"🌡 Converted {len(t_cols)} soil-temp columns from °C to °F")
     return df
+
 
 def normalize_timestamp_series(
     ts: pd.Series,
@@ -201,6 +204,149 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
     return df_copy
 
 
+# ============================= Growing-season summary ============================= #
+
+def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
+    """
+    Build a 3-row growing-season summary from DAILY logger data and
+    write it as:
+
+        PARQUET_DIR / "summary" / "gseason" / f"{year}_gseason.parquet"
+
+    Uses DEFAULT_GSEASON_PERIODS from config.py. Each row corresponds
+    to one period and contains:
+      - period_code
+      - period_label (e.g. "Winter", "Early Growing")
+      - period_start, period_end (ISO dates)
+      - aggregated sensor columns
+        * precip_* columns summed over the period
+        * all other columns averaged over the period
+
+    Cross-year periods (e.g. "11-01" → "04-30") pull the earlier part
+    from the previous year's daily summary file if it exists.
+    """
+    if "timestamp" not in df_daily.columns:
+        logger.warning(
+            f"⚠️ write_gseason_summary({year}) skipped: no 'timestamp' column in daily frame"
+        )
+        return
+
+    df_daily = df_daily.copy()
+    df_daily["timestamp"] = pd.to_datetime(df_daily["timestamp"], errors="coerce")
+    df_daily = df_daily.dropna(subset=["timestamp"])
+
+    if df_daily.empty:
+        logger.warning(f"⚠️ write_gseason_summary({year}) skipped: empty daily frame")
+        return
+
+    value_cols = [c for c in df_daily.columns if c != "timestamp"]
+    agg_map = {
+        col: ("sum" if col.startswith("precip") else "mean")
+        for col in value_cols
+    }
+
+    daily_dir = Path(PARQUET_DIR) / "summary" / "daily"
+    prev_daily: Optional[pd.DataFrame] = None
+    prev_loaded_for_year: Optional[int] = None
+
+    rows = []
+
+    for period_code, meta in DEFAULT_GSEASON_PERIODS.items():
+        label = meta.get("label", period_code)
+        start_mmdd = meta["start"]
+        end_mmdd = meta["end"]
+
+        start_month = int(start_mmdd.split("-")[0])
+        end_month = int(end_mmdd.split("-")[0])
+        wraps_year = start_month > end_month  # e.g. 11-01 → 04-30
+
+        if wraps_year:
+            start_year = year - 1
+            end_year = year
+        else:
+            start_year = year
+            end_year = year
+
+        start_ts = pd.Timestamp(f"{start_year}-{start_mmdd}")
+        end_ts = (
+            pd.Timestamp(f"{end_year}-{end_mmdd}")
+            + pd.Timedelta(days=1)
+            - pd.Timedelta(seconds=1)
+        )
+
+        window_parts: List[pd.DataFrame] = []
+
+        # Previous-year component (for wrap-around periods)
+        if wraps_year and start_year < year:
+            prev_path = daily_dir / f"{start_year}_daily.parquet"
+            if prev_path.exists():
+                if prev_daily is None or prev_loaded_for_year != start_year:
+                    prev_daily = pd.read_parquet(prev_path)
+                    prev_daily["timestamp"] = pd.to_datetime(
+                        prev_daily["timestamp"], errors="coerce"
+                    )
+                    prev_daily = prev_daily.dropna(subset=["timestamp"])
+                    prev_loaded_for_year = start_year
+
+                mask_prev = (prev_daily["timestamp"] >= start_ts) & (
+                    prev_daily["timestamp"] <= end_ts
+                )
+                window_parts.append(prev_daily.loc[mask_prev])
+            else:
+                logger.warning(
+                    f"⚠️ No previous-year daily summary found at {prev_path} "
+                    f"for gseason period {period_code} in {year}; "
+                    f"using only {year} data."
+                )
+
+        # Current-year component
+        mask_cur = (df_daily["timestamp"] >= start_ts) & (
+            df_daily["timestamp"] <= end_ts
+        )
+        window_parts.append(df_daily.loc[mask_cur])
+
+        if window_parts:
+            window = pd.concat(window_parts, ignore_index=True)
+        else:
+            window = pd.DataFrame(columns=df_daily.columns)
+
+        if window.empty:
+            logger.warning(
+                f"⚠️ No daily rows for gseason period {period_code} in {year} "
+                f"[{start_ts.date()} → {end_ts.date()}]; filling with NaN."
+            )
+            stats = {col: np.nan for col in value_cols}
+        else:
+            # Aggregate and round to 3 decimals so gseason matches other summaries
+            stats_series = window[value_cols].agg(agg_map)
+            stats_series = stats_series.round(3)
+            stats = stats_series.to_dict()
+
+        rows.append(
+            {
+                "period_code": period_code,
+                "period_label": label,
+                "period_start": start_ts.date().isoformat(),
+                "period_end": end_ts.date().isoformat(),
+                **stats,
+            }
+        )
+
+    out_df = pd.DataFrame(rows)
+
+    # Final safety: ensure all numeric columns are rounded to 3 decimals
+    num_cols = out_df.select_dtypes(include=["float", "int"]).columns
+    if len(num_cols) > 0:
+        out_df[num_cols] = out_df[num_cols].round(3)
+
+    out_dir = Path(PARQUET_DIR) / "summary" / "gseason"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    out_path = out_dir / f"{year}_gseason.parquet"
+    out_df.to_parquet(out_path, index=False, compression="snappy")
+    logger.info(f"✅ Summary gseason (DEFAULT periods): {out_path.name}")
+
+
 # ============================= Aggregation (loggers) ============================= #
 
 def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
@@ -208,6 +354,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     Given cleaned df (indexed on timestamp), write:
       - raw‐logger + raw‐logger_ratios
       - fixed‐frequency summaries + *_ratios
+      - gseason summary built from daily data (using DEFAULT_GSEASON_PERIODS)
     """
     year_dir = Path(PARQUET_DIR) / str(year)
     year_dir.mkdir(parents=True, exist_ok=True)
@@ -235,7 +382,10 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         out_dir = summary_base / freq
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in df.columns}
+        agg_map = {
+            col: "sum" if col.startswith("precip") else "mean"
+            for col in df.columns
+        }
 
         # a) raw summary
         df_s = df.resample(code).agg(agg_map).round(3)
@@ -244,6 +394,10 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         fn_raw = f"{year}_{freq}.parquet"
         df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq}: {fn_raw}")
+
+        # 👉 build DEFAULT gseason summary off the daily frame
+        if freq == "daily":
+            write_gseason_summary(year, df_s)
 
         # b) summary ratios
         df_s_ratio = calculate_ratios(df_s.set_index("timestamp"))
@@ -283,7 +437,7 @@ def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
 def generate_summaries(years: List[int]) -> None:
     """
     Run the full ETL for each year in `years`:
-      - logger data → merge, clean, aggregate
+      - logger data → merge, clean, aggregate (+ DEFAULT gseason)
       - weather data → fetch, clean, aggregate
     """
     for year in years:
@@ -304,7 +458,10 @@ def generate_summaries(years: List[int]) -> None:
             # mask VWC > 150%
             vwc_cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
             outliers = int(
-                pd.concat([pd.to_numeric(df[c], errors="coerce") for c in vwc_cols], axis=1)
+                pd.concat(
+                    [pd.to_numeric(df[c], errors="coerce") for c in vwc_cols],
+                    axis=1,
+                )
                 .gt(150.0)
                 .sum()
                 .sum()
@@ -322,7 +479,7 @@ def generate_summaries(years: List[int]) -> None:
 
         # weather data
         try:
-            dfw = fetch_weather_data(year)  # or get_weather_data(year)
+            dfw = fetch_weather_data(year)
         except Exception as e:
             logger.error(f"❌ fetch_weather_data({year}) failed: {e}")
             continue
@@ -330,7 +487,9 @@ def generate_summaries(years: List[int]) -> None:
         required_cols = {"timestamp", "precip_in", "temp_air_degF"}
         missing = required_cols - set(dfw.columns)
         if missing:
-            logger.error(f"❌ fetch_weather_data({year}) missing columns: {sorted(missing)}")
+            logger.error(
+                f"❌ fetch_weather_data({year}) missing columns: {sorted(missing)}"
+            )
             continue
 
         dfw_clean = clean_weather_frame(dfw).set_index("timestamp").sort_index()

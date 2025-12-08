@@ -1,107 +1,312 @@
-import os
+"""
+create_markdown.py  —  Convert Word (.docx) files into cleaned Markdown (.md)
+
+Reads configuration exclusively from markdown_config.py:
+
+  • docx_markdown_config: main page documents (intro, experiment, tech details)
+  • modal_config:         modal “Directions” docs (Main, Summary)
+
+For each configured .docx:
+
+  1. Runs pandoc to convert .docx → GitHub-flavored Markdown (gfm).
+  2. Replaces Pandoc's image/table placeholders with custom HTML using
+     the metadata in markdown_config.py (figures + side-by-side pairs).
+  3. Cleans up any leftover imageN.* references so we don't get 404s.
+
+Run manually whenever you update the source Word documents:
+
+    (.venv) $ python biochar_app/scripts/create_markdown.py
+"""
+
 import re
 import subprocess
-from markdown_config import image_config, modal_config
+from pathlib import Path
 
-markdown_dir = "markdown"
-images_dir = "static/images"
-os.makedirs(images_dir, exist_ok=True)
+from markdown_config import docx_markdown_config, modal_config
 
-# 🚀 Process Word docs into Markdown
-for docx, config in image_config.items():
-    input_path = os.path.join(markdown_dir, docx)
-    output_md = config["output_md"]
-    output_path = os.path.join(markdown_dir, output_md)
+# -------------------------------------------------------------------
+# Paths
+# -------------------------------------------------------------------
 
-    print(f"\n📄 Processing: {docx} → {output_md}")
+# This file should live at: biochar_app/scripts/create_markdown.py
+# So parent.parent should be: biochar_app/
+BASE_DIR = Path(__file__).resolve().parent.parent  # -> biochar_app/
 
-    subprocess.run([
-        "pandoc", input_path,
+DOCX_DIR = BASE_DIR / "markdown" / "docx"   # source .docx files
+MARKDOWN_DIR = BASE_DIR / "markdown"        # output .md files
+IMAGES_DIR = BASE_DIR / "static" / "images"
+
+MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# -------------------------------------------------------------------
+# Pandoc runner
+# -------------------------------------------------------------------
+
+def run_pandoc(input_path: Path, output_path: Path) -> None:
+    """
+    Run pandoc to convert docx → GitHub-flavored markdown (gfm).
+
+    If the input file does not exist, log a warning and skip.
+    """
+    if not input_path.exists():
+        print(f"⚠️ Skipping pandoc: source file not found: {input_path}")
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "pandoc",
+        str(input_path),
         "-f", "docx",
         "-t", "gfm",
         "--wrap=none",
-        "-o", output_path
-    ])
+        "-o", str(output_path),
+    ]
+    print(f"📄 pandoc: {input_path.name} → {output_path.name}")
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Pandoc failed for {input_path}: {e}")
 
-    with open(output_path, "r", encoding="utf-8") as f:
-        md_text = f.read()
 
-    images = config.get("images", [])
-    replacements = []
+# -------------------------------------------------------------------
+# Cleanup helpers
+# -------------------------------------------------------------------
 
-    # Replace <figure>...</figure> blocks
-    figure_pattern = re.compile(r"<figure>.*?</figure>", re.DOTALL)
-    figure_matches = figure_pattern.findall(md_text)
+def _cleanup_loose_pandoc_images(md_text: str) -> str:
+    """
+    Remove loose Pandoc image references that we did not explicitly replace.
 
-    for match in figure_matches:
-        replacements.append(match)
+    We leave <figure> and <table> alone so they can be used as placeholders
+    for our custom blocks. This only strips:
+      - Markdown image syntax pointing to imageN.*
+      - Raw <img src="imageN.*"> or <img src="media/imageN.*">
+    """
 
-    for i, img_info in enumerate(images):
-        filename = img_info["file"]
-        alt = img_info.get("alt", "")
-        caption = img_info.get("caption", "")
-        img_path = f"/static/images/{filename}"
+    # 1) Markdown image syntax: ![alt](image2.jpg) or ![alt](media/image2.jpg)
+    md_image_pattern = re.compile(
+        r"!\[[^\]]*]\((?:media/)?image\d+\.(?:png|jpe?g|gif)\)",
+        re.IGNORECASE,
+    )
+    md_text = md_image_pattern.sub("", md_text)
 
-        new_block = f'''<figure>
-<img src="{img_path}" alt="{alt}" style="max-width: 100%;" />
-<figcaption style="text-align: center;"><p><em>{caption}</em></p></figcaption>
-</figure><br>'''
+    # 2) HTML <img> tags that reference imageN.* or media/imageN.*
+    html_img_pattern = re.compile(
+        r"<img[^>]+src=\"(?:media/)?image\d+\.[^\"]*\"[^>]*>",
+        re.IGNORECASE,
+    )
+    md_text = html_img_pattern.sub("", md_text)
 
-        if i < len(replacements):
-            md_text = md_text.replace(replacements[i], new_block)
-        else:
-            print(f"⚠️ Could not find placeholder for {filename}. Appending at end.")
-            md_text += f"\n{new_block}\n"
+    return md_text
 
-    # Remove leftover Pandoc junk (media refs and embedded tables)
-    md_text = re.sub(r'<img src="media/[^>]+>"', '', md_text)
-    md_text = re.sub(r'<table>.*?</table>', '', md_text, flags=re.DOTALL)
 
-    # Insert cleaned side-by-side image block (once)
-    if config.get("side_by_side"):
-        for pair in config["side_by_side"]:
+# -------------------------------------------------------------------
+# Main docs (intro, experiment, tech details)
+# -------------------------------------------------------------------
+
+def process_main_docs() -> None:
+    """
+    Convert the main Word docs to markdown and post-process images / cleanup
+    according to docx_markdown_config.
+    """
+    for docx_name, cfg in docx_markdown_config.items():
+        src_docx = DOCX_DIR / docx_name
+        out_md = MARKDOWN_DIR / cfg["output_md"]
+
+        print(f"\n📄 Processing main doc: {docx_name} → {out_md.name}")
+        run_pandoc(src_docx, out_md)
+
+        if not out_md.exists():
+            # pandoc failed or source missing
+            continue
+
+        md_text = out_md.read_text(encoding="utf-8")
+
+        images = cfg.get("images", []) or []
+        side_pairs = cfg.get("side_by_side") or []
+
+        # Filenames that participate in a side-by-side pair.
+        # We do NOT give these their own single <figure> blocks.
+        side_image_names = {f for pair in side_pairs for f in pair}
+
+        # ------------------------------------------------------------------
+        # 1. Replace the side-by-side table placeholder (if any)
+        # ------------------------------------------------------------------
+        if side_pairs:
+            # Build the custom HTML table once.
+            # For the intro doc this is Figures 2 and 3.
+            pair = side_pairs[0]
             img1 = next((img for img in images if img["file"] == pair[0]), None)
             img2 = next((img for img in images if img["file"] == pair[1]), None)
 
             if img1 and img2:
-                block = f'''
+                side_table_block = f"""
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
-<thead>
-<tr>
-<th><p><img src="/static/images/{img1['file']}" alt="{img1['alt']}" style="max-width: 100%;" /></p>
-<p><em>{img1['caption']}</em></p></th>
-<th><p><img src="/static/images/{img2['file']}" alt="{img2['alt']}" style="max-width: 100%;" /></p>
-<p><em>{img2['caption']}</em></p></th>
-</tr>
-</thead>
-<tbody>
-</tbody>
-</table><br>
-'''
-                if block not in md_text:
-                    md_text += f"\n{block}\n"
+  <colgroup>
+    <col style="width: 50%" />
+    <col style="width: 50%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>
+        <p><img src="/static/images/{img1['file']}" alt="{img1['alt']}" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p><em>{img1['caption']}</em></p>
+      </th>
+      <th>
+        <p><img src="/static/images/{img2['file']}" alt="{img2['alt']}" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p><em>{img2['caption']}</em></p>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+"""
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(md_text)
+                # Find the FIRST table that appears to be an image table
+                # (contains "image" or "media/") and replace it in-place.
+                table_pattern = re.compile(r"<table>.*?</table>", re.DOTALL | re.IGNORECASE)
 
-    print(f"✅ Finished: {output_md}")
+                def _replace_first_image_table(match_iter, text, replacement):
+                    for m in match_iter:
+                        if "image" in m.group(0) or "media/" in m.group(0):
+                            return text.replace(m.group(0), replacement, 1)
+                    return text  # no match; caller can decide to append
 
-# 🔧 Handle modals
-for modal_id, modal in modal_config.items():
-    source = os.path.join(markdown_dir, modal["source"])
-    target = os.path.join(markdown_dir, modal["output"])
-    try:
-        subprocess.run([
-            "pandoc", source,
-            "-f", "docx",
-            "-t", "gfm",
-            "--wrap=none",
-            "-o", target
-        ])
-        print(f"✅ Modal converted: {modal['source']} → {modal['output']}")
-    except Exception as e:
-        print(f"❌ Modal failed: {modal['source']} — {e}")
+                md_text_before = md_text
+                md_text = _replace_first_image_table(
+                    table_pattern.finditer(md_text),
+                    md_text,
+                    side_table_block,
+                )
+
+                # Fallback: if nothing changed, append at the end.
+                if md_text == md_text_before:
+                    print("ℹ️ No Pandoc image table found; appending side-by-side block at end.")
+                    md_text += f"\n{side_table_block}\n"
+
+        # ------------------------------------------------------------------
+        # 2. Replace single-image <figure> placeholders (e.g., Figure 1)
+        # ------------------------------------------------------------------
+        # Grab all <figure> blocks as potential placeholders.
+        figure_pattern = re.compile(r"<figure>.*?</figure>", re.DOTALL | re.IGNORECASE)
+        figure_matches = figure_pattern.findall(md_text)
+
+        # For intro.docx this will pick up the original location of Figure 1.
+        for img_info in images:
+            filename = img_info["file"]
+
+            # Skip images that belong to side-by-side pairs; they’re already handled.
+            if filename in side_image_names:
+                continue
+
+            if figure_matches:
+                placeholder = figure_matches.pop(0)
+                alt = img_info.get("alt", "")
+                caption = img_info.get("caption", "")
+                img_path = f"/static/images/{filename}"
+
+                new_block = (
+                    "<figure>\n"
+                    f'  <img src="{img_path}" alt="{alt}" '
+                    'style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />\n'
+                    '  <figcaption style="text-align: center;">'
+                    f"<p><em>{caption}</em></p></figcaption>\n"
+                    "</figure>\n"
+                )
+
+                md_text = md_text.replace(placeholder, new_block, 1)
+            else:
+                # No placeholder left; append at the end as a last resort.
+                alt = img_info.get("alt", "")
+                caption = img_info.get("caption", "")
+                img_path = f"/static/images/{filename}"
+                new_block = (
+                    "<figure>\n"
+                    f'  <img src="{img_path}" alt="{alt}" '
+                    'style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />\n'
+                    '  <figcaption style="text-align: center;">'
+                    f"<p><em>{caption}</em></p></figcaption>\n"
+                    "</figure>\n"
+                )
+                md_text += f"\n{new_block}\n"
+
+        # ------------------------------------------------------------------
+        # 3. Clean up any leftover imageN.* references that we didn't touch
+        # ------------------------------------------------------------------
+        md_text = _cleanup_loose_pandoc_images(md_text)
+
+        # ------------------------------------------------------------------
+        # 4. Fix Pandoc's inline-math pattern $`...`$ so markdown-it + MathJax
+        #    see a normal $...$ TeX string instead of a <code>...</code> block.
+        #
+        #    Example Pandoc output:
+        #      $`\frac{T_{experiment}}{T_{reference}}`$
+        #    becomes:
+        #      $\frac{T_{experiment}}{T_{reference}}$
+        # ------------------------------------------------------------------
+        inline_math_pattern = re.compile(r"\$`([^`]+)`\$")
+        md_text = inline_math_pattern.sub(r"$\1$", md_text)
+
+        # ------------------------------------------------------------------
+        # 5. Normalize stray Unicode "zero-like" characters.
+        #
+        #    Word sometimes exports a mathematical / modifier "o" or
+        #    math-specific zero glyph instead of an ASCII '0', which
+        #    can render as “o K” instead of “0 K”.  We map the most
+        #    common offenders back to plain '0'.
+        # ------------------------------------------------------------------
+        MATH_ZERO_LIKE = [
+            "\u1D52",  # ᵒ  modifier letter small o (often used as degree/zero)
+            "\u1D5BA", # 𝗺𝗮𝘁𝗵 italic o (look-alike)
+            "\u1D7CE", # 𝟎  math sans-serif digit zero
+            "\u1D7D8", # 𝟘  math double-struck zero
+        ]
+
+        for z in MATH_ZERO_LIKE:
+            if z in md_text:
+                md_text = md_text.replace(z, "0")
+
+        out_md.write_text(md_text, encoding="utf-8")
+        print(f"✅ Finished: {out_md.name}")
+
+
+# -------------------------------------------------------------------
+# Modal docs (help_main, help_summary)
+# -------------------------------------------------------------------
+
+def process_modals() -> None:
+    """
+    Convert modal Word docs to markdown based on modal_config.
+
+    No special image handling here—just straight pandoc conversion.
+    """
+    for modal_id, modal in modal_config.items():
+        src = DOCX_DIR / modal["source"]
+        out = MARKDOWN_DIR / modal["output"]
+
+        print(f"\n📄 Processing modal '{modal_id}': {src.name} → {out.name}")
+        if not src.exists():
+            print(f"⚠️ Modal source not found for '{modal_id}': {src}")
+            continue
+
+        run_pandoc(src, out)
+        if out.exists():
+            print(f"✅ Modal converted: {out.name}")
+
+
+# -------------------------------------------------------------------
+# Script entrypoint
+# -------------------------------------------------------------------
+
+if __name__ == "__main__":
+    print(f"📂 DOCX_DIR     = {DOCX_DIR}")
+    print(f"📂 MARKDOWN_DIR = {MARKDOWN_DIR}")
+    print(f"📂 IMAGES_DIR   = {IMAGES_DIR}")
+
+    process_main_docs()
+    process_modals()
+
+    print("\n🎉 Markdown generation complete.")

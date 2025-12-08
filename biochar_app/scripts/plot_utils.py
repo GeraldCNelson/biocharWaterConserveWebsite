@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 from biochar_app.scripts.config import (
     PRECIP_COLS,
-    DATA_PROCESSED_DIR,
     bar_width_map,
     label_name_mapping,
     sensor_depth_mapping,
@@ -44,6 +43,54 @@ from biochar_app.scripts.plot_helpers import (
     load_irrigation_events,
     common_legend_config,
 )
+
+from fastapi import HTTPException
+
+
+# ---------------------------------------------------------------------------
+# Internal helper: safe scalar timestamp parsing
+# ---------------------------------------------------------------------------
+
+def _safe_parse_timestamp(value: Any) -> Optional[pd.Timestamp]:
+    """
+    Best-effort conversion of a single value to a scalar Timestamp.
+
+    Returns:
+        - pd.Timestamp if we can parse a single scalar
+        - None if the value is None, container-like, or could not be parsed
+
+    This avoids ambiguous truth-value issues when comparing against
+    start/end bounds, and keeps PyCharm/mypy much happier.
+    """
+    if value is None:
+        return None
+
+    # Reject obvious container types up front
+    if isinstance(
+        value,
+        (
+            pd.Series,
+            pd.DataFrame,
+            pd.DatetimeIndex,
+            np.ndarray,
+            list,
+            tuple,
+        ),
+    ):
+        return None
+
+    ts = pd.to_datetime(value, errors="coerce")
+
+    # If pandas still gave us something array-like, collapse or drop
+    if isinstance(ts, (pd.Series, pd.DatetimeIndex)):
+        if len(ts) == 0:
+            return None
+        ts = ts[0]
+
+    if pd.isna(ts):
+        return None
+
+    return ts
 
 
 def init_time_figure(
@@ -144,7 +191,7 @@ def add_precipitation_bars(
         vals = df[primary].astype(float)
     elif fallback in df.columns:
         tmp = df[fallback].astype(float)
-        vals = tmp * (25.4 if unit_system == "metric" else 1/25.4)
+        vals = tmp * (25.4 if unit_system == "metric" else 1 / 25.4)
     else:
         return
 
@@ -191,16 +238,26 @@ def add_irrigation_shapes(
         ]
 
         for i, p in enumerate(periods):
-            start_ts = pd.to_datetime(getattr(p, "start", None))
-            end_ts   = pd.to_datetime(getattr(p, "end", None))
-            if pd.isna(start_ts) or pd.isna(end_ts):
+            start_raw = getattr(p, "start", None)
+            end_raw = getattr(p, "end", None)
+
+            start_ts = _safe_parse_timestamp(start_raw)
+            end_ts = _safe_parse_timestamp(end_raw)
+
+            if start_ts is None or end_ts is None:
                 continue
 
             total = 0.0
             for ev in recs:
-                ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
-                if pd.isna(ts) or not (start_ts <= ts <= end_ts):
+                ts_raw = ev.get("start") or ev.get("timestamp")
+                ts = _safe_parse_timestamp(ts_raw)
+                if ts is None:
                     continue
+
+                # explicit range checks (no chained comparison)
+                if ts < start_ts or ts > end_ts:
+                    continue
+
                 try:
                     total += float(ev.get("volume_gal", 0))
                 except (TypeError, ValueError):
@@ -215,14 +272,20 @@ def add_irrigation_shapes(
             # vertical dotted line at the *category*, spanning the full plot height
             fig.add_shape(
                 type="line",
-                xref="x", x0=cat, x1=cat,
-                yref="paper", y0=0, y1=1,
+                xref="x",
+                x0=cat,
+                x1=cat,
+                yref="paper",
+                y0=0,
+                y1=1,
                 line=dict(color="sienna", dash="dot", width=2),
             )
             # “### k gal/k L” above the plot, centered over the same category
             fig.add_annotation(
-                xref="x", x=cat,
-                yref="paper", y=1.02,
+                xref="x",
+                x=cat,
+                yref="paper",
+                y=1.02,
                 text=f"{total/1000:.0f} {unit_lbl}",
                 showarrow=False,
                 font=dict(size=10, color="sienna"),
@@ -231,14 +294,19 @@ def add_irrigation_shapes(
     elif not sum_only:
         # date-time axis case
         for ev in recs:
-            ts = pd.to_datetime(ev.get("start") or ev.get("timestamp"), errors="coerce")
-            if pd.isna(ts):
+            ts_raw = ev.get("start") or ev.get("timestamp")
+            ts = _safe_parse_timestamp(ts_raw)
+            if ts is None:
                 continue
 
             fig.add_shape(
                 type="line",
-                xref="x", x0=ts, x1=ts,
-                yref="paper", y0=0, y1=1,
+                xref="x",
+                x0=ts,
+                x1=ts,
+                yref="paper",
+                y0=0,
+                y1=1,
                 line=dict(color="sienna", dash="dot", width=2),
             )
 
@@ -581,6 +649,7 @@ def make_ratio_figure(
     configure_primary_yaxis(fig, df_plot, y_cols, variable, unit_system, kind="ratio")
     return prepare_plot_for_json(fig)
 
+
 # plot_utils.py
 
 def make_raw_gseason_figure(
@@ -646,7 +715,9 @@ def make_raw_gseason_figure(
                 list(zip(labels, vals_for_log)),
             )
 
-        # Precipitation bar trace on y2
+        # Precipitation bar trace on y2  (growing-season)
+        unit_suffix = "in" if unit_system == "us" else "mm"
+
         fig.add_trace(
             go.Bar(
                 x=labels,
@@ -656,25 +727,16 @@ def make_raw_gseason_figure(
                 yaxis="y2",
                 offsetgroup="0",
                 opacity=0.6,
-                hovertemplate="Precip: %{y:.2f}"
-                + (" in" if unit_system == "us" else " mm"),
+
+                # Put precip labels above the bars (only once)
+                text=[f"{v:.2f} {unit_suffix}" for v in precip_vals],
+                textposition="outside",
+                textfont=dict(size=12),
+                cliponaxis=False,
+
+                hovertemplate="Precip: %{y:.2f} " + unit_suffix,
             )
         )
-
-        # Add numeric labels above each precip bar (on y2 axis)
-        unit_suffix = "in" if unit_system == "us" else "mm"
-        for lab, val in zip(labels, precip_vals):
-            if pd.isna(val) or val <= 0:
-                continue
-            fig.add_annotation(
-                x=lab,
-                xref="x",
-                y=float(val) * 1.03,  # a bit above the bar
-                yref="y2",
-                text=f"{val:.2f} {unit_suffix}",
-                showarrow=False,
-                font=dict(size=10),
-            )
 
     # -------------------------------------------------------------------------
     # 2) Sensor bars on primary y-axis
@@ -689,7 +751,7 @@ def make_raw_gseason_figure(
         # One bar per depth at a single logger location
         for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
             col = f"{variable}_{d}_raw_{strip}_{logger_location}"
-            if col not in df:
+            if col not in df.columns:
                 continue
             sensor_cols_plotted.append(col)
             fig.add_trace(
@@ -709,7 +771,7 @@ def make_raw_gseason_figure(
             logger_location_mapping.items(), start=1
         ):
             col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
-            if col not in df:
+            if col not in df.columns:
                 continue
             sensor_cols_plotted.append(col)
             fig.add_trace(
@@ -756,11 +818,15 @@ def make_raw_gseason_figure(
         for (start_ts, end_ts), cat in zip(start_end_pairs, labels):
             total = 0.0
             for ev in evs:
-                ts = pd.to_datetime(
-                    ev.get("start") or ev.get("timestamp"), errors="coerce"
-                )
-                if pd.isna(ts) or not (start_ts <= ts <= end_ts):
+                ts_raw = ev.get("start") or ev.get("timestamp")
+                ts = _safe_parse_timestamp(ts_raw)
+                if ts is None:
                     continue
+
+                # explicit range checks (no chained comparison)
+                if ts < start_ts or ts > end_ts:
+                    continue
+
                 try:
                     total += float(ev.get("volume_gal", 0))
                 except (TypeError, ValueError):
@@ -867,18 +933,14 @@ def make_raw_gseason_figure(
         },
         yaxis={**yaxis_cfg, "title": human_var},
         yaxis2=y2_cfg,
-        legend=dict(
-            **common_legend_config("Legend"),
-            bgcolor="rgba(255,255,255,0.7)",  # slightly transparent
-            bordercolor="rgba(0,0,0,0.15)",
-            borderwidth=1,
-        ),
+        legend=common_legend_config("Legend"),
         template="plotly_white",
         margin={"l": 60, "r": 20, "t": 70, "b": 40},
         height=400,
     )
 
     return prepare_plot_for_json(fig)
+
 
 def make_ratio_gseason_figure(
     *,

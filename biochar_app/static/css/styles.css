@@ -4,7 +4,7 @@ html, body {
     padding: 0;
     height: 100%; /* Ensure full height is applied to root elements */
     /* Global default: serif, to match long-form content */
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: "Source Serif Pro", serif;
 }
 
 /* Global Box Sizing */
@@ -68,7 +68,7 @@ html, body {
 
 /* Compact and clean markdown styling */
 .markdown-content {
-    font-family: Georgia, serif !important;
+    font-family: Source Serif Pro, serif !important;
     font-size: 14px;
     line-height: 1.4;
     /* If you want the shaded box back, uncomment:
@@ -123,7 +123,7 @@ table {
 
 /* Match tab font to content */
 .nav-tabs .nav-link {
-    font-family: Georgia, serif;
+    font-family: Source Serif Pro, serif;
 }
 
 /* Headers – left-aligned with moderate spacing */
