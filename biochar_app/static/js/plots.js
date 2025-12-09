@@ -2,6 +2,38 @@
 import { getSelectedFilters } from "./ui_controls.js";
 import { DEBUG } from "./config.js";
 
+// --- Zoom / pan syncing between raw (plot-1) and ratio (plot-2) ---
+
+let isSyncingZoom = false;
+
+/**
+ * Sync zoom/pan between two Plotly graphs.
+ * We only care about x-axis ranges (time axis).
+ */
+function syncZoom(sourceDiv, targetDiv, eventData) {
+  if (!targetDiv || isSyncingZoom) return;
+
+  // Only respond to explicit x-axis range changes.
+  const hasXRange =
+    "xaxis.range[0]" in eventData && "xaxis.range[1]" in eventData;
+
+  if (!hasXRange) return;
+
+  const newRange = [
+    eventData["xaxis.range[0]"],
+    eventData["xaxis.range[1]"],
+  ];
+
+  isSyncingZoom = true;
+  Plotly.relayout(targetDiv, { "xaxis.range": newRange })
+    .catch((err) => {
+      console.error("❌ Error syncing zoom:", err);
+    })
+    .finally(() => {
+      isSyncingZoom = false;
+    });
+}
+
 export function debugLog(...args) {
   if (DEBUG) console.log(...args);
 }

@@ -12,6 +12,8 @@ For each configured .docx:
   2. Replaces Pandoc's image/table placeholders with custom HTML using
      the metadata in markdown_config.py (figures + side-by-side pairs).
   3. Cleans up any leftover imageN.* references so we don't get 404s.
+  4. Normalizes Pandoc's inline-math pattern $`...`$ → $...$ so that
+     markdown-it + MathJax can render LaTeX properly.
 
 Run manually whenever you update the source Word documents:
 
@@ -135,13 +137,16 @@ def process_main_docs() -> None:
         # 1. Replace the side-by-side table placeholder (if any)
         # ------------------------------------------------------------------
         if side_pairs:
-            # Build the custom HTML table once.
-            # For the intro doc this is Figures 2 and 3.
+            # For now we assume exactly one side-by-side pair list (intro: Figures 2 & 3).
             pair = side_pairs[0]
             img1 = next((img for img in images if img["file"] == pair[0]), None)
             img2 = next((img for img in images if img["file"] == pair[1]), None)
 
             if img1 and img2:
+                # Use title if provided, otherwise fall back to alt.
+                title1 = img1.get("title") or img1.get("alt", "")
+                title2 = img2.get("title") or img2.get("alt", "")
+
                 side_table_block = f"""
 <table>
   <colgroup>
@@ -151,11 +156,21 @@ def process_main_docs() -> None:
   <thead>
     <tr>
       <th>
-        <p><img src="/static/images/{img1['file']}" alt="{img1['alt']}" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p>
+          <img src="/static/images/{img1['file']}"
+               alt="{img1['alt']}"
+               title="{title1}"
+               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+        </p>
         <p><em>{img1['caption']}</em></p>
       </th>
       <th>
-        <p><img src="/static/images/{img2['file']}" alt="{img2['alt']}" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" /></p>
+        <p>
+          <img src="/static/images/{img2['file']}"
+               alt="{img2['alt']}"
+               title="{title2}"
+               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+        </p>
         <p><em>{img2['caption']}</em></p>
       </th>
     </tr>
@@ -202,35 +217,25 @@ def process_main_docs() -> None:
             if filename in side_image_names:
                 continue
 
+            alt = img_info.get("alt", "")
+            caption = img_info.get("caption", "")
+            title = img_info.get("title") or alt
+            img_path = f"/static/images/{filename}"
+
+            new_block = (
+                "<figure>\n"
+                f'  <img src="{img_path}" alt="{alt}" title="{title}" '
+                'style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />\n'
+                '  <figcaption style="text-align: center;">'
+                f"<p><em>{caption}</em></p></figcaption>\n"
+                "</figure>\n"
+            )
+
             if figure_matches:
                 placeholder = figure_matches.pop(0)
-                alt = img_info.get("alt", "")
-                caption = img_info.get("caption", "")
-                img_path = f"/static/images/{filename}"
-
-                new_block = (
-                    "<figure>\n"
-                    f'  <img src="{img_path}" alt="{alt}" '
-                    'style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />\n'
-                    '  <figcaption style="text-align: center;">'
-                    f"<p><em>{caption}</em></p></figcaption>\n"
-                    "</figure>\n"
-                )
-
                 md_text = md_text.replace(placeholder, new_block, 1)
             else:
                 # No placeholder left; append at the end as a last resort.
-                alt = img_info.get("alt", "")
-                caption = img_info.get("caption", "")
-                img_path = f"/static/images/{filename}"
-                new_block = (
-                    "<figure>\n"
-                    f'  <img src="{img_path}" alt="{alt}" '
-                    'style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />\n'
-                    '  <figcaption style="text-align: center;">'
-                    f"<p><em>{caption}</em></p></figcaption>\n"
-                    "</figure>\n"
-                )
                 md_text += f"\n{new_block}\n"
 
         # ------------------------------------------------------------------
@@ -240,34 +245,15 @@ def process_main_docs() -> None:
 
         # ------------------------------------------------------------------
         # 4. Fix Pandoc's inline-math pattern $`...`$ so markdown-it + MathJax
-        #    see a normal $...$ TeX string instead of a <code>...</code> block.
+        # see a normal $...$ TeX string instead of a <code>...</code> block.
         #
-        #    Example Pandoc output:
-        #      $`\frac{T_{experiment}}{T_{reference}}`$
-        #    becomes:
-        #      $\frac{T_{experiment}}{T_{reference}}$
+        # Example Pandoc output:
+        #   $`\frac{T_{experiment}}{T_{reference}}`$
+        # becomes:
+        #   $\frac{T_{experiment}}{T_{reference}}$
         # ------------------------------------------------------------------
         inline_math_pattern = re.compile(r"\$`([^`]+)`\$")
         md_text = inline_math_pattern.sub(r"$\1$", md_text)
-
-        # ------------------------------------------------------------------
-        # 5. Normalize stray Unicode "zero-like" characters.
-        #
-        #    Word sometimes exports a mathematical / modifier "o" or
-        #    math-specific zero glyph instead of an ASCII '0', which
-        #    can render as “o K” instead of “0 K”.  We map the most
-        #    common offenders back to plain '0'.
-        # ------------------------------------------------------------------
-        MATH_ZERO_LIKE = [
-            "\u1D52",  # ᵒ  modifier letter small o (often used as degree/zero)
-            "\u1D5BA", # 𝗺𝗮𝘁𝗵 italic o (look-alike)
-            "\u1D7CE", # 𝟎  math sans-serif digit zero
-            "\u1D7D8", # 𝟘  math double-struck zero
-        ]
-
-        for z in MATH_ZERO_LIKE:
-            if z in md_text:
-                md_text = md_text.replace(z, "0")
 
         out_md.write_text(md_text, encoding="utf-8")
         print(f"✅ Finished: {out_md.name}")

@@ -135,16 +135,19 @@ docx_markdown_config = {
                 "file": "biocharMicro1.jpg",
                 "caption": "Figure 1. Scanning electron microscope image of biochar",
                 "alt": "Scanning electron microscope image of biochar",
+                "title": "Scanning electron microscope image of biochar",
             },
             {
                 "file": "lignin_diagram.jpg",
                 "caption": "Figure 2. Lignin chemical structure",
                 "alt": "Diagram showing lignin structure",
+                "title": "Diagram showing lignin structure",
             },
             {
                 "file": "biochar_diagram.jpg",
                 "caption": "Figure 3. Biochar chemical structure",
                 "alt": "Diagram showing biochar chemical structure",
+                "title": "Diagram showing biochar chemical structure",
             },
         ],
         "side_by_side": [
@@ -157,13 +160,15 @@ docx_markdown_config = {
         "images": [
             {
                 "file": "biocharExperimentalDesign.jpg",
-                "caption": "Field experimental layout",
+                "caption": "Figure 1: Field experimental layout",
                 "alt": "Layout of biochar plots",
+                "title": "Layout of biochar plots",
             },
             {
                 "file": "biochar_closeup.jpg",
-                "caption": "Closeup image of biochar material",
+                "caption": "Figure 2: Closeup image of biochar material",
                 "alt": "Closeup of biochar material",
+                "title": "Closeup of biochar material",
             },
         ],
     },
