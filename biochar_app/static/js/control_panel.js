@@ -44,27 +44,50 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
   const mainToggle    = document.getElementById("units-toggle_main");
   const summaryToggle = document.getElementById("units-toggle_summary");
 
+  /**
+   * Keep both toggles visually in sync.
+   */
   function mirrorToggles(isMetric) {
-    if (mainToggle)    mainToggle.checked    = isMetric;
-    if (summaryToggle) summaryToggle.checked = isMetric;
+    if (mainToggle) {
+      mainToggle.checked = isMetric;
+    }
+    if (summaryToggle) {
+      summaryToggle.checked = isMetric;
+    }
   }
 
-  async function onToggleChange() {
-    const isMetric = mainToggle?.checked ?? false;
-    window.unitSystem = isMetric ? "metric" : "us";
-    console.log(`🌡 Unit system changed to ${window.unitSystem}`);
+  /**
+   * Handle either toggle being changed.
+   * We *only* trust event.target.checked and then mirror the other toggle.
+   */
+  async function onToggleChange(event) {
+    const src = event?.target;
+    if (!src) return;
 
-    // Update depth dropdown labels on BOTH tabs
-    updateDepthLabels(window.unitSystem);
+    const isMetric   = !!src.checked;
+    const sourceId   = src.id || "(unknown-toggle)";
+    const newSystem  = isMetric ? "metric" : "us";
 
-    // Re-render plots and summary in the new unit system
+    // 1) Update global unit system
+    window.unitSystem = newSystem;
+    console.log(
+      `🌡 Unit system changed to ${window.unitSystem} ` +
+      `(source: ${sourceId}, checked=${isMetric})`
+    );
+
+    // 2) Mirror to both toggles
+    mirrorToggles(isMetric);
+
+    // 3) Update depth dropdown labels on BOTH tabs
+    //    ui_controls.js uses the mapping set earlier from the backend
+    updateDepthLabels(window.unitSystem, window.depthMapping || {});
+
+    // 4) Re-render plots and summary in the new unit system
     await renderMainPlots();
     updateSummaryStatistics();
-
-    // Keep the two toggles visually in sync
-    mirrorToggles(isMetric);
   }
 
+  // Attach listeners (both toggles share the same handler)
   if (mainToggle) {
     mainToggle.addEventListener("change", onToggleChange);
   }
@@ -72,10 +95,13 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     summaryToggle.addEventListener("change", onToggleChange);
   }
 
-  // Initialize toggles & labels based on initial unit system
-  const isMetricDefault = initialUnitSystem === "metric";
+  // Initialize global unit system & UI based on initial setting
+  window.unitSystem = initialUnitSystem === "metric" ? "metric" : "us";
+  const isMetricDefault = window.unitSystem === "metric";
+  console.log("🌡 Initial unitSystem =", window.unitSystem);
+
   mirrorToggles(isMetricDefault);
-  updateDepthLabels(initialUnitSystem);
+  updateDepthLabels(window.unitSystem, window.depthMapping || {});
 }
 
 /**

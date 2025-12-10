@@ -24,11 +24,17 @@ import re
 import logging
 from io import BytesIO
 import zipfile
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -57,6 +63,7 @@ from biochar_app.scripts.config import (
     DEFAULT_STRIP,
     DEFAULT_LOGGER_LOCATION,
     DEFAULT_GRANULARITY,
+    PARQUET_DIR,
     YEARS,
     PLOT_BASED_ON_OPTIONS,
     TRACE_OPTION_MAP,
@@ -66,85 +73,36 @@ from biochar_app.scripts.config import (
     granularity_name_mapping,
     strip_name_mapping,
 )
-
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
 logger = logging.getLogger(__name__)
+
 main_router = APIRouter()
 api_router = APIRouter(prefix="/api")
+
 templates = Jinja2Templates(
     directory=os.path.join(os.path.dirname(__file__), "../templates")
 )
 
-# ---------------------------------------------------------------------------
-# Defaults / options endpoint
-# ---------------------------------------------------------------------------
-
-@api_router.get("/markdown_files")
-async def get_markdown_files():
-    """
-    Expose the Markdown ID → URL mapping to the frontend.
-
-    Source of truth is markdown_config.build_markdown_mapping().
-    """
-    mapping = build_markdown_mapping()
-    return JSONResponse(mapping)
-
-@api_router.get("/get_defaults_and_options")
-async def get_defaults_and_options():
-    # 1) Build each of the arrays the UI expects:
-    years = YEARS
-    strips = [
-        {"value": k, "label": strip_name_mapping[k]}
-        for k in strip_name_mapping
-    ]
-    variables = [
-        {"value": k, "label": variable_name_mapping[k]}
-        for k in variable_name_mapping
-    ]
-    depths = [
-        {"value": str(d), "label": sensor_depth_mapping[d]["us"]}
-        for d in sensor_depth_mapping
-    ]
-    logger_locations = [
-        {"value": k, "label": logger_location_mapping[k]}
-        for k in logger_location_mapping
-    ]
-    granularities = [
-        {"value": g, "label": granularity_name_mapping[g]}
-        for g in granularity_name_mapping
-    ]
-
-    # 2) Assemble the payload exactly as your UI code expects:
-    response_data = {
-        "defaults": {
-            "year": DEFAULT_YEAR,
-            "startDate": DEFAULT_START_DATE,
-            "endDate": DEFAULT_END_DATE,
-            "variable": DEFAULT_VARIABLE,
-            "depth": str(DEFAULT_DEPTH),
-            "strip": DEFAULT_STRIP,
-            "loggerLocation": DEFAULT_LOGGER_LOCATION,
-            "granularity": DEFAULT_GRANULARITY,
-            "traceOption": PLOT_BASED_ON_OPTIONS[0]["value"],
-            "unitSystem": "us",
-        },
-        "years": years,
-        "strips": strips,
-        "variables": variables,
-        "depths": depths,
-        "loggerLocations": logger_locations,
-        "granularities": granularities,
-        "traceOptions": PLOT_BASED_ON_OPTIONS,
-        "depthMapping": sensor_depth_mapping,
-    }
-
-    return JSONResponse(response_data)
+# ---------------------------------------------------------------------
+# Bulk download directories (must match etl.py)
+# ---------------------------------------------------------------------
+DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
+LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
+WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
+# (You can later add ANCILLARY_DOWNLOADS_DIR here as well.)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _ensure_year_allowed(year: int) -> None:
+    """Raise 404 if year is not in configured YEARS."""
+    if year not in YEARS:
+        raise HTTPException(status_code=404, detail=f"Year {year} is not available.")
+
+
 def _round_ratio_columns(df: pd.DataFrame, decimals: int = 6) -> pd.DataFrame:
     """
     Rounds all ratio columns (containing '_ratio_') to a fixed number of decimals.
@@ -155,6 +113,7 @@ def _round_ratio_columns(df: pd.DataFrame, decimals: int = 6) -> pd.DataFrame:
     if ratio_cols:
         df_out[ratio_cols] = df_out[ratio_cols].round(decimals)
     return df_out
+
 
 def _select_trace_columns(
     df: pd.DataFrame,
@@ -310,15 +269,160 @@ def _add_unit_suffixes_for_download(df: pd.DataFrame, variable: str) -> pd.DataF
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
+# Bulk download endpoints (loggers + weather)
 # ---------------------------------------------------------------------------
 
+@main_router.get("/bulk_download/options")
+async def get_bulk_download_options():
+    """
+    Report which bulk-download ZIPs exist for each year.
+
+    Returns JSON:
+        {
+          "available": {
+            "2023": {"loggers": true, "weather": true},
+            "2024": {"loggers": true, "weather": true},
+            ...
+          }
+        }
+    """
+    available: Dict[str, Dict[str, bool]] = {}
+
+    for year in YEARS:
+        loggers_zip = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
+        weather_zip = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
+
+        available[str(year)] = {
+            "loggers": loggers_zip.exists(),
+            "weather": weather_zip.exists(),
+            # Later: "ancillary": <bool>
+        }
+
+    return JSONResponse({"available": available})
+
+
+@main_router.get("/bulk_download/loggers/{year}")
+async def download_loggers_zip(year: int):
+    """
+    Download the per-year 15-min logger data:
+
+        Biochar_Loggers_15min_{year}_USunits.zip
+    """
+    _ensure_year_allowed(year)
+
+    zip_path = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
+    if not zip_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Logger download ZIP not found for {year}.",
+        )
+
+    return FileResponse(
+        path=str(zip_path),
+        filename=zip_path.name,
+        media_type="application/zip",
+    )
+
+
+@main_router.get("/bulk_download/weather/{year}")
+async def download_weather_zip(year: int):
+    """
+    Download the per-year 15-min weather data:
+
+        Biochar_Weather_15min_{year}_USunits.zip
+    """
+    _ensure_year_allowed(year)
+
+    zip_path = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
+    if not zip_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Weather download ZIP not found for {year}.",
+        )
+
+    return FileResponse(
+        path=str(zip_path),
+        filename=zip_path.name,
+        media_type="application/zip",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Defaults / options endpoint
+# ---------------------------------------------------------------------------
+
+@api_router.get("/markdown_files")
+async def get_markdown_files():
+    """
+    Expose the Markdown ID → URL mapping to the frontend.
+
+    Source of truth is markdown_config.build_markdown_mapping().
+    """
+    mapping = build_markdown_mapping()
+    return JSONResponse(mapping)
+
+
+@api_router.get("/get_defaults_and_options")
+async def get_defaults_and_options():
+    # 1) Build each of the arrays the UI expects:
+    years = YEARS
+    strips = [
+        {"value": k, "label": strip_name_mapping[k]}
+        for k in strip_name_mapping
+    ]
+    variables = [
+        {"value": k, "label": variable_name_mapping[k]}
+        for k in variable_name_mapping
+    ]
+    depths = [
+        {"value": str(d), "label": sensor_depth_mapping[d]["us"]}
+        for d in sensor_depth_mapping
+    ]
+    logger_locations = [
+        {"value": k, "label": logger_location_mapping[k]}
+        for k in logger_location_mapping
+    ]
+    granularities = [
+        {"value": g, "label": granularity_name_mapping[g]}
+        for g in granularity_name_mapping
+    ]
+
+    # 2) Assemble the payload exactly as your UI code expects:
+    response_data = {
+        "defaults": {
+            "year": DEFAULT_YEAR,
+            "startDate": DEFAULT_START_DATE,
+            "endDate": DEFAULT_END_DATE,
+            "variable": DEFAULT_VARIABLE,
+            "depth": str(DEFAULT_DEPTH),
+            "strip": DEFAULT_STRIP,
+            "loggerLocation": DEFAULT_LOGGER_LOCATION,
+            "granularity": DEFAULT_GRANULARITY,
+            "traceOption": PLOT_BASED_ON_OPTIONS[0]["value"],
+            "unitSystem": "us",
+        },
+        "years": years,
+        "strips": strips,
+        "variables": variables,
+        "depths": depths,
+        "loggerLocations": logger_locations,
+        "granularities": granularities,
+        "traceOptions": PLOT_BASED_ON_OPTIONS,
+        "depthMapping": sensor_depth_mapping,
+    }
+
+    return JSONResponse(response_data)
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
 
 class PeriodSpec(BaseModel):
     code: str
     label: str
     start: str  # e.g. "2024-03-01"
-    end: str  # e.g. "2024-05-31"
+    end: str    # e.g. "2024-05-31"
 
 
 class GSeasonParams(BaseModel):
@@ -369,7 +473,6 @@ class PlotRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Plot routes
 # ---------------------------------------------------------------------------
-
 
 @api_router.post("/plot_raw")
 async def api_plot_raw(req: PlotRequest):
@@ -511,7 +614,6 @@ async def api_plot_ratio(req: PlotRequest):
 # Summary statistics + downloads
 # ---------------------------------------------------------------------------
 
-
 class SummaryStatsRequest(BaseModel):
     year: int
     variable: str
@@ -634,7 +736,10 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
     Expects JSON with keys:
       year, variable, strip, granularity, depth,
       startDate (optional), endDate (optional), unitSystem (optional)
-    Returns raw & ratio summary statistics.
+
+    Returns:
+      - raw_statistics: dict[label_key -> {min, mean, max, std}]
+      - ratio_statistics: dict[label_key -> {min, mean, max, std}]
     """
     required = ["year", "variable", "strip", "granularity", "depth"]
     missing = [k for k in required if data.get(k) is None]
@@ -644,37 +749,103 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
             detail=f"Missing parameter(s): {', '.join(missing)}",
         )
 
+    # --- Parse core params ------------------------------------------------
     try:
         year = int(data["year"])
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=400, detail=f"Invalid year: {data.get('year')}"
         )
-    variable = data["variable"]
-    strip = data["strip"]
-    granularity = data["granularity"]
+
+    variable = data["variable"]          # "VWC", "T", "EC", "SWC", ...
+    strip = data["strip"]                # e.g. "S1"
+    granularity = data["granularity"]    # "daily", "monthly", "gseason", ...
     try:
-        depth = int(data["depth"])
+        depth = int(data["depth"])       # 1, 2, 3
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=400, detail=f"Invalid depth: {data.get('depth')}"
         )
 
+    unit_system = data.get("unitSystem", "us")  # "us" | "metric"
     start = data.get("startDate")
     end = data.get("endDate")
 
+    # --- Load the logger summary frame for this year/granularity ----------
     try:
         df = load_logger_year(year, granularity)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    if start and end:
+    if df.empty:
+        return JSONResponse(
+            {
+                "year": year,
+                "variable": variable,
+                "strip": strip,
+                "granularity": granularity,
+                "depth": str(depth),
+                "unitSystem": unit_system,
+                "raw_statistics": {},
+                "ratio_statistics": {},
+            }
+        )
+
+    # Filter to the requested date window if provided
+    if start and end and "timestamp" in df.columns:
         df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
+    # ----------------------------------------------------------------------
+    # Special handling for SWC
+    # ----------------------------------------------------------------------
+    if variable == "SWC":
+        stats_raw: Dict[str, Dict[str, float]] = {}
+        stats_ratio: Dict[str, Dict[str, float]] = {}
+
+        # Choose the correct SWC volume column prefix based on unit system
+        vol_prefix = "SWC_vol_L" if unit_system == "metric" else "SWC_vol_gal"
+
+        # logger_location_mapping keys are typically "T", "M", "B"
+        for loc_key in logger_location_mapping.keys():
+            vol_col = f"{vol_prefix}_{strip}_{loc_key}_{depth}"
+            if vol_col not in df.columns:
+                continue
+
+            series = pd.to_numeric(df[vol_col], errors="coerce").dropna()
+            if series.empty:
+                continue
+
+            label_key = f"SWC_{depth}_raw_{strip}_{loc_key}"
+            stats_raw[label_key] = {
+                "min": float(series.min()),
+                "mean": float(series.mean()),
+                "max": float(series.max()),
+                # std over the time window; 0.0 if only one point
+                "std": float(series.std(ddof=1)) if len(series) > 1 else 0.0,
+            }
+
+        # No SWC ratios at this stage
+        return JSONResponse(
+            {
+                "year": year,
+                "variable": variable,
+                "strip": strip,
+                "granularity": granularity,
+                "depth": str(depth),
+                "unitSystem": unit_system,
+                "raw_statistics": stats_raw,
+                "ratio_statistics": stats_ratio,
+            }
+        )
+
+    # ----------------------------------------------------------------------
+    # Default path for VWC, T, EC, etc.
+    # ----------------------------------------------------------------------
     stats_raw, stats_ratio = compute_summary_statistics(
         df, variable, strip, str(depth)
     )
 
+    # Temperature ratios are not meaningful; strip them out
     if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
         stats_ratio = {}
 
@@ -685,6 +856,7 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
             "strip": strip,
             "granularity": granularity,
             "depth": str(depth),
+            "unitSystem": unit_system,
             "raw_statistics": stats_raw,
             "ratio_statistics": stats_ratio,
         }
@@ -695,11 +867,10 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
 # Markdown + custom gseason pages
 # ---------------------------------------------------------------------------
 
-
 @main_router.get("/markdown/{filename}")
 async def serve_markdown(filename: str):
     """
-    Serves markdown from: biochar_app/templates/markdown/<filename>
+    Serves markdown from: biochar_app/markdown/<filename>
     """
     md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown")
     fullpath = os.path.abspath(os.path.join(md_dir, filename))
@@ -723,7 +894,6 @@ async def custom_gseason(request: Request):
 # ---------------------------------------------------------------------------
 # Trace download routes (raw / ratio / all)
 # ---------------------------------------------------------------------------
-
 
 @main_router.get("/download_raw_data")
 async def download_raw_data(
@@ -837,11 +1007,6 @@ async def download_all_data(
                 status_code=404,
                 detail=f"No growing-season data available for {year}.",
             )
-
-        # df_gs columns (per get_flat_gseason_summary docstring):
-        #   period_code, variable, strip, depth, logger_location,
-        #   raw_min, raw_mean, raw_max, raw_std,
-        #   ratio_min, ratio_mean, ratio_max, ratio_std
 
         df_sel = df_gs.copy()
 

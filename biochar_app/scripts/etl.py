@@ -7,15 +7,19 @@ Full ETL including growing-season (gseason) summaries:
   - Convert VWC fractions → percent (×100) deterministically
   - Mask VWC > 150% → NaN
   - Compute SWC cylinder volumes & logger‐ratios
+  - Compute ΔT (biochar − control) and ΔSWC volumes (biochar − control)
   - Resample to 15 min / hourly / daily / monthly; write Parquet + Parquet_ratios
   - Build DEFAULT gseason summaries from daily data (with cross-year support)
   - Fetch CoAgMet 5 min weather; clean precip increments; write resampled Parquet
+  - Build bulk-download ZIPs for 15-min logger and weather data
 """
 
 import os
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+from zipfile import ZipFile
+from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -33,11 +37,37 @@ from biochar_app.scripts.config import (
     UNIT_CONVERSIONS,
     cylinder_volume_m3,
     DEFAULT_GSEASON_PERIODS,
+    # NEW:
+    COLLECT_PERIOD,
+    COAG_STATION,
+    COAGMET_VARIABLE_MAP,
+    DEFAULT_TIMEZONE,
+    DEFAULT_UNITS,
 )
 from utils import calculate_ratios  # ensure this exists in your project
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Strip pairing assumptions for biochar vs. non-biochar comparisons
+#   - First element = "treated" (biochar)
+#   - Second element = "control" (no biochar)
+# ---------------------------------------------------------------------------
+STRIP_PAIRS = [
+    ("S1", "S2"),
+    ("S3", "S4"),
+]
+
+# ---------------------------------------------------------------------------
+# Download directories for bulk 15-min ZIPs (loggers + weather)
+#   These live alongside PARQUET_DIR in a sibling "downloads" folder.
+# ---------------------------------------------------------------------------
+DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
+LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
+WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
+LOGGER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ============================= Common helpers ============================= #
@@ -201,6 +231,98 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_l
                 df_copy[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
 
+    logger.info("💧 Added SWC cylinder volumes (L & gallons) per sensor")
+    return df_copy
+
+
+def add_temperature_differences(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add ΔT columns for each pair of strips, depth, and logger location.
+
+    For each (treated, control) in STRIP_PAIRS, compute:
+
+        Tdiff_{depth}_{treated}_{control}_{loc}
+            = T_{depth}_raw_{treated}_{loc} − T_{depth}_raw_{control}_{loc}
+
+    Units: °F (since convert_soil_t_to_fahrenheit() has already been applied).
+    """
+    df_copy = df.copy()
+    new_cols = 0
+
+    for treated, control in STRIP_PAIRS:
+        for loc in LOGGER_LOCATIONS:
+            for depth in ["1", "2", "3"]:
+                col_treated = f"T_{depth}_raw_{treated}_{loc}"
+                col_control = f"T_{depth}_raw_{control}_{loc}"
+                if col_treated not in df_copy.columns or col_control not in df_copy.columns:
+                    continue
+
+                diff_col = f"Tdiff_{depth}_{treated}_{control}_{loc}"
+                df_copy[diff_col] = (
+                    pd.to_numeric(df_copy[col_treated], errors="coerce")
+                    - pd.to_numeric(df_copy[col_control], errors="coerce")
+                )
+                new_cols += 1
+
+    if new_cols:
+        logger.info(f"🌡 Added {new_cols} ΔT columns (biochar − control)")
+    else:
+        logger.info("🌡 No ΔT columns added (required T_*_raw_* columns missing)")
+
+    return df_copy
+
+
+def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add ΔSWC volume columns (gallons & liters) for each strip pair, depth,
+    and logger location.
+
+    For each (treated, control) in STRIP_PAIRS, compute:
+
+        SWCdiff_gal_{treated}_{control}_{loc}_{depth}
+            = SWC_vol_gal_{treated}_{loc}_{depth}
+              − SWC_vol_gal_{control}_{loc}_{depth}
+
+        SWCdiff_L_{treated}_{control}_{loc}_{depth}
+            = SWC_vol_L_{treated}_{loc}_{depth}
+              − SWC_vol_L_{control}_{loc}_{depth}
+
+    Units: gallons / liters per sensor cylinder.
+    """
+    df_copy = df.copy()
+    new_cols = 0
+
+    for treated, control in STRIP_PAIRS:
+        for loc in LOGGER_LOCATIONS:
+            for depth in ["1", "2", "3"]:
+                col_treated_gal = f"SWC_vol_gal_{treated}_{loc}_{depth}"
+                col_control_gal = f"SWC_vol_gal_{control}_{loc}_{depth}"
+                col_treated_L = f"SWC_vol_L_{treated}_{loc}_{depth}"
+                col_control_L = f"SWC_vol_L_{control}_{loc}_{depth}"
+
+                # Gallons
+                if col_treated_gal in df_copy.columns and col_control_gal in df_copy.columns:
+                    diff_col_gal = f"SWCdiff_gal_{treated}_{control}_{loc}_{depth}"
+                    df_copy[diff_col_gal] = (
+                        pd.to_numeric(df_copy[col_treated_gal], errors="coerce")
+                        - pd.to_numeric(df_copy[col_control_gal], errors="coerce")
+                    )
+                    new_cols += 1
+
+                # Liters
+                if col_treated_L in df_copy.columns and col_control_L in df_copy.columns:
+                    diff_col_L = f"SWCdiff_L_{treated}_{control}_{loc}_{depth}"
+                    df_copy[diff_col_L] = (
+                        pd.to_numeric(df_copy[col_treated_L], errors="coerce")
+                        - pd.to_numeric(df_copy[col_control_L], errors="coerce")
+                    )
+                    new_cols += 1
+
+    if new_cols:
+        logger.info(f"💧 Added {new_cols} ΔSWC volume columns (biochar − control)")
+    else:
+        logger.info("💧 No ΔSWC columns added (required SWC_vol_* columns missing)")
+
     return df_copy
 
 
@@ -347,6 +469,123 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
     logger.info(f"✅ Summary gseason (DEFAULT periods): {out_path.name}")
 
 
+# ============================= Bulk-download helpers ============================= #
+
+def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
+    """
+    Build a per-year ZIP for 15-min logger data:
+
+        Biochar_Loggers_15min_{year}_USunits.zip
+
+    containing one CSV per logger (S1T, S1M, ..., S4B) plus a README.
+    Only includes columns that belong to that logger (no cross-strip
+    ΔT/ΔSWC or ratio columns).
+    """
+    zip_path = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
+
+    # Ensure timestamp is a column
+    df = df_15min.copy()
+    if "timestamp" not in df.columns:
+        df = df.reset_index()
+    if "timestamp" not in df.columns:
+        raise ValueError("write_logger_download_zip: df_15min must have 'timestamp' as index or column")
+
+    readme_lines: List[str] = [
+        f"Biochar Fruita CSU Experiment - Logger 15-min Data ({year})",
+        "",
+        "Contents:",
+    ]
+
+    # Open ZIP and stream per-logger CSVs into it
+    with ZipFile(zip_path, mode="w") as zf:
+        for strip in STRIPS:
+            for loc in LOGGER_LOCATIONS:
+                tag = f"{strip}{loc}"  # e.g., S1T
+                suffix = f"_{strip}_{loc}"
+
+                # Columns that belong to this logger: timestamp + any ending with _{strip}_{loc}
+                cols = [
+                    c for c in df.columns
+                    if c == "timestamp" or c.endswith(suffix)
+                ]
+                # Require at least one non-timestamp column
+                if len(cols) <= 1:
+                    continue
+
+                sub = df[cols].copy()
+                csv_name = f"{tag}_15min_{year}_USunits.csv"
+
+                buf = StringIO()
+                sub.to_csv(buf, index=False)
+                zf.writestr(csv_name, buf.getvalue())
+
+                readme_lines.append(f"  - {csv_name}: 15-min data for logger {tag}")
+
+        readme_lines.extend(
+            [
+                "",
+                "Notes:",
+                "  - All timestamps are naive datetimes interpreted as America/Denver local time.",
+                "  - Units are US customary (e.g., VWC as %, temperature in °F, volumes in gallons/L).",
+                "  - Columns with suffix '..._{strip}_{loc}' belong to that logger's sensors.",
+                "  - Cross-strip comparison variables (e.g., Tdiff_*, SWCdiff_*) and",
+                "    derived strip-to-strip ratios are not included here.",
+            ]
+        )
+        zf.writestr(f"README_Logger_15min_{year}.txt", "\n".join(readme_lines))
+
+    logger.info(f"📦 Wrote logger download ZIP: {zip_path.name}")
+
+
+def write_weather_download_zip(
+    year: int,
+    df_15min: pd.DataFrame,
+    download_url: str = "",
+    builder_url: str = "",
+) -> None:
+    """
+    Build per-year ZIP for 15-min weather data:
+
+        Biochar_Weather_15min_{year}_USunits.zip
+
+    containing:
+      - weather_15min_{year}_USunits.csv
+      - README_Weather_15min_{year}.txt including CoAgMet URLs
+    """
+    zip_path = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
+
+    df = df_15min.copy()
+    if "timestamp" not in df.columns:
+        df = df.reset_index()
+    if "timestamp" not in df.columns:
+        raise ValueError("write_weather_download_zip: df_15min must have 'timestamp' as index or column")
+
+    # CSV content
+    csv_buf = StringIO()
+    df.to_csv(csv_buf, index=False)
+
+    # README with URLs (placeholders OK; can be customized via arguments)
+    readme_lines: List[str] = [
+        f"Biochar Fruita CSU Experiment - 15-min Weather Data ({year})",
+        "",
+        "Source:",
+        f"  - Direct CoAgMet-style download URL: {download_url or '[ADD_DOWNLOAD_URL_HERE]'}",
+        f"  - CoAgMet builder page (construct custom URLs): {builder_url or '[ADD_BUILDER_URL_HERE]'}",
+        "",
+        "Notes:",
+        "  - Timestamps are naive datetimes interpreted as America/Denver local time.",
+        "  - Units are US customary (e.g., precip_in, temp_air_degF) with derived",
+        "    metric columns (precip_mm, temp_air_degC) where present.",
+        "  - Values may have been cleaned (e.g., -999 → 0 for precip, negatives clipped).",
+    ]
+
+    with ZipFile(zip_path, mode="w") as zf:
+        zf.writestr(f"weather_15min_{year}_USunits.csv", csv_buf.getvalue())
+        zf.writestr(f"README_Weather_15min_{year}.txt", "\n".join(readme_lines))
+
+    logger.info(f"📦 Wrote weather download ZIP: {zip_path.name}")
+
+
 # ============================= Aggregation (loggers) ============================= #
 
 def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
@@ -355,6 +594,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
       - raw‐logger + raw‐logger_ratios
       - fixed‐frequency summaries + *_ratios
       - gseason summary built from daily data (using DEFAULT_GSEASON_PERIODS)
+      - bulk-download ZIP for 15-min logger data
     """
     year_dir = Path(PARQUET_DIR) / str(year)
     year_dir.mkdir(parents=True, exist_ok=True)
@@ -369,7 +609,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
     # 2) Fixed‐frequency summaries
-    sensor_prefixes = ("VWC_", "T_", "EC_", "SWC_")
+    sensor_prefixes = ("VWC_", "T_", "EC_", "SWC_", "Tdiff_", "SWCdiff_")
     sensor_cols = [
         c for c in df.columns if any(c.startswith(pref) for pref in sensor_prefixes)
     ]
@@ -398,6 +638,11 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         # 👉 build DEFAULT gseason summary off the daily frame
         if freq == "daily":
             write_gseason_summary(year, df_s)
+
+        # 👉 build 15-min bulk-download ZIP for loggers
+        if freq == "15min":
+            # df_s currently has a 'timestamp' column; set index for helper
+            write_logger_download_zip(year, df_s.set_index("timestamp"))
 
         # b) summary ratios
         df_s_ratio = calculate_ratios(df_s.set_index("timestamp"))
@@ -438,7 +683,7 @@ def generate_summaries(years: List[int]) -> None:
     """
     Run the full ETL for each year in `years`:
       - logger data → merge, clean, aggregate (+ DEFAULT gseason)
-      - weather data → fetch, clean, aggregate
+      - weather data → fetch, clean, aggregate (+ 15-min download ZIP)
     """
     for year in years:
         logger.info(f"🌱 Starting ETL for {year}")
@@ -474,6 +719,8 @@ def generate_summaries(years: List[int]) -> None:
 
             df = convert_soil_t_to_fahrenheit(df)
             df = add_swc_cylinder_volumes(df)
+            df = add_temperature_differences(df)
+            df = add_swc_differences(df)
             df = df.set_index("timestamp").sort_index()
             aggregate_and_write(year, df)
 
@@ -501,6 +748,8 @@ def generate_summaries(years: List[int]) -> None:
         )
 
         weather_base = Path(PARQUET_DIR) / "summary" / "weather"
+        dfw_15min_for_zip: Optional[pd.DataFrame] = None
+
         for freq, code in GRANULARITIES:
             if code is None:
                 continue
@@ -514,6 +763,37 @@ def generate_summaries(years: List[int]) -> None:
             fn = f"{year}_{freq}.parquet"
             dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")
+
+            if freq == "15min":
+                dfw_15min_for_zip = dfr
+
+        # After we have written all weather summaries for this year, build ZIP if 15-min exists
+        if dfw_15min_for_zip is not None:
+            # Rebuild the exact CoAgMet URL used (same logic as in fetch_weather_data)
+            start_ts = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE)
+            year_end = pd.Timestamp(f"{year}-12-31 23:59", tz=DEFAULT_TIMEZONE)
+            now_ts = pd.Timestamp.now(tz=DEFAULT_TIMEZONE).floor("min")
+            end_ts = min(year_end, now_ts)
+
+            start_iso = start_ts.strftime("%Y-%m-%dT%H:%M")
+            end_iso = end_ts.strftime("%Y-%m-%dT%H:%M")
+
+            fields_param = ",".join(COAGMET_VARIABLE_MAP.keys())
+            coag_download_url = (
+                f"https://coagmet.colostate.edu/data/{COLLECT_PERIOD}/{COAG_STATION}.csv"
+                f"?header=yes"
+                f"&fields={fields_param}"
+                f"&from={start_iso}&to={end_iso}"
+                f"&tz=co&units={DEFAULT_UNITS}&dateFmt=iso"
+            )
+            builder_url = "https://coagmet.colostate.edu/data/url-builder"
+
+            write_weather_download_zip(
+                year,
+                dfw_15min_for_zip,
+                download_url=coag_download_url,
+                builder_url=builder_url,
+            )
 
     logger.info("🎉 ETL complete.")
 

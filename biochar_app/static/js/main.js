@@ -8,6 +8,8 @@ import {
   downloadSummaryData,
 } from "./downloads.js";
 
+import { initBulkDownloadTab } from "./downloads.js";
+
 // ✅ Expose download helpers for inline onclick handlers in index.html
 window.downloadTraceData   = downloadTraceData;
 window.downloadPlot        = downloadPlot;
@@ -88,10 +90,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Reset date range when the year changes
   document
-    .getElementById("main-year")
-    ?.addEventListener("change", (e) =>
-      updateStartAndEndDatesFromYear(e.target.value)
-    );
+      .getElementById("main-year")
+      ?.addEventListener("change", (e) =>
+          updateStartAndEndDatesFromYear(e.target.value)
+      );
 
   // Make sure the depth labels match the current unit system
   updateDepthLabels(window.unitSystem);
@@ -101,11 +103,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.table(defaults);
     if (window.depthMapping) {
       console.table(
-        Object.entries(window.depthMapping).map(([depth, map]) => ({
-          Depth: depth,
-          US: map.us,
-          Metric: map.metric,
-        }))
+          Object.entries(window.depthMapping).map(([depth, map]) => ({
+            Depth: depth,
+            US: map.us,
+            Metric: map.metric,
+          }))
       );
     }
   });
@@ -137,9 +139,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (markdownFiles && Object.keys(markdownFiles).length > 0) {
     debugLog("📖 Loading markdown snippets…");
     await Promise.all(
-      Object.entries(markdownFiles).map(([id, path]) =>
-        loadMarkdownContent(id, path)
-      )
+        Object.entries(markdownFiles).map(([id, path]) =>
+            loadMarkdownContent(id, path)
+        )
     );
   } else {
     console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
@@ -151,7 +153,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 3) Initialize the Custom Season editor (if present)
   // ----------------------------------------------------
   const gseasonContent = document.getElementById("gseason-content");
-if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
-  initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
-}
+  if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
+    initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
+  }
+  try {
+    await initBulkDownloadTab();
+  } catch (err) {
+    console.error("Failed to initialize Bulk Downloads tab:", err);
+  }
 });
