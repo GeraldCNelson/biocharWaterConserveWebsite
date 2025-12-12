@@ -235,7 +235,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
  * Kick off both of your main‐tab plots in sequence.
  */
 export async function renderMainPlots() {
-  console.group("▶️ Rendering Main Data Display plots…");
+  console.group("▶️ Rendering Interactive Plots…");
   try {
     // reset in case we re-render everything
     zoomHandlersAttached = false;

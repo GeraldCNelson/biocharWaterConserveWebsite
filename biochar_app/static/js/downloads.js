@@ -8,7 +8,7 @@ import { getDropdownValue, getElementByIdSafe, showAlert } from "./ui_utils.js";
 window.latestSummaryStats = window.latestSummaryStats || {};
 
 // Fixed-size export for high-resolution images (pixels)
-const FIXED_EXPORT_WIDTH = 2000;
+const FIXED_EXPORT_WIDTH  = 2000;
 const FIXED_EXPORT_HEIGHT = 1200;
 
 // ----------------------------------------------------
@@ -17,11 +17,11 @@ const FIXED_EXPORT_HEIGHT = 1200;
 function downloadTraceData(type) {
   console.log(`📥 Downloading ${type} data...`);
 
-  const year = getDropdownValue("main-year");
-  const granularity = getDropdownValue("main-granularity");
-  const variable = getDropdownValue("main-variable");
-  const strip = getDropdownValue("main-strip");
-  const depth = getDropdownValue("main-depth");
+  const year           = getDropdownValue("main-year");
+  const granularity    = getDropdownValue("main-granularity");
+  const variable       = getDropdownValue("main-variable");
+  const strip          = getDropdownValue("main-strip");
+  const depth          = getDropdownValue("main-depth");
   const loggerLocation = getDropdownValue("main-loggerLocation");
 
   const params = new URLSearchParams({
@@ -49,6 +49,32 @@ function downloadTraceData(type) {
   window.location.href = `${route}?${params}`;
 }
 
+/**
+ * Download a ZIP bundle for the main data tab
+ * (CSV(s) + README) via /download_all_data_zip.
+ */
+function downloadTraceBundleZip() {
+  console.log("📥 Downloading ZIP bundle for main data...");
+
+  const year           = getDropdownValue("main-year");
+  const granularity    = getDropdownValue("main-granularity");
+  const variable       = getDropdownValue("main-variable");
+  const strip          = getDropdownValue("main-strip");
+  const depth          = getDropdownValue("main-depth");
+  const loggerLocation = getDropdownValue("main-loggerLocation");
+
+  const params = new URLSearchParams({
+    year,
+    granularity,
+    variable,
+    strip,
+    depth,
+    loggerLocation,
+  }).toString();
+
+  window.location.href = `/download_all_data_zip?${params}`;
+}
+
 // ----------------------------------------------------
 //  Plot image download (raw / ratio, png / jpeg)
 //     mode = "screen" (match browser size)
@@ -57,12 +83,11 @@ function downloadTraceData(type) {
 function downloadPlot(plotType, format, mode = "screen") {
   console.log(`📡 Downloading ${plotType} plot as ${format} (${mode})...`);
 
-  const year = getDropdownValue("main-year") || "unknown";
-  const variable = getDropdownValue("main-variable") || "unknown";
-  const strip = getDropdownValue("main-strip") || "unknown";
-  const loggerLocation =
-    getDropdownValue("main-loggerLocation") || "unknown";
-  const depth = (getDropdownValue("main-depth") || "unknown").replace(" ", "");
+  const year           = getDropdownValue("main-year")           || "unknown";
+  const variable       = getDropdownValue("main-variable")       || "unknown";
+  const strip          = getDropdownValue("main-strip")          || "unknown";
+  const loggerLocation = getDropdownValue("main-loggerLocation") || "unknown";
+  const depth          = (getDropdownValue("main-depth") || "unknown").replace(" ", "");
 
   const filename = `${plotType}_plot_${year}_${variable}_${strip}_${loggerLocation}_${depth}_${mode}`;
   console.log(`📂 Generated filename: ${filename}.${format}`);
@@ -81,34 +106,35 @@ function downloadPlot(plotType, format, mode = "screen") {
 
   if (mode === "fixed") {
     // Static high-resolution export
-    exportWidth = FIXED_EXPORT_WIDTH;
+    exportWidth  = FIXED_EXPORT_WIDTH;
     exportHeight = FIXED_EXPORT_HEIGHT;
-    scale = 2;
+    scale        = 2;
   } else {
     // Match current browser size (WYSIWYG)
     const bounds = plotElement.getBoundingClientRect();
-    exportWidth = Math.max(800, Math.round(bounds.width));
+    exportWidth  = Math.max(800, Math.round(bounds.width));
     exportHeight = Math.max(400, Math.round(bounds.height));
   }
 
-  // noinspection JSUnresolvedFunction
   Plotly.downloadImage(plotElement, {
     format,
     filename,
-    width: exportWidth,
+    width:  exportWidth,
     height: exportHeight,
     scale,
   });
 }
 
 // ----------------------------------------------------
-//  Summary tab downloads (already using fetch + blob)
+//  Summary tab downloads (via /api/download_summary_data)
 // ----------------------------------------------------
 async function downloadSummaryData(type) {
-  const year = getDropdownValue("summary-year");
-  const variable = getDropdownValue("summary-variable");
-  const strip = getDropdownValue("summary-strip");
-  const depth = getDropdownValue("summary-depth");
+  console.log(`📥 Downloading summary data (${type})...`);
+
+  const year        = getDropdownValue("summary-year");
+  const variable    = getDropdownValue("summary-variable");
+  const strip       = getDropdownValue("summary-strip");
+  const depth       = getDropdownValue("summary-depth");
   const granularity = getDropdownValue("summary-granularity");
 
   const payload = {
@@ -120,7 +146,7 @@ async function downloadSummaryData(type) {
     type, // "raw", "ratio", or "all"
   };
 
-  const stats = window.latestSummaryStats || {};
+  const stats    = window.latestSummaryStats || {};
   const isSeason = granularity === "gseason";
 
   if (isSeason) {
@@ -128,13 +154,13 @@ async function downloadSummaryData(type) {
       return showAlert("No seasonal summary statistics available.");
     }
   } else {
-    const hasRaw = stats.raw && Object.keys(stats.raw).length > 0;
+    const hasRaw   = stats.raw && Object.keys(stats.raw).length > 0;
     const hasRatio = stats.ratio && Object.keys(stats.ratio).length > 0;
 
     if (
-      (type === "raw" && !hasRaw) ||
+      (type === "raw"   && !hasRaw) ||
       (type === "ratio" && !hasRatio) ||
-      (type === "all" && !hasRaw && !hasRatio)
+      (type === "all"   && !hasRaw && !hasRatio)
     ) {
       return showAlert("No summary statistics available for download.");
     }
@@ -144,15 +170,15 @@ async function downloadSummaryData(type) {
     payload.summaryStats = isSeason
       ? stats.gseason_stats
       : type === "raw"
-      ? stats.raw
-      : type === "ratio"
-      ? stats.ratio
-      : { ...stats.raw, ...stats.ratio };
+        ? stats.raw
+        : type === "ratio"
+          ? stats.ratio
+          : { ...stats.raw, ...stats.ratio };
 
     const response = await fetch("/api/download_summary_data", {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body:    JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -161,12 +187,13 @@ async function downloadSummaryData(type) {
     }
 
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    const url  = URL.createObjectURL(blob);
 
+    // Backend returns a ZIP (raw / ratio / all) plus README
     const fileName = `summary_${granularity}_${type}.zip`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
+    const a        = document.createElement("a");
+    a.href         = url;
+    a.download     = fileName;
     a.click();
     URL.revokeObjectURL(url);
   } catch (err) {
@@ -208,17 +235,17 @@ export async function initBulkDownloadTab() {
 
   if (!years.length) {
     yearSelect.innerHTML = `<option value="">No years available</option>`;
-    loggersBtn.disabled = true;
-    weatherBtn.disabled = true;
+    loggersBtn.disabled  = true;
+    weatherBtn.disabled  = true;
     return;
   }
 
   // Populate the select
   yearSelect.innerHTML = "";
   years.forEach((y) => {
-    const opt = document.createElement("option");
-    opt.value = y;
-    opt.textContent = y;
+    const opt        = document.createElement("option");
+    opt.value        = y;
+    opt.textContent  = y;
     yearSelect.appendChild(opt);
   });
 
@@ -226,7 +253,7 @@ export async function initBulkDownloadTab() {
    * Enable/disable buttons based on selected year availability.
    */
   function updateButtons() {
-    const y = yearSelect.value;
+    const y     = yearSelect.value;
     const avail = availableByYear[y] || {};
     loggersBtn.disabled = !Boolean(avail["loggers"]);
     weatherBtn.disabled = !Boolean(avail["weather"]);
@@ -254,4 +281,9 @@ export async function initBulkDownloadTab() {
 // ----------------------------------------------------
 //  ES module exports (for other JS files)
 // ----------------------------------------------------
-export { downloadTraceData, downloadPlot, downloadSummaryData };
+export {
+  downloadTraceData,
+  downloadTraceBundleZip,
+  downloadPlot,
+  downloadSummaryData,
+};

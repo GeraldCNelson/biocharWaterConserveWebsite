@@ -488,15 +488,31 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
     if "timestamp" not in df.columns:
         df = df.reset_index()
     if "timestamp" not in df.columns:
-        raise ValueError("write_logger_download_zip: df_15min must have 'timestamp' as index or column")
+        raise ValueError(
+            "write_logger_download_zip: df_15min must have 'timestamp' as index or column"
+        )
 
+    # We’ll accumulate file descriptions as we go, then write a README at the end.
     readme_lines: List[str] = [
-        f"Biochar Fruita CSU Experiment - Logger 15-min Data ({year})",
+        "Biochar Fruita CSU Experiment – Logger 15-minute Data",
+        f"Year: {year}",
         "",
-        "Contents:",
+        "Project:",
+        "  Field experiment with four strips (S1–S4) and three logger locations",
+        "  per strip: Top (T), Middle (M), Bottom (B).",
+        "",
+        "Files in this ZIP",
+        "-----------------",
+        "  One CSV per datalogger location (e.g., S1T, S1M, S1B, …, S4B).",
+        "  Each CSV contains a 15-minute time series for all depths (1, 2, 3)",
+        "  in US customary units.",
+        "",
+        "CSV files:",
     ]
 
-    # Open ZIP and stream per-logger CSVs into it
+    from io import StringIO
+    from zipfile import ZipFile
+
     with ZipFile(zip_path, mode="w") as zf:
         for strip in STRIPS:
             for loc in LOGGER_LOCATIONS:
@@ -521,17 +537,34 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
 
                 readme_lines.append(f"  - {csv_name}: 15-min data for logger {tag}")
 
+        # Add general notes and column conventions
         readme_lines.extend(
             [
                 "",
-                "Notes:",
-                "  - All timestamps are naive datetimes interpreted as America/Denver local time.",
-                "  - Units are US customary (e.g., VWC as %, temperature in °F, volumes in gallons/L).",
-                "  - Columns with suffix '..._{strip}_{loc}' belong to that logger's sensors.",
-                "  - Cross-strip comparison variables (e.g., Tdiff_*, SWCdiff_*) and",
-                "    derived strip-to-strip ratios are not included here.",
+                "Column naming convention",
+                "------------------------",
+                "  timestamp                         : local time (America/Denver), 15-min step",
+                "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
+                "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
+                "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
+                "  SWC_vol_L_<strip>_<loc>_<depth>   : soil water content volume (liters)",
+                "  SWC_vol_gal_<strip>_<loc>_<depth> : soil water content volume (gallons)",
+                "",
+                "Notes",
+                "-----",
+                "  - All timestamps are timezone-naive and should be interpreted as",
+                "    America/Denver local time.",
+                "  - Units are US customary (VWC as %, temperature in °F, volumes in",
+                "    gallons/L).",
+                "  - Extreme placeholder values from the loggers (e.g., −999) have been",
+                "    converted to NaN.",
+                "  - VWC values above 150% have been masked to NaN.",
+                "  - Cross-strip comparison variables (ΔT, ΔSWC, ratio columns, etc.)",
+                "    are not included in these per-logger CSVs. They are available in",
+                "    the aggregated Parquet summary files used by the web app.",
             ]
         )
+
         zf.writestr(f"README_Logger_15min_{year}.txt", "\n".join(readme_lines))
 
     logger.info(f"📦 Wrote logger download ZIP: {zip_path.name}")
@@ -550,7 +583,7 @@ def write_weather_download_zip(
 
     containing:
       - weather_15min_{year}_USunits.csv
-      - README_Weather_15min_{year}.txt including CoAgMet URLs
+      - README_Weather_15min_{year}.txt with URLs and metadata
     """
     zip_path = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
@@ -558,25 +591,50 @@ def write_weather_download_zip(
     if "timestamp" not in df.columns:
         df = df.reset_index()
     if "timestamp" not in df.columns:
-        raise ValueError("write_weather_download_zip: df_15min must have 'timestamp' as index or column")
+        raise ValueError(
+            "write_weather_download_zip: df_15min must have 'timestamp' as index or column"
+        )
+
+    from io import StringIO
+    from zipfile import ZipFile
 
     # CSV content
     csv_buf = StringIO()
     df.to_csv(csv_buf, index=False)
 
-    # README with URLs (placeholders OK; can be customized via arguments)
+    # README: keep your existing header but flesh it out
     readme_lines: List[str] = [
         f"Biochar Fruita CSU Experiment - 15-min Weather Data ({year})",
         "",
         "Source:",
         f"  - Direct CoAgMet-style download URL: {download_url or '[ADD_DOWNLOAD_URL_HERE]'}",
-        f"  - CoAgMet builder page (construct custom URLs): {builder_url or '[ADD_BUILDER_URL_HERE]'}",
+        f"  - CoAgMet builder page (construct custom URLs): {builder_url or 'https://coagmet.colostate.edu/data/url-builder'}",
+        "",
+        "Files in this ZIP",
+        "-----------------",
+        f"  - weather_15min_{year}_USunits.csv : 15-minute time series for the full year",
+        "    (or up to the ETL run date).",
+        "",
+        "Column naming convention",
+        "------------------------",
+        "  timestamp              : local time (America/Denver), 15-min step",
+        "  temp_air_degF          : air temperature",
+        "  rh_pct                 : relative humidity (%)",
+        "  dewpoint_degF          : dewpoint temperature",
+        "  vp_kPa                 : vapor pressure (kPa)",
+        "  solarRad_Wm2           : solar radiation (W/m²)",
+        "  precip_in              : precipitation increments (inches per 15-min bin)",
+        "  windSpeed_mph          : wind speed (mph)",
+        "  windDir_deg            : wind direction (degrees)",
+        "  soil_temp_2in_degF     : 2-inch soil temperature (°F)",
+        "  soil_temp_6in_degF     : 6-inch soil temperature (°F)",
         "",
         "Notes:",
         "  - Timestamps are naive datetimes interpreted as America/Denver local time.",
-        "  - Units are US customary (e.g., precip_in, temp_air_degF) with derived",
-        "    metric columns (precip_mm, temp_air_degC) where present.",
-        "  - Values may have been cleaned (e.g., -999 → 0 for precip, negatives clipped).",
+        "  - Units are US customary (e.g., precip_in, temp_air_degF); you may also see",
+        "    derived metric columns (precip_mm, temp_air_degC) where present.",
+        "  - Precipitation values have been cleaned so that negatives are clipped to 0",
+        "    and typical CoAgMet missing-value codes (e.g., -999) are treated as NaN.",
     ]
 
     with ZipFile(zip_path, mode="w") as zf:
@@ -585,6 +643,95 @@ def write_weather_download_zip(
 
     logger.info(f"📦 Wrote weather download ZIP: {zip_path.name}")
 
+def build_logger_zip_readme(year: int) -> str:
+    return f"""Biochar Water Conservation Experiment – Fruita, CO
+ Logger data (15-minute time step)
+
+ Year: {year}
+ Project: CSU Biochar Water Conservation field experiment (four strips, S1–S4)
+ Units: US customary
+     • Volumetric water content (VWC): percent (%)
+     • Soil temperature (T): degrees Fahrenheit (°F)
+     • Electrical conductivity (EC): deciSiemens per meter (dS/m)
+     • Soil water content (SWC volumes): liters (L) and gallons (gal)
+     • Timestamps: local time (America/Denver), timezone-naive
+
+ Files in this ZIP
+ -----------------
+     • One CSV per datalogger location (e.g., S1T, S1M, S1B, …, S4B).
+     • Each CSV contains a 15-minute time series for all depths (1, 2, 3).
+
+ Column naming convention
+ ------------------------
+     timestamp                      : local time (America/Denver), 15-minute step
+     VWC_<depth>_raw_<strip>_<loc>  : VWC at depth (1,2,3), strip S1–S4, location T/M/B
+     T_<depth>_raw_<strip>_<loc>    : soil temperature at depth (1,2,3)
+     EC_<depth>_raw_<strip>_<loc>   : electrical conductivity at depth (1,2,3)
+     SWC_vol_L_<strip>_<loc>_<depth>: soil water content as cylinder volume (liters)
+     SWC_vol_gal_<strip>_<loc>_<depth>: soil water content as cylinder volume (gallons)
+
+     Additional columns may include biochar–control differences (ΔT, ΔSWC).
+
+ Data caveats
+ ------------
+     • Data are research-grade and may contain gaps or sensor artifacts.
+     • Extreme placeholder values from the dataloggers (e.g. -999) have been
+       converted to NaN during processing.
+     • VWC values above 150% have been masked to NaN.
+
+ For details on processing and aggregation, see the “Technical Details” tab
+ in the Biochar dashboard or the project documentation.
+ """
+
+def build_weather_zip_readme(year: int) -> str:
+    return f"""Biochar Water Conservation Experiment – Fruita, CO
+Weather data (15-minute time step)
+
+Year: {year}
+Station: CoAgMet {COAG_STATION}
+Source: CoAgMet 5-minute data, aggregated to 15-minute intervals.
+
+Units (US customary)
+--------------------
+    • Air temperature: degrees Fahrenheit (°F)
+    • Relative humidity: percent (%)
+    • Dewpoint: degrees Fahrenheit (°F)
+    • Vapor pressure: kilopascals (kPa)
+    • Solar radiation: watts per square meter (W/m²)
+    • Precipitation: inches (in), non-negative
+    • Wind speed: miles per hour (mph)
+    • Wind direction: degrees (°)
+    • 2-inch soil temperature: degrees Fahrenheit (°F)
+    • 6-inch soil temperature: degrees Fahrenheit (°F)
+
+File(s) in this ZIP
+-------------------
+    • A single CSV containing a 15-minute time series for the full year
+      (or up to the current processing date).
+
+Column naming convention
+------------------------
+    timestamp              : local time (America/Denver), 15-minute step
+    temp_air_degF          : air temperature
+    rh_pct                 : relative humidity
+    dewpoint_degF          : dewpoint temperature
+    vp_kPa                 : vapor pressure
+    solarRad_Wm2           : solar radiation
+    precip_in              : precipitation (15-minute increments, summed)
+    windSpeed_mph          : wind speed
+    windDir_deg            : wind direction
+    soil_temp_2in_degF     : soil temperature at 2 inches
+    soil_temp_6in_degF     : soil temperature at 6 inches
+
+Data caveats
+------------
+    • Source data and metadata provided by the CoAgMet system.
+    • Rows with invalid timestamps are dropped.
+    • Precipitation values are clipped at zero (no negative rain).
+
+For more information, consult CoAgMet documentation and the
+Biochar dashboard “Technical Details” tab.
+"""
 
 # ============================= Aggregation (loggers) ============================= #
 

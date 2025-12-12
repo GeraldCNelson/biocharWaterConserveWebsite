@@ -18,12 +18,13 @@ Responsibilities:
       Technical Details, and modal “Directions” content.
 ------------------------------------------------------------------------------
 """
-
 import os
 import re
+import json
 import logging
 from io import BytesIO
 import zipfile
+from zipfile import ZipFile
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -37,6 +38,7 @@ from fastapi.responses import (
 )
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from plotly.utils import PlotlyJSONEncoder
 
 from biochar_app.scripts.routes_utils import (
     load_gseason_df,
@@ -53,6 +55,7 @@ from biochar_app.scripts.plot_utils import (
     make_ratio_figure,
     make_raw_gseason_figure,
     make_ratio_gseason_figure,
+    make_temperature_delta_figure,
 )
 from biochar_app.scripts.config import (
     DEFAULT_YEAR,
@@ -563,10 +566,14 @@ async def api_plot_raw(req: PlotRequest):
 
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
-    year, gran = req.year, req.granularity.lower()
-    var, strip, logger_loc = req.variable, req.strip, req.loggerLocation
-    depth, unit = int(req.depth), req.unitSystem
-    start, end = req.startDate, req.endDate
+    year          = req.year
+    gran          = req.granularity.lower()
+    var           = req.variable
+    strip         = req.strip
+    logger_loc    = req.loggerLocation
+    depth         = int(req.depth)
+    unit          = req.unitSystem
+    start, end    = req.startDate, req.endDate
 
     # ---- growing-season ratios ----
     if gran == "gseason":
@@ -589,24 +596,39 @@ async def api_plot_ratio(req: PlotRequest):
         )
         return JSONResponse(fig)
 
-    # ---- time-series ratios ----
+    # ---- time-series: ΔT for soil temperature, ratios otherwise ----
     df = load_logger_year(year, gran)
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
+
     df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
-    fig = make_ratio_figure(
-        df=df,
-        variable=var,
-        strip=strip,
-        logger_location=logger_loc,
-        unit_system=unit,
-        granularity=gran,
-        year=year,
-        start=start,
-        end=end,
-        depth=str(depth),
-    )
+    if var == "T":
+        fig = make_temperature_delta_figure(
+            df=df,
+            depth=depth,
+            logger_location=logger_loc,
+            unit_system=unit,
+            granularity=gran,
+            year=year,
+            start=start,
+            end=end,
+        )
+    else:
+        fig = make_ratio_figure(
+            df=df,
+            variable=var,
+            strip=strip,
+            logger_location=logger_loc,
+            unit_system=unit,
+            granularity=gran,
+            year=year,
+            start=start,
+            end=end,
+            depth=str(depth),
+        )
+
+    # By this point fig is already a plain dict (to_plotly_json)
     return JSONResponse(fig)
 
 
@@ -1087,5 +1109,99 @@ async def download_all_data(
     return Response(
         content=csv_bytes,
         media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+@main_router.get("/download_all_data_zip")
+async def download_all_data_zip(
+    year: int,
+    granularity: str,
+    variable: str,
+    strip: str,
+    depth: int,
+    loggerLocation: str,
+    unitSystem: str = "us",
+):
+    gran = granularity.lower()
+
+    try:
+        df = load_logger_year(year, gran)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No logger data available for year={year}, "
+                f"granularity={granularity!r}."
+            ),
+        ) from exc
+
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No data rows available for year={year}, "
+                f"granularity={granularity!r}."
+            ),
+        )
+
+    # Same selection logic as /download_all_data
+    df_sel = df.copy()
+    if variable:
+        cols = [c for c in df_sel.columns if c.startswith(f"{variable}_")]
+        base_cols = ["timestamp"] + cols if "timestamp" in df_sel.columns else cols
+        df_sel = df_sel[base_cols]
+
+    df_sel = _add_unit_suffixes_for_download(df_sel, variable)
+    df_sel = _round_ratio_columns(df_sel, decimals=6)
+
+    csv_bytes = df_sel.to_csv(index=False).encode("utf-8")
+
+    # --- Build README text ---
+    readme_lines = [
+        "Biochar Fruita CSU Experiment – Main Data Download",
+        "",
+        f"Year: {year}",
+        f"Granularity: {granularity}",
+        f"Variable: {variable}",
+        f"Strip: {strip}",
+        f"Depth: {depth}",
+        f"Logger location: {loggerLocation}",
+        f"Unit system (stored): US customary (website toggle may show metric).",
+        "",
+        "Files in this ZIP",
+        "-----------------",
+        "  • all_data.csv : Time series for the selected variable, strip, depth,",
+        "                   and logger location (plus any helper columns).",
+        "",
+        "Column naming convention",
+        "------------------------",
+        "  timestamp                         : local time (America/Denver)",
+        "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (percent)",
+        "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F, US units)",
+        "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
+        "  ...                               : other variables as defined on the website.",
+        "",
+        "Notes",
+        "-----",
+        "  • Timestamps are timezone-naive and should be interpreted as",
+        "    America/Denver local time.",
+        "  • Under the hood, all stored data are US customary units; the",
+        "    website may convert them for display when Metric Units is chosen.",
+        "  • Extreme placeholder values from loggers (e.g., -999) are masked.",
+        "  • VWC > 150% is masked to NaN.",
+    ]
+    readme_bytes = "\n".join(readme_lines).encode("utf-8")
+
+    bio = BytesIO()
+    with ZipFile(bio, mode="w") as zf:
+        zf.writestr("all_data.csv", csv_bytes)
+        zf.writestr(f"README_Main_{year}.txt", readme_bytes)
+
+    bio.seek(0)
+    filename = f"main_bundle_{year}_{granularity}_{variable}_{strip}_D{depth}_{loggerLocation}_{unitSystem}.zip"
+
+    return StreamingResponse(
+        bio,
+        media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
