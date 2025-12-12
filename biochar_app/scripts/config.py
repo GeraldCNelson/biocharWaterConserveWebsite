@@ -502,3 +502,53 @@ TRACE_OPTION_MAP: dict[str, str] = {
     "depth":          "depths",
     "loggerLocation": "locations",
 }
+
+# ----------------------------------------
+# Color palette (Okabe–Ito, colorblind-safe)
+# ----------------------------------------
+
+OKABE_ITO = {
+    "black": "#000000",
+    "orange": "#E69F00",
+    "sky_blue": "#56B4E9",
+    "bluish_green": "#009E73",
+    "yellow": "#F0E442",
+    "blue": "#0072B2",
+    "vermillion": "#D55E00",
+    "reddish_purple": "#CC79A7",
+}
+
+# ----------------------------------------
+# Semantic color mapping for plots
+# (USE THESE KEYS IN CODE)
+# ----------------------------------------
+
+PLOT_COLORS = {
+    # Raw data traces
+    "strip_S1": OKABE_ITO["blue"],
+    "strip_S2": OKABE_ITO["orange"],
+    "strip_S3": OKABE_ITO["bluish_green"],
+    "strip_S4": OKABE_ITO["vermillion"],
+
+    # Ratios
+    "ratio_S1_S2": OKABE_ITO["blue"],
+    "ratio_S3_S4": OKABE_ITO["vermillion"],
+
+    # Temperature deltas
+    "delta_T_S1_S2": OKABE_ITO["blue"],
+    "delta_T_S3_S4": OKABE_ITO["vermillion"],
+
+    # Weather overlays
+    "precip": OKABE_ITO["sky_blue"],
+    "air_temp": OKABE_ITO["reddish_purple"],
+
+    "irrigation": OKABE_ITO["black"],
+
+    # Reference lines / annotations
+    "zero_line": OKABE_ITO["black"],
+
+    # Depth traces (deterministic)
+    "depth_1": OKABE_ITO["blue"],         # 6 inches (Depth "1")
+    "depth_2": OKABE_ITO["orange"],       # 12 inches (Depth "2")
+    "depth_3": OKABE_ITO["bluish_green"], # 18 inches (Depth "3")
+}
