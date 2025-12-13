@@ -1,7 +1,7 @@
 annotated-types==0.7.0
 anyio==4.9.0
 beautifulsoup4==4.13.4
--e git+https://github.com/GeraldCNelson/biocharWaterConserveWebsite.git@e72632ed9642522d0de843f274a932aa6bed7e86#egg=biochar_app&subdirectory=biochar_app
+ctory=biochar_app
 blinker==1.9.0
 cachetools==6.1.0
 certifi==2025.1.31
