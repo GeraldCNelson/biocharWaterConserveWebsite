@@ -45,7 +45,6 @@ function downloadTraceData(type) {
     return;
   }
 
-  // This hands control to the browser's download mechanism
   window.location.href = `${route}?${params}`;
 }
 
@@ -77,8 +76,6 @@ function downloadTraceBundleZip() {
 
 // ----------------------------------------------------
 //  Plot image download (raw / ratio, png / jpeg)
-//     mode = "screen" (match browser size)
-//          or "fixed" (static high-resolution)
 // ----------------------------------------------------
 function downloadPlot(plotType, format, mode = "screen") {
   console.log(`📡 Downloading ${plotType} plot as ${format} (${mode})...`);
@@ -92,9 +89,7 @@ function downloadPlot(plotType, format, mode = "screen") {
   const filename = `${plotType}_plot_${year}_${variable}_${strip}_${loggerLocation}_${depth}_${mode}`;
   console.log(`📂 Generated filename: ${filename}.${format}`);
 
-  const plotElement = getElementByIdSafe(
-    plotType === "raw" ? "plot-1" : "plot-2",
-  );
+  const plotElement = getElementByIdSafe(plotType === "raw" ? "plot-1" : "plot-2");
   if (!plotElement) {
     console.error(`❌ Plot container not found for type: ${plotType}`);
     return;
@@ -102,15 +97,13 @@ function downloadPlot(plotType, format, mode = "screen") {
 
   let exportWidth;
   let exportHeight;
-  let scale = 2; // keep text crisp
+  let scale = 2;
 
   if (mode === "fixed") {
-    // Static high-resolution export
     exportWidth  = FIXED_EXPORT_WIDTH;
     exportHeight = FIXED_EXPORT_HEIGHT;
     scale        = 2;
   } else {
-    // Match current browser size (WYSIWYG)
     const bounds = plotElement.getBoundingClientRect();
     exportWidth  = Math.max(800, Math.round(bounds.width));
     exportHeight = Math.max(400, Math.round(bounds.height));
@@ -137,14 +130,7 @@ async function downloadSummaryData(type) {
   const depth       = getDropdownValue("summary-depth");
   const granularity = getDropdownValue("summary-granularity");
 
-  const payload = {
-    year,
-    variable,
-    strip,
-    depth,
-    granularity,
-    type, // "raw", "ratio", or "all"
-  };
+  const payload = { year, variable, strip, depth, granularity, type };
 
   const stats    = window.latestSummaryStats || {};
   const isSeason = granularity === "gseason";
@@ -189,7 +175,6 @@ async function downloadSummaryData(type) {
     const blob = await response.blob();
     const url  = URL.createObjectURL(blob);
 
-    // Backend returns a ZIP (raw / ratio / all) plus README
     const fileName = `summary_${granularity}_${type}.zip`;
     const a        = document.createElement("a");
     a.href         = url;
@@ -202,7 +187,12 @@ async function downloadSummaryData(type) {
   }
 }
 
-// --- Bulk download tab helpers -----------------------------------------
+// ----------------------------------------------------
+//  Bulk downloads (Option A)
+//  - One Year dropdown
+//  - A stack of obvious "Download ____" buttons
+//  - Enabled/disabled based on /bulk_download/options
+// ----------------------------------------------------
 
 async function fetchBulkDownloadOptions() {
   const resp = await fetch("/bulk_download/options");
@@ -215,18 +205,45 @@ async function fetchBulkDownloadOptions() {
 }
 
 /**
- * Initialize the Bulk Downloads tab.
- * - Populates the year dropdown from /bulk_download/options
- * - Enables/disables buttons depending on which ZIPs exist
- * - Hooks click handlers to trigger the downloads
+ * Some backends name routes differently. If needed, override here.
+ * Key = data-dataset attribute from the button.
+ * Value = function(year)->url OR string template.
+ */
+const DATASET_ROUTE_OVERRIDES = {
+  // If your backend already matches /bulk_download/<key>/<year>, you can leave this empty.
+  // Example if needed:
+  // weather: (year) => `/bulk_download/weather/${year}`,
+  // loggers: (year) => `/bulk_download/loggers/${year}`,
+};
+
+function buildBulkDownloadUrl(datasetKey, year) {
+  const override = DATASET_ROUTE_OVERRIDES[datasetKey];
+  if (typeof override === "function") return override(year);
+  if (typeof override === "string") return override.replace("{year}", year);
+
+  // Default convention:
+  return `/bulk_download/${datasetKey}/${year}`;
+}
+
+/**
+ * Initialize the Bulk Downloads tab (Option A).
+ *
+ * Expects:
+ *  - #bulk-year select exists
+ *  - buttons have class "bulk-download-btn" and data-dataset="..."
+ *  - /bulk_download/options returns:
+ *      { available: { "2023": { loggers: true, weather: true, irrigation: true, ... }, ... } }
  */
 export async function initBulkDownloadTab() {
   const yearSelect = document.getElementById("bulk-year");
-  const loggersBtn = document.getElementById("bulk-download-loggers");
-  const weatherBtn = document.getElementById("bulk-download-weather");
+  if (!yearSelect) {
+    console.warn("Bulk year select (#bulk-year) not found.");
+    return;
+  }
 
-  if (!yearSelect || !loggersBtn || !weatherBtn) {
-    console.warn("Bulk download elements not found in DOM.");
+  const buttons = Array.from(document.querySelectorAll("button.bulk-download-btn"));
+  if (!buttons.length) {
+    console.warn("No bulk download buttons found (button.bulk-download-btn).");
     return;
   }
 
@@ -235,46 +252,44 @@ export async function initBulkDownloadTab() {
 
   if (!years.length) {
     yearSelect.innerHTML = `<option value="">No years available</option>`;
-    loggersBtn.disabled  = true;
-    weatherBtn.disabled  = true;
+    buttons.forEach((b) => { b.disabled = true; });
     return;
   }
 
-  // Populate the select
+  // Populate dropdown
   yearSelect.innerHTML = "";
   years.forEach((y) => {
-    const opt        = document.createElement("option");
-    opt.value        = y;
-    opt.textContent  = y;
+    const opt = document.createElement("option");
+    opt.value = y;
+    opt.textContent = y;
     yearSelect.appendChild(opt);
   });
 
-  /**
-   * Enable/disable buttons based on selected year availability.
-   */
   function updateButtons() {
-    const y     = yearSelect.value;
+    const y = yearSelect.value;
     const avail = availableByYear[y] || {};
-    loggersBtn.disabled = !Boolean(avail["loggers"]);
-    weatherBtn.disabled = !Boolean(avail["weather"]);
+
+    buttons.forEach((btn) => {
+      const key = btn.getAttribute("data-dataset");
+      if (!key) return;
+      btn.disabled = !Boolean(avail[key]);
+    });
   }
 
   yearSelect.addEventListener("change", updateButtons);
 
-  // Click handlers: just hit the ZIP endpoints directly
-  loggersBtn.addEventListener("click", () => {
-    const y = yearSelect.value;
-    if (!y) return;
-    window.location.href = `/bulk_download/loggers/${y}`;
+  // Wire all buttons
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const y = yearSelect.value;
+      const key = btn.getAttribute("data-dataset");
+      if (!y || !key) return;
+
+      const url = buildBulkDownloadUrl(key, y);
+      window.location.href = url;
+    });
   });
 
-  weatherBtn.addEventListener("click", () => {
-    const y = yearSelect.value;
-    if (!y) return;
-    window.location.href = `/bulk_download/weather/${y}`;
-  });
-
-  // Initialize state for the default selection
   updateButtons();
 }
 

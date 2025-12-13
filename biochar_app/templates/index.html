@@ -11,6 +11,7 @@
     <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
 
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@300;400;600;700&display=swap" rel="stylesheet">
+
     <!-- Datepicker CSS -->
     <link
             rel="stylesheet"
@@ -115,7 +116,7 @@
             </a>
         </li>
 
-        <!-- NEW Bulk Downloads tab -->
+        <!-- Bulk Downloads tab -->
         <li class="nav-item" role="presentation">
             <a
               class="nav-link"
@@ -150,7 +151,6 @@
 
         <!-- Custom Growing-Season Pane -->
         <div class="tab-pane fade" id="gseason" role="tabpanel" aria-labelledby="gseason-tab">
-          <!-- use markdown-container to match your other tabs -->
           <div id="gseason-content" class="container markdown-container mt-3">
             {% include "_custom_gseason.html" %}
           </div>
@@ -593,7 +593,7 @@
             </div>
         </div>
 
-        <!-- NEW Bulk Downloads pane (inside tab-content) -->
+        <!-- Bulk Downloads pane -->
         <div
           class="tab-pane fade"
           id="bulk-pane"
@@ -602,16 +602,16 @@
         >
           <div class="container mt-3">
 
-            <!-- Explanatory text ABOVE the card -->
             <p class="mb-3">
-              Use this tab to download full 15-minute datasets for the 12 data loggers and weather data for each year. ZIP files also contain a README file with more details on the datasets.
+              Use this tab to download full-year datasets. Files are bundled into ZIP archives with a README.
+              Select a year to enable downloads.
             </p>
 
             <div class="row">
-              <div class="col-md-4">
+              <div class="col-md-6 col-lg-5">
                 <div class="card">
                   <div class="card-header">
-                    Bulk Downloads
+                    Bulk Downloads (Full-Year ZIPs)
                   </div>
                   <div class="card-body">
                     <div class="mb-3">
@@ -622,10 +622,12 @@
                     </div>
 
                     <div class="d-grid gap-2">
+                      <!-- Keep the same ids for backwards compatibility, but also add data-dataset -->
                       <button
                         id="bulk-download-loggers"
-                        class="btn btn-primary"
+                        class="btn btn-primary bulk-download-btn"
                         type="button"
+                        data-dataset="loggers"
                         disabled
                       >
                         Download logger data (15-min, zipped CSVs)
@@ -633,30 +635,74 @@
 
                       <button
                         id="bulk-download-weather"
-                        class="btn btn-secondary"
+                        class="btn btn-secondary bulk-download-btn"
                         type="button"
+                        data-dataset="weather"
                         disabled
                       >
                         Download weather data (15-min, zipped CSV)
                       </button>
+
+                      <hr class="my-2"/>
+
+                      <button
+                        id="bulk-download-irrigation"
+                        class="btn btn-outline-primary bulk-download-btn"
+                        type="button"
+                        data-dataset="irrigation"
+                        disabled
+                      >
+                        Download irrigation data (zipped CSV)
+                      </button>
+
+                      <button
+                        id="bulk-download-soil-chem"
+                        class="btn btn-outline-primary bulk-download-btn"
+                        type="button"
+                        data-dataset="soil_chem"
+                        disabled
+                      >
+                        Download soil chemistry (zipped CSV)
+                      </button>
+
+                      <button
+                        id="bulk-download-soil-bio"
+                        class="btn btn-outline-primary bulk-download-btn"
+                        type="button"
+                        data-dataset="soil_bio"
+                        disabled
+                      >
+                        Download soil biology (zipped CSV)
+                      </button>
+
+                      <button
+                        id="bulk-download-biomass"
+                        class="btn btn-outline-primary bulk-download-btn"
+                        type="button"
+                        data-dataset="biomass"
+                        disabled
+                      >
+                        Download biomass / hay data (zipped CSV)
+                      </button>
                     </div>
 
-                    <small class="text-muted d-block mt-2">
-                      Logger ZIP files contain one CSV per logger (12 total) plus
-                      metadata. Weather ZIP contains 15-minute weather data for the year
-                      plus metadata.
+                    <small class="text-muted d-block mt-3">
+                      Each download is a full-year ZIP bundle with a README.
+                      Irrigation is collected periodically during the irrigation season.
+                      Soil chemistry/biology are typically sampled ~2× per year.
+                      Biomass/hay includes yield + chemical analysis.
                     </small>
                   </div>
                 </div>
               </div>
 
-              <!-- optional right-hand panel for future content -->
-              <div class="col-md-8">
-                <!-- Reserved for future help/FAQ or left empty -->
+              <div class="col-md-6 col-lg-7">
+                <!-- Reserved for future: explanatory notes, file inventory, etc. -->
               </div>
             </div>
           </div>
         </div>
+
     </div>
 </div>
 
@@ -718,7 +764,8 @@
       const gran = document.getElementById("main-granularity");
       const dateControls = document.getElementById("main-date-controls");
       function toggleDateControls() {
-        const disable = gran.value === "custom";
+        const disable = gran && gran.value === "custom";
+        if (!dateControls) return;
         dateControls.querySelectorAll("select, input").forEach(el => {
           el.disabled = disable;
           el.classList.toggle("disabled", disable);

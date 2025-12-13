@@ -8,7 +8,7 @@ This is an introduction to the project and the website. Here’s what you can ex
 
 - Overview of the biochar experiment at the Colorado State University research station, located outside Fruita, CO.
 
-- Digital data collection results in graphical (Main Data Display tab) and tabular form (Summary Statistics tab).
+- Digital data collection results in graphical (Interactive Plots tab) and tabular form (Summary Statistics tab).
 
 - Technical details on the data collection process.
 
