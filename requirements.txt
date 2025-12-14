@@ -1,7 +1,6 @@
 annotated-types==0.7.0
 anyio==4.9.0
 beautifulsoup4==4.13.4
--e git+https://github.com/GeraldCNelson/biocharWaterConserveWebsite.git@6202eac68d5e8e1a506e913a3f5677a78682e8bc#egg=biochar_app
 blinker==1.9.0
 cachetools==6.1.0
 certifi==2025.1.31
@@ -11,7 +10,7 @@ cramjam==2.11.0
 Cython==3.0.12
 et_xmlfile==2.0.0
 fastapi==0.116.0
-fastparquet==2024.11.0
+fastparquet @ git+https://github.com/dask/fastparquet@f4524139b64322dff2822e18182cdf4f52b7a51a
 Flask==3.1.0
 fsspec==2025.7.0
 h11==0.16.0
@@ -31,7 +30,8 @@ plotly==6.3.0
 pluggy==1.5.0
 psutil==7.0.0
 pyarrow==20.0.0
--e git+https://github.com/SalemHarrache/PyCampbellCR1000.git@9114b2acd47c5c019733f9a2167c557f197ef575#egg=PyCampbellCR1000
+PyCampbellCR1000 @ git+https://github.com/SalemHarrache/PyCampbellCR1000.git@9114b2acd47c5c019733f9a2167c557f197ef575
+PyLink @ git+https://github.com/SalemHarrache/PyLink.git@0d7a1efecdc452c3e75f2320c46df9cc7c197070
 pydantic==2.11.7
 pydantic_core==2.33.2
 PyLink @ git+https://github.com/SalemHarrache/PyLink.git@0d7a1efecdc452c3e75f2320c46df9cc7c197070
