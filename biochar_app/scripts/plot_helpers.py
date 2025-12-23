@@ -352,9 +352,16 @@ def common_yaxis_config(
             y_max += 1
 
     # 6) Build axis dict
+    if kind == "ratio":
+        # Ratios are unitless; keep the y-axis short and unambiguous.
+        # Use the variable code directly (e.g., "VWC") since the full name
+        # is already shown in the plot title/UI.
+        title_text = f"{variable} (dimensionless)"
+    else:
+        title_text = f"{title_base}{f' ({unit})' if unit else ''}"
+
     axis_cfg: Dict[str, Any] = {
-        "title": {"text": f"{title_base}{f' ({unit})' if unit else ''}"
-                          + (" Ratio" if kind == "ratio" else "")},
+        "title": {"text": title_text},
         "tickformat": None,
         "showgrid": True,
         "showline": True,

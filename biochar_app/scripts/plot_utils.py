@@ -250,7 +250,7 @@ def add_irrigation_shapes(
     recs = events_df.to_dict(orient="records")
 
     conv = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
-    unit_lbl = "k L" if unit_system == "metric" else "k gal"
+    unit_lbl = "<br>k L" if unit_system == "metric" else "<br>k gal"
 
     irr_color = PLOT_COLORS.get("irrigation", "black")
     irr_anno_color = irr_color

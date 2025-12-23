@@ -10,7 +10,7 @@ cramjam==2.11.0
 Cython==3.0.12
 et_xmlfile==2.0.0
 fastapi==0.116.0
-fastparquet @ git+https://github.com/dask/fastparquet@f4524139b64322dff2822e18182cdf4f52b7a51a
+fastparquet==2024.11.0
 Flask==3.1.0
 fsspec==2025.7.0
 h11==0.16.0
@@ -18,27 +18,22 @@ idna==3.10
 iniconfig==2.1.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
-logger==1.4
 MarkupSafe==3.0.2
 narwhals==1.35.0
 numpy==2.2.4
 openpyxl==3.1.5
 packaging==24.2
 pandas==2.2.3
-pandas-stubs==2.2.3.250527
 plotly==6.3.0
 pluggy==1.5.0
 psutil==7.0.0
 pyarrow==20.0.0
 PyCampbellCR1000 @ git+https://github.com/SalemHarrache/PyCampbellCR1000.git@9114b2acd47c5c019733f9a2167c557f197ef575
-PyLink @ git+https://github.com/SalemHarrache/PyLink.git@0d7a1efecdc452c3e75f2320c46df9cc7c197070
 pydantic==2.11.7
 pydantic_core==2.33.2
-PyLink @ git+https://github.com/SalemHarrache/PyLink.git@0d7a1efecdc452c3e75f2320c46df9cc7c197070
 pylink-square==2.0.0
 Pympler==1.1
 pyserial==3.5
-pytest==8.3.5
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 pytz==2025.2
@@ -51,7 +46,6 @@ sniffio==1.3.1
 soupsieve==2.6
 SQLAlchemy==2.0.44
 starlette==0.46.2
-types-pytz==2025.2.0.20250809
 typing-inspection==0.4.1
 typing_extensions==4.13.2
 tzdata==2025.2
