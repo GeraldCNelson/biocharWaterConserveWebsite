@@ -1,0 +1,86 @@
+############################
+# Core Python
+############################
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.Python
+############################
+# Virtual environments
+############################
+.biochar_py313/
+venv/
+env/
+ENV/
+############################
+# IDE / Editor
+############################
+.idea/
+.vscode/
+.Rproj.user/
+.Rhistory
+*.swp
+*.swo
+*~
+############################
+# OS junk
+############################
+.DS_Store
+Thumbs.db
+############################
+# Logs & debug output
+############################
+*.log
+debug_plot_output.json
+processed_datetime_debug.csv
+############################
+# PakBus / binary artifacts
+############################
+*.pcap
+*.pcapng
+*.hex
+*.tdf
+*.sha256
+############################
+# Generated data & pulls
+############################
+pulls*/
+scout_*/
+pakbus_runs/
+pakbus_suite*/
+fresh_leaf*/
+leaf*_latest/
+leaf*_since_*/
+out/
+out_csv/
+data.tmp/
+############################
+# Raw & processed data
+############################
+biochar_app/data-raw/
+biochar_app/data-processed/
+biochar_app/data_temp/
+############################
+# Parquet & downloads
+############################
+biochar_app/data-processed/parquet/
+biochar_app/data-processed/downloads/
+############################
+# Archives
+############################
+archive/
+biochar_app/archive/
+############################
+# Node / frontend
+############################
+node_modules/
+package-lock.json
+############################
+# Misc scratch
+############################
+*.zip
+*.csv
+*.xlsx
+*.docx
+*.pdf
