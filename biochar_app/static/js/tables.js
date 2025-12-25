@@ -152,13 +152,12 @@ function renderSplitRatioTables(ratioStats, variable, unitSystem) {
 async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: starting…");
 
-  // 1) Read values straight from the Summary controls:
+  // 1) Grab controls
   const yearEl     = document.getElementById("summary-year");
   const variableEl = document.getElementById("summary-variable");
   const stripEl    = document.getElementById("summary-strip");
   const granEl     = document.getElementById("summary-granularity");
   const depthEl    = document.getElementById("summary-depth");
-  const unitSystem = window.unitSystem || "us";
 
   if (!yearEl || !variableEl || !stripEl || !granEl || !depthEl) {
     console.error("❌ Summary controls not found in DOM!");
@@ -170,7 +169,8 @@ async function updateSummaryStatistics() {
   const variable    = variableEl.value;
   const strip       = stripEl.value;
   const granularity = granEl.value;
-  const depth       = parseInt(depthEl.value, 10);
+  const depth       = depthEl.value;            // keep as string, e.g. "1"
+  const unitSystem  = window.unitSystem || "us";
 
   console.log("🔍 Summary request:", {
     year,
@@ -181,13 +181,12 @@ async function updateSummaryStatistics() {
     unitSystem,
   });
 
-  // 2) Validate:
   if (isNaN(year)) {
     alert("⚠️ Please select a valid year.");
     return;
   }
 
-  // 3) Build payload and fetch:
+  // 2) Call backend
   const payload = { year, variable, strip, granularity, depth, unitSystem };
   const resp = await fetch("/api/get_summary_stats", {
     method: "POST",
@@ -205,27 +204,48 @@ async function updateSummaryStatistics() {
   const data = await resp.json();
   console.log("✅ Summary stats received:", data);
 
-  // 4) Render:
   const container = document.getElementById("summary-table-container");
   if (!container) return;
 
-  // Use the server-echoed unitSystem if present, else fallback to window
-  const effectiveUnitSystem = data.unitSystem || unitSystem;
-  const displayVar = resolveDisplayName(variable, effectiveUnitSystem);
-  const rawUnit    = getUnitLabel(variable, effectiveUnitSystem, false);
+  // 3) Figure out units and labels
+  const effectiveUnitSystem = data.unitSystem || unitSystem; // "us" or "metric"
+  const displayVar          = resolveDisplayName(variable, effectiveUnitSystem);
+  const rawUnit             = getUnitLabel(variable, effectiveUnitSystem, false);
+
+  // Depth label via mapping from backend (sensor_depth_mapping)
+  const depthMapping = window.depthMapping || {};
+  let depthLabel = depth;
+
+  if (depth && depthMapping[depth]) {
+    // Prefer the currently active unit system (us / metric)
+    if (depthMapping[depth][effectiveUnitSystem]) {
+      depthLabel = depthMapping[depth][effectiveUnitSystem];
+    } else if (depthMapping[depth].us) {
+      // Fallback to US label if present
+      depthLabel = depthMapping[depth].us;
+    } else {
+      // Fallback to "first available" label
+      const firstKey = Object.keys(depthMapping[depth])[0];
+      if (firstKey) {
+        depthLabel = depthMapping[depth][firstKey];
+      }
+    }
+  }
 
   if (granularity !== "gseason") {
     const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
-    const rawSubtitle = `
-      Raw Values – ${displayVar}${unitSuffix} by logger location
-      in strip ${strip}, depth = ${depth}
-    `.replace(/\s+/g, " ").trim();
 
-    const rawHTML   = generateSummaryTable(
+    const rawSubtitle = (
+      `Raw Values – ${displayVar}${unitSuffix} ` +
+      `by logger location in strip ${strip}, depth = ${depthLabel}`
+    );
+
+    const rawHTML = generateSummaryTable(
       data.raw_statistics,
       displayVar,
       rawUnit
     );
+
     const ratioHTML = renderSplitRatioTables(
       data.ratio_statistics,
       variable,
@@ -239,7 +259,7 @@ async function updateSummaryStatistics() {
     `;
   } else {
     // Seasonal (gseason) summaries use the accordion renderer,
-    // which already formats its own titles.
+    // which already handles its own titles.
     if (typeof generateSeasonalSummaryAccordion === "function") {
       container.innerHTML = generateSeasonalSummaryAccordion(data, variable);
     } else {
