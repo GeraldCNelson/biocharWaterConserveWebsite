@@ -44,13 +44,27 @@ export async function fetchDefaultsAndOptions() {
     // Persist for later modules
     window.dropdownOptions = options;
     window.depthMapping    = options.depthMapping;
-    window.loggerLocationMapping = options.loggerLocations.reduce(
+    window.loggerLocationMapping = options.loggerLocations?.reduce(
       (m, o) => ({ ...m, [o.value]: o.label }),
       {}
-    );
-    window.variableNameMapping = options.variableNameMapping || {};
+    ) || {};
+
+    // Variable label/name mappings from backend
+    window.variableNameMapping =
+      options.variableNameMapping || options.variable_name_mapping || {};
+
+    // Pretty labels for variables (used in summary tables, seasonal UI, etc.)
+    window.labelNameMapping =
+      options.labelNameMapping || options.label_name_mapping || {};
+
+    // Growing-season periods (JSON version of DEFAULT_GSEASON_PERIODS)
+    // Expect shape: { code: { label, start, end }, ... }
+    window.gseasonPeriods =
+      options.gseasonPeriods || options.gseason_periods || {};
 
     console.log("🧭 depthMapping from backend:", window.depthMapping);
+    console.log("🌱 gseasonPeriods from backend:", window.gseasonPeriods);
+    console.log("🏷️ labelNameMapping from backend:", window.labelNameMapping);
 
     return options;
   } catch (err) {
@@ -83,7 +97,7 @@ export function populateAllDropdowns(options) {
         "value" in list[0] &&
         "label" in list[0]
       ) {
-        // object form
+        // object form { value, label }
         values = list.map((item) => item.value);
         labels = list.map((item) => item.label);
       } else {
@@ -280,5 +294,5 @@ export function updateStartAndEndDatesFromYear(year) {
  * Placeholder for traceOption logic (kept so imports don’t break).
  */
 export function handleTraceOptionChange(event) {
-  // Implement as needed if you change trace behaviour in the future.
+  // Implement as needed if you change trace behavior in the future.
 }

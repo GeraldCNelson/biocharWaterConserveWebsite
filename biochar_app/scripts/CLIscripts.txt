@@ -61,7 +61,17 @@ python -m biochar_app.pakbus.scripts.loop_27b_tx_pull \
   --tdf-file biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
   --table Table1 \
   --num 1 \
+  --collect-mode mostrecent \python -m biochar_app.pakbus.scripts.fetch_leaf_records \
+  --host 2605:59ca:2202:7700:2d0:2cff:fe02:1ddd \
+  --port 6785 \
+  --router 1 \
+  --src 4093 \
+  --leaf 2 \
+  --tdf-file biochar_app/pakbus/pakbus_data/catalog/CSU_3depths.tdf \
+  --table Table1 \
   --collect-mode mostrecent \
+  --num 1 \
+  --output test_leaf2_Table1.csv
   --output leaf2_table1.csv
   
   python -m biochar_app.pakbus.scripts.serial_collect_tail \

@@ -30,6 +30,38 @@ html, body {
     font-size: 0.875rem;
 }
 
+/* Tighter spacing inside growing-season accordion */
+#summary-table-container .accordion-item + .accordion-item {
+    margin-top: 0.35rem;              /* was 0.5rem */
+}
+
+#summary-table-container .accordion-body {
+    padding: 0.5rem 0.75rem;          /* slightly smaller padding */
+}
+
+#summary-table-container .accordion-body > h6 {
+    margin-top: 0.35rem;
+    margin-bottom: 0.15rem;           /* tighter heading spacing */
+}
+
+/* Less space between the stacked tables inside each season */
+#summary-table-container .accordion-body > .table {
+    margin-bottom: 0.25rem;
+}
+
+/* Also shrink row padding a bit more */
+#summary-table-container .table th,
+#summary-table-container .table td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+/* Remove huge top margin from accordion headings in Summary Statistics */
+#summary-table-container h2.accordion-header {
+    margin-top: 0;
+    margin-bottom: 0;   /* let the button's padding control spacing */
+}
+
 .table {
     border-collapse: collapse;
     width: 100%;
@@ -45,6 +77,70 @@ html, body {
 .thead-dark th {
     background-color: #343a40 !important;
     color: white;
+}
+
+/* --- Growing-season summary accordion & compact tables --- */
+
+/* Make accordion headers clearly clickable */
+#summary-table-container .accordion-button {
+    background-color: #d7e6ff; /* light blue */
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Big chevron instead of subtle Bootstrap caret */
+#summary-table-container .accordion-button::after {
+    background-image: none;
+    content: "▾";
+    font-size: 0.9rem;
+    line-height: 1;
+    transform: rotate(0deg);
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Rotate chevron when collapsed */
+#summary-table-container .accordion-button.collapsed::after {
+    transform: rotate(-90deg);
+}
+
+/* Hover effect to reinforce interactivity */
+#summary-table-container .accordion-button:hover {
+    background-color: #c4daff;
+}
+
+/* Slight spacing between accordion sections */
+#summary-table-container .accordion-item + .accordion-item {
+    margin-top: 0.5rem;
+}
+
+/* Tighter padding inside accordion bodies */
+#summary-table-container .accordion-body {
+    padding: 0.75rem 1rem;
+}
+
+/* Compact headings inside the accordion */
+#summary-table-container h6 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Make summary tables more compact */
+#summary-table-container table {
+    margin-bottom: 0.5rem; /* less vertical space between tables */
+}
+
+/* Prefer compact Bootstrap tables in this container */
+#summary-table-container table.table-sm th,
+#summary-table-container table.table-sm td {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+}
+
+/* Also slightly reduce padding for any tables in the summary area */
+#summary-table-container .table th,
+#summary-table-container .table td {
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 
 /* Container */

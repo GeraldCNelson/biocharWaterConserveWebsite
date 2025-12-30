@@ -1,15 +1,19 @@
 // tables.js
 import { formatValue } from "./ui_utils.js";
+import { generateSeasonalSummaryAccordion } from "./api_requests.js";
 
 /**
  * Unit labels for each variable and unit system.
  * These are used in the summary subtitles, *not* for table headers.
  */
 const VARIABLE_UNITS = {
-  VWC:   { us: "%",    metric: "%" },
-  T:     { us: "°F",   metric: "°C" },
-  EC:    { us: "dS/m", metric: "dS/m" },
-  SWC:   { us: "gal per sensor cylinder", metric: "L per sensor cylinder" },
+  VWC: { us: "%",    metric: "%" },
+  T:   { us: "°F",   metric: "°C" },
+  EC:  { us: "dS/m", metric: "dS/m" },
+  SWC: {
+    us:     "gal per sensor cylinder",
+    metric: "L per sensor cylinder",
+  },
 };
 
 /**
@@ -24,7 +28,6 @@ function resolveDisplayName(variable, unitSystem) {
     // Explicit SWC label, without units (those come from VARIABLE_UNITS)
     return "Soil Water Content";
   }
-
   return base;
 }
 
@@ -33,24 +36,19 @@ function resolveDisplayName(variable, unitSystem) {
  * For ratio summaries we now keep subtitles/headers unit-free.
  */
 function getUnitLabel(variable, unitSystem, isRatio = false) {
-  if (isRatio) {
-    // Ratios are shown without units in subtitles and headers.
-    return "";
-  }
+  if (isRatio) return "";
   const varUnits = VARIABLE_UNITS[variable];
   if (!varUnits) return "";
   return varUnits[unitSystem] || "";
 }
 
 /**
- * Builds an HTML table for a flat set of summary stats.
- * `displayVar` is the human label; `unitLabel` is currently unused,
- * but kept in the signature for future flexibility.
+ * Build an HTML table for a flat set of summary stats.
  *
  * Table headers are intentionally unit-free:
  *   Variable (Logger) | Min | Mean | Max | Std Dev
  */
-function generateSummaryTable(stats, displayVar, unitLabel) {
+export function generateSummaryTable(stats, displayVar, unitLabel) {
   if (!stats || Object.keys(stats).length === 0) {
     return `
       <p class="text-muted mb-0">
@@ -74,8 +72,8 @@ function generateSummaryTable(stats, displayVar, unitLabel) {
   `;
 
   for (const [key, value] of Object.entries(stats)) {
-    // Expect keys like VWC_1_raw_S1_T, EC_2_raw_S1_M, SWC_1_raw_S1_T, etc.
-    const match = key.match(/_(B|M|T)$/);
+    // Expect keys like VWC_1_raw_S1_T, EC_2_raw_S1_M, etc.
+    const match  = key.match(/_(B|M|T)$/);
     const logger = match ? match[1] : key;
     const displayName = `${displayVar} (${logger})`;
     const { min, mean, max, std } = value || {};
@@ -96,7 +94,7 @@ function generateSummaryTable(stats, displayVar, unitLabel) {
 }
 
 /**
- * Splits ratio stats into S1/S2 and S3/S4 sections.
+ * Split ratio stats into S1/S2 and S3/S4 sections and render them.
  */
 function renderSplitRatioTables(ratioStats, variable, unitSystem) {
   const s1s2 = {};
@@ -108,8 +106,14 @@ function renderSplitRatioTables(ratioStats, variable, unitSystem) {
     else if (key.includes("S3_S4")) s3s4[trace] = values;
   }
 
-  const displayVar = resolveDisplayName(variable, unitSystem);
-  const ratioUnit  = getUnitLabel(variable, unitSystem, true); // now "" for ratios
+  // Raw display label (may include units for raw tables)
+  const rawDisplayVar = resolveDisplayName(variable, unitSystem);
+
+  // For ratios, strip any trailing "(...)" unit text and append "ratio"
+  const ratioBase = rawDisplayVar.replace(/\s*\([^)]*\)\s*$/, "");
+  const ratioDisplayVar = `${ratioBase} ratio`;
+
+  const ratioUnit  = getUnitLabel(variable, unitSystem, true); // currently ""
 
   const build = (label, group) => {
     if (!group || Object.keys(group).length === 0) {
@@ -135,11 +139,11 @@ function renderSplitRatioTables(ratioStats, variable, unitSystem) {
     }
 
     const unitSuffix = ratioUnit ? ` (${ratioUnit})` : "";
-    const subtitle = `${label} Ratio – ${displayVar}${unitSuffix} by logger location`;
+    const subtitle   = `${label} Ratio – ${ratioDisplayVar}${unitSuffix} by logger location`;
 
     return `
       <h5 class="mt-3 mb-1">${subtitle}</h5>
-      ${generateSummaryTable(group, displayVar, ratioUnit)}
+      ${generateSummaryTable(group, ratioDisplayVar, ratioUnit)}
     `;
   };
 
@@ -147,12 +151,11 @@ function renderSplitRatioTables(ratioStats, variable, unitSystem) {
 }
 
 /**
- * 📊 Fetches & renders the summary statistics.
+ * 📊 Fetch & render summary statistics (both standard & growing-season).
  */
 async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: starting…");
 
-  // 1) Grab controls
   const yearEl     = document.getElementById("summary-year");
   const variableEl = document.getElementById("summary-variable");
   const stripEl    = document.getElementById("summary-strip");
@@ -169,16 +172,11 @@ async function updateSummaryStatistics() {
   const variable    = variableEl.value;
   const strip       = stripEl.value;
   const granularity = granEl.value;
-  const depth       = depthEl.value;            // keep as string, e.g. "1"
+  const depth       = depthEl.value;     // e.g. "1"
   const unitSystem  = window.unitSystem || "us";
 
   console.log("🔍 Summary request:", {
-    year,
-    variable,
-    strip,
-    granularity,
-    depth,
-    unitSystem,
+    year, variable, strip, granularity, depth, unitSystem,
   });
 
   if (isNaN(year)) {
@@ -186,7 +184,6 @@ async function updateSummaryStatistics() {
     return;
   }
 
-  // 2) Call backend
   const payload = { year, variable, strip, granularity, depth, unitSystem };
   const resp = await fetch("/api/get_summary_stats", {
     method: "POST",
@@ -203,75 +200,75 @@ async function updateSummaryStatistics() {
 
   const data = await resp.json();
   console.log("✅ Summary stats received:", data);
-
+  // 🔍 Make the most recent payload available in DevTools
+  window.__lastSummaryData = data;
+  console.log("🔍 Cached summary data on window.__lastSummaryData");
   const container = document.getElementById("summary-table-container");
   if (!container) return;
 
-  // 3) Figure out units and labels
-  const effectiveUnitSystem = data.unitSystem || unitSystem; // "us" or "metric"
+  const effectiveUnitSystem = data.unitSystem || unitSystem;
   const displayVar          = resolveDisplayName(variable, effectiveUnitSystem);
   const rawUnit             = getUnitLabel(variable, effectiveUnitSystem, false);
 
   // Depth label via mapping from backend (sensor_depth_mapping)
   const depthMapping = window.depthMapping || {};
-  let depthLabel = depth;
+  let depthLabel     = depth;
 
   if (depth && depthMapping[depth]) {
-    // Prefer the currently active unit system (us / metric)
     if (depthMapping[depth][effectiveUnitSystem]) {
       depthLabel = depthMapping[depth][effectiveUnitSystem];
     } else if (depthMapping[depth].us) {
-      // Fallback to US label if present
       depthLabel = depthMapping[depth].us;
     } else {
-      // Fallback to "first available" label
       const firstKey = Object.keys(depthMapping[depth])[0];
-      if (firstKey) {
-        depthLabel = depthMapping[depth][firstKey];
-      }
+      if (firstKey) depthLabel = depthMapping[depth][firstKey];
     }
   }
 
-  if (granularity !== "gseason") {
-    const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
+  // ---- Seasonal (gseason) path using accordion ----
+  const hasSeasonal =
+    data.gseason_stats && Object.keys(data.gseason_stats).length > 0;
 
-    const rawSubtitle = (
-      `Raw Values – ${displayVar}${unitSuffix} ` +
-      `by logger location in strip ${strip}, depth = ${depthLabel}`
+  if (granularity === "gseason" && hasSeasonal) {
+    console.log("🌱 Rendering seasonal summaries with accordion…",
+                data.gseason_stats);
+
+    container.innerHTML = generateSeasonalSummaryAccordion(
+      data.gseason_stats,
+      variable
     );
-
-    const rawHTML = generateSummaryTable(
-      data.raw_statistics,
-      displayVar,
-      rawUnit
-    );
-
-    const ratioHTML = renderSplitRatioTables(
-      data.ratio_statistics,
-      variable,
-      effectiveUnitSystem
-    );
-
-    container.innerHTML = `
-      <h5 class="mb-1">${rawSubtitle}</h5>
-      ${rawHTML}
-      ${ratioHTML}
-    `;
-  } else {
-    // Seasonal (gseason) summaries use the accordion renderer,
-    // which already handles its own titles.
-    if (typeof generateSeasonalSummaryAccordion === "function") {
-      container.innerHTML = generateSeasonalSummaryAccordion(data, variable);
-    } else {
-      container.innerHTML = `
-        <p class="text-muted">
-          Seasonal summary renderer is not available.
-        </p>
-      `;
-    }
+    console.log("✅ Seasonal summary accordion rendered.");
+    return;
   }
 
-  console.log("✅ Summary tables updated.");
+  // ---- Default non-seasonal layout ----
+  console.log("📅 Rendering standard (non-seasonal) summaries…");
+
+  const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
+
+  const rawSubtitle =
+    `Raw Values – ${displayVar}${unitSuffix} ` +
+    `by logger location in strip ${strip}, depth = ${depthLabel}, year = ${year}`;
+
+  const rawHTML = generateSummaryTable(
+    data.raw_statistics,
+    displayVar,
+    rawUnit
+  );
+
+  const ratioHTML = renderSplitRatioTables(
+    data.ratio_statistics,
+    variable,
+    effectiveUnitSystem
+  );
+
+  container.innerHTML = `
+    <h5 class="mb-1">${rawSubtitle}</h5>
+    ${rawHTML}
+    ${ratioHTML}
+  `;
+
+  console.log("✅ Summary tables updated (standard mode).");
 }
 
 export { updateSummaryStatistics };

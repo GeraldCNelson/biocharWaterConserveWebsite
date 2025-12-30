@@ -1,304 +1,331 @@
 // static/js/downloads.js
 
-/* global Plotly */
-
-import { getDropdownValue, getElementByIdSafe, showAlert } from "./ui_utils.js";
-
-// Ensure the global summary stats object exists (filled elsewhere in the app)
-window.latestSummaryStats = window.latestSummaryStats || {};
-
-// Fixed-size export for high-resolution images (pixels)
-const FIXED_EXPORT_WIDTH  = 2000;
-const FIXED_EXPORT_HEIGHT = 1200;
-
-// ----------------------------------------------------
-//  Main data download buttons (raw / ratio / all)
-// ----------------------------------------------------
-function downloadTraceData(type) {
-  console.log(`📥 Downloading ${type} data...`);
-
-  const year           = getDropdownValue("main-year");
-  const granularity    = getDropdownValue("main-granularity");
-  const variable       = getDropdownValue("main-variable");
-  const strip          = getDropdownValue("main-strip");
-  const depth          = getDropdownValue("main-depth");
-  const loggerLocation = getDropdownValue("main-loggerLocation");
-
-  const params = new URLSearchParams({
-    year,
-    granularity,
-    variable,
-    strip,
-    depth,
-    loggerLocation,
-  }).toString();
-
-  let route = "";
-  if (type === "raw") {
-    route = "/download_raw_data";
-  } else if (type === "ratio") {
-    route = "/download_ratio_data";
-  } else if (type === "all") {
-    route = "/download_all_data";
-  } else {
-    console.error("❌ Invalid download type");
-    return;
-  }
-
-  window.location.href = `${route}?${params}`;
+/**
+ * Helper: build a filename-safe slug from pieces.
+ */
+function buildFilename(parts) {
+  return parts
+    .filter(Boolean)
+    .join("_")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\-]+/g, "");
 }
 
 /**
- * Download a ZIP bundle for the main data tab
- * (CSV(s) + README) via /download_all_data_zip.
+ * Generic helper to POST JSON and download the returned blob.
  */
-function downloadTraceBundleZip() {
-  console.log("📥 Downloading ZIP bundle for main data...");
+async function postAndDownload(url, payload, filename) {
+  console.log("⬇️ postAndDownload →", url, payload);
 
-  const year           = getDropdownValue("main-year");
-  const granularity    = getDropdownValue("main-granularity");
-  const variable       = getDropdownValue("main-variable");
-  const strip          = getDropdownValue("main-strip");
-  const depth          = getDropdownValue("main-depth");
-  const loggerLocation = getDropdownValue("main-loggerLocation");
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-  const params = new URLSearchParams({
-    year,
-    granularity,
-    variable,
-    strip,
-    depth,
-    loggerLocation,
-  }).toString();
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error("❌ Download failed:", resp.status, txt);
+    throw new Error(`Download failed with status ${resp.status}`);
+  }
 
-  window.location.href = `/download_all_data_zip?${params}`;
+  const blob   = await resp.blob();
+  const objUrl = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = objUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(objUrl);
+  console.log("✅ Download triggered:", filename);
 }
 
-// ----------------------------------------------------
-//  Plot image download (raw / ratio, png / jpeg)
-// ----------------------------------------------------
-function downloadPlot(plotType, format, mode = "screen") {
-  console.log(`📡 Downloading ${plotType} plot as ${format} (${mode})...`);
+/* -------------------------------------------------------------------------
+ *  MAIN DATA DOWNLOADS (Raw / Ratio / All)
+ * ---------------------------------------------------------------------- */
 
-  const year           = getDropdownValue("main-year")           || "unknown";
-  const variable       = getDropdownValue("main-variable")       || "unknown";
-  const strip          = getDropdownValue("main-strip")          || "unknown";
-  const loggerLocation = getDropdownValue("main-loggerLocation") || "unknown";
-  const depth          = (getDropdownValue("main-depth") || "unknown").replace(" ", "");
+/**
+ * Download trace data (raw / ratio / all) for the Main Data Display tab.
+ *
+ * This is exposed on window as `downloadTraceData` and is typically called
+ * from the "Download Data" dropdown on the main tab.
+ *
+ * @param {string} kind - "raw" | "ratio" | "all"
+ */
+export async function downloadTraceData(kind = "all") {
+  try {
+    const yearEl     = document.getElementById("main-year");
+    const variableEl = document.getElementById("main-variable");
+    const stripEl    = document.getElementById("main-strip");
+    const granEl     = document.getElementById("main-granularity");
+    const depthEl    = document.getElementById("main-depth");
 
-  const filename = `${plotType}_plot_${year}_${variable}_${strip}_${loggerLocation}_${depth}_${mode}`;
-  console.log(`📂 Generated filename: ${filename}.${format}`);
+    if (!yearEl || !variableEl || !stripEl || !granEl || !depthEl) {
+      alert("⚠️ Cannot download data: one or more controls are missing.");
+      return;
+    }
 
-  const plotElement = getElementByIdSafe(plotType === "raw" ? "plot-1" : "plot-2");
-  if (!plotElement) {
-    console.error(`❌ Plot container not found for type: ${plotType}`);
+    const year        = parseInt(yearEl.value, 10);
+    const variable    = variableEl.value;
+    const strip       = stripEl.value;
+    const granularity = granEl.value;
+    const depth       = depthEl.value;
+    const unitSystem  = window.unitSystem || "us";
+
+    const payload = {
+      year,
+      variable,
+      strip,
+      granularity,
+      depth,
+      unitSystem,
+      downloadType: kind,
+    };
+
+    const fname =
+      buildFilename([
+        "data",
+        kind,
+        variable,
+        strip,
+        `${depth}depth`,
+        granularity,
+        year,
+      ]) + ".zip";
+
+    // NOTE: this assumes your FastAPI route is mounted at /api/download_data.
+    await postAndDownload("/api/download_data", payload, fname);
+  } catch (err) {
+    console.error("❌ Error in downloadTraceData:", err);
+    alert("Unable to download data. Please check the console for details.");
+  }
+}
+
+/* -------------------------------------------------------------------------
+ *  SUMMARY STATISTICS DOWNLOAD (Summary Statistics tab)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Download summary statistics (raw / ratio / all / zip) for the Summary tab.
+ *
+ * @param {string} mode - "raw" | "ratio" | "all" | "zip"
+ */
+export async function downloadSummaryData(mode = "all") {
+  const yearEl        = document.getElementById("summary-year");
+  const variableEl    = document.getElementById("summary-variable");
+  const stripEl       = document.getElementById("summary-strip");
+  const granularityEl = document.getElementById("summary-granularity");
+  const depthEl       = document.getElementById("summary-depth");
+
+  if (!yearEl || !variableEl || !stripEl || !granularityEl || !depthEl) {
+    console.error("❌ downloadSummaryData: summary controls not found in DOM");
+    alert("Internal error: summary controls are missing.");
     return;
   }
 
-  let exportWidth;
-  let exportHeight;
-  let scale = 2;
+  const year        = parseInt(yearEl.value, 10);
+  const variable    = variableEl.value;
+  const strip       = stripEl.value;
+  const granularity = granularityEl.value;
+  const depth       = depthEl.value;
+  const unitSystem  = window.unitSystem || "us";
 
-  if (mode === "fixed") {
-    exportWidth  = FIXED_EXPORT_WIDTH;
-    exportHeight = FIXED_EXPORT_HEIGHT;
-    scale        = 2;
-  } else {
-    const bounds = plotElement.getBoundingClientRect();
-    exportWidth  = Math.max(800, Math.round(bounds.width));
-    exportHeight = Math.max(400, Math.round(bounds.height));
+  if (Number.isNaN(year)) {
+    alert("Please choose a valid year before downloading.");
+    return;
   }
 
-  Plotly.downloadImage(plotElement, {
-    format,
-    filename,
-    width:  exportWidth,
-    height: exportHeight,
-    scale,
-  });
-}
-
-// ----------------------------------------------------
-//  Summary tab downloads (via /api/download_summary_data)
-// ----------------------------------------------------
-async function downloadSummaryData(type) {
-  console.log(`📥 Downloading summary data (${type})...`);
-
-  const year        = getDropdownValue("summary-year");
-  const variable    = getDropdownValue("summary-variable");
-  const strip       = getDropdownValue("summary-strip");
-  const depth       = getDropdownValue("summary-depth");
-  const granularity = getDropdownValue("summary-granularity");
-
-  const payload = { year, variable, strip, depth, granularity, type };
-
-  const stats    = window.latestSummaryStats || {};
-  const isSeason = granularity === "gseason";
-
-  if (isSeason) {
-    if (!stats.gseason_stats || Object.keys(stats.gseason_stats).length === 0) {
-      return showAlert("No seasonal summary statistics available.");
-    }
-  } else {
-    const hasRaw   = stats.raw && Object.keys(stats.raw).length > 0;
-    const hasRatio = stats.ratio && Object.keys(stats.ratio).length > 0;
-
-    if (
-      (type === "raw"   && !hasRaw) ||
-      (type === "ratio" && !hasRatio) ||
-      (type === "all"   && !hasRaw && !hasRatio)
-    ) {
-      return showAlert("No summary statistics available for download.");
-    }
+  // If user selected "zip" but this isn’t gseason, treat it as "all"
+  // so the filename matches the actual CSV content.
+  let effectiveMode = mode;
+  if (granularity !== "gseason" && mode === "zip") {
+    effectiveMode = "all";
   }
+
+  // Use the last summary response we already fetched in tables.js
+  const summaryStats = window.__lastSummaryData || null;
+
+  const payload = {
+    year,
+    variable,
+    strip,
+    granularity,
+    depth,
+    unitSystem,
+    mode,          // backend can use or ignore this
+    summaryStats,
+  };
+
+  console.log("⬇️ downloadSummaryData payload:", payload);
 
   try {
-    payload.summaryStats = isSeason
-      ? stats.gseason_stats
-      : type === "raw"
-        ? stats.raw
-        : type === "ratio"
-          ? stats.ratio
-          : { ...stats.raw, ...stats.ratio };
-
-    const response = await fetch("/api/download_summary_data", {
-      method:  "POST",
+    const resp = await fetch("/api/download_summary_data", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(payload),
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Download failed: ${text}`);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error("❌ Summary download failed:", resp.status, txt);
+      alert("Unable to download summary data.");
+      return;
     }
 
-    const blob = await response.blob();
-    const url  = URL.createObjectURL(blob);
+    const blob = await resp.blob();
+    const url  = window.URL.createObjectURL(blob);
 
-    const fileName = `summary_${granularity}_${type}.zip`;
-    const a        = document.createElement("a");
-    a.href         = url;
-    a.download     = fileName;
+    // Extension is driven by granularity: gseason → ZIP, others → CSV
+    const ext = granularity === "gseason" ? "zip" : "csv";
+
+    // Build filename
+    let baseName = `summary_${granularity}_${variable}_${year}`;
+
+    // For gseason+zip we omit the mode suffix:
+    //   summary_gseason_VWC_2025.zip
+    // For everything else we append effectiveMode:
+    //   summary_daily_VWC_2025_raw.csv
+    //   summary_daily_VWC_2025_all.csv
+    if (!(granularity === "gseason" && ext === "zip")) {
+      baseName += `_${effectiveMode}`;
+    }
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}.${ext}`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+    console.log("✅ Summary data download triggered:", `${baseName}.${ext}`);
   } catch (err) {
-    console.error("❌ Download error:", err);
-    showAlert("Failed to download summary data.");
+    console.error("❌ Error in downloadSummaryData:", err);
+    alert("An error occurred while downloading summary data.");
   }
 }
 
-// ----------------------------------------------------
-//  Bulk downloads (Option A)
-//  - One Year dropdown
-//  - A stack of obvious "Download ____" buttons
-//  - Enabled/disabled based on /bulk_download/options
-// ----------------------------------------------------
-
-async function fetchBulkDownloadOptions() {
-  const resp = await fetch("/bulk_download/options");
-  if (!resp.ok) {
-    console.error("Failed to fetch bulk download options:", resp.status);
-    return {};
-  }
-  const data = await resp.json();
-  return data.available || {};
-}
-
 /**
- * Some backends name routes differently. If needed, override here.
- * Key = data-dataset attribute from the button.
- * Value = function(year)->url OR string template.
- */
-const DATASET_ROUTE_OVERRIDES = {
-  // If your backend already matches /bulk_download/<key>/<year>, you can leave this empty.
-  // Example if needed:
-  // weather: (year) => `/bulk_download/weather/${year}`,
-  // loggers: (year) => `/bulk_download/loggers/${year}`,
-};
-
-function buildBulkDownloadUrl(datasetKey, year) {
-  const override = DATASET_ROUTE_OVERRIDES[datasetKey];
-  if (typeof override === "function") return override(year);
-  if (typeof override === "string") return override.replace("{year}", year);
-
-  // Default convention:
-  return `/bulk_download/${datasetKey}/${year}`;
-}
-
-/**
- * Initialize the Bulk Downloads tab (Option A).
+ * Wire the Summary tab's dropdown menu to the downloadSummaryData() helper.
  *
- * Expects:
- *  - #bulk-year select exists
- *  - buttons have class "bulk-download-btn" and data-dataset="..."
- *  - /bulk_download/options returns:
- *      { available: { "2023": { loggers: true, weather: true, irrigation: true, ... }, ... } }
+ * Expected HTML IDs:
+ *   - #download-summary-raw
+ *   - #download-summary-ratio
+ *   - #download-summary-all
+ *   - #download-summary-zip   (optional: All Summary (ZIP) menu item)
+ */
+export function initSummaryDownloadMenu() {
+  const rawBtn   = document.getElementById("download-summary-raw");
+  const ratioBtn = document.getElementById("download-summary-ratio");
+  const allBtn   = document.getElementById("download-summary-all");
+  const zipBtn   = document.getElementById("download-summary-zip");
+
+  if (!rawBtn && !ratioBtn && !allBtn && !zipBtn) {
+    console.warn("⚠️ Summary download menu not found in DOM.");
+    return;
+  }
+
+  if (rawBtn) {
+    rawBtn.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      // Explicitly ignore the Promise to avoid “Promise returned … is ignored” warnings
+      void downloadSummaryData("raw");
+    });
+  }
+
+  if (ratioBtn) {
+    ratioBtn.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      void downloadSummaryData("ratio");
+    });
+  }
+
+  if (allBtn) {
+    allBtn.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      void downloadSummaryData("all");
+    });
+  }
+
+  if (zipBtn) {
+    zipBtn.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      void downloadSummaryData("zip");
+    });
+  }
+
+  console.log("✅ Summary download menu initialized.");
+}
+
+/* -------------------------------------------------------------------------
+ *  PLOT IMAGE DOWNLOADS (JPEG/PNG of Plotly figures)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Download a Plotly figure as an image.
+ *
+ * This is exposed on window as `downloadPlot`. It accepts either:
+ *   - the ID of a plot div (e.g., "raw-plot"), or
+ *   - a DOM element reference.
+ */
+export async function downloadPlot(target = "raw-plot") {
+  try {
+    // noinspection JSUnresolvedVariable
+    const Plotly = window.Plotly;
+    if (!Plotly) {
+      alert("Plotly is not available; cannot download plot image.");
+      return;
+    }
+
+    const el =
+      typeof target === "string" ? document.getElementById(target) : target;
+
+    if (!el) {
+      console.error("❌ downloadPlot: plot element not found:", target);
+      alert("Unable to find the plot container to download.");
+      return;
+    }
+
+    const filenameBase = el.id || "plot";
+    const filename = `${filenameBase}.png`;
+
+    console.log("⬇️ Downloading plot image for:", filenameBase);
+
+    // noinspection JSUnresolvedFunction
+    const dataUrl = await Plotly.toImage(el, {
+      format: "png",
+      height: 600,
+      width: 1000,
+    });
+
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    console.log("✅ Plot image download triggered:", filename);
+  } catch (err) {
+    console.error("❌ Error in downloadPlot:", err);
+    alert("An error occurred while downloading the plot image.");
+  }
+}
+
+/* -------------------------------------------------------------------------
+ *  BULK DOWNLOAD TAB INITIALIZATION
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Initialize any handlers needed for the Bulk Downloads tab.
+ *
+ * If your Bulk Downloads tab is mostly simple links that hit static routes,
+ * this can safely be a no-op with some debugging logs.
  */
 export async function initBulkDownloadTab() {
-  const yearSelect = document.getElementById("bulk-year");
-  if (!yearSelect) {
-    console.warn("Bulk year select (#bulk-year) not found.");
-    return;
-  }
-
-  const buttons = Array.from(document.querySelectorAll("button.bulk-download-btn"));
-  if (!buttons.length) {
-    console.warn("No bulk download buttons found (button.bulk-download-btn).");
-    return;
-  }
-
-  const availableByYear = await fetchBulkDownloadOptions();
-  const years = Object.keys(availableByYear).sort();
-
-  if (!years.length) {
-    yearSelect.innerHTML = `<option value="">No years available</option>`;
-    buttons.forEach((b) => { b.disabled = true; });
-    return;
-  }
-
-  // Populate dropdown
-  yearSelect.innerHTML = "";
-  years.forEach((y) => {
-    const opt = document.createElement("option");
-    opt.value = y;
-    opt.textContent = y;
-    yearSelect.appendChild(opt);
-  });
-
-  function updateButtons() {
-    const y = yearSelect.value;
-    const avail = availableByYear[y] || {};
-
-    buttons.forEach((btn) => {
-      const key = btn.getAttribute("data-dataset");
-      if (!key) return;
-      btn.disabled = !Boolean(avail[key]);
-    });
-  }
-
-  yearSelect.addEventListener("change", updateButtons);
-
-  // Wire all buttons
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const y = yearSelect.value;
-      const key = btn.getAttribute("data-dataset");
-      if (!y || !key) return;
-
-      const url = buildBulkDownloadUrl(key, y);
-      window.location.href = url;
-    });
-  });
-
-  updateButtons();
+  // Placeholder for any future wiring logic.
+  console.log("📦 initBulkDownloadTab: nothing to wire at the moment.");
 }
-
-// ----------------------------------------------------
-//  ES module exports (for other JS files)
-// ----------------------------------------------------
-export {
-  downloadTraceData,
-  downloadTraceBundleZip,
-  downloadPlot,
-  downloadSummaryData,
-};

@@ -209,7 +209,7 @@ class PakbusConfig:
     logger_ids: List[int]
 
 PAKBUS = PakbusConfig(
-    host=os.getenv("PAKBUS_HOST", "2605:59c0:30f3:2500:2d0:2cff:fe02:1ddd"),
+    host=os.getenv("PAKBUS_HOST", "2605:59ca:2202:7700:2d0:2cff:fe02:1ddd"),
     port=int(os.getenv("PAKBUS_PORT", 6785)),
     base_id=int(os.getenv("PAKBUS_BASE_ID", 4094)),
     logger_ids=list(range(2, 14)),

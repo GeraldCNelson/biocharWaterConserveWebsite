@@ -1,27 +1,24 @@
 // static/js/main.js
 
+// 1) Config / constants
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 
+// 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
   downloadTraceData,
   downloadPlot,
   downloadSummaryData,
+  initBulkDownloadTab,
+  initSummaryDownloadMenu,
 } from "./downloads.js";
 
-import { initBulkDownloadTab } from "./downloads.js";
-
-// ✅ Expose download helpers for inline onclick handlers in index.html
-window.downloadTraceData   = downloadTraceData;
-window.downloadPlot        = downloadPlot;
-window.downloadSummaryData = downloadSummaryData;
-
-// 1) debugging & logging
+// 3) Debugging & logging
 import { debugLog, debugGroup } from "./plots.js";
 
-// 2) markdown loader
+// 4) Markdown loader
 import { loadMarkdownContent } from "./markdown.js";
 
-// 3) all your UI controls (dropdowns, handlers, etc.)
+// 5) UI controls (dropdowns, unit toggle, etc.)
 import {
   initializeUpdateButtons,
   setupUnitToggleHandlers,
@@ -36,19 +33,28 @@ import {
   updateStartAndEndDatesFromYear,
 } from "./ui_controls.js";
 
-// 5) main plotting routines
+// 6) Main plotting routines
 import {
   renderMainPlots,
   waitForAllDropdowns,
 } from "./plot_utils.js";
 
-// 6) summary‐table updater
+// 7) Summary-table updater
 import { updateSummaryStatistics } from "./tables.js";
 
-// 7) custom‐season setup
+// 8) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";
 
+// ----------------------------------------------------
+// Expose download helpers for inline onclick handlers
+// ----------------------------------------------------
+window.downloadTraceData   = downloadTraceData;
+window.downloadPlot        = downloadPlot;
+window.downloadSummaryData = downloadSummaryData;
 
+// ----------------------------------------------------
+// Main app bootstrap
+// ----------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
   // ----------------------------------------------------
   // 1) Core app initialization
@@ -90,10 +96,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Reset date range when the year changes
   document
-      .getElementById("main-year")
-      ?.addEventListener("change", (e) =>
-          updateStartAndEndDatesFromYear(e.target.value)
-      );
+    .getElementById("main-year")
+    ?.addEventListener("change", (e) =>
+      updateStartAndEndDatesFromYear(e.target.value)
+    );
 
   // Make sure the depth labels match the current unit system
   updateDepthLabels(window.unitSystem);
@@ -103,11 +109,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.table(defaults);
     if (window.depthMapping) {
       console.table(
-          Object.entries(window.depthMapping).map(([depth, map]) => ({
-            Depth: depth,
-            US: map.us,
-            Metric: map.metric,
-          }))
+        Object.entries(window.depthMapping).map(([depth, map]) => ({
+          Depth: depth,
+          US: map.us,
+          Metric: map.metric,
+        }))
       );
     }
   });
@@ -139,9 +145,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (markdownFiles && Object.keys(markdownFiles).length > 0) {
     debugLog("📖 Loading markdown snippets…");
     await Promise.all(
-        Object.entries(markdownFiles).map(([id, path]) =>
-            loadMarkdownContent(id, path)
-        )
+      Object.entries(markdownFiles).map(([id, path]) =>
+        loadMarkdownContent(id, path)
+      )
     );
   } else {
     console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
@@ -156,9 +162,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
     initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
   }
+
+  // Bulk downloads tab
   try {
     await initBulkDownloadTab();
   } catch (err) {
     console.error("Failed to initialize Bulk Downloads tab:", err);
   }
+
+  // Summary Statistics dropdown (Raw / Ratio / All)
+  try {
+    initSummaryDownloadMenu();
+  } catch (err) {
+    console.error("Failed to initialize Summary Summary dropdown:", err);
+  }
+
 });

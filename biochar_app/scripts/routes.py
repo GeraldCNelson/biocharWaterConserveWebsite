@@ -5,6 +5,7 @@ routes.py — API Endpoints & Orchestration for Biochar Dashboard
 """
 import os
 import re
+import math
 import json
 import logging
 from io import BytesIO
@@ -54,6 +55,8 @@ from biochar_app.scripts.config import (
     YEARS,
     PLOT_BASED_ON_OPTIONS,
     TRACE_OPTION_MAP,
+    DEFAULT_GSEASON_PERIODS,
+    label_name_mapping,
     sensor_depth_mapping,
     logger_location_mapping,
     variable_name_mapping,
@@ -61,6 +64,21 @@ from biochar_app.scripts.config import (
     strip_name_mapping,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
+
+def _clean_for_json(obj):
+    """
+    Recursively walk dicts/lists and replace NaN/inf floats with None
+    so JSONResponse can serialize the payload.
+    """
+    if isinstance(obj, dict):
+        return {k: _clean_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_clean_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    return obj
 
 logger = logging.getLogger(__name__)
 
@@ -464,6 +482,8 @@ async def get_defaults_and_options():
         "granularities": granularities,
         "traceOptions": PLOT_BASED_ON_OPTIONS,
         "depthMapping": sensor_depth_mapping,
+        "gseasonPeriods": DEFAULT_GSEASON_PERIODS,
+        "label_name_mapping": label_name_mapping,  # or similar
     }
 
     return JSONResponse(response_data)
@@ -652,7 +672,6 @@ class SummaryStatsRequest(BaseModel):
     granularity: str
     summaryStats: Dict[str, Any]
 
-
 @api_router.post("/download_summary_data")
 async def download_summary_data(req: SummaryStatsRequest):
     year, variable, strip, granularity, stats = (
@@ -663,39 +682,142 @@ async def download_summary_data(req: SummaryStatsRequest):
         req.summaryStats,
     )
 
+    # 🔍 Top-level debug of the request
+    print(
+        f"[download_summary_data] year={year}, variable={variable}, "
+        f"strip={strip}, granularity={granularity}, "
+        f"has_stats={bool(stats)}"
+    )
+
+    # Figure out depth from the summaryStats payload if present
+    depth_val = None
+    if isinstance(stats, dict):
+        depth_val = stats.get("depth")
+    if depth_val is None:
+        depth_val = getattr(req, "depth", None)
+    depth_str = str(depth_val) if depth_val is not None else ""
+
+    # ------------------------------------------------------
+    # 🌱 Growing-season (gseason) path
+    # ------------------------------------------------------
     if granularity == "gseason":
-        gstats = get_flat_gseason_summary(year)
         raw_rows: List[Dict[str, Any]] = []
         ratio_rows: List[Dict[str, Any]] = []
 
-        for season_code, season_block in gstats.items():
-            for var_key, strip_blocks in season_block.items():
-                for strip_key, stat_obj in strip_blocks.items():
-                    for trace, vals in stat_obj.get("raw_statistics", {}).items():
-                        logger_id = trace.split("_")[-1]
-                        raw_rows.append(
-                            {
-                                "Season": season_code,
-                                "Variable": var_key,
-                                "Strip": strip_key,
-                                "Logger": logger_id,
-                                **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
-                            }
-                        )
-                    for trace, vals in stat_obj.get("ratio_statistics", {}).items():
-                        parts = trace.split("_")
-                        strips_ = parts[3] if len(parts) > 4 else ""
-                        logger_id = parts[-1]
-                        ratio_rows.append(
-                            {
-                                "Season": season_code,
-                                "Variable": var_key,
-                                "Strips": strips_,
-                                "Logger": logger_id,
-                                **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
-                            }
-                        )
+        if not isinstance(stats, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="summaryStats for gseason must be a JSON object",
+            )
 
+        # Prefer the nested gseason_stats block if present
+        season_data = stats.get("gseason_stats")
+        if isinstance(season_data, dict):
+            print(
+                "[download_summary_data:gseason] Using stats['gseason_stats'] "
+                f"with seasons={list(season_data.keys())}"
+            )
+        else:
+            print(
+                "[download_summary_data:gseason] No 'gseason_stats' key; "
+                "treating stats as the seasonal map directly."
+            )
+            season_data = stats
+
+        if not isinstance(season_data, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Could not interpret seasonal summary structure",
+            )
+
+        for season_code, season_block in season_data.items():
+            if not isinstance(season_block, dict):
+                print(
+                    "[download_summary_data:gseason] "
+                    f"Non-dict season_block for season={season_code}: "
+                    f"{season_block!r} (type={type(season_block).__name__})"
+                )
+                continue
+
+            raw_map = season_block.get("raw_statistics", {}) or {}
+            ratio_map = season_block.get("ratio_statistics", {}) or {}
+
+            # Derive season start/end dates in YYYY-MM-DD form
+            spec = DEFAULT_GSEASON_PERIODS.get(season_code)
+            if spec:
+                sm, sd = map(int, spec["start"].split("-"))
+                em, ed = map(int, spec["end"].split("-"))
+                # Same wrap logic you use in get_summary_stats
+                start_year = year - 1 if sm > em else year
+                end_year = year
+                start_date_str = f"{start_year}-{spec['start']}"
+                end_date_str = f"{end_year}-{spec['end']}"
+            else:
+                start_date_str = ""
+                end_date_str = ""
+
+            # ---------- RAW rows ----------
+            for trace, vals in raw_map.items():
+                if not isinstance(vals, dict):
+                    print(
+                        "[download_summary_data:gseason:raw] "
+                        f"Non-dict vals for season={season_code}, trace={trace}: "
+                        f"{vals!r} (type={type(vals).__name__})"
+                    )
+                    continue
+
+                # e.g. VWC_1_raw_S1_T → logger_id = "T"
+                logger_id = trace.split("_")[-1]
+                raw_rows.append(
+                    {
+                        "Year": year,
+                        "Depth": depth_str,
+                        "Season": season_code,
+                        "StartDate": start_date_str,
+                        "EndDate": end_date_str,
+                        "Variable": variable,
+                        "Strip": strip,
+                        "Logger": logger_id,
+                        **{
+                            k: round(vals.get(k, 0), 4)
+                            for k in ("min", "mean", "max", "std")
+                        },
+                    }
+                )
+
+            # ---------- RATIO rows ----------
+            for trace, vals in ratio_map.items():
+                if not isinstance(vals, dict):
+                    print(
+                        "[download_summary_data:gseason:ratio] "
+                        f"Non-dict vals for season={season_code}, trace={trace}: "
+                        f"{vals!r} (type={type(vals).__name__})"
+                    )
+                    continue
+
+                # e.g. VWC_1_ratio_S1_S2_T → strips + logger
+                strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
+                strips_ = strips_match.group(1) if strips_match else ""
+                logger_id = trace.split("_")[-1]
+
+                ratio_rows.append(
+                    {
+                        "Year": year,
+                        "Depth": depth_str,
+                        "Season": season_code,
+                        "StartDate": start_date_str,
+                        "EndDate": end_date_str,
+                        "Variable": variable,
+                        "Strips": strips_,
+                        "Logger": logger_id,
+                        **{
+                            k: round(vals.get(k, 0), 4)
+                            for k in ("min", "mean", "max", "std")
+                        },
+                    }
+                )
+
+        # Build ZIP payload
         bioio = BytesIO()
         with zipfile.ZipFile(bioio, "w") as zf:
             if raw_rows:
@@ -713,23 +835,43 @@ async def download_summary_data(req: SummaryStatsRequest):
             headers={"Content-Disposition": f"attachment; filename={fname}"},
         )
 
+    # ------------------------------------------------------
+    # 📅 Non-seasonal (standard) path
+    # ------------------------------------------------------
     if not stats:
         raise HTTPException(status_code=400, detail="No summary statistics provided")
 
+    if not isinstance(stats, dict):
+        raise HTTPException(status_code=400, detail="summaryStats must be a JSON object")
+
     rows: List[Dict[str, Any]] = []
     for trace, vals in stats.items():
+        # 🧪 Debug: catch any fields that are not the stat dicts
+        if not isinstance(vals, dict):
+            print(
+                "[download_summary_data:standard] Non-dict vals encountered: "
+                f"trace={trace}, vals={vals!r}, type={type(vals).__name__}"
+            )
+            continue
+
         parts = trace.split("_")
         typ = "raw" if "_raw_" in trace else "ratio" if "_ratio_" in trace else ""
         strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
         strips_ = strips_match.group(1) if strips_match else ""
         logger_id = parts[-1] if parts else ""
+
         rows.append(
             {
+                "Year": year,
+                "Depth": depth_str,
                 "Variable": parts[0] if parts else "",
                 "Type": typ,
                 "Strips": strips_,
                 "Logger": logger_id,
-                **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
+                **{
+                    k: round(vals.get(k, 0), 4)
+                    for k in ("min", "mean", "max", "std")
+                },
             }
         )
 
@@ -745,28 +887,156 @@ async def download_summary_data(req: SummaryStatsRequest):
 
 @api_router.post("/get_summary_stats")
 async def get_summary_stats(data: Dict[str, Any] = Body(...)):
+    """
+    Return summary statistics for the Summary Statistics tab.
+
+    For granularity != "gseason":
+        - raw_statistics / ratio_statistics summarize the full filtered DataFrame.
+
+    For granularity == "gseason":
+        - raw_statistics / ratio_statistics are left empty at the top level.
+        - gseason_stats is a dict:
+            {
+              "Q1_Winter": {
+                  "raw_statistics":   { col -> {min, mean, max, std} },
+                  "ratio_statistics": { col -> {min, mean, max, std} },
+              },
+              "Q2_Early_Growing": { ... },
+              "Q3_Peak_Harvest":  { ... },
+            }
+    """
     required = ["year", "variable", "strip", "granularity", "depth"]
     missing = [k for k in required if data.get(k) is None]
     if missing:
-        raise HTTPException(status_code=400, detail=f"Missing parameter(s): {', '.join(missing)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing parameter(s): {', '.join(missing)}",
+        )
 
+    # --- basic parsing / validation -----------------------------------------
     try:
         year = int(data["year"])
     except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail=f"Invalid year: {data.get('year')}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid year: {data.get('year')}",
+        )
 
-    variable = data["variable"]
-    strip = data["strip"]
+    variable    = data["variable"]
+    strip       = data["strip"]
     granularity = data["granularity"]
+
     try:
         depth = int(data["depth"])
     except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail=f"Invalid depth: {data.get('depth')}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid depth: {data.get('depth')}",
+        )
 
     unit_system = data.get("unitSystem", "us")
-    start = data.get("startDate")
-    end = data.get("endDate")
+    start       = data.get("startDate")
+    end         = data.get("endDate")
 
+    # --- helper: JSON-safe stats (no NaN / Inf) -----------------------------
+    def _clean_numbers(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _clean_numbers(v) for k, v in obj.items()}
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        return obj
+
+    # ========================================================================
+    # 1) GROWING-SEASON BRANCH
+    #    Use 15-minute data and slice into the three periods.
+    # ========================================================================
+    if granularity == "gseason":
+        # Use 15-minute data as the base for growing-season summaries.
+        try:
+            df = load_logger_year(year, "15min")
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+        if df.empty:
+            return JSONResponse(
+                {
+                    "year": year,
+                    "variable": variable,
+                    "strip": strip,
+                    "granularity": granularity,
+                    "depth": str(depth),
+                    "unitSystem": unit_system,
+                    "raw_statistics": {},
+                    "ratio_statistics": {},
+                    "gseason_stats": {},
+                }
+            )
+
+        if "timestamp" not in df.columns:
+            raise HTTPException(
+                status_code=500,
+                detail="Expected 'timestamp' column in logger data.",
+            )
+
+        # Make sure timestamp is datetime
+        df = df.copy()
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+        gseason_stats: Dict[str, Dict[str, Any]] = {}
+
+        for code, spec in DEFAULT_GSEASON_PERIODS.items():
+            # spec["start"] / spec["end"] are "MM-DD" strings
+            sm, sd = map(int, spec["start"].split("-"))
+            em, ed = map(int, spec["end"].split("-"))
+
+            # Handle wrap windows (e.g. Winter 11-01 → 04-30, crossing year)
+            start_year = year - 1 if sm > em else year
+            end_year   = year
+
+            start_ts = pd.Timestamp(f"{start_year}-{spec['start']}")
+            # inclusive end-of-day
+            end_ts   = (
+                pd.Timestamp(f"{end_year}-{spec['end']}")
+                + pd.Timedelta(days=1)
+                - pd.Timedelta(seconds=1)
+            )
+
+            slice_df = df[
+                (df["timestamp"] >= start_ts) & (df["timestamp"] <= end_ts)
+            ]
+
+            if slice_df.empty:
+                raw_stats: Dict[str, Dict[str, float]] = {}
+                ratio_stats: Dict[str, Dict[str, float]] = {}
+            else:
+                raw_stats, ratio_stats = compute_summary_statistics(
+                    slice_df, variable, strip, str(depth)
+                )
+
+            gseason_stats[code] = {
+                "raw_statistics":   _clean_numbers(raw_stats),
+                "ratio_statistics": _clean_numbers(ratio_stats),
+            }
+
+        return JSONResponse(
+            {
+                "year": year,
+                "variable": variable,
+                "strip": strip,
+                "granularity": granularity,
+                "depth": str(depth),
+                "unitSystem": unit_system,
+                "raw_statistics": {},      # intentionally empty at top level
+                "ratio_statistics": {},
+                "gseason_stats": gseason_stats,
+            }
+        )
+
+    # ========================================================================
+    # 2) STANDARD (NON-GSEASON) BRANCH
+    # ========================================================================
+
+    # Load the data for the requested granularity (15min/daily/monthly/…)
     try:
         df = load_logger_year(year, granularity)
     except FileNotFoundError as e:
@@ -783,12 +1053,14 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                 "unitSystem": unit_system,
                 "raw_statistics": {},
                 "ratio_statistics": {},
+                "gseason_stats": {},
             }
         )
 
     if start and end and "timestamp" in df.columns:
         df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
+    # --- SWC special case ----------------------------------------------------
     if variable == "SWC":
         stats_raw: Dict[str, Dict[str, float]] = {}
         stats_ratio: Dict[str, Dict[str, float]] = {}
@@ -806,10 +1078,10 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
 
             label_key = f"SWC_{depth}_raw_{strip}_{loc_key}"
             stats_raw[label_key] = {
-                "min": float(series.min()),
+                "min":  float(series.min()),
                 "mean": float(series.mean()),
-                "max": float(series.max()),
-                "std": float(series.std(ddof=1)) if len(series) > 1 else 0.0,
+                "max":  float(series.max()),
+                "std":  float(series.std(ddof=1)) if len(series) > 1 else 0.0,
             }
 
         return JSONResponse(
@@ -820,13 +1092,18 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                 "granularity": granularity,
                 "depth": str(depth),
                 "unitSystem": unit_system,
-                "raw_statistics": stats_raw,
-                "ratio_statistics": stats_ratio,
+                "raw_statistics": _clean_numbers(stats_raw),
+                "ratio_statistics": _clean_numbers(stats_ratio),
+                "gseason_stats": {},
             }
         )
 
-    stats_raw, stats_ratio = compute_summary_statistics(df, variable, strip, str(depth))
+    # --- all other variables -------------------------------------------------
+    stats_raw, stats_ratio = compute_summary_statistics(
+        df, variable, strip, str(depth)
+    )
 
+    # Temperature variables: ratios are not meaningful
     if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
         stats_ratio = {}
 
@@ -838,8 +1115,9 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
             "granularity": granularity,
             "depth": str(depth),
             "unitSystem": unit_system,
-            "raw_statistics": stats_raw,
-            "ratio_statistics": stats_ratio,
+            "raw_statistics": _clean_numbers(stats_raw),
+            "ratio_statistics": _clean_numbers(stats_ratio),
+            "gseason_stats": {},
         }
     )
 
