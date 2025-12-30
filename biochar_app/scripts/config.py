@@ -370,15 +370,10 @@ DEFAULT_GSEASON_PERIODS = {
         "end": "04-30"
     },
     "Q2_Early_Growing": {
-        "label": "Early Growing",
+        "label": "Growing Season",
         "start": "04-01",
-        "end": "06-30"
-    },
-    "Q3_Peak_Harvest": {
-        "label": "Peak Harvest",
-        "start": "07-01",
         "end": "10-31"
-    }
+    },
 }
 
 VALUE_COLS_STANDARD = [
