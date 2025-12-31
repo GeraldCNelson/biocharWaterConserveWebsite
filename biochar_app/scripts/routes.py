@@ -8,6 +8,7 @@ import re
 import math
 import json
 import logging
+import textwrap
 from io import BytesIO
 import zipfile
 from zipfile import ZipFile
@@ -65,6 +66,7 @@ from biochar_app.scripts.config import (
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
+
 def _clean_for_json(obj):
     """
     Recursively walk dicts/lists and replace NaN/inf floats with None
@@ -79,6 +81,7 @@ def _clean_for_json(obj):
             return None
         return obj
     return obj
+
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +280,7 @@ async def download_weather_zip(year: int):
 
     return FileResponse(path=str(zip_path), filename=zip_path.name, media_type="application/zip")
 
+
 @main_router.get("/bulk_download/irrigation/{year}")
 async def download_irrigation_zip(year: int):
     _ensure_year_allowed(year)
@@ -320,6 +324,7 @@ async def download_biomass_zip(year: int):
     headers = {"Content-Disposition": f'attachment; filename="Biochar_BiomassHay_{year}.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
+
 ANCILLARY_DATASETS: Dict[str, Dict[str, str]] = {
     # key used by buttons / options -> Excel sheet name + default csv name inside zip
     "irrigation": {"sheet": "IRRIGATION", "csv": "irrigation.csv"},
@@ -327,6 +332,7 @@ ANCILLARY_DATASETS: Dict[str, Dict[str, str]] = {
     "soil_bio":   {"sheet": "SOIL BIO",   "csv": "soil_bio.csv"},
     "biomass":    {"sheet": "Hay Data All", "csv": "biomass_hay.csv"},
 }
+
 
 def _find_sheet_for_year(xlsx_path: str, base_sheet: str, year: int) -> Optional[str]:
     """
@@ -441,6 +447,7 @@ def _ancillary_available_for_year(xlsx_path: str, dataset_key: str, year: int) -
         return not df.empty
     except Exception:
         return False
+
 
 # ---------------------------------------------------------------------------
 # Defaults / options endpoint
@@ -671,6 +678,7 @@ class SummaryStatsRequest(BaseModel):
     strip: str
     granularity: str
     summaryStats: Dict[str, Any]
+
 
 @api_router.post("/download_summary_data")
 async def download_summary_data(req: SummaryStatsRequest):
@@ -1146,6 +1154,191 @@ async def custom_gseason(request: Request):
 # Trace download routes (raw / ratio / all)
 # ---------------------------------------------------------------------------
 
+class DownloadDataRequest(BaseModel):
+    year: int
+    variable: str
+    strip: str
+    granularity: str
+    depth: str
+    unitSystem: str = "us"
+    downloadType: str = "all"  # "raw" | "ratio" | "all"
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+
+
+@api_router.post("/download_data")
+async def download_data(req: DownloadDataRequest):
+    """
+    Combined trace download for the Main Data Display tab.
+
+    Always returns a ZIP bundle containing:
+      - raw_data.csv  (if downloadType in {"raw","all"} and available)
+      - ratio_data.csv (if downloadType in {"ratio","all"} and available)
+      - README.txt    (describing the selection and contents)
+    """
+    year        = req.year
+    variable    = req.variable
+    strip       = req.strip
+    granularity = req.granularity.lower()
+    depth       = req.depth
+    unit_system = req.unitSystem
+    download_ty = req.downloadType or "all"
+    start       = req.startDate
+    end         = req.endDate
+
+    _ensure_year_allowed(year)
+
+    try:
+        df = load_logger_year(year, granularity)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No data available for year={year}, granularity={granularity}",
+        )
+
+    # Optional date filtering if we have timestamps + explicit range
+    if start and end and "timestamp" in df.columns:
+        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No data in the requested date range for year={year}, granularity={granularity}",
+        )
+
+    source_var = "VWC" if variable == "SWC" else variable
+
+    AUX_PREFIXES = ("precip", "rain", "irrig", "gallon")
+    AIR_TEMP_PREFIXES = ("temp_air_degF", "temp_air_degC")
+
+    raw_cols: List[str] = []
+    ratio_cols: List[str] = []
+    aux_cols: List[str] = []
+
+    for col in df.columns:
+        if col == "timestamp":
+            continue
+
+        # Always keep aux/overlay columns
+        if any(col.startswith(p) for p in AUX_PREFIXES):
+            aux_cols.append(col)
+            continue
+
+        if variable == "T" and any(col.startswith(p) for p in AIR_TEMP_PREFIXES):
+            aux_cols.append(col)
+            continue
+
+        # Raw columns for this variable/strip/depth
+        if (
+            col.startswith(f"{source_var}_{depth}_raw_{strip}_")
+            and f"_{strip}_" in col
+        ):
+            raw_cols.append(col)
+            continue
+
+        # Ratio columns for this variable/strip/depth
+        if (
+            col.startswith(f"{source_var}_{depth}_ratio_")
+            and f"_{strip}" in col
+        ):
+            ratio_cols.append(col)
+            continue
+
+    # Build raw and ratio DataFrames (if any)
+    raw_df = None
+    if raw_cols and download_ty in ("raw", "all"):
+        cols = []
+        if "timestamp" in df.columns:
+            cols.append("timestamp")
+        cols.extend(aux_cols)
+        cols.extend(sorted(raw_cols))
+        raw_df = df[cols].copy()
+        raw_df = _add_unit_suffixes_for_download(raw_df, variable)
+
+    ratio_df = None
+    if ratio_cols and download_ty in ("ratio", "all"):
+        cols = []
+        if "timestamp" in df.columns:
+            cols.append("timestamp")
+        cols.extend(aux_cols)
+        cols.extend(sorted(ratio_cols))
+        ratio_df = df[cols].copy()
+        ratio_df = _round_ratio_columns(ratio_df, decimals=6)
+
+    if raw_df is None and ratio_df is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No matching columns found for variable={variable}, "
+                f"strip={strip}, depth={depth}, granularity={granularity}"
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # Build README
+    # ------------------------------------------------------------------
+    included_files: List[str] = []
+    if raw_df is not None:
+        included_files.append("raw_data.csv")
+    if ratio_df is not None:
+        included_files.append("ratio_data.csv")
+
+    readme_text = textwrap.dedent(
+        f"""
+        Biochar Fruita CSU – Downloaded Data Bundle
+        ===========================================
+
+        This ZIP file was generated from the Interactive Plots tab.
+
+        Selection summary
+        -----------------
+        • Year:         {year}
+        • Variable:     {variable}
+        • Strip:        {strip}
+        • Depth index:  {depth}
+        • Granularity:  {granularity}
+        • Unit system:  {unit_system}
+        • Download type:{download_ty}
+
+        Files in this bundle
+        --------------------
+        {os.linesep.join(f"- {name}" for name in included_files) or "- (none)"}
+
+        Notes
+        -----
+        • Timestamps are stored in naive local time (America/Denver).
+        • VWC is stored as percent (0–100) when labelled with '_pct'.
+        • SWC volumes are in gallons if unit system = 'us', litres if unit system = 'metric'.
+        • Ratio columns (with '_ratio_') are unitless ratios between strip groups.
+        """
+    ).strip() + "\n"
+
+    # ------------------------------------------------------------------
+    # Build ZIP
+    # ------------------------------------------------------------------
+    bioio = BytesIO()
+    with zipfile.ZipFile(bioio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("README.txt", readme_text)
+
+        if raw_df is not None:
+            zf.writestr("raw_data.csv", raw_df.to_csv(index=False))
+
+        if ratio_df is not None:
+            zf.writestr("ratio_data.csv", ratio_df.to_csv(index=False))
+
+    bioio.seek(0)
+
+    fname = f"data_{download_ty}_{variable}_{strip}_D{depth}_{granularity}_{year}.zip"
+    return StreamingResponse(
+        bioio,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
 @main_router.get("/download_raw_data")
 async def download_raw_data(
     year: int = Query(...),
@@ -1215,9 +1408,6 @@ async def download_ratio_data(
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
-
-# NOTE: leaving your /download_all_data and /download_all_data_zip as you provided.
-# (No route mismatch issues were shown there in your snippet.)
 
 # ---------------------------------------------------------------------------
 # Registry-based bulk download (checkbox UI) [API routes]

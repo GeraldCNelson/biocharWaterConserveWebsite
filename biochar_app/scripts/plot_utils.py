@@ -614,10 +614,11 @@ def make_ratio_figure(
 
     human_var = get_unit_aware_label(variable, unit_system)
     human_logger_loc = logger_location_mapping.get(logger_location, logger_location)
+    var_abbrev = variable  # already something like "VWC", "EC", "T", etc.
 
     title = (
         f"{granularity.capitalize()} Ratio Plot for "
-        f"{human_var} in {year} ({human_logger_loc} Logger)"
+        f"{var_abbrev} in {year} ({human_logger_loc} Logger)"
     )
     xcfg = {"title": "Season", "type": "category"} if is_gs else common_xaxis_config(granularity, start, end)
 
