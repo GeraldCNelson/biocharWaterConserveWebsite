@@ -9,11 +9,17 @@ Provides:
 """
 
 from typing import Mapping, Any
+import logging
+
 import pandas as pd
 from biochar_app.scripts.config import DEFAULT_GSEASON_PERIODS
 
+logger = logging.getLogger(__name__)
 
-def _slice_and_mean(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+
+def _slice_and_mean(
+    df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp
+) -> pd.Series:
     """Column-wise mean of df[start:end] (inclusive). Assumes DatetimeIndex."""
     mask = (df.index >= start) & (df.index <= end)
     return df.loc[mask].mean(numeric_only=True)
@@ -48,9 +54,22 @@ def compute_seasons(
     DataFrame with one row per period (code, label, start, end, precip?, plus MEANs of other columns).
     """
     if "timestamp" in df.columns:
-        df = df.set_index(pd.to_datetime(df["timestamp"], errors="coerce")).drop(columns=["timestamp"])
+        df = df.set_index(
+            pd.to_datetime(df["timestamp"], errors="coerce")
+        ).drop(columns=["timestamp"])
     if not isinstance(df.index, pd.DatetimeIndex):
-        raise ValueError("compute_seasons: df must be indexed by DatetimeIndex or contain a 'timestamp' column.")
+        raise ValueError(
+            "compute_seasons: df must be indexed by DatetimeIndex or contain a 'timestamp' column."
+        )
+
+    # Debug: what are we feeding into seasonal aggregation?
+    logger.info(
+        "🍂 compute_seasons(year=%s): %d rows, %d columns. Example columns: %s",
+        year,
+        len(df),
+        len(df.columns),
+        [c for c in df.columns if c.startswith("VWC") or c.startswith("SWC")][:10],
+    )
 
     have_precip_in = "precip_in" in df.columns
     have_precip_mm = "precip_mm" in df.columns
@@ -63,30 +82,61 @@ def compute_seasons(
 
         # Resolve window for this calendar year (wrap-aware, e.g., Nov–Feb)
         start_year = year - 1 if sm > em else year
-        end_year   = year
+        end_year = year
         start = pd.Timestamp(f"{start_year}-{spec['start']}")
-        end   = pd.Timestamp(f"{end_year}-{spec['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        end = (
+            pd.Timestamp(f"{end_year}-{spec['end']}")
+            + pd.Timedelta(days=1)
+            - pd.Timedelta(seconds=1)
+        )
+
+        # Warn if this window has no data at all
+        window_mask = (df.index >= start) & (df.index <= end)
+        if not window_mask.any():
+            logger.warning(
+                "🍂 compute_seasons: no data found for period %s (%s–%s) in year %s",
+                code,
+                start,
+                end,
+                year,
+            )
 
         # MEAN of all non-precip columns
-        means = _slice_and_mean(df.drop(columns=[precip_col], errors="ignore"), start, end).to_dict()
+        means = _slice_and_mean(
+            df.drop(columns=[precip_col], errors="ignore"), start, end
+        ).to_dict()
 
         row = {
-            "code":  code,
+            "code": code,
             "label": spec.get("label", code.replace("_", " ")),
             "start": start,
-            "end":   end,
+            "end": end,
         }
         row.update(means)
 
         # SUM of precip increments over the window
         if include_precip and precip_col is not None:
-            ser = pd.to_numeric(df[precip_col], errors="coerce").fillna(0.0).clip(lower=0.0)
-            mask = (df.index >= start) & (df.index <= end)
-            row[precip_col] = float(ser.loc[mask].sum())
+            ser = (
+                pd.to_numeric(df[precip_col], errors="coerce")
+                .fillna(0.0)
+                .clip(lower=0.0)
+            )
+            row[precip_col] = float(ser.loc[window_mask].sum())
 
         out_rows.append(row)
 
-    return pd.DataFrame(out_rows)
+    out_df = pd.DataFrame(out_rows)
+
+    # Debug: confirm that seasonal slice carries through key variables
+    logger.info(
+        "🍂 compute_seasons(year=%s): seasonal df shape=%s; SWC cols=%s; VWC cols=%s",
+        year,
+        out_df.shape,
+        [c for c in out_df.columns if c.startswith("SWC")][:10],
+        [c for c in out_df.columns if c.startswith("VWC")][:10],
+    )
+
+    return out_df
 
 
 def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
@@ -100,10 +150,14 @@ def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
         em, ed = map(int, period["end"].split("-"))
 
         start_year = year - 1 if sm > em else year
-        end_year   = year
+        end_year = year
 
         start = pd.Timestamp(f"{start_year}-{period['start']}")
-        end   = pd.Timestamp(f"{end_year}-{period['end']}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        end = (
+            pd.Timestamp(f"{end_year}-{period['end']}")
+            + pd.Timedelta(days=1)
+            - pd.Timedelta(seconds=1)
+        )
 
         if start <= ts <= end:
             return code

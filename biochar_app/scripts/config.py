@@ -367,7 +367,7 @@ DEFAULT_GSEASON_PERIODS = {
     "Q1_Winter": {
         "label": "Winter",
         "start": "11-01",
-        "end": "04-30"
+        "end": "03-31"
     },
     "Q2_Early_Growing": {
         "label": "Growing Season",

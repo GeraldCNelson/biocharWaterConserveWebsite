@@ -11,29 +11,32 @@ Relies on:
 """
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
-import pandas as pd
-import numpy as np
+from collections.abc import Mapping
+from typing import Any
 
+import numpy as np
+import pandas as pd
 
 from biochar_app.scripts.gseason import assign_gseason_periods  # core mapper
 from biochar_app.scripts.config import (
     DATA_PROCESSED_DIR,
     DEFAULT_GSEASON_PERIODS,
-    PRECIP_COLS,   # e.g., {"us": "in", "metric": "mm"}
+    PRECIP_COLS,  # e.g., {"us": "in", "metric": "mm"}
     PARQUET_DIR,
     UNIT_CONVERSIONS,
 )
 
-from collections.abc import Mapping
-from typing import Any
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Top‑level: generate & load JSON for logger seasonal summaries
+# Top-level: generate & load JSON for logger seasonal summaries
 # (Assumes you have a job that prepares this; we keep the interface unchanged.)
 # ---------------------------------------------------------------------------
+
 
 def generate_gseason_summary(
     year: int,
@@ -78,59 +81,74 @@ def generate_gseason_summary(
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp"])
 
-    # NOTE: we intentionally do *not* clamp to df["timestamp"].dt.year == year.
-    # The wrap-aware assign_gseason_periods(...) call below will assign
-    # Q1_Winter, Q2_Early_Growing, Q3_Peak_Harvest for the chosen "year"
-    # (e.g. 2025) even when part of Winter lives in the previous calendar year
-    # (e.g. Nov–Dec 2024). Rows that do NOT belong to any period for "year"
-    # will get NaN for period_code and be dropped.
+    logger.info(
+        "🍂 generate_gseason_summary(%s): 15-min slice rows=%d, cols=%d",
+        year,
+        len(df),
+        len(df.columns),
+    )
 
     # 2) assign period_code to each row using wrap-aware mapper
-    df["period_code"] = df["timestamp"].apply(
-        lambda ts: assign_gseason_periods(ts, year)
-    )
+    df["period_code"] = df["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
     df = df[df["period_code"].notna()]
 
     if df.empty:
-        # write empty scaffold to keep downstream happy
+        logger.warning(
+            "🍂 generate_gseason_summary(%s): no rows mapped to any growing-season period; writing empty JSON",
+            year,
+        )
         summary_path.write_text(json.dumps({}, indent=2))
         return
 
     # 3) discover variable/strip/depth from column names
     #    RAW:   VAR_DEPTH_raw_S?_?   e.g., VWC_1_raw_S1_T
     #    RATIO: VAR_DEPTH_ratio_S1_S2_?  or _S3_S4_?
-    raw_re   = re.compile(
+    #    SWC:   SWC_vol_gal_S1_T_1  or SWC_vol_L_S1_T_1
+    raw_re = re.compile(
         r"^(?P<var>[A-Z]+)_(?P<depth>\d)_raw_(?P<strip>S\d)_(?P<loc>[A-Z])$"
     )
     ratio_re = re.compile(
         r"^(?P<var>[A-Z]+)_(?P<depth>\d)_ratio_(?P<pair>S\d_S\d)_(?P<loc>[A-Z])$"
     )
+    swc_raw_re = re.compile(
+        r"^SWC_vol_(?P<unit>L|gal)_(?P<strip>S\d)_(?P<loc>[A-Z])_(?P<depth>\d)$"
+    )
 
     # 4) build nested accumulator
-    nested: dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    from collections import defaultdict as dd
+
+    nested: dict[str, dict] = dd(lambda: dd(lambda: dd(dict)))
 
     def stats(series: pd.Series) -> dict:
         s = pd.to_numeric(series, errors="coerce").dropna()
         if s.empty:
             return {}
         return {
-            "min":  round(float(s.min()),  4),
+            "min": round(float(s.min()), 4),
             "mean": round(float(s.mean()), 4),
-            "max":  round(float(s.max()),  4),
-            "std":  round(float(s.std()),  4),
+            "max": round(float(s.max()), 4),
+            "std": round(float(s.std()), 4),
         }
 
     # 5) per period, compute stats for RAW and RATIO groups
     for pcode, g in df.groupby("period_code", dropna=True):
-        # RAW groups by (var, strip, depth, loc)
+        logger.info(
+            "🍂 generate_gseason_summary(%s): period=%s rows=%d",
+            year,
+            pcode,
+            len(g),
+        )
         for col in g.columns:
+            # Skip non-data columns
+            if col in {"timestamp", "period_code"}:
+                continue
+
             m = raw_re.match(col)
             if m:
-                var   = m.group("var")
+                var = m.group("var")
                 depth = m.group("depth")
                 strip = m.group("strip")
-                # loc = m.group("loc")  # currently not used, but kept for clarity
-                key   = f"{strip}_D{depth}"
+                key = f"{strip}_D{depth}"
                 rs = stats(g[col])
                 if rs:
                     slot = nested[pcode][var].setdefault(
@@ -141,22 +159,42 @@ def generate_gseason_summary(
 
             m = ratio_re.match(col)
             if m:
-                var   = m.group("var")
+                var = m.group("var")
                 depth = m.group("depth")
-                pair  = m.group("pair")   # S1_S2 or S3_S4
-                # loc = m.group("loc")    # currently not used
-                key   = f"{pair}_D{depth}"  # keep pairs separate from single-strip keys
+                pair = m.group("pair")  # S1_S2 or S3_S4
+                key = f"{pair}_D{depth}"  # keep pairs separate from single-strip keys
                 rs = stats(g[col])
                 if rs:
                     slot = nested[pcode][var].setdefault(
                         key, {"raw_statistics": {}, "ratio_statistics": {}}
                     )
                     slot["ratio_statistics"][col] = rs
+                continue
+
+            # --- SWC special case: treat SWC_vol_* as the raw SWC values ----
+            m = swc_raw_re.match(col)
+            if m:
+                depth = m.group("depth")
+                strip = m.group("strip")
+                key = f"{strip}_D{depth}"
+                rs = stats(g[col])
+                if rs:
+                    slot = nested[pcode]["SWC"].setdefault(
+                        key, {"raw_statistics": {}, "ratio_statistics": {}}
+                    )
+                    slot["raw_statistics"][col] = rs
+                continue
 
     # 6) write JSON
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(nested, f, indent=2, default=str)
+
+    logger.info(
+        "🍂 generate_gseason_summary(%s): wrote %s",
+        year,
+        summary_path,
+    )
 
 
 def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict:
@@ -170,14 +208,19 @@ def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict
     with summary_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
+
 # ---------------------------------------------------------------------------
 # Stats helpers for UI
 # ---------------------------------------------------------------------------
+
 
 def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, depth: str):
     """
     Compute summary statistics for raw and ratio values filtered by variable, strip, and depth.
     Returns two dictionaries: raw_stats and ratio_stats.
+
+    For SWC, we treat SWC_vol_gal_* / SWC_vol_L_* as the "raw" SWC series and
+    build S1/S2 and S3/S4 ratios on the fly from those volume columns.
     """
     if not variable or not strip or not depth or df is None or df.empty:
         return {}, {}
@@ -186,10 +229,75 @@ def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, dept
     raw_stats: dict[str, dict] = {}
     ratio_stats: dict[str, dict] = {}
 
+    depth = str(depth)
+
+    # ------------------------------------------------------------------
+    # SWC special case: use SWC_vol_* for RAW and synthesize ratios
+    # ------------------------------------------------------------------
+    if variable == "SWC":
+        # RAW: volumes per cylinder by strip / logger / depth
+        raw_cols = [
+            col
+            for col in df.columns
+            if (
+                (col.startswith(f"SWC_vol_gal_{strip}_")
+                 or col.startswith(f"SWC_vol_L_{strip}_"))
+                and col.endswith(f"_{depth}")
+            )
+        ]
+
+        for col in raw_cols:
+            s = pd.to_numeric(df[col], errors="coerce").dropna()
+            if not s.empty:
+                raw_stats[col] = {
+                    "min": round(float(s.min()), 4),
+                    "mean": round(float(s.mean()), 4),
+                    "max": round(float(s.max()), 4),
+                    "std": round(float(s.std()), 4),
+                }
+
+        # Choose which SWC_vol_* family to use for ratios (gal preferred)
+        has_gal = any(c.startswith("SWC_vol_gal_") for c in df.columns)
+        base_prefix = "SWC_vol_gal" if has_gal else "SWC_vol_L"
+
+        # S1/S2 and S3/S4 ratios per logger location (T, M, B)
+        loc_keys = ["T", "M", "B"]
+        pairs = [("S1_S2", ("S1", "S2")), ("S3_S4", ("S3", "S4"))]
+
+        for pair_label, (s_w, s_e) in pairs:
+            for loc in loc_keys:
+                num_col = f"{base_prefix}_{s_w}_{loc}_{depth}"
+                den_col = f"{base_prefix}_{s_e}_{loc}_{depth}"
+                if num_col not in df.columns or den_col not in df.columns:
+                    continue
+
+                num = pd.to_numeric(df[num_col], errors="coerce")
+                den = pd.to_numeric(df[den_col], errors="coerce")
+
+                ratio = num / den
+                ratio = ratio.replace([np.inf, -np.inf], np.nan).dropna()
+
+                if ratio.empty:
+                    continue
+
+                # Synthetic column name that matches the VWC pattern
+                col_key = f"SWC_{depth}_ratio_{pair_label}_{loc}"
+                ratio_stats[col_key] = {
+                    "min": round(float(ratio.min()), 4),
+                    "mean": round(float(ratio.mean()), 4),
+                    "max": round(float(ratio.max()), 4),
+                    "std": round(float(ratio.std()), 4),
+                }
+
+        return raw_stats, ratio_stats
+
+    # ------------------------------------------------------------------
+    # Default path: VWC, EC, Temp, etc. (unchanged)
+    # ------------------------------------------------------------------
     raw_prefix = f"{variable}_{depth}_raw_{strip}_"
     ratio_prefixes = [
         f"{variable}_{depth}_ratio_S1_S2_",
-        f"{variable}_{depth}_ratio_S3_S4_"
+        f"{variable}_{depth}_ratio_S3_S4_",
     ]
 
     # RAW stats
@@ -222,7 +330,7 @@ def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, dept
 
 def get_flat_gseason_summary(year: int) -> pd.DataFrame:
     """
-    Flatten the nested gseason JSON into a wide, analysis‑friendly table.
+    Flatten the nested gseason JSON into a wide, analysis-friendly table.
 
     Output columns:
       period_code, variable, strip, depth, logger_location,
@@ -241,7 +349,7 @@ def get_flat_gseason_summary(year: int) -> pd.DataFrame:
     # Walk the nested structure
     for period_code, by_var in nested.items():
         for var, by_strip_depth in by_var.items():
-            for strip_depth_key, stats in by_strip_depth.items():
+            for strip_depth_key, stats_block in by_strip_depth.items():
                 # strip_depth_key examples: "S1_D1" or "S1_S2_D1"
                 if "_D" in strip_depth_key:
                     strip_key, depth = strip_depth_key.split("_D", 1)
@@ -249,86 +357,111 @@ def get_flat_gseason_summary(year: int) -> pd.DataFrame:
                     strip_key, depth = strip_depth_key, ""
 
                 # RAW stats (e.g., {"VWC_1_raw_S1_T": {"min":..., "mean":...}, ...})
-                raw_stats = stats.get("raw_statistics", {}) or {}
+                raw_stats = stats_block.get("raw_statistics", {}) or {}
                 for col_name, metrics in raw_stats.items():
                     # logger_location is the last underscore token in the column name
-                    # e.g., "VWC_1_raw_S1_T" -> "T"
+                    # e.g., "VWC_1_raw_S1_T" or "SWC_vol_gal_S1_T_1" -> "T" or "1"
+                    # For SWC_vol_*, we still treat that last token as logger location-ish
+                    # for compatibility with the existing schema.
                     logger_location = col_name.rsplit("_", 1)[-1]
-                    rows.append({
-                        "period_code":      period_code,
-                        "variable":         var,
-                        "strip":            strip_key,
-                        "depth":            depth,
-                        "logger_location":  logger_location,
-                        "kind":             "raw",
-                        "min":              metrics.get("min"),
-                        "mean":             metrics.get("mean"),
-                        "max":              metrics.get("max"),
-                        "std":              metrics.get("std"),
-                    })
+                    rows.append(
+                        {
+                            "period_code": period_code,
+                            "variable": var,
+                            "strip": strip_key,
+                            "depth": depth,
+                            "logger_location": logger_location,
+                            "kind": "raw",
+                            "min": metrics.get("min"),
+                            "mean": metrics.get("mean"),
+                            "max": metrics.get("max"),
+                            "std": metrics.get("std"),
+                        }
+                    )
 
                 # RATIO stats (e.g., {"VWC_1_ratio_S1_S2_T": {...}})
-                ratio_stats = stats.get("ratio_statistics", {}) or {}
+                ratio_stats = stats_block.get("ratio_statistics", {}) or {}
                 for col_name, metrics in ratio_stats.items():
                     logger_location = col_name.rsplit("_", 1)[-1]
-                    rows.append({
-                        "period_code":      period_code,
-                        "variable":         var,
-                        "strip":            strip_key,   # can be "S1_S2"
-                        "depth":            depth,
-                        "logger_location":  logger_location,
-                        "kind":             "ratio",
-                        "min":              metrics.get("min"),
-                        "mean":             metrics.get("mean"),
-                        "max":              metrics.get("max"),
-                        "std":              metrics.get("std"),
-                    })
+                    rows.append(
+                        {
+                            "period_code": period_code,
+                            "variable": var,
+                            "strip": strip_key,  # can be "S1_S2"
+                            "depth": depth,
+                            "logger_location": logger_location,
+                            "kind": "ratio",
+                            "min": metrics.get("min"),
+                            "mean": metrics.get("mean"),
+                            "max": metrics.get("max"),
+                            "std": metrics.get("std"),
+                        }
+                    )
 
     if not rows:
-        # Return a correctly‑typed empty frame if there was no data
-        return pd.DataFrame(columns=[
-            "period_code", "variable", "strip", "depth", "logger_location",
-            "raw_min", "raw_mean", "raw_max", "raw_std",
-            "ratio_min", "ratio_mean", "ratio_max", "ratio_std",
-        ])
+        # Return a correctly-typed empty frame if there was no data
+        return pd.DataFrame(
+            columns=[
+                "period_code",
+                "variable",
+                "strip",
+                "depth",
+                "logger_location",
+                "raw_min",
+                "raw_mean",
+                "raw_max",
+                "raw_std",
+                "ratio_min",
+                "ratio_mean",
+                "ratio_max",
+                "ratio_std",
+            ]
+        )
 
     long_df = pd.DataFrame.from_records(rows)
 
     # Pivot so raw/ratio stats land in separate column groups, then flatten
-    wide = (
-        long_df
-        .pivot_table(
-            index=["period_code", "variable", "strip", "depth", "logger_location"],
-            columns="kind",
-            values=["min", "mean", "max", "std"],
-            aggfunc="first"  # there should be at most one row per index/kind
-        )
+    wide = long_df.pivot_table(
+        index=["period_code", "variable", "strip", "depth", "logger_location"],
+        columns="kind",
+        values=["min", "mean", "max", "std"],
+        aggfunc="first",  # there should be at most one row per index/kind
     )
 
     # Flatten MultiIndex columns to raw_min, ratio_mean, etc.
-    wide.columns = [
-        f"{kind}_{stat}"
-        for stat, kind in wide.columns.to_flat_index()
-    ]
+    wide.columns = [f"{kind}_{stat}" for stat, kind in wide.columns.to_flat_index()]
     wide = wide.reset_index()
 
     # Ensure all expected columns exist (even if one of raw/ratio was absent)
-    for col in ["raw_min", "raw_mean", "raw_max", "raw_std",
-                "ratio_min", "ratio_mean", "ratio_max", "ratio_std"]:
+    for col in [
+        "raw_min",
+        "raw_mean",
+        "raw_max",
+        "raw_std",
+        "ratio_min",
+        "ratio_mean",
+        "ratio_max",
+        "ratio_std",
+    ]:
         if col not in wide.columns:
             wide[col] = pd.NA
 
     # Sort for readability
-    wide = wide.sort_values(
-        ["period_code", "variable", "strip", "depth", "logger_location"],
-        kind="stable"
-    ).reset_index(drop=True)
+    wide = (
+        wide.sort_values(
+            ["period_code", "variable", "strip", "depth", "logger_location"],
+            kind="stable",
+        )
+        .reset_index(drop=True)
+    )
 
     return wide
 
+
 # ---------------------------------------------------------------------------
-# Weather: seasonal precip SUMs for plotting right‑axis
+# Weather: seasonal precip SUMs for plotting right-axis
 # ---------------------------------------------------------------------------
+
 
 def format_gseason_label(code: str) -> str:
     period = DEFAULT_GSEASON_PERIODS.get(code)
@@ -380,7 +513,7 @@ def add_gseason_precip_from_daily(
 
     for p in periods:
         start_mmdd = str(p["start"])  # e.g. "11-01"
-        end_mmdd   = str(p["end"])    # e.g. "04-30"
+        end_mmdd = str(p["end"])  # e.g. "04-30"
 
         sm, sd = map(int, start_mmdd.split("-"))
         em, ed = map(int, end_mmdd.split("-"))
@@ -388,10 +521,10 @@ def add_gseason_precip_from_daily(
         # wrap-around if start month > end month (e.g. Nov→Apr)
         if sm > em:
             start_ts = pd.Timestamp(year - 1, sm, sd)
-            end_ts   = pd.Timestamp(year, em, ed)
+            end_ts = pd.Timestamp(year, em, ed)
         else:
             start_ts = pd.Timestamp(year, sm, sd)
-            end_ts   = pd.Timestamp(year, em, ed)
+            end_ts = pd.Timestamp(year, em, ed)
 
         # inclusive end-of-day (important)
         end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
@@ -408,6 +541,7 @@ def add_gseason_precip_from_daily(
     df_gs["precip_mm"] = precip_mm_sums
 
     return df_gs
+
 
 # Normalize PeriodSpec / mappings → list of simple dicts for seasons
 def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
@@ -430,10 +564,14 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
     if isinstance(periods, Mapping):
         return [
             {
-                "code":  code,
+                "code": code,
                 "label": spec.get("label", code.replace("_", " ")),
-                "start": spec["start"][-5:] if isinstance(spec.get("start"), str) else spec["start"],
-                "end":   spec["end"][-5:]   if isinstance(spec.get("end"), str)   else spec["end"],
+                "start": spec["start"][-5:]
+                if isinstance(spec.get("start"), str)
+                else spec["start"],
+                "end": spec["end"][-5:]
+                if isinstance(spec.get("end"), str)
+                else spec["end"],
             }
             for code, spec in periods.items()
         ]
@@ -441,10 +579,10 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for p in periods:
         if isinstance(p, Mapping):
-            code  = p["code"]
+            code = p["code"]
             label = p.get("label", code.replace("_", " "))
             start = p["start"]
-            end   = p["end"]
+            end = p["end"]
         else:
             # Pydantic v2 / v1 / plain object
             if hasattr(p, "model_dump"):
@@ -453,15 +591,15 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
                 d = p.dict()
             else:
                 d = {
-                    "code":  getattr(p, "code"),
+                    "code": getattr(p, "code"),
                     "label": getattr(p, "label", None),
                     "start": getattr(p, "start"),
-                    "end":   getattr(p, "end"),
+                    "end": getattr(p, "end"),
                 }
-            code  = d["code"]
+            code = d["code"]
             label = d.get("label") or code.replace("_", " ")
             start = d["start"]
-            end   = d["end"]
+            end = d["end"]
 
         # Normalize YYYY-MM-DD → MM-DD for strings
         if isinstance(start, str) and len(start) >= 5 and "-" in start:
@@ -471,6 +609,7 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
 
         out.append({"code": code, "label": label, "start": start, "end": end})
     return out
+
 
 def add_gseason_irrigation_from_events(
     df_gs: pd.DataFrame,
@@ -518,7 +657,7 @@ def add_gseason_irrigation_from_events(
 
     for p in periods:
         start_mmdd = str(p["start"])  # e.g. "11-01"
-        end_mmdd   = str(p["end"])    # e.g. "04-30"
+        end_mmdd = str(p["end"])  # e.g. "04-30"
 
         sm, sd = map(int, start_mmdd.split("-"))
         em, ed = map(int, end_mmdd.split("-"))
@@ -526,16 +665,18 @@ def add_gseason_irrigation_from_events(
         # wrap-around if start month > end month (e.g. Nov→Apr)
         if sm > em:
             start_ts = pd.Timestamp(year - 1, sm, sd)
-            end_ts   = pd.Timestamp(year, em, ed)
+            end_ts = pd.Timestamp(year, em, ed)
         else:
             start_ts = pd.Timestamp(year, sm, sd)
-            end_ts   = pd.Timestamp(year, em, ed)
+            end_ts = pd.Timestamp(year, em, ed)
 
         # inclusive end-of-day
         end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
         mask = (irr[ts_col] >= start_ts) & (irr[ts_col] <= end_ts)
-        total_gal = float(pd.to_numeric(irr.loc[mask, gallons_col], errors="coerce").sum())
+        total_gal = float(
+            pd.to_numeric(irr.loc[mask, gallons_col], errors="coerce").sum()
+        )
         irrigation_totals.append(total_gal)
 
     df_out = df_gs.copy()
@@ -543,6 +684,7 @@ def add_gseason_irrigation_from_events(
     df_out["irrigation_kgal"] = np.round(df_out["irrigation_gal"] / 1000.0, 3)
 
     return df_out
+
 
 def build_gseason_frame_for_strip_depth(
     year: int,
@@ -558,14 +700,12 @@ def build_gseason_frame_for_strip_depth(
       - timestamp (period start)
       - period_code
       - period_label
-      - VWC/T/EC columns for the chosen strip/depth
+      - variable columns for the chosen strip/depth
       - precip_in, precip_mm
       - irrigation_gal, irrigation_kgal
     """
     # 1) Load logger gseason summary parquet
-    gseason_path = (
-        Path(PARQUET_DIR) / "summary" / "gseason" / f"{year}_gseason.parquet"
-    )
+    gseason_path = Path(PARQUET_DIR) / "summary" / "gseason" / f"{year}_gseason.parquet"
     df_gs = pd.read_parquet(gseason_path)
 
     # Your gseason parquet rows already correspond to DEFAULT_GSEASON_PERIODS
@@ -574,9 +714,25 @@ def build_gseason_frame_for_strip_depth(
     df_gs["timestamp"] = pd.to_datetime(df_gs["period_start"], errors="coerce")
 
     # 2) Keep only the columns relevant for this variable/strip/depth
-    # example col names: VWC_1_raw_S1_T, VWC_1_raw_S1_M, VWC_1_raw_S1_B
-    value_prefix = f"{variable}_{depth}_raw_{strip}_"
-    value_cols = [c for c in df_gs.columns if c.startswith(value_prefix)]
+    if variable == "SWC":
+        # SWC gseason values are stored as volumes:
+        #   SWC_vol_gal_S1_T_1, SWC_vol_gal_S1_M_1, ...
+        base_prefix = f"SWC_vol_gal_{strip}_"
+        value_cols = [
+            c
+            for c in df_gs.columns
+            if c.startswith(base_prefix) and c.endswith(f"_{depth}")
+        ]
+        logger.info(
+            "🍂 build_gseason_frame_for_strip_depth: year=%s variable=SWC strip=%s depth=%s -> value_cols=%s",
+            year,
+            strip,
+            depth,
+            value_cols,
+        )
+    else:
+        value_prefix = f"{variable}_{depth}_raw_{strip}_"
+        value_cols = [c for c in df_gs.columns if c.startswith(value_prefix)]
 
     base_cols = ["timestamp", "period_code", "period_label"]
     cols = base_cols + value_cols

@@ -63,6 +63,7 @@ from biochar_app.scripts.config import (
     variable_name_mapping,
     granularity_name_mapping,
     strip_name_mapping,
+    variable_name_abbrev,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
@@ -550,6 +551,11 @@ async def api_plot_raw(req: PlotRequest):
             unit_system=unit,
         )
 
+        # 🔍 TEMP debug for SWC
+        if var == "SWC":
+            print("[DEBUG] gseason SWC columns:",
+                  [c for c in df_gseason.columns if "SWC" in c])
+
         fig = make_raw_gseason_figure(
             df=df_gseason,
             periods=periods_list,
@@ -666,7 +672,6 @@ async def api_plot_ratio(req: PlotRequest):
         )
 
     return JSONResponse(fig)
-
 
 # ---------------------------------------------------------------------------
 # Summary statistics + downloads
@@ -946,6 +951,21 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
     start       = data.get("startDate")
     end         = data.get("endDate")
 
+    # --- human-facing labels used by the frontend ---------------------------
+    # Raw tables: full label with units (e.g. "Soil Water Content (in)")
+    # Ratio tables: abbreviation ONLY (e.g. "SWC"), no units.
+    label_block = label_name_mapping.get(variable, {})
+    if isinstance(label_block, dict):
+        human_var = (
+            label_block.get(unit_system)
+            or label_block.get("us")
+            or str(variable)
+        )
+    else:
+        human_var = str(variable)
+
+    abbr = variable_name_abbrev.get(variable, variable)
+
     # --- helper: JSON-safe stats (no NaN / Inf) -----------------------------
     def _clean_numbers(obj: Any) -> Any:
         if isinstance(obj, dict):
@@ -977,6 +997,8 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                     "raw_statistics": {},
                     "ratio_statistics": {},
                     "gseason_stats": {},
+                    "display_label_raw":   human_var,
+                    "display_label_ratio": abbr,
                 }
             )
 
@@ -1037,6 +1059,8 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                 "raw_statistics": {},      # intentionally empty at top level
                 "ratio_statistics": {},
                 "gseason_stats": gseason_stats,
+                "display_label_raw":   human_var,
+                "display_label_ratio": abbr,
             }
         )
 
@@ -1062,6 +1086,8 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                 "raw_statistics": {},
                 "ratio_statistics": {},
                 "gseason_stats": {},
+                "display_label_raw":   human_var,
+                "display_label_ratio": abbr,
             }
         )
 
@@ -1103,6 +1129,8 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
                 "raw_statistics": _clean_numbers(stats_raw),
                 "ratio_statistics": _clean_numbers(stats_ratio),
                 "gseason_stats": {},
+                "display_label_raw":   human_var,
+                "display_label_ratio": abbr,
             }
         )
 
@@ -1126,6 +1154,8 @@ async def get_summary_stats(data: Dict[str, Any] = Body(...)):
             "raw_statistics": _clean_numbers(stats_raw),
             "ratio_statistics": _clean_numbers(stats_ratio),
             "gseason_stats": {},
+            "display_label_raw":   human_var,
+            "display_label_ratio": abbr,
         }
     )
 

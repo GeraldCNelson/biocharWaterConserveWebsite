@@ -95,8 +95,18 @@ export function generateSummaryTable(stats, displayVar, unitLabel) {
 
 /**
  * Split ratio stats into S1/S2 and S3/S4 sections and render them.
+ *
+ * Now uses backend-provided labels where available:
+ *   - displayLabelRaw:   full human-readable label (may include units)
+ *   - displayLabelRatio: abbreviation / base label (NO units)
  */
-function renderSplitRatioTables(ratioStats, variable, unitSystem) {
+function renderSplitRatioTables(
+  ratioStats,
+  variable,
+  unitSystem,
+  displayLabelRaw,
+  displayLabelRatioBase
+) {
   const s1s2 = {};
   const s3s4 = {};
 
@@ -106,14 +116,17 @@ function renderSplitRatioTables(ratioStats, variable, unitSystem) {
     else if (key.includes("S3_S4")) s3s4[trace] = values;
   }
 
-  // Raw display label (may include units for raw tables)
-  const rawDisplayVar = resolveDisplayName(variable, unitSystem);
+  // Raw display label (fallback to local mapping if backend didn't provide it)
+  const rawDisplayVar =
+    displayLabelRaw || resolveDisplayName(variable, unitSystem);
 
-  // For ratios, strip any trailing "(...)" unit text and append "ratio"
-  const ratioBase = rawDisplayVar.replace(/\s*\([^)]*\)\s*$/, "");
+  // For ratios, we want a *unitless* base label (from backend if available).
+  // displayLabelRatioBase is expected to be an abbreviation (e.g., "SWC").
+  const fallbackBase = rawDisplayVar.replace(/\s*\([^)]*\)\s*$/, "");
+  const ratioBase = displayLabelRatioBase || fallbackBase;
   const ratioDisplayVar = `${ratioBase} ratio`;
 
-  const ratioUnit  = getUnitLabel(variable, unitSystem, true); // currently ""
+  const ratioUnit = getUnitLabel(variable, unitSystem, true); // currently ""
 
   const build = (label, group) => {
     if (!group || Object.keys(group).length === 0) {
@@ -207,8 +220,16 @@ async function updateSummaryStatistics() {
   if (!container) return;
 
   const effectiveUnitSystem = data.unitSystem || unitSystem;
-  const displayVar          = resolveDisplayName(variable, effectiveUnitSystem);
-  const rawUnit             = getUnitLabel(variable, effectiveUnitSystem, false);
+
+  // Prefer backend-provided labels; fall back to local resolution.
+  const displayLabelRaw =
+    data.display_label_raw ||
+    resolveDisplayName(variable, effectiveUnitSystem);
+
+  const displayLabelRatioBase =
+    data.display_label_ratio || displayLabelRaw;
+
+  const rawUnit = getUnitLabel(variable, effectiveUnitSystem, false);
 
   // Depth label via mapping from backend (sensor_depth_mapping)
   const depthMapping = window.depthMapping || {};
@@ -247,19 +268,21 @@ async function updateSummaryStatistics() {
   const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
 
   const rawSubtitle =
-    `Raw Values – ${displayVar}${unitSuffix} ` +
+    `Raw Values – ${displayLabelRaw}${unitSuffix} ` +
     `by logger location in strip ${strip}, depth = ${depthLabel}, year = ${year}`;
 
   const rawHTML = generateSummaryTable(
     data.raw_statistics,
-    displayVar,
+    displayLabelRaw,
     rawUnit
   );
 
   const ratioHTML = renderSplitRatioTables(
     data.ratio_statistics,
     variable,
-    effectiveUnitSystem
+    effectiveUnitSystem,
+    displayLabelRaw,
+    displayLabelRatioBase
   );
 
   container.innerHTML = `
