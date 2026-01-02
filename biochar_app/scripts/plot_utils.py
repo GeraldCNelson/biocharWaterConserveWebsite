@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from flask import abort
 from plotly.utils import PlotlyJSONEncoder
+from fastapi import HTTPException
 
 from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
 
@@ -53,8 +54,6 @@ from biochar_app.scripts.plot_helpers import (  # noqa: E402
     load_irrigation_events,
     common_legend_config,
 )
-
-from fastapi import HTTPException  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -768,6 +767,19 @@ def make_raw_gseason_figure(
     year: int,
     trace_option: str,
 ) -> Dict[str, Any]:
+    """
+    Growing-season RAW figure.
+
+    For most variables this uses the usual `{variable}_{depth}_raw_{strip}_{logger}`
+    columns (mirroring the non-seasonal plots).
+
+    For SWC we use the aggregated volume columns:
+
+        SWC_vol_gal_{strip}_{logger}_{depth}   (US)
+        SWC_vol_L_{strip}_{logger}_{depth}     (metric)
+
+    and apply the same 'depths' vs 'locations' logic for traces.
+    """
     df = convert_units(df, unit_system)
 
     norm_periods = periods_to_list_of_dicts(periods or [])
@@ -775,9 +787,15 @@ def make_raw_gseason_figure(
 
     fig = go.Figure()
 
+    # ------------------------------------------------------------------ #
+    # Precipitation overlay (VWC only, as before)
+    # ------------------------------------------------------------------ #
     precip_col_us = "precip_in"
     precip_col_mm = "precip_mm"
-    have_precip = (variable == "VWC") and (precip_col_us in df.columns or precip_col_mm in df.columns)
+    have_precip = (
+        variable == "VWC"
+        and (precip_col_us in df.columns or precip_col_mm in df.columns)
+    )
 
     precip_vals = None
     if have_precip:
@@ -798,7 +816,12 @@ def make_raw_gseason_figure(
                 yaxis="y2",
                 offsetgroup="0",
                 opacity=0.55,
-                text=[f"{v:.2f} {unit_suffix}" if (v is not None and np.isfinite(v)) else "" for v in precip_vals],
+                text=[
+                    f"{v:.2f} {unit_suffix}"
+                    if (v is not None and np.isfinite(v))
+                    else ""
+                    for v in precip_vals
+                ],
                 textposition="outside",
                 textfont=dict(size=12),
                 cliponaxis=False,
@@ -806,47 +829,106 @@ def make_raw_gseason_figure(
             )
         )
 
+    # ------------------------------------------------------------------ #
+    # Sensor bars
+    # ------------------------------------------------------------------ #
     human_var = label_name_mapping[variable][unit_system]
-    abbrev = variable_name_abbrev[variable]
-    legend_fmt = f"{abbrev}, {{}}"
+    abbr = variable_name_abbrev.get(variable, variable)
+    legend_fmt = f"{abbr}, {{}}"
 
     sensor_cols_plotted: List[str] = []
 
-    if trace_option == "depths":
-        for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
-            col = f"{variable}_{d}_raw_{strip}_{logger_location}"
-            if col not in df.columns:
-                continue
-            sensor_cols_plotted.append(col)
+    # ----- SWC special case (use SWC_vol_* columns) -------------------- #
+    if variable == "SWC":
+        vol_suffix = "gal" if unit_system == "us" else "L"
+        base = f"SWC_vol_{vol_suffix}"
 
-            bar_kwargs: Dict[str, Any] = dict(
-                x=labels,
-                y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
-                name=legend_fmt.format(depth_map[unit_system]),
-                offsetgroup=str(idx),
-                opacity=0.85,
-            )
-            depth_col = _depth_color(str(d))
-            if depth_col:
-                bar_kwargs["marker"] = dict(color=depth_col)
+        if trace_option == "depths":
+            # One bar per depth for the chosen strip & logger location.
+            for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
+                col = f"{base}_{strip}_{logger_location}_{d}"
+                if col not in df.columns:
+                    continue
+                sensor_cols_plotted.append(col)
 
-            fig.add_trace(go.Bar(**bar_kwargs))
-    else:
-        for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
-            col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
-            if col not in df.columns:
-                continue
-            sensor_cols_plotted.append(col)
-            fig.add_trace(
-                go.Bar(
+                series = pd.to_numeric(df[col], errors="coerce").astype(float)
+
+                bar_kwargs: Dict[str, Any] = dict(
                     x=labels,
-                    y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
-                    name=legend_fmt.format(loc_label),
+                    y=series.tolist(),
+                    name=legend_fmt.format(depth_map[unit_system]),
                     offsetgroup=str(idx),
                     opacity=0.85,
                 )
-            )
+                depth_col = _depth_color(str(d))
+                if depth_col:
+                    bar_kwargs["marker"] = dict(color=depth_col)
 
+                fig.add_trace(go.Bar(**bar_kwargs))
+        else:
+            # One bar per logger location at the chosen depth.
+            for idx, (loc_key, loc_label) in enumerate(
+                logger_location_mapping.items(), start=1
+            ):
+                col = f"{base}_{strip}_{loc_key}_{depth}"
+                if col not in df.columns:
+                    continue
+                sensor_cols_plotted.append(col)
+
+                series = pd.to_numeric(df[col], errors="coerce").astype(float)
+
+                fig.add_trace(
+                    go.Bar(
+                        x=labels,
+                        y=series.tolist(),
+                        name=legend_fmt.format(loc_label),
+                        offsetgroup=str(idx),
+                        opacity=0.85,
+                    )
+                )
+
+    # ----- All other variables (VWC, EC, T, etc.) ---------------------- #
+    else:
+        if trace_option == "depths":
+            for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
+                col = f"{variable}_{d}_raw_{strip}_{logger_location}"
+                if col not in df.columns:
+                    continue
+                sensor_cols_plotted.append(col)
+
+                bar_kwargs: Dict[str, Any] = dict(
+                    x=labels,
+                    y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
+                    name=legend_fmt.format(depth_map[unit_system]),
+                    offsetgroup=str(idx),
+                    opacity=0.85,
+                )
+                depth_col = _depth_color(str(d))
+                if depth_col:
+                    bar_kwargs["marker"] = dict(color=depth_col)
+
+                fig.add_trace(go.Bar(**bar_kwargs))
+        else:
+            for idx, (loc_key, loc_label) in enumerate(
+                logger_location_mapping.items(), start=1
+            ):
+                col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
+                if col not in df.columns:
+                    continue
+                sensor_cols_plotted.append(col)
+                fig.add_trace(
+                    go.Bar(
+                        x=labels,
+                        y=pd.to_numeric(df[col], errors="coerce")
+                        .astype(float)
+                        .tolist(),
+                        name=legend_fmt.format(loc_label),
+                        offsetgroup=str(idx),
+                        opacity=0.85,
+                    )
+                )
+
+    # Irrigation overlays (still VWC-only for now)
     if variable == "VWC" and norm_periods:
         add_irrigation_shapes(
             fig=fig,
@@ -865,7 +947,9 @@ def make_raw_gseason_figure(
         primary_min = None
         primary_max = None
 
-    yaxis_cfg = common_yaxis_config("raw", variable, unit_system, primary_min, primary_max)
+    yaxis_cfg = common_yaxis_config(
+        "raw", variable, unit_system, primary_min, primary_max
+    )
     y2_cfg: Dict[str, Any] = common_yaxis2_config(unit_system)
 
     if have_precip and precip_vals is not None:
@@ -913,28 +997,206 @@ def make_ratio_gseason_figure(
     unit_system: str,
     year: int,
 ) -> Dict[str, Any]:
+    """
+    Growing-season RATIO figure.
+
+    * For VWC (and other ratio-ready variables) we use the precomputed
+      `{variable}_{depth}_ratio_*_{logger}` columns.
+
+    * For SWC we build ratios on the fly:
+
+        SWC ratio S1/S2  =  SWC_vol_{unit}_S1_{logger}_{depth}
+                           / SWC_vol_{unit}_S2_{logger}_{depth}
+
+        SWC ratio S3/S4  =  SWC_vol_{unit}_S3_{logger}_{depth}
+                           / SWC_vol_{unit}_S4_{logger}_{depth}
+
+      so the growing-season SWC ratio plot has the same structure as the
+      VWC ratio plot: two bars per season (S1/S2 and S3/S4).
+    """
     df = convert_units(df, unit_system)
 
-    labels = [f"{p.label} ({p.start}-{p.end})" for p in periods]
-
-    y_cols = [
-        c for c in df.columns
-        if c.startswith(f"{variable}_{depth}_ratio_")
-        and c.endswith(f"_{logger_location}")
-    ]
-    if not y_cols:
-        abort(400, "No ratio data available for the selected filters.")
+    # Normalized periods + x-axis labels
+    norm_periods = periods_to_list_of_dicts(periods or [])
+    labels = [f"{p['label']} ({p['start']}-{p['end']})" for p in norm_periods]
 
     fig = go.Figure()
 
+    # ------------------------------------------------------------------ #
+    # Shared label / title helpers (auto-detect what to show)
+    # ------------------------------------------------------------------ #
+    # Abbreviation like "VWC", "SWC", "EC", ...
+    abbr = variable_name_abbrev.get(variable, variable)
+
+    # Full unit-aware label (e.g. "Volumetric Water Content (%)")
+    full_label = label_name_mapping[variable][unit_system]
+    human_base = full_label.split(" (")[0]  # drop units → "Volumetric Water Content"
+
+    # Logger location label, e.g. "Top"
+    logger_label = logger_location_mapping.get(logger_location, "")
+    logger_suffix = f" ({logger_label} Logger)" if logger_label else ""
+
+    def _make_title(no_data: bool = False) -> str:
+        """
+        Build a ratio title that is consistent with the daily ratio plots:
+        - Use abbreviation (VWC, SWC, ...)
+        - Mention year and logger location
+        - Mention that these are strip ratios S1/S2 and S3/S4
+        - Optionally append a 'no data' message.
+        """
+        base = f"Growing-season Ratio Plot for {abbr} in {year}{logger_suffix} " \
+               "(Strip Ratios S1/S2 and S3/S4)"
+        if no_data:
+            base += " — no ratio data available for selected filters"
+        return base
+
+    # ------------------------------------------------------------------ #
+    # SWC: construct S1/S2 and S3/S4 ratios from SWC_vol_* columns
+    # ------------------------------------------------------------------ #
+    if variable == "SWC":
+        vol_suffix = "gal" if unit_system == "us" else "L"
+        base = f"SWC_vol_{vol_suffix}"
+
+        s1_col = f"{base}_S1_{logger_location}_{depth}"
+        s2_col = f"{base}_S2_{logger_location}_{depth}"
+        s3_col = f"{base}_S3_{logger_location}_{depth}"
+        s4_col = f"{base}_S4_{logger_location}_{depth}"
+
+        # Debug: check that at least some SWC columns exist for this slice
+        swc_cols = [c for c in df.columns if c.startswith("SWC_")]
+        logger.info("[SWC gseason ratio] available SWC columns: %s", swc_cols)
+
+        ratios: Dict[str, pd.Series] = {}
+
+        if s1_col in df.columns and s2_col in df.columns:
+            s1 = pd.to_numeric(df[s1_col], errors="coerce")
+            s2 = pd.to_numeric(df[s2_col], errors="coerce")
+            r12 = (s1 / s2).replace([np.inf, -np.inf], np.nan)
+            ratios["S1/S2"] = r12
+
+        if s3_col in df.columns and s4_col in df.columns:
+            s3 = pd.to_numeric(df[s3_col], errors="coerce")
+            s4 = pd.to_numeric(df[s4_col], errors="coerce")
+            r34 = (s3 / s4).replace([np.inf, -np.inf], np.nan)
+            ratios["S3/S4"] = r34
+
+        if not ratios:
+            # Nothing to plot – return an empty but valid figure with a clear title
+            logger.warning(
+                "[SWC gseason ratio] No usable SWC_vol columns for "
+                "strip=%s, logger=%s, depth=%s",
+                strip,
+                logger_location,
+                depth,
+            )
+            fig.update_layout(
+                title={"text": _make_title(no_data=True), "x": 0.5},
+                xaxis={
+                    "title": "Season",
+                    "type": "category",
+                    "showline": True,
+                    "linecolor": "black",
+                    "linewidth": 1,
+                },
+            )
+            return prepare_plot_for_json(fig)
+
+        # Build traces
+        all_vals: List[pd.Series] = []
+        for idx, (pair_label, series) in enumerate(ratios.items(), start=1):
+            vals = pd.to_numeric(series, errors="coerce").astype(float)
+            all_vals.append(vals)
+
+            color_key = f"ratio_SWC_{pair_label.replace('/', '_')}"
+            color_val = PLOT_COLORS.get(color_key, None)
+
+            bar_kwargs: Dict[str, Any] = dict(
+                x=labels,
+                y=vals.tolist(),
+                name=f"{abbr} ratio {pair_label}",
+                offsetgroup=str(idx),
+                opacity=0.8,
+            )
+            if color_val is not None:
+                bar_kwargs["marker"] = dict(color=color_val)
+
+            fig.add_trace(go.Bar(**bar_kwargs))
+
+        # Global y-range from all ratio series
+        combined = pd.concat(all_vals, axis=0)
+        global_min = float(combined.min()) if not combined.empty else None
+        global_max = float(combined.max()) if not combined.empty else None
+
+        fig.update_layout(
+            barmode="group",
+            bargap=0.2,
+            bargroupgap=0.1,
+            title={"text": _make_title(no_data=False), "x": 0.5},
+            xaxis={
+                "title": "Season",
+                "type": "category",
+                "showline": True,
+                "linecolor": "black",
+                "linewidth": 1,
+            },
+            yaxis={
+                **common_yaxis_config(
+                    kind="ratio",
+                    variable="SWC",
+                    unit_system=unit_system,
+                    global_min=global_min,
+                    global_max=global_max,
+                ),
+                "title": f"{human_base} Ratio",
+            },
+            legend=common_legend_config("Strip Ratios"),
+            template="plotly_white",
+            margin={"l": 60, "r": 20, "t": 60, "b": 40},
+            height=400,
+        )
+
+        return prepare_plot_for_json(fig)
+
+    # ------------------------------------------------------------------ #
+    # Default path: use precomputed *_ratio_* columns (e.g. VWC)
+    # ------------------------------------------------------------------ #
+    y_cols = [
+        c
+        for c in df.columns
+        if c.startswith(f"{variable}_{depth}_ratio_")
+        and c.endswith(f"_{logger_location}")
+    ]
+
+    if not y_cols:
+        logger.warning(
+            "[gseason ratio] No ratio columns for variable=%s, depth=%s, "
+            "strip=%s, logger=%s",
+            variable,
+            depth,
+            strip,
+            logger_location,
+        )
+        fig.update_layout(
+            title={"text": _make_title(no_data=True), "x": 0.5},
+            xaxis={
+                "title": "Season",
+                "type": "category",
+                "showline": True,
+                "linecolor": "black",
+                "linewidth": 1,
+            },
+        )
+        return prepare_plot_for_json(fig)
+
+    # Reuse the same figure object; add traces for each ratio column
     for idx, col in enumerate(y_cols, start=1):
         p1, p2 = col.split("_ratio_")[1].split("_")[:2]
         pair_color = PLOT_COLORS.get(f"ratio_{p1}_{p2}", None)
 
         bar_kwargs: Dict[str, Any] = dict(
             x=labels,
-            y=df[col].astype(float).tolist(),
-            name=f"{variable_name_abbrev[variable]} ratio {p1}/{p2}",
+            y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
+            name=f"{abbr} ratio {p1}/{p2}",
             offsetgroup=str(idx),
             opacity=0.8,
         )
@@ -943,20 +1205,14 @@ def make_ratio_gseason_figure(
 
         fig.add_trace(go.Bar(**bar_kwargs))
 
-    depth_label = sensor_depth_mapping[str(depth)][unit_system]
-    human_var = label_name_mapping[variable][unit_system].split(" (")[0]
+    global_min = df[y_cols].min(numeric_only=True).min()
+    global_max = df[y_cols].max(numeric_only=True).max()
 
     fig.update_layout(
         barmode="group",
         bargap=0.2,
         bargroupgap=0.1,
-        title={
-            "text": (
-                f"Growing-season Ratio Plot for {human_var} at {depth_label} in Strip {strip}, {year} "
-                "(Strip Ratios S1/S2 and S3/S4)"
-            ),
-            "x": 0.5,
-        },
+        title={"text": _make_title(no_data=False), "x": 0.5},
         xaxis={
             "title": "Season",
             "type": "category",
@@ -969,10 +1225,10 @@ def make_ratio_gseason_figure(
                 kind="ratio",
                 variable=variable,
                 unit_system=unit_system,
-                global_min=df[y_cols].min(numeric_only=True).min(),
-                global_max=df[y_cols].max(numeric_only=True).max(),
+                global_min=global_min,
+                global_max=global_max,
             ),
-            "title": f"{human_var} Ratio",
+            "title": f"{human_base} Ratio",
         },
         legend=common_legend_config("Strip Ratios"),
         template="plotly_white",

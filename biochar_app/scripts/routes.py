@@ -687,109 +687,330 @@ class SummaryStatsRequest(BaseModel):
 
 @api_router.post("/download_summary_data")
 async def download_summary_data(req: SummaryStatsRequest):
-    year, variable, strip, granularity, stats = (
-        req.year,
-        req.variable,
-        req.strip,
-        req.granularity,
-        req.summaryStats,
-    )
+    """
+    Build a ZIP file containing:
+      - README.txt
+      - One CSV with summary statistics.
 
-    # 🔍 Top-level debug of the request
+    Behaviour:
+      • granularity == "gseason":
+          - summary_gseason_<variable>_<year>_<strip>.csv
+          - README.txt
+          - CSV contains raw + ratio rows, with Season/StartDate/EndDate columns.
+      • granularity != "gseason":
+          - summary_<granularity>_<variable>_<year>_<strip|all>.csv
+          - README.txt
+          - CSV contains raw + ratio rows (standard format).
+
+    NOTE: This endpoint ALWAYS returns a real ZIP
+          (media_type='application/zip').
+    """
+    year        = req.year
+    variable    = req.variable
+    strip       = req.strip
+    granularity = req.granularity
+    stats       = req.summaryStats or {}
+
     print(
         f"[download_summary_data] year={year}, variable={variable}, "
-        f"strip={strip}, granularity={granularity}, "
-        f"has_stats={bool(stats)}"
+        f"strip={strip}, granularity={granularity}, has_stats={bool(stats)}"
     )
 
-    # Figure out depth from the summaryStats payload if present
-    depth_val = None
-    if isinstance(stats, dict):
-        depth_val = stats.get("depth")
-    if depth_val is None:
-        depth_val = getattr(req, "depth", None)
-    depth_str = str(depth_val) if depth_val is not None else ""
+    if not isinstance(stats, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="summaryStats must be a JSON object",
+        )
 
-    # ------------------------------------------------------
-    # 🌱 Growing-season (gseason) path
-    # ------------------------------------------------------
-    if granularity == "gseason":
-        raw_rows: List[Dict[str, Any]] = []
-        ratio_rows: List[Dict[str, Any]] = []
+    # Try to infer depth and unit system from the summaryStats payload
+    depth_idx = stats.get("depth")
+    unit_system = stats.get("unitSystem", "us")
 
-        if not isinstance(stats, dict):
-            raise HTTPException(
-                status_code=400,
-                detail="summaryStats for gseason must be a JSON object",
-            )
+    depth_idx_str = str(depth_idx) if depth_idx is not None else ""
 
-        # Prefer the nested gseason_stats block if present
-        season_data = stats.get("gseason_stats")
-        if isinstance(season_data, dict):
-            print(
-                "[download_summary_data:gseason] Using stats['gseason_stats'] "
-                f"with seasons={list(season_data.keys())}"
-            )
-        else:
-            print(
-                "[download_summary_data:gseason] No 'gseason_stats' key; "
-                "treating stats as the seasonal map directly."
-            )
-            season_data = stats
+    # Map depth index -> human-readable label (e.g. "6 in" or "15 cm")
+    depth_label = depth_idx_str
+    if depth_idx_str and depth_idx_str in sensor_depth_mapping:
+        depth_label = (
+            sensor_depth_mapping[depth_idx_str].get(unit_system)
+            or sensor_depth_mapping[depth_idx_str].get("us")
+            or depth_idx_str
+        )
 
-        if not isinstance(season_data, dict):
-            raise HTTPException(
-                status_code=400,
-                detail="Could not interpret seasonal summary structure",
-            )
+    # For SWC at gseason, we don't conceptually have a single depth
+    # (already integrated over the 3 depths), so we leave Depth blank.
+    def _depth_value_for_csv() -> str:
+        if variable == "SWC" and granularity == "gseason":
+            return ""
+        return depth_label
 
-        for season_code, season_block in season_data.items():
-            if not isinstance(season_block, dict):
-                print(
-                    "[download_summary_data:gseason] "
-                    f"Non-dict season_block for season={season_code}: "
-                    f"{season_block!r} (type={type(season_block).__name__})"
+    # ------------------------------------------------------------------
+    # Helper: clean NaN/Inf if they sneak into dicts
+    # ------------------------------------------------------------------
+    def _clean_numbers(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _clean_numbers(v) for k, v in obj.items()}
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        return obj
+
+    # ------------------------------------------------------------------
+    # Helper: extract logger ID from a trace key, preferring T/M/B
+    # ------------------------------------------------------------------
+    def _extract_logger_id(trace: str) -> str:
+        tokens = trace.split("_")
+        # Prefer a token that matches a known logger location key
+        for tok in reversed(tokens):
+            if tok in logger_location_mapping:
+                return tok
+        # Fallback: last non-numeric token
+        for tok in reversed(tokens):
+            if not tok.isdigit():
+                return tok
+        return ""
+
+    # ------------------------------------------------------------------
+    # Human-facing variable label and unit description for README
+    # ------------------------------------------------------------------
+    # Full label with units, if available
+    label_block = label_name_mapping.get(variable, {})
+    if isinstance(label_block, dict):
+        var_full_label = (
+            label_block.get(unit_system)
+            or label_block.get("us")
+            or variable_name_mapping.get(variable, variable)
+        )
+    else:
+        var_full_label = variable_name_mapping.get(variable, variable)
+
+    # Short description of granularity
+    if granularity == "15min":
+        granularity_desc = (
+            "15-minute time step (high-frequency data; no additional temporal averaging)."
+        )
+    elif granularity == "hourly":
+        granularity_desc = "Hourly averages (or sums for precipitation/irrigation)."
+    elif granularity == "daily":
+        granularity_desc = "Daily averages (or sums for precipitation/irrigation)."
+    elif granularity == "monthly":
+        granularity_desc = "Monthly averages (or sums for precipitation/irrigation)."
+    elif granularity == "gseason":
+        # Spell out the custom growing-season periods and date ranges
+        parts = []
+        for code, spec in DEFAULT_GSEASON_PERIODS.items():
+            parts.append(f"- {code}: {spec['start']} to {spec['end']} (MM-DD)")
+        periods_text = "\n".join(parts) if parts else "- (see Technical Details tab)."
+        granularity_desc = (
+            "Custom growing-season periods, each summarizing a multi-month window.\n"
+            "The default seasons are:\n"
+            f"{periods_text}"
+        )
+    else:
+        granularity_desc = f"Custom granularity '{granularity}' (see Technical Details tab)."
+
+    # ------------------------------------------------------------------
+    # Helper to build a README body (used for both branches)
+    # ------------------------------------------------------------------
+    def build_readme(title_suffix: str) -> str:
+        return textwrap.dedent(
+            f"""
+            Biochar Fruita CSU – Summary Statistics Download
+            ================================================
+
+            This ZIP file was generated from the Summary Statistics tab.
+
+            Selection summary
+            -----------------
+            • Year:        {year}
+            • Variable:    {variable} — {var_full_label}
+            • Strip:       {strip}
+            • Depth:       {_depth_value_for_csv() or '(integrated over depths)' if variable == 'SWC' else _depth_value_for_csv()}
+            • Granularity: {granularity}
+
+            Granularity details
+            -------------------
+            {granularity_desc}
+
+            Units and interpretation
+            ------------------------
+            • Raw values use the same units as shown in the plots/tables for this variable.
+            • Ratio rows (Type = 'ratio') are unitless ratios between strip groupings
+              (e.g., S1/S2 and S3/S4 for volumetric water content).
+            • For SWC, seasonal volumes are already integrated over sensor depths.
+
+            Additional documentation
+            ------------------------
+            • For equations, exact units, and data-processing details, see the
+              “Technical Details” tab on the website.
+
+            Archive contents
+            ----------------
+            • {title_suffix}
+            """
+        ).strip() + "\n"
+
+    bioio = BytesIO()
+    with zipfile.ZipFile(bioio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+
+        # ==================================================================
+        # 1) GROWING-SEASON BRANCH (single CSV with raw + ratio)
+        # ==================================================================
+        if granularity == "gseason":
+            rows: List[Dict[str, Any]] = []
+
+            season_data = stats.get("gseason_stats")
+            if not isinstance(season_data, dict):
+                # Fallback: treat stats itself as the seasonal map
+                season_data = stats
+
+            if not isinstance(season_data, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not interpret seasonal summary structure",
                 )
-                continue
 
-            raw_map = season_block.get("raw_statistics", {}) or {}
-            ratio_map = season_block.get("ratio_statistics", {}) or {}
+            for season_code, season_block in season_data.items():
+                if not isinstance(season_block, dict):
+                    print(
+                        "[download_summary_data:gseason] "
+                        f"Non-dict season_block for season={season_code}: "
+                        f"{season_block!r} (type={type(season_block).__name__})"
+                    )
+                    continue
 
-            # Derive season start/end dates in YYYY-MM-DD form
-            spec = DEFAULT_GSEASON_PERIODS.get(season_code)
-            if spec:
-                sm, sd = map(int, spec["start"].split("-"))
-                em, ed = map(int, spec["end"].split("-"))
-                # Same wrap logic you use in get_summary_stats
-                start_year = year - 1 if sm > em else year
-                end_year = year
-                start_date_str = f"{start_year}-{spec['start']}"
-                end_date_str = f"{end_year}-{spec['end']}"
-            else:
-                start_date_str = ""
-                end_date_str = ""
+                raw_map = season_block.get("raw_statistics", {}) or {}
+                ratio_map = season_block.get("ratio_statistics", {}) or {}
 
-            # ---------- RAW rows ----------
+                # Derive season start/end dates in YYYY-MM-DD form
+                spec = DEFAULT_GSEASON_PERIODS.get(season_code)
+                if spec:
+                    sm, sd = map(int, spec["start"].split("-"))
+                    em, ed = map(int, spec["end"].split("-"))
+                    start_year = year - 1 if sm > em else year
+                    end_year = year
+                    start_date_str = f"{start_year}-{spec['start']}"
+                    end_date_str = f"{end_year}-{spec['end']}"
+                else:
+                    start_date_str = ""
+                    end_date_str = ""
+
+                # ---------- RAW rows ----------
+                for trace, vals in raw_map.items():
+                    if not isinstance(vals, dict):
+                        print(
+                            "[download_summary_data:gseason:raw] "
+                            f"Non-dict vals for season={season_code}, trace={trace}: "
+                            f"{vals!r} (type={type(vals).__name__})"
+                        )
+                        continue
+
+                    logger_id = _extract_logger_id(trace)
+
+                    rows.append(
+                        {
+                            "Year": year,
+                            "Depth": _depth_value_for_csv(),
+                            "Variable": variable,
+                            "Type": "raw",
+                            "Strips": strip,  # raw summaries are for a single strip
+                            "Logger": logger_id,
+                            "Season": season_code,
+                            "StartDate": start_date_str,
+                            "EndDate": end_date_str,
+                            **{
+                                k: round(vals.get(k, 0), 4)
+                                for k in ("min", "mean", "max", "std")
+                            },
+                        }
+                    )
+
+                # ---------- RATIO rows ----------
+                for trace, vals in ratio_map.items():
+                    if not isinstance(vals, dict):
+                        print(
+                            "[download_summary_data:gseason:ratio] "
+                            f"Non-dict vals for season={season_code}, trace={trace}: "
+                            f"{vals!r} (type={type(vals).__name__})"
+                        )
+                        continue
+
+                    # e.g. VWC_1_ratio_S1_S2_T → strip group + logger
+                    strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
+                    strips_ = strips_match.group(1) if strips_match else ""
+                    logger_id = _extract_logger_id(trace)
+
+                    rows.append(
+                        {
+                            "Year": year,
+                            "Depth": _depth_value_for_csv(),
+                            "Variable": variable,
+                            "Type": "ratio",
+                            "Strips": strips_,
+                            "Logger": logger_id,
+                            "Season": season_code,
+                            "StartDate": start_date_str,
+                            "EndDate": end_date_str,
+                            **{
+                                k: round(vals.get(k, 0), 4)
+                                for k in ("min", "mean", "max", "std")
+                            },
+                        }
+                    )
+
+            if not rows:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No seasonal summary statistics found.",
+                )
+
+            df_gs = pd.DataFrame(rows)
+            # Clean up any NaN/Inf that might appear in numeric columns
+            df_gs = df_gs.applymap(
+                lambda v: None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v
+            )
+
+            csv_name = f"summary_gseason_{variable}_{year}_{strip}.csv"
+            zf.writestr(csv_name, df_gs.to_csv(index=False))
+
+            zf.writestr(
+                "README.txt",
+                build_readme(
+                    f"{csv_name} – seasonal statistics (raw + ratio) "
+                    "for custom growing-season periods."
+                ),
+            )
+
+        # ==================================================================
+        # 2) STANDARD (NON-GSEASON) BRANCH (single CSV with raw + ratio)
+        # ==================================================================
+        else:
+            raw_map = stats.get("raw_statistics", {}) or {}
+            ratio_map = stats.get("ratio_statistics", {}) or {}
+
+            rows: List[Dict[str, Any]] = []
+
+            # --- RAW stats -------------------------------------------------
             for trace, vals in raw_map.items():
                 if not isinstance(vals, dict):
                     print(
-                        "[download_summary_data:gseason:raw] "
-                        f"Non-dict vals for season={season_code}, trace={trace}: "
+                        "[download_summary_data:standard:raw] "
+                        f"Non-dict vals for trace={trace}: "
                         f"{vals!r} (type={type(vals).__name__})"
                     )
                     continue
 
-                # e.g. VWC_1_raw_S1_T → logger_id = "T"
-                logger_id = trace.split("_")[-1]
-                raw_rows.append(
+                parts = trace.split("_")
+                strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
+                strips_ = strips_match.group(1) if strips_match else ""
+                logger_id = _extract_logger_id(trace)
+
+                rows.append(
                     {
                         "Year": year,
-                        "Depth": depth_str,
-                        "Season": season_code,
-                        "StartDate": start_date_str,
-                        "EndDate": end_date_str,
-                        "Variable": variable,
-                        "Strip": strip,
+                        "Depth": _depth_value_for_csv(),
+                        "Variable": parts[0] if parts else "",
+                        "Type": "raw",
+                        "Strips": strips_ or strip,
                         "Logger": logger_id,
                         **{
                             k: round(vals.get(k, 0), 4)
@@ -798,29 +1019,27 @@ async def download_summary_data(req: SummaryStatsRequest):
                     }
                 )
 
-            # ---------- RATIO rows ----------
+            # --- RATIO stats -----------------------------------------------
             for trace, vals in ratio_map.items():
                 if not isinstance(vals, dict):
                     print(
-                        "[download_summary_data:gseason:ratio] "
-                        f"Non-dict vals for season={season_code}, trace={trace}: "
+                        "[download_summary_data:standard:ratio] "
+                        f"Non-dict vals for trace={trace}: "
                         f"{vals!r} (type={type(vals).__name__})"
                     )
                     continue
 
-                # e.g. VWC_1_ratio_S1_S2_T → strips + logger
+                parts = trace.split("_")
                 strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
                 strips_ = strips_match.group(1) if strips_match else ""
-                logger_id = trace.split("_")[-1]
+                logger_id = _extract_logger_id(trace)
 
-                ratio_rows.append(
+                rows.append(
                     {
                         "Year": year,
-                        "Depth": depth_str,
-                        "Season": season_code,
-                        "StartDate": start_date_str,
-                        "EndDate": end_date_str,
-                        "Variable": variable,
+                        "Depth": _depth_value_for_csv(),
+                        "Variable": parts[0] if parts else "",
+                        "Type": "ratio",
                         "Strips": strips_,
                         "Logger": logger_id,
                         **{
@@ -830,71 +1049,35 @@ async def download_summary_data(req: SummaryStatsRequest):
                     }
                 )
 
-        # Build ZIP payload
-        bioio = BytesIO()
-        with zipfile.ZipFile(bioio, "w") as zf:
-            if raw_rows:
-                df_r = pd.DataFrame(raw_rows)
-                zf.writestr("gseason_raw_summary.csv", df_r.to_csv(index=False))
-            if ratio_rows:
-                df_ra = pd.DataFrame(ratio_rows)
-                zf.writestr("gseason_ratio_summary.csv", df_ra.to_csv(index=False))
-        bioio.seek(0)
+            if not rows:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No summary statistics found in raw_statistics or ratio_statistics.",
+                )
 
-        fname = f"summary_gseason_{year}_{variable}_{strip}.zip"
-        return StreamingResponse(
-            bioio,
-            media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename={fname}"},
-        )
-
-    # ------------------------------------------------------
-    # 📅 Non-seasonal (standard) path
-    # ------------------------------------------------------
-    if not stats:
-        raise HTTPException(status_code=400, detail="No summary statistics provided")
-
-    if not isinstance(stats, dict):
-        raise HTTPException(status_code=400, detail="summaryStats must be a JSON object")
-
-    rows: List[Dict[str, Any]] = []
-    for trace, vals in stats.items():
-        # 🧪 Debug: catch any fields that are not the stat dicts
-        if not isinstance(vals, dict):
-            print(
-                "[download_summary_data:standard] Non-dict vals encountered: "
-                f"trace={trace}, vals={vals!r}, type={type(vals).__name__}"
+            df_out = pd.DataFrame(rows)
+            df_out = df_out.applymap(
+                lambda v: None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v
             )
-            continue
 
-        parts = trace.split("_")
-        typ = "raw" if "_raw_" in trace else "ratio" if "_ratio_" in trace else ""
-        strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
-        strips_ = strips_match.group(1) if strips_match else ""
-        logger_id = parts[-1] if parts else ""
+            strip_part = strip if strip != "all" else "all"
+            csv_name = f"summary_{granularity}_{variable}_{year}_{strip_part}.csv"
 
-        rows.append(
-            {
-                "Year": year,
-                "Depth": depth_str,
-                "Variable": parts[0] if parts else "",
-                "Type": typ,
-                "Strips": strips_,
-                "Logger": logger_id,
-                **{
-                    k: round(vals.get(k, 0), 4)
-                    for k in ("min", "mean", "max", "std")
-                },
-            }
-        )
+            zf.writestr(csv_name, df_out.to_csv(index=False))
 
-    df_out = pd.DataFrame(rows)
-    csv = df_out.to_csv(index=False)
-    fname = f"summary_data_{year}_{variable}_{strip}_{granularity}.csv"
-    return Response(
-        content=csv,
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+            zf.writestr(
+                "README.txt",
+                build_readme(
+                    f"{csv_name} – summary statistics (raw + ratio) for granularity '{granularity}'."
+                ),
+            )
+
+    bioio.seek(0)
+    zip_fname = f"summary_{granularity}_{variable}_{year}.zip"
+    return StreamingResponse(
+        bioio,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_fname}"'},
     )
 
 
@@ -1202,9 +1385,8 @@ async def download_data(req: DownloadDataRequest):
     Combined trace download for the Main Data Display tab.
 
     Always returns a ZIP bundle containing:
-      - raw_data.csv  (if downloadType in {"raw","all"} and available)
-      - ratio_data.csv (if downloadType in {"ratio","all"} and available)
-      - README.txt    (describing the selection and contents)
+      - plot_data.csv  (timestamp + aux + raw + ratio columns as requested)
+      - README.txt     (describing the selection and contents)
     """
     year        = req.year
     variable    = req.variable
@@ -1212,7 +1394,7 @@ async def download_data(req: DownloadDataRequest):
     granularity = req.granularity.lower()
     depth       = req.depth
     unit_system = req.unitSystem
-    download_ty = req.downloadType or "all"
+    download_ty = req.downloadType or "all"  # "raw" | "ratio" | "all"
     start       = req.startDate
     end         = req.endDate
 
@@ -1277,87 +1459,162 @@ async def download_data(req: DownloadDataRequest):
             ratio_cols.append(col)
             continue
 
-    # Build raw and ratio DataFrames (if any)
-    raw_df = None
-    if raw_cols and download_ty in ("raw", "all"):
-        cols = []
-        if "timestamp" in df.columns:
-            cols.append("timestamp")
-        cols.extend(aux_cols)
-        cols.extend(sorted(raw_cols))
-        raw_df = df[cols].copy()
-        raw_df = _add_unit_suffixes_for_download(raw_df, variable)
+    # Determine which groups we will actually include based on downloadType
+    has_raw = bool(raw_cols) and download_ty in ("raw", "all")
+    has_ratio = bool(ratio_cols) and download_ty in ("ratio", "all")
 
-    ratio_df = None
-    if ratio_cols and download_ty in ("ratio", "all"):
-        cols = []
-        if "timestamp" in df.columns:
-            cols.append("timestamp")
-        cols.extend(aux_cols)
-        cols.extend(sorted(ratio_cols))
-        ratio_df = df[cols].copy()
-        ratio_df = _round_ratio_columns(ratio_df, decimals=6)
-
-    if raw_df is None and ratio_df is None:
+    if not has_raw and not has_ratio:
         raise HTTPException(
             status_code=404,
             detail=(
                 f"No matching columns found for variable={variable}, "
-                f"strip={strip}, depth={depth}, granularity={granularity}"
+                f"strip={strip}, depth={depth}, granularity={granularity} "
+                f"for downloadType={download_ty}"
             ),
         )
 
     # ------------------------------------------------------------------
+    # Build a single combined DataFrame: timestamp + aux + raw + ratio
+    # ------------------------------------------------------------------
+    combined_cols: List[str] = []
+
+    if "timestamp" in df.columns:
+        combined_cols.append("timestamp")
+
+    combined_cols.extend(sorted(aux_cols))
+
+    if has_raw:
+        combined_cols.extend(sorted(raw_cols))
+
+    if has_ratio:
+        combined_cols.extend(sorted(ratio_cols))
+
+    combined_df = df[combined_cols].copy()
+    # Add unit suffixes to raw columns where appropriate
+    combined_df = _add_unit_suffixes_for_download(combined_df, variable)
+    # Round ratio columns to a fixed number of decimals
+    combined_df = _round_ratio_columns(combined_df, decimals=6)
+
+    # ------------------------------------------------------------------
+    # Human-readable depth and variable label for README
+    # ------------------------------------------------------------------
+    depth_label = depth
+    if depth in sensor_depth_mapping:
+        depth_label = (
+            sensor_depth_mapping[depth].get(unit_system)
+            or sensor_depth_mapping[depth].get("us")
+            or depth
+        )
+
+    # For SWC + gseason, the SWC volumes are conceptually integrated over depths.
+    if variable == "SWC" and granularity == "gseason":
+        depth_display = "(integrated over depths)"
+    else:
+        depth_display = depth_label
+
+    # Full label with units, if available
+    label_block = label_name_mapping.get(variable, {})
+    if isinstance(label_block, dict):
+        var_full_label = (
+            label_block.get(unit_system)
+            or label_block.get("us")
+            or variable_name_mapping.get(variable, variable)
+        )
+    else:
+        var_full_label = variable_name_mapping.get(variable, variable)
+
+    # Short description of granularity
+    if granularity == "15min":
+        granularity_desc = (
+            "15-minute time step (high-frequency data; no additional temporal averaging)."
+        )
+    elif granularity == "hourly":
+        granularity_desc = "Hourly averages (or sums for precipitation/irrigation)."
+    elif granularity == "daily":
+        granularity_desc = "Daily averages (or sums for precipitation/irrigation)."
+    elif granularity == "monthly":
+        granularity_desc = "Monthly averages (or sums for precipitation/irrigation)."
+    elif granularity == "gseason":
+        # Spell out the custom growing-season periods and date ranges
+        parts = []
+        for code, spec in DEFAULT_GSEASON_PERIODS.items():
+            parts.append(f"- {code}: {spec['start']} to {spec['end']} (MM-DD)")
+        periods_text = "\n".join(parts) if parts else "- (see Technical Details tab)."
+        granularity_desc = (
+            "Custom growing-season periods, each summarizing a multi-month window.\n"
+            "The default seasons are:\n"
+            f"{periods_text}"
+        )
+    else:
+        granularity_desc = f"Custom granularity '{granularity}' (see Technical Details tab)."
+
+    # Text description of which column groups are present
+    groups_desc_lines = []
+    if has_raw:
+        groups_desc_lines.append("- Raw columns are included.")
+    else:
+        groups_desc_lines.append("- Raw columns are NOT included for this selection.")
+    if has_ratio:
+        groups_desc_lines.append("- Ratio columns are included.")
+    else:
+        groups_desc_lines.append("- Ratio columns are NOT included for this selection.")
+    groups_desc = "\n".join(groups_desc_lines)
+
+    # ------------------------------------------------------------------
     # Build README
     # ------------------------------------------------------------------
-    included_files: List[str] = []
-    if raw_df is not None:
-        included_files.append("raw_data.csv")
-    if ratio_df is not None:
-        included_files.append("ratio_data.csv")
-
     readme_text = textwrap.dedent(
         f"""
-        Biochar Fruita CSU – Downloaded Data Bundle
-        ===========================================
+        Biochar Fruita CSU – Plot Data Download
+        =======================================
 
-        This ZIP file was generated from the Interactive Plots tab.
+        This ZIP file was generated from the Main Data Display (Interactive Plots) tab.
 
         Selection summary
         -----------------
-        • Year:         {year}
-        • Variable:     {variable}
-        • Strip:        {strip}
-        • Depth index:  {depth}
-        • Granularity:  {granularity}
-        • Unit system:  {unit_system}
-        • Download type:{download_ty}
+        • Year:        {year}
+        • Variable:    {variable} — {var_full_label}
+        • Strip:       {strip}
+        • Depth:       {depth_display}
+        • Granularity: {granularity}
+        • Unit system: {unit_system}
+        • Download type: {download_ty}
+
+        Granularity details
+        -------------------
+        {granularity_desc}
+
+        Column groups included
+        ----------------------
+        {groups_desc}
+
+        Units and interpretation
+        ------------------------
+        • Raw columns use the same units as shown in the plots for this variable.
+        • VWC raw columns labelled with '_pct' are expressed as percent (0–100).
+        • SWC volumes are in gallons if unitSystem = 'us', litres if unitSystem = 'metric'.
+        • Ratio columns (with '_ratio_') are unitless ratios between strip groupings
+          (e.g., S1/S2 and S3/S4 for volumetric water content).
+        • Timestamps are stored in naive local time (America/Denver).
+
+        Additional documentation
+        ------------------------
+        • For equations, exact units, and data-processing details, see the
+          “Technical Details” tab on the website.
 
         Files in this bundle
         --------------------
-        {os.linesep.join(f"- {name}" for name in included_files) or "- (none)"}
-
-        Notes
-        -----
-        • Timestamps are stored in naive local time (America/Denver).
-        • VWC is stored as percent (0–100) when labelled with '_pct'.
-        • SWC volumes are in gallons if unit system = 'us', litres if unit system = 'metric'.
-        • Ratio columns (with '_ratio_') are unitless ratios between strip groups.
+        - plot_data.csv   (combined time series for this selection)
         """
     ).strip() + "\n"
 
     # ------------------------------------------------------------------
-    # Build ZIP
+    # Build ZIP with a single CSV + README
     # ------------------------------------------------------------------
     bioio = BytesIO()
     with zipfile.ZipFile(bioio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("README.txt", readme_text)
-
-        if raw_df is not None:
-            zf.writestr("raw_data.csv", raw_df.to_csv(index=False))
-
-        if ratio_df is not None:
-            zf.writestr("ratio_data.csv", ratio_df.to_csv(index=False))
+        zf.writestr("plot_data.csv", combined_df.to_csv(index=False))
 
     bioio.seek(0)
 
@@ -1367,7 +1624,6 @@ async def download_data(req: DownloadDataRequest):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
-
 
 @main_router.get("/download_raw_data")
 async def download_raw_data(

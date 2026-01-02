@@ -138,12 +138,7 @@ export async function downloadSummaryData(mode = "all") {
     return;
   }
 
-  // If user selected "zip" but this isn’t gseason, treat it as "all"
-  // so the filename matches the actual CSV content.
-  let effectiveMode = mode;
-  if (granularity !== "gseason" && mode === "zip") {
-    effectiveMode = "all";
-  }
+  const effectiveMode = mode;
 
   // Use the last summary response we already fetched in tables.js
   const summaryStats = window.__lastSummaryData || null;
@@ -178,18 +173,21 @@ export async function downloadSummaryData(mode = "all") {
     const blob = await resp.blob();
     const url  = window.URL.createObjectURL(blob);
 
-    // Extension is driven by granularity: gseason → ZIP, others → CSV
-    const ext = granularity === "gseason" ? "zip" : "csv";
+    // Decide extension from the *mode*, not the granularity
+    const isZip = effectiveMode === "zip";
+    const ext   = isZip ? "zip" : "csv";
 
-    // Build filename
+    // Base filename core
     let baseName = `summary_${granularity}_${variable}_${year}`;
 
-    // For gseason+zip we omit the mode suffix:
+    // For ZIP downloads (any granularity), omit the mode suffix:
+    //   summary_daily_VWC_2025.zip
     //   summary_gseason_VWC_2025.zip
-    // For everything else we append effectiveMode:
+    // For CSV downloads, append the mode suffix:
     //   summary_daily_VWC_2025_raw.csv
+    //   summary_daily_VWC_2025_ratio.csv
     //   summary_daily_VWC_2025_all.csv
-    if (!(granularity === "gseason" && ext === "zip")) {
+    if (!isZip) {
       baseName += `_${effectiveMode}`;
     }
 
@@ -264,6 +262,7 @@ export function initSummaryDownloadMenu() {
  *  PLOT IMAGE DOWNLOADS (JPEG/PNG of Plotly figures)
  * ---------------------------------------------------------------------- */
 
+
 /**
  * Download a Plotly figure as an image.
  *
@@ -271,7 +270,53 @@ export function initSummaryDownloadMenu() {
  *   - the ID of a plot div (e.g., "raw-plot"), or
  *   - a DOM element reference.
  */
-export async function downloadPlot(target = "raw-plot") {
+
+function buildPlotFilename({ plotType, format }) {
+  const getVal = (id, fallback = "") =>
+    document.getElementById(id)?.value || fallback;
+
+  const variable = getVal("main-variable");
+  const strip = getVal("main-strip");
+  const logger = getVal("main-loggerLocation");
+  const depthIndex = getVal("main-depth");
+  const granularity = getVal("main-granularity");
+  const year = getVal("main-year");
+  const unitSystem = window.unitSystem || "us";
+
+  // --- Depth mapping (index → physical depth) ---
+  let depthPart = "";
+  if (depthIndex && window.depthMapping?.[depthIndex]) {
+    const depthLabel = window.depthMapping[depthIndex][unitSystem];
+    depthPart = depthLabel
+      .replace(/\s+/g, "")
+      .replace("inches", "in")
+      .replace("inch", "in")
+      .replace("centimeters", "cm")
+      .replace("centimeter", "cm");
+  }
+
+  const ext = format === "jpeg" ? "jpg" : format;
+
+  const parts = [
+    "biochar",
+    plotType,
+    variable,
+    strip,
+    logger,
+    depthPart,
+    granularity,
+    year,
+  ].filter(Boolean);
+
+  const safe = parts
+    .join("_")
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9._-]/g, "");
+
+  return `${safe}.${ext}`;
+}
+
+export async function downloadPlot(target = "raw", format = "png", sizeMode = "screen") {
   try {
     // noinspection JSUnresolvedVariable
     const Plotly = window.Plotly;
@@ -280,27 +325,108 @@ export async function downloadPlot(target = "raw-plot") {
       return;
     }
 
-    const el =
-      typeof target === "string" ? document.getElementById(target) : target;
+    // --- Debug: show exactly what we received ---
+    console.log(
+      "🎯 downloadPlot called with:",
+      { target, format, sizeMode, targetType: typeof target }
+    );
+
+    // --- Normalize format for Plotly ---
+    // Plotly expects "jpeg" not "jpg"
+    let plotlyFormat = (format || "png").toLowerCase().trim();
+    if (plotlyFormat === "jpg") plotlyFormat = "jpeg";
+    if (!["png", "jpeg", "webp", "svg"].includes(plotlyFormat)) {
+      console.warn("⚠️ Unknown format requested; falling back to png:", plotlyFormat);
+      plotlyFormat = "png";
+    }
+
+    // File extension: use .jpg when user selected jpeg/jpg
+    const fileExt = plotlyFormat === "jpeg" ? "jpg" : plotlyFormat;
+
+    // --- Resolve element ---
+    let el = null;
+
+    // If they passed an element, use it.
+    if (typeof target === "object" && target !== null) {
+      el = target;
+    } else {
+      const t = String(target).toLowerCase().trim();
+
+      // Map friendly targets to your actual plot IDs
+      const idCandidates = [];
+      if (t === "raw") {
+        idCandidates.push("plot-1");
+      } else if (t === "ratio") {
+        idCandidates.push("plot-2");
+      } else {
+        // They might have passed an explicit ID
+        idCandidates.push(target);
+      }
+
+      // Try candidates first
+      for (const id of idCandidates) {
+        const candidate = document.getElementById(id);
+        if (candidate) {
+          el = candidate;
+          break;
+        }
+      }
+
+      // Fallback: find Plotly plot divs and pick first/second
+      if (!el) {
+        const plotDivs = Array.from(document.querySelectorAll(".js-plotly-plot"));
+        console.log("🔎 Found .js-plotly-plot count:", plotDivs.length);
+
+        if (plotDivs.length > 0) {
+          if (t === "ratio") el = plotDivs[1] || plotDivs[0];
+          else el = plotDivs[0];
+        }
+      }
+    }
 
     if (!el) {
-      console.error("❌ downloadPlot: plot element not found:", target);
+      console.error("❌ downloadPlot: No plot found. Target =", target);
       alert("Unable to find the plot container to download.");
       return;
     }
 
-    const filenameBase = el.id || "plot";
-    const filename = `${filenameBase}.png`;
+    console.log("✅ downloadPlot resolved element:", { id: el.id, className: el.className });
 
-    console.log("⬇️ Downloading plot image for:", filenameBase);
+    // --- Choose export size ---
+    // screen: use current rendered size (good default)
+    // fixed: use a larger consistent export
+    let width, height, scale;
 
+    if (String(sizeMode).toLowerCase().trim() === "fixed") {
+      width = 1600;
+      height = 900;
+      scale = 2;
+    } else {
+      // "screen" behavior: approximate the current plot size
+      const rect = el.getBoundingClientRect();
+      width = Math.max(600, Math.round(rect.width));
+      height = Math.max(450, Math.round(rect.height));
+      scale = 1;
+    }
+
+    console.log("🖼️ Export settings:", { plotlyFormat, fileExt, width, height, scale });
+
+    // --- Build filename (descriptive) ---
+    const plotType = String(target).toLowerCase().trim() === "ratio" ? "ratio" : "raw";
+    const filename = buildPlotFilename({ plotType, format: plotlyFormat });
+
+    console.log("⬇️ Downloading plot image:", filename);
+
+    // --- Render image ---
     // noinspection JSUnresolvedFunction
     const dataUrl = await Plotly.toImage(el, {
-      format: "png",
-      height: 600,
-      width: 1000,
+      format: plotlyFormat,
+      width,
+      height,
+      scale,
     });
 
+    // --- Trigger download ---
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = filename;
