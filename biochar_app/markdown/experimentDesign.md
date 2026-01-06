@@ -8,10 +8,10 @@ The experiment began in Spring 2023 at the Fruita Research Station of Colorado S
 
 ## Experiment design
 
-The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 46 ft wide and 280 ft long.
+The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 46 ft (14 m) wide and 366 ft (112 m) long.
 
 <figure>
-  <img src="/static/images/biocharExperimentalDesign.jpg" alt="Layout of biochar plots" title="Layout of biochar plots" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
+  <img src="/static/images/biocharExperimentalDesign.png" alt="Layout of biochar plots" title="Layout of biochar plots" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
   <figcaption style="text-align: center;"><p><em>Figure 1: Field experimental layout</em></p></figcaption>
 </figure>
 
