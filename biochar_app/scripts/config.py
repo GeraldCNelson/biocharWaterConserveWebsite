@@ -108,7 +108,7 @@ from typing import List, Dict
 STRIPS = ["S1", "S2", "S3", "S4"]
 VARIABLES = ["VWC", "EC", "T", "SWC"]
 DEPTHS = ["1", "2", "3"]
-YEARS = [2023, 2024, 2025]
+YEARS = [2023, 2024, 2025], 2026
 LOGGER_LOCATIONS = ["T", "M", "B"]
 GRANULARITIES = [
     ("15min",   "15min"),   # 15-minute bins
