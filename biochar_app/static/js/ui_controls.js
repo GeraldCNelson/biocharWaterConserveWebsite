@@ -24,6 +24,58 @@ export const dropdownConfigs = {
 };
 
 /**
+ * Apply DATE_RANGES[year][granularity] to the main start/end date inputs.
+ * Falls back to year-wide dates only if no mapping exists.
+ */
+export function applyDateRangeFromDefaults(year, granularity, dateRanges) {
+  const y = String(year);
+
+  // Default fallback (only used if no DATE_RANGES entry exists)
+  let start = `${y}-01-01`;
+  let end   = `${y}-12-31`;
+
+  const r = dateRanges?.[y]?.[granularity] || dateRanges?.[Number(y)]?.[granularity];
+  if (r?.min && r?.max) {
+    start = r.min;
+    end   = r.max;
+  }
+
+  const startInput = document.getElementById("main-startDate");
+  const endInput   = document.getElementById("main-endDate");
+
+  if (startInput) startInput.value = start;
+  if (endInput)   endInput.value   = end;
+}
+
+/**
+ * Wire up listeners so changing year or granularity updates the main date inputs
+ * using DATE_RANGES.
+ */
+export function wireMainDateRangeListeners() {
+  const yearEl = document.getElementById("main-year");
+  const granEl = document.getElementById("main-granularity");
+
+  if (!yearEl || !granEl) {
+    console.warn("wireMainDateRangeListeners: missing main-year or main-granularity");
+    return;
+  }
+
+  const handler = () => {
+    const year = yearEl.value;            // keep as string key
+    const granularity = granEl.value;
+
+    applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
+  };
+
+  // Update immediately once (useful after dropdowns populate)
+  handler();
+
+  // Update on change
+  yearEl.addEventListener("change", handler);
+  granEl.addEventListener("change", handler);
+}
+
+/**
  * 1) Fetch the JSON of defaults & options from your API.
  */
 export async function fetchDefaultsAndOptions() {
@@ -49,6 +101,13 @@ export async function fetchDefaultsAndOptions() {
       {}
     ) || {};
 
+    // ✅ Persist DATE_RANGES globally (this is what your UI needs)
+    // Depending on your backend, this might be in defaults.dateRanges or top-level dateRanges.
+    window.dateRanges =
+      options.defaults.dateRanges ||
+      options.dateRanges ||
+      {};
+
     // Variable label/name mappings from backend
     window.variableNameMapping =
       options.variableNameMapping || options.variable_name_mapping || {};
@@ -58,11 +117,11 @@ export async function fetchDefaultsAndOptions() {
       options.labelNameMapping || options.label_name_mapping || {};
 
     // Growing-season periods (JSON version of DEFAULT_GSEASON_PERIODS)
-    // Expect shape: { code: { label, start, end }, ... }
     window.gseasonPeriods =
       options.gseasonPeriods || options.gseason_periods || {};
 
     console.log("🧭 depthMapping from backend:", window.depthMapping);
+    console.log("🗓️ dateRanges from backend:", window.dateRanges);
     console.log("🌱 gseasonPeriods from backend:", window.gseasonPeriods);
     console.log("🏷️ labelNameMapping from backend:", window.labelNameMapping);
 
@@ -97,11 +156,9 @@ export function populateAllDropdowns(options) {
         "value" in list[0] &&
         "label" in list[0]
       ) {
-        // object form { value, label }
         values = list.map((item) => item.value);
         labels = list.map((item) => item.label);
       } else {
-        // primitive form
         values = list;
         labels = list.map((item) => String(item));
       }
@@ -147,7 +204,7 @@ export function populateDropdown(
 
 /**
  * Collects all of the controls for the given tab, and if on the Main tab
- * with granularity="gseason", also pulls in your custom‐season rows.
+ * with granularity="gseason", also pulls in your custom-season rows.
  */
 export function getSelectedFilters(tab) {
   const keys = [
@@ -162,14 +219,12 @@ export function getSelectedFilters(tab) {
     "traceOption",
   ];
 
-  // 1) collect all the simple dropdown/text values
   const filters = keys.reduce((acc, id) => {
     const el = document.getElementById(`${tab}-${id}`);
     if (el) acc[id] = el.value;
     return acc;
   }, {});
 
-  // 2) if we're on Main + “Growing Season”, scrape all your .period-row cards
   if (tab === "main" && filters.granularity === "gseason") {
     const periods = Array.from(document.querySelectorAll(".period-row")).map(
       (row) => {
@@ -189,13 +244,6 @@ export function getSelectedFilters(tab) {
 /**
  * Update the depth dropdown labels on both tabs
  * based on window.depthMapping and the current unit system.
- *
- * depthMapping is expected to look like:
- * {
- *   "1": { us: "6 inches",  metric: "15 cm" },
- *   "2": { us: "12 inches", metric: "30 cm" },
- *   "3": { us: "18 inches", metric: "45 cm" }
- * }
  */
 export function updateDepthLabels(unitSystem) {
   console.log("🔁 [updateDepthLabels] unitSystem =", unitSystem);
@@ -206,7 +254,6 @@ export function updateDepthLabels(unitSystem) {
     return;
   }
 
-  // Use the class shared by both Main & Summary depth selects
   const selects = document.querySelectorAll("select.depth-dropdown");
   if (!selects.length) {
     console.warn(
@@ -221,7 +268,6 @@ export function updateDepthLabels(unitSystem) {
     );
 
     Array.from(select.options).forEach((opt, idx) => {
-      // Prefer the option value as the key; fall back to 1-based index
       const rawValue = opt.value;
       const key =
         rawValue && window.depthMapping[rawValue]
@@ -238,11 +284,6 @@ export function updateDepthLabels(unitSystem) {
           `[updateDepthLabels]  • ${select.id}: option index=${idx}, key=${key}, ` +
             `old="${oldText}" → new="${newText}"`
         );
-      } else {
-        console.log(
-          `[updateDepthLabels]  • ${select.id}: no mapping for key=${key} ` +
-            `under unitSystem=${unitSystem}`
-        );
       }
     });
   });
@@ -250,10 +291,11 @@ export function updateDepthLabels(unitSystem) {
 
 /**
  * Wire up the two main‐tab date inputs.
+ * Uses DATE_RANGES if available; falls back to defaults.
  */
 export function initializeMainDatepickers() {
   if (!window.dropdownOptions?.defaults) return;
-  const { startDate, endDate } = window.dropdownOptions.defaults;
+
   const startEl = document.getElementById("main-startDate");
   const endEl   = document.getElementById("main-endDate");
   if (!startEl || !endEl) {
@@ -261,33 +303,32 @@ export function initializeMainDatepickers() {
     return;
   }
 
-  // force them to be HTML5 date inputs
-  startEl.type  = "date";
-  endEl.type    = "date";
-  startEl.value = startDate;
-  endEl.value   = endDate;
+  startEl.type = "date";
+  endEl.type   = "date";
 
-  // store references so updateStartAndEndDatesFromYear can reset them
+  // Prefer DATE_RANGES for initial values
+  const defaults = window.dropdownOptions.defaults;
+  const year = String(defaults.year);
+  const granularity = defaults.granularity;
+
+  // This sets start/end to DATE_RANGES if present, else year-wide
+  applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
+
+  // If you really want to fall back to backend defaults when no dateRanges exist:
+  if (!startEl.value) startEl.value = defaults.startDate;
+  if (!endEl.value)   endEl.value   = defaults.endDate;
+
   window.mainDatepickers = { start: startEl, end: endEl };
 }
 
 /**
- * Reset the start/end inputs to the full selected year.
+ * Reset the start/end inputs using DATE_RANGES.
+ * (Kept for backwards compatibility if other modules call it.)
  */
 export function updateStartAndEndDatesFromYear(year) {
-  const y = String(year);
-  const start = `${y}-01-01`;
-  const end   = `${y}-12-31`;
-
-  if (window.mainDatepickers?.start && window.mainDatepickers?.end) {
-    window.mainDatepickers.start.value = start;
-    window.mainDatepickers.end.value   = end;
-  } else {
-    console.warn(
-      "updateStartAndEndDatesFromYear: date inputs not initialized yet",
-      window.mainDatepickers
-    );
-  }
+  const granEl = document.getElementById("main-granularity");
+  const granularity = granEl ? granEl.value : (window.dropdownOptions?.defaults?.granularity || "daily");
+  applyDateRangeFromDefaults(String(year), granularity, window.dateRanges || {});
 }
 
 /**

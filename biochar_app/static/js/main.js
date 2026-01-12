@@ -30,14 +30,15 @@ import {
   populateAllDropdowns,
   initializeMainDatepickers,
   updateDepthLabels,
+  // keep this import only if something else still uses it
   updateStartAndEndDatesFromYear,
+  // ✅ add these:
+  applyDateRangeFromDefaults,
+  wireMainDateRangeListeners,
 } from "./ui_controls.js";
 
 // 6) Main plotting routines
-import {
-  renderMainPlots,
-  waitForAllDropdowns,
-} from "./plot_utils.js";
+import { renderMainPlots, waitForAllDropdowns } from "./plot_utils.js";
 
 // 7) Summary-table updater
 import { updateSummaryStatistics } from "./tables.js";
@@ -48,17 +49,14 @@ import { initCustomGseason } from "./custom_gseason.js";
 // ----------------------------------------------------
 // Expose download helpers for inline onclick handlers
 // ----------------------------------------------------
-window.downloadTraceData   = downloadTraceData;
-window.downloadPlot        = downloadPlot;
+window.downloadTraceData = downloadTraceData;
+window.downloadPlot = downloadPlot;
 window.downloadSummaryData = downloadSummaryData;
 
 // ----------------------------------------------------
 // Main app bootstrap
 // ----------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
-  // ----------------------------------------------------
-  // 1) Core app initialization
-  // ----------------------------------------------------
   debugLog("🌐 Initializing application...");
 
   // Fetch defaults & options from the server
@@ -68,7 +66,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Make options globally available if needed elsewhere
   window.dropdownOptions = options;
 
-  // Normalize defaults into a local object
   const defaults = options.defaults || {};
 
   // Decide initial unit system (backend → fallback to config)
@@ -83,23 +80,46 @@ document.addEventListener("DOMContentLoaded", async () => {
   await waitForAllDropdowns(getAllDropdownIds());
   await new Promise(requestAnimationFrame);
 
-  // Seed defaults into the main & summary inputs
+  // ----------------------------------------------------
+  // Seed defaults into inputs
+  // IMPORTANT: do NOT overwrite startDate/endDate here
+  // because those must come from DATE_RANGES.
+  // ----------------------------------------------------
+  const DO_NOT_SEED = new Set(["startDate", "endDate", "dateRanges"]);
+
   for (const [key, value] of Object.entries(defaults)) {
-    const mainEl    = document.getElementById(`main-${key}`);
+    if (DO_NOT_SEED.has(key)) continue;
+
+    const mainEl = document.getElementById(`main-${key}`);
     const summaryEl = document.getElementById(`summary-${key}`);
-    if (mainEl)    mainEl.value    = value;
+    if (mainEl) mainEl.value = value;
     if (summaryEl) summaryEl.value = value;
   }
 
-  // Initialize the date-pickers on the main tab
+  // ----------------------------------------------------
+  // Initialize the date inputs, then apply DATE_RANGES
+  // ----------------------------------------------------
   initializeMainDatepickers();
 
-  // Reset date range when the year changes
-  document
-    .getElementById("main-year")
-    ?.addEventListener("change", (e) =>
-      updateStartAndEndDatesFromYear(e.target.value)
-    );
+  // Apply correct range immediately based on current selections
+  const yearEl = document.getElementById("main-year");
+  const granEl = document.getElementById("main-granularity");
+
+  const selectedYear = yearEl ? yearEl.value : String(defaults.year);
+  const selectedGran = granEl ? granEl.value : defaults.granularity;
+
+  // Use global dateRanges (set by fetchDefaultsAndOptions / ui_controls.js)
+  applyDateRangeFromDefaults(selectedYear, selectedGran, window.dateRanges || {});
+
+  // Wire listeners so year/granularity changes update start/end automatically
+  wireMainDateRangeListeners();
+
+  // ❌ Remove this old handler — it can fight with DATE_RANGES logic
+  // document
+  //   .getElementById("main-year")
+  //   ?.addEventListener("change", (e) =>
+  //     updateStartAndEndDatesFromYear(e.target.value)
+  //   );
 
   // Make sure the depth labels match the current unit system
   updateDepthLabels(window.unitSystem);
@@ -116,6 +136,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }))
       );
     }
+    if (window.dateRanges) {
+      console.log("🗓️ window.dateRanges keys:", Object.keys(window.dateRanges));
+    }
   });
 
   // If “Main Data Display” is already active on load, render immediately
@@ -131,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateSummaryStatistics();
 
   // ----------------------------------------------------
-  // 2) Load markdown snippets (from backend mapping)
+  // Load markdown snippets (from backend mapping)
   // ----------------------------------------------------
   debugLog("📖 Loading markdown mapping from backend…");
   let markdownFiles = {};
@@ -156,7 +179,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   debugLog("✅ Application initialized.");
 
   // ----------------------------------------------------
-  // 3) Initialize the Custom Season editor (if present)
+  // Initialize the Custom Season editor (if present)
   // ----------------------------------------------------
   const gseasonContent = document.getElementById("gseason-content");
   if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
@@ -176,5 +199,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     console.error("Failed to initialize Summary Summary dropdown:", err);
   }
-
 });

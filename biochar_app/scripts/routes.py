@@ -3,6 +3,8 @@
 routes.py — API Endpoints & Orchestration for Biochar Dashboard
 ================================================================================
 """
+from __future__ import annotations
+
 import os
 import re
 import math
@@ -14,6 +16,7 @@ import zipfile
 from zipfile import ZipFile
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+
 
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
@@ -43,6 +46,7 @@ from biochar_app.scripts.plot_utils import (
     make_ratio_gseason_figure,
     make_temperature_delta_figure,
 )
+from biochar_app.scripts import state
 from biochar_app.scripts.config import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
@@ -67,6 +71,97 @@ from biochar_app.scripts.config import (
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
+def _normalize_sheet_name(s: str) -> str:
+    # Your workbook has at least one sheet with trailing spaces ("2023 IRRIGATION ")
+    return (s or "").strip()
+
+def load_irrigation_for_year(
+    year: int,
+    xlsx_path: str | Path,
+    logger=None,
+) -> pd.DataFrame:
+    """
+    Return irrigation events for a given year.
+
+    If the year sheet doesn't exist, return an EMPTY dataframe with the expected columns.
+    This avoids warnings/noise and makes downstream plotting logic simple.
+    """
+    xlsx_path = Path(xlsx_path)
+
+    # Always return these columns (even when empty) so plotting code is consistent.
+    empty = pd.DataFrame(columns=["time_on", "time_off", "gallons", "side"])
+
+    if not xlsx_path.exists():
+        if logger:
+            logger.info(f"ℹ️ Irrigation workbook not found at {xlsx_path}; skipping irrigation overlay.")
+        return empty
+
+    try:
+        xl = pd.ExcelFile(xlsx_path)
+    except Exception as e:
+        if logger:
+            logger.warning(f"⚠️ Failed to open irrigation workbook {xlsx_path}: {e}")
+        return empty
+
+    # Find "YYYY IRRIGATION" sheet (robust to trailing spaces)
+    target = f"{int(year)} IRRIGATION"
+    sheets_norm = {_normalize_sheet_name(s): s for s in xl.sheet_names}
+    sheet_name = sheets_norm.get(target)
+
+    if not sheet_name:
+        if logger:
+            # Use INFO (not WARNING) — this is expected early season / future years.
+            logger.info(
+                f"ℹ️ No irrigation sheet for year {year}. "
+                f"Expected '{target}'. Available: {list(sheets_norm.keys())}"
+            )
+        return empty
+
+    df = pd.read_excel(xlsx_path, sheet_name=sheet_name)
+
+    # ---- Normalize columns to your canonical names ----
+    # Adjust these mappings to match your workbook headers.
+    rename_map = {
+        "Time On": "time_on",
+        "Time Off": "time_off",
+        "time on": "time_on",
+        "time off": "time_off",
+        "gallons": "gallons",
+        "Gallons": "gallons",
+        "Side": "side",
+        "side": "side",
+    }
+    df = df.rename(columns={c: rename_map.get(c, c) for c in df.columns})
+
+    # If there are duplicate columns, keep the first occurrence
+    df = df.loc[:, ~df.columns.duplicated()].copy()
+
+    # Keep only columns we care about (if present)
+    keep = [c for c in ["time_on", "time_off", "gallons", "side"] if c in df.columns]
+    df = df[keep].copy()
+
+    # Parse datetimes safely
+    for c in ["time_on", "time_off"]:
+        if c in df.columns:
+            df[c] = pd.to_datetime(df[c], errors="coerce")
+
+    if "gallons" in df.columns:
+        df["gallons"] = pd.to_numeric(df["gallons"], errors="coerce")
+
+    # Drop rows without a valid interval
+    if "time_on" in df.columns and "time_off" in df.columns:
+        df = df.dropna(subset=["time_on", "time_off"])
+
+    # If sheet exists but no usable rows, still return empty-shaped df
+    if df.empty:
+        return empty
+
+    # Ensure all expected columns exist
+    for col in empty.columns:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    return df[empty.columns].copy()
 
 def _clean_for_json(obj):
     """
@@ -469,11 +564,23 @@ async def get_defaults_and_options():
     logger_locations = [{"value": k, "label": logger_location_mapping[k]} for k in logger_location_mapping]
     granularities = [{"value": g, "label": granularity_name_mapping[g]} for g in granularity_name_mapping]
 
+    # Pick a date range for the DEFAULT selection.
+    # IMPORTANT: your DATE_RANGES keys may be "daily"/"15min"/"raw_logger", etc.
+    # So only use DEFAULT_GRANULARITY if it matches what you store.
+    r = state.DATE_RANGES.get(int(DEFAULT_YEAR), {}).get(str(DEFAULT_GRANULARITY))
+
+    if r:
+        start_date = r["min"]
+        end_date = r["max"]
+    else:
+        start_date = DEFAULT_START_DATE
+        end_date = DEFAULT_END_DATE
+
     response_data = {
         "defaults": {
             "year": DEFAULT_YEAR,
-            "startDate": DEFAULT_START_DATE,
-            "endDate": DEFAULT_END_DATE,
+            "startDate": start_date,
+            "endDate": end_date,
             "variable": DEFAULT_VARIABLE,
             "depth": str(DEFAULT_DEPTH),
             "strip": DEFAULT_STRIP,
@@ -491,7 +598,9 @@ async def get_defaults_and_options():
         "traceOptions": PLOT_BASED_ON_OPTIONS,
         "depthMapping": sensor_depth_mapping,
         "gseasonPeriods": DEFAULT_GSEASON_PERIODS,
-        "label_name_mapping": label_name_mapping,  # or similar
+        "label_name_mapping": label_name_mapping,
+        # ✅ Expose dateRanges at top-level
+        "dateRanges": state.DATE_RANGES,
     }
 
     return JSONResponse(response_data)
@@ -606,6 +715,20 @@ async def api_plot_raw(req: PlotRequest):
         start=start,
         end=end,
     )
+
+    # -------------------------------------------------
+    # hard-pin x-axis so irrigation overlays
+    # cannot expand the plot range
+    # -------------------------------------------------
+    start_ts = pd.to_datetime(start)
+    end_ts = pd.to_datetime(end)
+
+    layout = fig.setdefault("layout", {})
+    xaxis = layout.setdefault("xaxis", {})
+
+    # Plotly JSON accepts either datetimes or ISO strings; strings are safest
+    xaxis["range"] = [start_ts.isoformat(), end_ts.isoformat()]
+    xaxis["autorange"] = False
     return JSONResponse(fig)
 
 

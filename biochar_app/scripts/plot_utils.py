@@ -213,7 +213,8 @@ def add_precipitation_bars(
         return
 
     label = get_unit_aware_label("precip", unit_system)
-
+    unit_suffix = "in" if unit_system == "us" else "mm"
+    hovertemplate = "Precip: %{y:.2f} " + unit_suffix + "<extra></extra>"
     fig.add_trace(
         go.Bar(
             x=df["timestamp"].tolist(),
@@ -224,6 +225,7 @@ def add_precipitation_bars(
             marker=dict(color=PLOT_COLORS.get("precip", "LightSteelBlue")),
             offsetgroup="0",
             opacity=0.55,
+            hovertemplate=hovertemplate,
         )
     )
     fig.update_layout(yaxis2=common_yaxis2_config(unit_system))
