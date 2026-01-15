@@ -71,6 +71,20 @@ from biochar_app.scripts.config import (
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
+from biochar_app.scripts.nir_tables import build_nir_set1_table
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+WARD_MASTER_NIR_CLEAN_CSV = (
+    PROJECT_ROOT
+    / "biochar_app"
+    / "data-processed"
+    / "lab-tests"
+    / "hay-tests"
+    / "csv-files"
+    / "ward_master_nir_clean_set1.csv"
+)
+
 def _normalize_sheet_name(s: str) -> str:
     # Your workbook has at least one sheet with trailing spaces ("2023 IRRIGATION ")
     return (s or "").strip()
@@ -178,6 +192,16 @@ def _clean_for_json(obj):
         return obj
     return obj
 
+# ---- Paths ----
+BIOCHAR_APP_DIR = Path(__file__).resolve().parents[1]  # .../biochar_app
+WARD_MASTER_NIR_CSV = (
+    BIOCHAR_APP_DIR
+    / "data-raw"
+    / "lab-tests"
+    / "hay-tests"
+    / "csv-files"
+    / "Master2023.2025 602314.csv"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -731,7 +755,6 @@ async def api_plot_raw(req: PlotRequest):
     xaxis["autorange"] = False
     return JSONResponse(fig)
 
-
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
     year = req.year
@@ -795,6 +818,14 @@ async def api_plot_ratio(req: PlotRequest):
         )
 
     return JSONResponse(fig)
+
+@api_router.get("/get_nir_set1_table")
+async def api_get_nir_set1_table():
+    payload = build_nir_set1_table(
+        ward_master_csv=WARD_MASTER_NIR_CLEAN_CSV,
+        extra_event_csvs=None,  # keep disabled for now
+    )
+    return JSONResponse(payload)
 
 # ---------------------------------------------------------------------------
 # Summary statistics + downloads

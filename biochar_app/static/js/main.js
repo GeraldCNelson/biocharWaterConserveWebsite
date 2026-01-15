@@ -2,6 +2,7 @@
 
 // 1) Config / constants
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
+import { renderNirSet1Table } from "./nir_tab.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -141,6 +142,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // ----------------------------------------------------
+  // Tab wiring
+  // ----------------------------------------------------
+
   // If “Main Data Display” is already active on load, render immediately
   const mainTabLink = document.querySelector('a[href="#main"]');
   if (mainTabLink?.classList.contains("active")) {
@@ -149,6 +154,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Re-render Main plots whenever that tab is shown
   mainTabLink?.addEventListener("shown.bs.tab", renderMainPlots);
+
+  // ✅ NIR: render the Set 1 table whenever the NIR tab becomes active
+  // This requires:
+  // - the NIR tab link has href="#nir"
+  // - the pane has id="nir"
+  // - index.html includes <div id="nir-set1-table-container"></div> inside that pane
+  const nirTabLink = document.querySelector('a[href="#nir"]');
+  nirTabLink?.addEventListener("shown.bs.tab", () => {
+    // Render once (nir_tab.js can internally cache if you implemented it that way)
+    renderNirSet1Table();
+  });
+
+  // Optional: if the page loads with NIR already active, render immediately
+  if (nirTabLink?.classList.contains("active")) {
+    renderNirSet1Table();
+  }
 
   // Kick off the summary statistics table (async)
   await updateSummaryStatistics();
