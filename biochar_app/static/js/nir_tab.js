@@ -1,124 +1,213 @@
-// biochar_app/static/js/nir_tab.js
+// static/js/nir_tab.js
 
-let _nirSet1LoadedOnce = false;
+function isObject(x) {
+  return x !== null && typeof x === "object" && !Array.isArray(x);
+}
+
+function formatNumber(v) {
+  if (v === null || v === undefined) return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "";
+  return n.toFixed(2);
+}
+
+function validatePayloadShape(payload) {
+  if (!isObject(payload)) return false;
+  if (!Array.isArray(payload.periods)) return false;
+  if (!Array.isArray(payload.variables)) return false;
+  if (!Array.isArray(payload.rows)) return false;
+  if (!isObject(payload.data)) return false;
+  return true;
+}
+
+function buildTableForVariable(payload, variableKey, variableLabel) {
+  const periods = payload.periods || [];
+  const rows = payload.rows || [];
+  const data = payload.data || {};
+
+  const varBlock = data[variableKey];
+  if (!isObject(varBlock)) {
+    const div = document.createElement("div");
+    div.className = "alert alert-warning";
+    div.textContent = `No data found for variable: ${variableLabel}`;
+    return div;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "nir-var-block";
+
+  const h5 = document.createElement("h5");
+  h5.className = "nir-var-title";
+  h5.textContent = variableLabel;
+  wrapper.appendChild(h5);
+
+  const table = document.createElement("table");
+  table.className = "table table-sm table-striped table-bordered align-middle nir-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+
+  const th0 = document.createElement("th");
+  th0.textContent = "Row";
+  headRow.appendChild(th0);
+
+  for (const p of periods) {
+    const th = document.createElement("th");
+    th.textContent = (p && (p.label || p.key)) ? (p.label || p.key) : "";
+    headRow.appendChild(th);
+  }
+
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+
+    const tdLabel = document.createElement("td");
+    tdLabel.textContent = r;
+    tr.appendChild(tdLabel);
+
+    const rowBlock = varBlock[r];
+    for (const p of periods) {
+      const key = p?.key;
+      const td = document.createElement("td");
+      const raw = rowBlock && key ? rowBlock[key] : null;
+      td.textContent = formatNumber(raw);
+      tr.appendChild(td);
+    }
+
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+
+  return wrapper;
+}
+
+async function fetchJson(url) {
+  const resp = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`GET ${url} failed: ${resp.status} ${text}`);
+  }
+
+  return await resp.json();
+}
+
+function makeSetSectionTitle(titleText, subtitleText = "") {
+  const section = document.createElement("div");
+  section.className = "nir-set-section";
+
+  const h4 = document.createElement("h4");
+  h4.className = "nir-set-title";
+  h4.textContent = titleText;
+  section.appendChild(h4);
+
+  if (subtitleText) {
+    const p = document.createElement("p");
+    p.className = "text-muted nir-set-subtitle";
+    p.textContent = subtitleText;
+    section.appendChild(p);
+  }
+
+  return section;
+}
+
+async function renderOneSet(sectionEl, endpointUrl) {
+  // loading indicator inside section
+  const loading = document.createElement("div");
+  loading.className = "text-muted";
+  loading.textContent = "Loading…";
+  sectionEl.appendChild(loading);
+
+  try {
+    const payload = await fetchJson(endpointUrl);
+
+    // remove loading
+    loading.remove();
+
+    if (!validatePayloadShape(payload)) {
+      const pre = document.createElement("pre");
+      pre.className = "alert alert-warning";
+      pre.textContent =
+        "Endpoint returned JSON but not in a recognized shape.\n\n" +
+        JSON.stringify(payload, null, 2);
+      sectionEl.appendChild(pre);
+      return;
+    }
+
+    // tables per variable
+    for (const v of payload.variables) {
+      const key = v?.key;
+      const label = v?.label || key;
+      if (!key) continue;
+
+      const block = buildTableForVariable(payload, key, label);
+      sectionEl.appendChild(block);
+    }
+  } catch (err) {
+    console.error("Failed to render NIR set:", endpointUrl, err);
+    loading.remove();
+    const div = document.createElement("div");
+    div.className = "alert alert-danger";
+    div.textContent = "Failed to load NIR tables. Check server logs.";
+    sectionEl.appendChild(div);
+  }
+}
 
 /**
- * Render the NIR Set 1 table into the NIR tab, typically called when the tab activates.
- *
- * Options:
- *  - forceReload: if true, fetch again even if previously loaded
+ * Public: render Sets 1–4 into the NIR tab.
  */
-export async function renderNirSet1Table({ forceReload = false } = {}) {
-  const container = document.getElementById("nir-set1-table-container");
+export async function renderNirTables() {
+  const container = document.getElementById("nir-content");
   if (!container) {
-    console.warn("NIR container not found: #nir-set1-table-container");
+    console.warn("NIR container #nir-content not found.");
     return;
   }
 
-  if (_nirSet1LoadedOnce && !forceReload) return;
+  // Prevent double-render if the user clicks tabs repeatedly
+  if (container.dataset.rendered === "true") return;
 
-  container.innerHTML = `
-    <div class="text-muted">
-      Loading NIR Clean Data (Set 1)…
-    </div>
-  `;
+  container.innerHTML = "";
 
-  try {
-    const resp = await fetch("/api/get_nir_set1_table", {
-      method: "GET",
-      headers: { "Accept": "application/json" },
-    });
+  // --- Set 1 ---
+  const set1 = makeSetSectionTitle(
+    "Set 1: Pasture Quality Metrics",
+    "Core forage-quality indicators (dry-basis where applicable)."
+  );
+  container.appendChild(set1);
+  await renderOneSet(set1, "/api/get_nir_set1_table");
 
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`GET /api/get_nir_set1_table failed (${resp.status}): ${txt}`);
-    }
+  // --- Set 2 ---
+  const set2 = makeSetSectionTitle(
+    "Set 2: Carbohydrates & Energy Partitioning",
+    "Energy-related metrics and carbohydrate fractions."
+  );
+  container.appendChild(set2);
+  await renderOneSet(set2, "/api/get_nir_set2_table");
 
-    const payload = await resp.json();
+  // --- Set 3 ---
+  const set3 = makeSetSectionTitle(
+    "Set 3: Minerals & Ash",
+    "Ash/mineral indicators (placeholders until finalized)."
+  );
+  container.appendChild(set3);
+  await renderOneSet(set3, "/api/get_nir_set3_table");
 
-    // --- Preferred: backend supplies ready-to-insert HTML ---
-    const html = payload?.html ?? payload?.table_html ?? payload?.tableHtml;
-    if (typeof html === "string" && html.trim().length > 0) {
-      container.innerHTML = html;
-      _nirSet1LoadedOnce = true;
-      return;
-    }
+  // --- Set 4 ---
+  const set4 = makeSetSectionTitle(
+    "Set 4: Digestibility Metrics",
+    "Digestibility-oriented indicators (placeholders until finalized)."
+  );
+  container.appendChild(set4);
+  await renderOneSet(set4, "/api/get_nir_set4_table");
 
-    // --- Otherwise: try a generic "columns + rows" shape ---
-    const cols =
-      payload?.columns ??
-      payload?.headers ??
-      payload?.colnames ??
-      payload?.colNames ??
-      null;
-
-    const rows =
-      payload?.rows ??
-      payload?.data ??
-      payload?.values ??
-      null;
-
-    if (Array.isArray(cols) && Array.isArray(rows)) {
-      container.innerHTML = buildHtmlTable(cols, rows);
-      _nirSet1LoadedOnce = true;
-      return;
-    }
-
-    // Fallback: show payload for debugging
-    container.innerHTML = `
-      <div class="alert alert-warning">
-        NIR table endpoint returned JSON but not in a recognized shape.
-        <pre class="mb-0" style="white-space: pre-wrap;">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
-      </div>
-    `;
-  } catch (err) {
-    console.error(err);
-    container.innerHTML = `
-      <div class="alert alert-danger">
-        Failed to load NIR table. Check server logs and the Network tab.
-        <div class="mt-2"><code>${escapeHtml(String(err))}</code></div>
-      </div>
-    `;
-  }
-}
-
-function buildHtmlTable(columns, rows) {
-  const thead = `
-    <thead>
-      <tr>
-        ${columns.map(c => `<th scope="col">${escapeHtml(String(c))}</th>`).join("")}
-      </tr>
-    </thead>
-  `;
-
-  const tbody = `
-    <tbody>
-      ${rows.map(r => {
-        // r can be an array, or an object keyed by column names
-        const cells = Array.isArray(r)
-          ? columns.map((_, i) => r[i])
-          : columns.map(c => r?.[c]);
-
-        return `<tr>${cells.map(v => `<td>${escapeHtml(v ?? "")}</td>`).join("")}</tr>`;
-      }).join("")}
-    </tbody>
-  `;
-
-  return `
-    <div class="table-responsive">
-      <table class="table table-sm table-striped table-bordered align-middle">
-        ${thead}
-        ${tbody}
-      </table>
-    </div>
-  `;
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  container.dataset.rendered = "true";
 }

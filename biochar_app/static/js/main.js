@@ -2,7 +2,7 @@
 
 // 1) Config / constants
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
-import { renderNirSet1Table } from "./nir_tab.js";
+import { renderNirTables } from "./nir_tab.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -163,12 +163,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const nirTabLink = document.querySelector('a[href="#nir"]');
   nirTabLink?.addEventListener("shown.bs.tab", () => {
     // Render once (nir_tab.js can internally cache if you implemented it that way)
-    renderNirSet1Table();
+    renderNirTables();
   });
 
   // Optional: if the page loads with NIR already active, render immediately
   if (nirTabLink?.classList.contains("active")) {
-    renderNirSet1Table();
+    renderNirTables();
   }
 
   // Kick off the summary statistics table (async)
