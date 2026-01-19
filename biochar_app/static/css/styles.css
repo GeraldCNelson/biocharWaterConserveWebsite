@@ -493,11 +493,14 @@ h2 {
   max-width: 100%;
   height: auto;
 }
-
 /* ----------------------------------------------------
-   NIR tables: compact layout (wins over Bootstrap)
+   NIR + Soil tables: compact layout (wins over Bootstrap)
    + force flush-left placement under headings
 ---------------------------------------------------- */
+
+/* =========================
+   NIR
+========================= */
 
 /* Make sure the NIR section itself doesn't center content */
 #nir {
@@ -579,6 +582,156 @@ h2 {
 
 /* Optional: slightly smaller header text */
 #nir .nir-table thead th {
+  font-weight: 600;
+  font-size: 0.80rem;
+}
+
+
+/* =========================
+   SOIL CHEM
+   (mirrors NIR compact table styling)
+========================= */
+
+#soilchem {
+  text-align: left;
+}
+
+#soilchem .soilchem-var-block {
+  margin-bottom: 0.9rem;
+  display: block;
+  text-align: left;
+}
+
+#soilchem .soilchem-var-title {
+  margin: 0.6rem 0 0.35rem 0;
+  font-size: 1.0rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+#soilchem .soilchem-table {
+  font-size: 0.82rem;
+  line-height: 1.05;
+
+  width: auto !important;
+  max-width: 100%;
+
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+
+  display: table;
+  table-layout: fixed;
+}
+
+#soilchem .table-responsive {
+  display: block;
+  width: 100%;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: left;
+}
+
+#soilchem .soilchem-var-block > * {
+  margin-left: 0 !important;
+}
+
+#soilchem .soilchem-table th,
+#soilchem .soilchem-table td {
+  padding: 0.20rem 0.35rem !important;
+  white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
+}
+
+#soilchem .soilchem-table th:first-child,
+#soilchem .soilchem-table td:first-child {
+  text-align: left;
+  width: 5.5rem !important;
+}
+
+#soilchem .soilchem-table th:not(:first-child),
+#soilchem .soilchem-table td:not(:first-child) {
+  width: 5.0rem !important;
+}
+
+#soilchem .soilchem-table thead th {
+  font-weight: 600;
+  font-size: 0.80rem;
+}
+
+
+/* =========================
+   SOIL BIO
+   (mirrors NIR compact table styling)
+========================= */
+
+#soilbio {
+  text-align: left;
+}
+
+#soilbio .soilbio-var-block {
+  margin-bottom: 0.9rem;
+  display: block;
+  text-align: left;
+}
+
+#soilbio .soilbio-var-title {
+  margin: 0.6rem 0 0.35rem 0;
+  font-size: 1.0rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+#soilbio .soilbio-table {
+  font-size: 0.82rem;
+  line-height: 1.05;
+
+  width: auto !important;
+  max-width: 100%;
+
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+
+  display: table;
+  table-layout: fixed;
+}
+
+#soilbio .table-responsive {
+  display: block;
+  width: 100%;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: left;
+}
+
+#soilbio .soilbio-var-block > * {
+  margin-left: 0 !important;
+}
+
+#soilbio .soilbio-table th,
+#soilbio .soilbio-table td {
+  padding: 0.20rem 0.35rem !important;
+  white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
+}
+
+#soilbio .soilbio-table th:first-child,
+#soilbio .soilbio-table td:first-child {
+  text-align: left;
+  width: 5.5rem !important;
+}
+
+#soilbio .soilbio-table th:not(:first-child),
+#soilbio .soilbio-table td:not(:first-child) {
+  width: 5.0rem !important;
+}
+
+#soilbio .soilbio-table thead th {
   font-weight: 600;
   font-size: 0.80rem;
 }

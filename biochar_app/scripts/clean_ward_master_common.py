@@ -32,28 +32,22 @@ import pandas as pd
 # ---------------------------------------------------------------------
 # Admin columns to drop (case-insensitive) across ALL Ward/Lobato masters
 # ---------------------------------------------------------------------
-ADMIN_DROP_COLS = [
-    "customer_no",
-    "first_name",
-    "last_name",
-    "state",
+ADMIN_DROP_COLS = {
+    # Common admin fields
+    "customer_no", "cust_no", "cust_id", "customer_id",
+    "first_name", "last_name", "name", "company",
+    "address_1", "address_2", "city", "st", "state", "zip",
     "lab_no",
-    "feed_description",
-    "feeder",
-    "kind_of_sample",
-    "cust_id",
-    "name",
-    "company",
-    "address_1",
-    "address_2",
-    "city",
-    "st",
-    "zip",
-    # keep these in the drop list; some datasets use them and we only need STRIP
-    "sample_type",
-    "sample_id_1",
-    "sample_id_2",
-]
+    "kind_of_sample", "feed_description", "feeder",
+    "cust", "customer",
+
+    # Soil-specific admin-ish fields
+    "grower", "field_id",
+    "results_for",
+
+    # Depth columns we don’t want when enforcing fixed depth
+    "b_depth", "e_depth", "beginning_depth", "ending_depth",
+}
 
 
 # ---------------------------------------------------------------------

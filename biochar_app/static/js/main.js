@@ -3,6 +3,7 @@
 // 1) Config / constants
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./nir_tab.js";
+import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -170,6 +171,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (nirTabLink?.classList.contains("active")) {
     renderNirTables();
   }
+
+// Soil Chem tab
+const soilchemTabLink = document.querySelector('a[href="#soilchem"]');
+soilchemTabLink?.addEventListener("shown.bs.tab", () => {
+  renderSoilChemTable();
+});
+if (soilchemTabLink?.classList.contains("active")) {
+  renderSoilChemTable();
+}
+
+// Soil Bio tab
+const soilbioTabLink = document.querySelector('a[href="#soilbio"]');
+soilbioTabLink?.addEventListener("shown.bs.tab", () => {
+  renderSoilBioTable();
+});
+if (soilbioTabLink?.classList.contains("active")) {
+  renderSoilBioTable();
+}
 
   // Kick off the summary statistics table (async)
   await updateSummaryStatistics();

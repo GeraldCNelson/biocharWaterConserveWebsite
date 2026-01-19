@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import re
 
 import numpy as np
 import pandas as pd
@@ -84,24 +85,31 @@ SOILCHEM_VARIABLES_SET1: List[Dict[str, Any]] = [
 # Helpers
 # ------------------------------------------------------------
 
-def _normalize_colname(s: str) -> str:
-    return " ".join(str(s).strip().split())
+def _keyify(s: Any) -> str:
+    """
+    Produce a canonical key for matching human headers vs machine candidates.
+      "Total Biomass"  -> "total_biomass"
+      "1:1 Soil pH"    -> "1_1_soil_ph"
+      "Fungi:Bacteria" -> "fungi_bacteria"
+    """
+    s = "" if s is None else str(s)
+    s = s.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return s
 
 
 def _pick_first_existing(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-    """Pick the first candidate column found in df (normalized + case-insensitive exact)."""
-    norm_map = {_normalize_colname(c): c for c in df.columns}
+    """
+    Pick the first candidate column found in df using _keyify matching.
+    This allows snake_case candidates (total_biomass) to match human headers
+    (Total Biomass) in the soilbio CSV.
+    """
+    key_to_actual = {_keyify(c): c for c in df.columns}
     for cand in candidates:
-        k = _normalize_colname(cand)
-        if k in norm_map:
-            return norm_map[k]
-
-    df_cols = list(df.columns)
-    for cand in candidates:
-        low = str(cand).strip().lower()
-        for c in df_cols:
-            if low == str(c).strip().lower():
-                return c
+        k = _keyify(cand)
+        if k in key_to_actual:
+            return key_to_actual[k]
     return None
 
 
@@ -129,10 +137,16 @@ def _build_periods(df: pd.DataFrame, min_year: int = 2023) -> List[Dict[str, str
         d = pd.to_datetime(df["date_received"], errors="coerce")
     elif "nir_date" in df.columns:
         d = pd.to_datetime(df["nir_date"], errors="coerce")
+    elif "soil_date" in df.columns:
+        d = pd.to_datetime(df["soil_date"], errors="coerce")
     else:
         # try any plausible
         candidates = [c for c in df.columns if "date" in c.lower()]
-        d = pd.to_datetime(df[candidates[0]], errors="coerce") if candidates else pd.Series([], dtype="datetime64[ns]")
+        d = (
+            pd.to_datetime(df[candidates[0]], errors="coerce")
+            if candidates
+            else pd.Series([], dtype="datetime64[ns]")
+        )
 
     d = d.dropna()
     if d.empty:
@@ -149,20 +163,39 @@ def _build_periods(df: pd.DataFrame, min_year: int = 2023) -> List[Dict[str, str
 def _ensure_strip(df: pd.DataFrame) -> pd.DataFrame:
     """
     Expect cleaned CSV already has strip like strip_1..strip_4.
-    If it has STRIP 1 style, normalize to strip_1.
+    If not, try common fallbacks, then normalize to strip_1..strip_4.
+
+    Also supports your special case mapping:
+      "WEST FIELD" -> strip_4
     """
     df = df.copy()
+
+    # Prefer explicit strip, else try sample_id, else try human "Sample ID"
     if "strip" not in df.columns:
-        # allow sample_id as a fallback
         if "sample_id" in df.columns:
             df["strip"] = df["sample_id"]
         else:
-            raise ValueError("Expected a 'strip' column in cleaned soil table CSV.")
+            # common human headers (in case a cleaner didn't rename)
+            for alt in ("Sample ID", "Sample ID 1", "Sample ID 2"):
+                if alt in df.columns:
+                    df["strip"] = df[alt]
+                    break
+
+    if "strip" not in df.columns:
+        raise ValueError("Expected a 'strip' column (or Sample ID) in cleaned soil table CSV.")
 
     def norm_strip(x: Any) -> Optional[str]:
         if x is None or (isinstance(x, float) and np.isnan(x)):
             return None
-        s = str(x).strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+
+        raw = str(x).strip()
+        low = raw.lower().strip()
+
+        # Special case you reported for soil chem compilation
+        if low.replace(" ", "") in ("westfield", "west_field"):
+            return "strip_4"
+
+        s = low.replace(" ", "").replace("-", "").replace("_", "")
         # strip1 / strip_1 / STRIP 1
         if s.startswith("strip"):
             for d in ("1", "2", "3", "4"):
@@ -179,14 +212,16 @@ def _ensure_strip(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _get_date_key_col(df: pd.DataFrame) -> str:
-    for c in ("date_rec", "date_recd", "date_received", "nir_date"):
+    for c in ("date_rec", "date_recd", "date_received", "nir_date", "soil_date"):
         if c in df.columns:
             return c
     # last resort: any column containing 'date'
     for c in df.columns:
         if "date" in c.lower():
             return c
-    raise ValueError("Could not find a date column (expected date_rec/date_recd/date_received/nir_date).")
+    raise ValueError(
+        "Could not find a date column (expected date_rec/date_recd/date_received/nir_date/soil_date)."
+    )
 
 
 def build_soil_table_payload(
