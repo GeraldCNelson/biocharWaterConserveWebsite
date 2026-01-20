@@ -13,7 +13,7 @@ from typing import List
 from biochar_app.scripts.weather_runtime import load_weather_range
 from biochar_app.scripts.config import UNIT_CONVERSIONS
 from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts, add_gseason_precip_from_daily
-
+from biochar_app.scripts.nir_tables import _build_nir_table_payload
 @dataclass
 class PeriodSpec:
     code:  str   # e.g. "Q1_Winter"

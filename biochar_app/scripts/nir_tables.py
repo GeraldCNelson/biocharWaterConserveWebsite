@@ -561,3 +561,30 @@ def build_nir_set4_table(
 ) -> Dict[str, Any]:
     df = load_ward_master_csv(Path(ward_master_csv))
     return _build_nir_table_payload(df, NIR_VARIABLES_SET4, extra_event_csvs=extra_event_csvs)
+
+def build_nir_tables() -> dict:
+    return {
+        "title": "Pasture Quality Metrics",
+        "sets": [
+            {
+                "key": "nir_set1",
+                "label": "Set 1: Pasture Quality Metrics",
+                **build_nir_set1_table(),
+            },
+            {
+                "key": "nir_set2",
+                "label": "Set 2: Fiber & Digestibility",
+                **build_nir_set2_table(),
+            },
+            {
+                "key": "nir_set3",
+                "label": "Set 3: Energy Metrics",
+                **build_nir_set3_table(),
+            },
+            {
+                "key": "nir_set4",
+                "label": "Set 4: Additional Indicators",
+                **build_nir_set4_table(),
+            },
+        ],
+    }

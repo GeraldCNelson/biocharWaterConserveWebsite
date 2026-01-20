@@ -71,8 +71,8 @@ from biochar_app.scripts.markdown_config import build_markdown_mapping
 
 # Soil tables (compiled clean Ward-style masters)
 from biochar_app.scripts.soil_tables import (
-    build_soilbio_set1_table,
-    build_soilchem_set1_table,
+    build_soilbio_table,
+    build_soilchem_table,
 )
 
 # NIR tables (Sets 1–4)
@@ -826,239 +826,112 @@ async def api_plot_ratio(req: PlotRequest):
 
 
 # ---------------------------------------------------------------------------
-# NIR table routes (Sets 1–4)
+# Lab table routes (NIR + Soil) — NEW STANDARD
+#   Payload shape:
+#     { "title": str, "sets": [ { "key", "label", "periods", "variables", "rows",
+#                                "rowLabels", "data" } ] }
 # ---------------------------------------------------------------------------
-@api_router.get("/get_nir_set1_table")
-async def api_get_nir_set1_table():
-    payload = build_nir_set1_table(
-        ward_master_csv=WARD_MASTER_NIR_CLEAN_CSV,
-        extra_event_csvs=None,
-    )
-    return JSONResponse(_clean_for_json(payload))
 
+# Soil tables (compiled clean Ward-style masters)
+from biochar_app.scripts.soil_tables import (
+    build_soilbio_table,
+    build_soilchem_table,
+)
 
-@api_router.get("/get_nir_set2_table")
-async def api_get_nir_set2_table():
-    payload = build_nir_set2_table(
-        ward_master_csv=WARD_MASTER_NIR_CLEAN_CSV,
-        extra_event_csvs=None,
-    )
-    return JSONResponse(_clean_for_json(payload))
-
-
-@api_router.get("/get_nir_set3_table")
-async def api_get_nir_set3_table():
-    payload = build_nir_set3_table(
-        ward_master_csv=WARD_MASTER_NIR_CLEAN_CSV,
-        extra_event_csvs=None,
-    )
-    return JSONResponse(_clean_for_json(payload))
-
-
-@api_router.get("/get_nir_set4_table")
-async def api_get_nir_set4_table():
-    payload = build_nir_set4_table(
-        ward_master_csv=WARD_MASTER_NIR_CLEAN_CSV,
-        extra_event_csvs=None,
-    )
-    return JSONResponse(_clean_for_json(payload))
-
-
-def _normalize_strip_to_display(s: Any) -> Optional[str]:
-    """
-    Convert strip values to display form: "STRIP 1"..."STRIP 4".
-    Accepts values like: strip_1, STRIP1, S1, Strip 1, etc.
-    """
-    if s is None:
-        return None
-    ss = str(s).strip().upper().replace("-", "").replace("_", "").replace(" ", "")
-    if not ss:
-        return None
-
-    if ss.startswith("STRIP"):
-        for d in ("1", "2", "3", "4"):
-            if f"STRIP{d}" in ss:
-                return f"STRIP {d}"
-
-    for d in ("1", "2", "3", "4"):
-        if f"S{d}" in ss:
-            return f"STRIP {d}"
-
-    return None
-
-
-def _pick_date_column(df: pd.DataFrame) -> Optional[str]:
-    """
-    Soil files are single-header; we try common date columns.
-    """
-    candidates = [
-        "nir_date",     # if you ever reuse the same key as NIR
-        "date_rec",
-        "date_recd",
-        "date_received",
-        "Date Recd",
-        "Date Received",
-    ]
-    for c in candidates:
-        if c in df.columns:
-            return c
-    return None
-
-
-def build_soil_table_payload(
-    clean_csv: Any,
-    title: str,
-    include_ratio_rows: bool = True,
-) -> Dict[str, Any]:
-    """
-    Return the SAME payload shape as NIR:
-      {
-        "title": "...",
-        "periods": [{"key": "YYYY-MM-DD", "label": "..."}],
-        "variables": [{"key": "...", "label": "..."}],
-        "rows": ["STRIP 1", ... , "S1/S2", "S3/S4"],
-        "data": { var_key: { row_label: { period_key: value_or_null } } }
-      }
-
-    We compute per-(strip, sampling-date) MEANS for numeric columns.
-    """
-    df = pd.read_csv(clean_csv)
-
-    # --- strip ---
-    if "strip" in df.columns:
-        df["strip"] = df["strip"].apply(_normalize_strip_to_display)
-    elif "sample_id" in df.columns:
-        df["strip"] = df["sample_id"].apply(_normalize_strip_to_display)
-    else:
-        # try common variants
-        for c in ("Sample ID", "Sample ID 1", "Sample ID 2", "SampleID"):
-            if c in df.columns:
-                df["strip"] = df[c].apply(_normalize_strip_to_display)
-                break
-        if "strip" not in df.columns:
-            raise ValueError("Could not find a strip/sample-id column to derive 'strip'.")
-
-    # --- date ---
-    date_col = _pick_date_column(df)
-    if date_col is None:
-        raise ValueError("Could not find a date received column (e.g., date_rec/date_recd/Date Recd).")
-
-    df["sample_date"] = pd.to_datetime(df[date_col], errors="coerce").dt.date.astype("string")
-
-    # keep only good rows
-    df = df[df["strip"].notna()].copy()
-    df = df[df["sample_date"].notna()].copy()
-
-    # --- choose numeric variable columns ---
-    key_like = {
-        "strip",
-        "sample_date",
-        "nir_date",
-        "date_rec",
-        "date_recd",
-        "date_received",
-        "date_rept",
-        "date_reported",
-        "begin_depth_in",
-        "end_depth_in",
-        "beginning_depth",
-        "ending_depth",
-        "b_depth",
-        "e_depth",
-    }
-
-    value_cols: List[str] = []
-    for c in df.columns:
-        if c in key_like:
-            continue
-        # attempt numeric conversion; keep if it yields at least 1 numeric
-        s = pd.to_numeric(df[c], errors="coerce")
-        if s.notna().any():
-            value_cols.append(c)
-
-    # periods (sorted)
-    periods_sorted = sorted(df["sample_date"].dropna().unique().tolist())
-    periods = [{"key": str(p), "label": str(p)} for p in periods_sorted]
-
-    # rows
-    base_rows = ["STRIP 1", "STRIP 2", "STRIP 3", "STRIP 4"]
-    rows = base_rows + (["S1/S2", "S3/S4"] if include_ratio_rows else [])
-
-    out: Dict[str, Any] = {
-        "title": title,
-        "periods": periods,
-        "variables": [{"key": c, "label": c} for c in value_cols],
-        "rows": rows,
-        "data": {},
-    }
-
-    # group means
-    for col in value_cols:
-        table_for_var: Dict[str, Dict[str, Optional[float]]] = {
-            r: {p["key"]: None for p in periods} for r in rows
-        }
-
-        tmp = df[["strip", "sample_date", col]].copy()
-        tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
-
-        means = (
-            tmp.groupby(["strip", "sample_date"], dropna=False)[col]
-            .mean()
-            .reset_index()
-            .rename(columns={col: "value"})
-        )
-
-        for _, rr in means.iterrows():
-            strip = rr["strip"]
-            period = str(rr["sample_date"])
-            val = rr["value"]
-            if strip in table_for_var and period in table_for_var[strip]:
-                table_for_var[strip][period] = None if pd.isna(val) else float(val)
-
-        if include_ratio_rows:
-            for p in periods:
-                k = p["key"]
-                s1 = table_for_var["STRIP 1"][k]
-                s2 = table_for_var["STRIP 2"][k]
-                s3 = table_for_var["STRIP 3"][k]
-                s4 = table_for_var["STRIP 4"][k]
-                table_for_var["S1/S2"][k] = (s1 / s2) if (s1 is not None and s2 not in (None, 0)) else None
-                table_for_var["S3/S4"][k] = (s3 / s4) if (s3 is not None and s4 not in (None, 0)) else None
-
-        out["data"][col] = table_for_var
-
-    return out
+# NIR tables (recommended: single builder returning {title, sets})
+# NOTE: You should update nir_tables.py to expose build_nir_table() that wraps Sets 1–4.
+# Until then, keep the set builders and wrap them here.
+from biochar_app.scripts.nir_tables import (
+    build_nir_set1_table,
+    build_nir_set2_table,
+    build_nir_set3_table,
+    build_nir_set4_table,
+)
 
 
 @api_router.get("/get_soilbio_table")
 async def api_get_soilbio_table():
-    payload = build_soil_table_payload(
-        clean_csv=WARD_MASTER_SOILBIO_CLEAN_CSV,
-        title="Soil Biological Health (Ward / PLFA)",
-        include_ratio_rows=True,
-    )
+    """
+    Soil Biological Health (Ward PLFA) — NEW STANDARD payload:
+      { "title": "...", "sets": [ ... ] }
+    """
+    payload = build_soilbio_table(WARD_MASTER_SOILBIO_CLEAN_CSV, min_year=2023)
     return JSONResponse(payload)
 
 
 @api_router.get("/get_soilchem_table")
 async def api_get_soilchem_table():
-    payload = build_soil_table_payload(
-        clean_csv=WARD_MASTER_SOILCHEM_CLEAN_CSV,
-        title="Soil Chemistry (Ward)",
-        include_ratio_rows=True,
-    )
-    return JSONResponse(payload)
-# Soil tables routes
-# ---------------------------------------------------------------------------
-@api_router.get("/get_soilbio_set1_table")
-async def api_get_soilbio_set1_table():
-    payload = build_soilbio_set1_table(WARD_MASTER_SOILBIO_CLEAN_CSV)
+    """
+    Soil Chemistry (Ward) — NEW STANDARD payload:
+      { "title": "...", "sets": [ ... ] }
+    """
+    payload = build_soilchem_table(WARD_MASTER_SOILCHEM_CLEAN_CSV, min_year=2023)
     return JSONResponse(payload)
 
-@api_router.get("/get_soilchem_set1_table")
-async def api_get_soilchem_set1_table():
-    payload = build_soilchem_set1_table(WARD_MASTER_SOILCHEM_CLEAN_CSV)
-    return JSONResponse(payload)
+
+@api_router.get("/get_nir_table")
+async def api_get_nir_table():
+    """
+    NIR (Ward) — NEW STANDARD payload:
+      { "title": "...", "sets": [ ... ] }
+
+    If/when you add build_nir_table() in nir_tables.py, replace this wrapper with:
+        payload = build_nir_table(WARD_MASTER_NIR_CLEAN_CSV, min_year=2023)
+    """
+    set1 = build_nir_set1_table(WARD_MASTER_NIR_CLEAN_CSV)
+    set2 = build_nir_set2_table(WARD_MASTER_NIR_CLEAN_CSV)
+    set3 = build_nir_set3_table(WARD_MASTER_NIR_CLEAN_CSV)
+    set4 = build_nir_set4_table(WARD_MASTER_NIR_CLEAN_CSV)
+
+    # Defensive: allow either:
+    #   - set payloads already shaped like a set: {key,label,periods,variables,rows,rowLabels,data}
+    #   - or older "single-set" payloads: {title,periods,variables,rows,rowLabels,data}
+    def _coerce_to_set(obj: Dict[str, Any], fallback_key: str, fallback_label: str) -> Dict[str, Any]:
+        if not isinstance(obj, dict):
+            return {
+                "key": fallback_key,
+                "label": fallback_label,
+                "periods": [],
+                "variables": [],
+                "rows": [],
+                "rowLabels": {},
+                "data": {},
+            }
+
+        if "periods" in obj and "variables" in obj and "rows" in obj and "data" in obj:
+            # If it already looks like a set, ensure key/label exist
+            if "key" not in obj:
+                obj = {**obj, "key": fallback_key}
+            if "label" not in obj:
+                obj = {**obj, "label": fallback_label}
+            # Drop accidental embedded "title" if present
+            obj.pop("title", None)
+            return obj
+
+        # Unknown shape — return empty set
+        return {
+            "key": fallback_key,
+            "label": fallback_label,
+            "periods": [],
+            "variables": [],
+            "rows": [],
+            "rowLabels": {},
+            "data": {},
+        }
+
+    sets = [
+        _coerce_to_set(set1, "nir_set1", "Set 1: Pasture Quality Metrics"),
+        _coerce_to_set(set2, "nir_set2", "Set 2: Carbohydrates & Energy Partitioning"),
+        _coerce_to_set(set3, "nir_set3", "Set 3: Minerals & Ash"),
+        _coerce_to_set(set4, "nir_set4", "Set 4: Digestibility Metrics"),
+    ]
+
+    return JSONResponse(
+        {
+            "title": "Pasture Qualitative Metrics (Ward NIR)",
+            "sets": sets,
+        }
+    )
 
 # ---------------------------------------------------------------------------
 # Summary statistics + downloads

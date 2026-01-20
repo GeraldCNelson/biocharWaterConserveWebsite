@@ -1,4 +1,21 @@
 // static/js/nir_tab.js
+//
+// Updated to the new standard payload shape (same as soilchem/soilbio):
+// {
+//   title: "Pasture Quality Metrics",
+//   sets: [
+//     {
+//       key: "nir_set1",
+//       label: "Pasture Quality Metrics — Set 1",
+//       periods: [{key,label}, ...],
+//       variables: [{key,label}, ...],
+//       rows: ["strip_1", ...],
+//       rowLabels: {"strip_1":"STRIP 1", ...},
+//       data: { varKey: { rowKey: { periodKey: value|null } } }
+//     },
+//     ...
+//   ]
+// }
 
 function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -13,17 +30,28 @@ function formatNumber(v) {
 
 function validatePayloadShape(payload) {
   if (!isObject(payload)) return false;
-  if (!Array.isArray(payload.periods)) return false;
-  if (!Array.isArray(payload.variables)) return false;
-  if (!Array.isArray(payload.rows)) return false;
-  if (!isObject(payload.data)) return false;
+  if (typeof payload.title !== "string") return false;
+  if (!Array.isArray(payload.sets)) return false;
+
+  for (const s of payload.sets) {
+    if (!isObject(s)) return false;
+    if (typeof s.key !== "string") return false;
+    if (typeof s.label !== "string") return false;
+    if (!Array.isArray(s.periods)) return false;
+    if (!Array.isArray(s.variables)) return false;
+    if (!Array.isArray(s.rows)) return false;
+    if (!isObject(s.rowLabels)) return false;
+    if (!isObject(s.data)) return false;
+  }
+
   return true;
 }
 
-function buildTableForVariable(payload, variableKey, variableLabel) {
-  const periods = payload.periods || [];
-  const rows = payload.rows || [];
-  const data = payload.data || {};
+function buildTableForVariable(setPayload, variableKey, variableLabel) {
+  const periods = setPayload.periods || [];
+  const rows = setPayload.rows || [];
+  const rowLabels = setPayload.rowLabels || {};
+  const data = setPayload.data || {};
 
   const varBlock = data[variableKey];
   if (!isObject(varBlock)) {
@@ -49,6 +77,8 @@ function buildTableForVariable(payload, variableKey, variableLabel) {
 
   const th0 = document.createElement("th");
   th0.textContent = "Row";
+  // If you want sticky first column like soil tables, you can add inline style:
+  // th0.style.position = "sticky"; th0.style.left = "0"; th0.style.background = "white"; th0.style.zIndex = "2";
   headRow.appendChild(th0);
 
   for (const p of periods) {
@@ -66,7 +96,7 @@ function buildTableForVariable(payload, variableKey, variableLabel) {
     const tr = document.createElement("tr");
 
     const tdLabel = document.createElement("td");
-    tdLabel.textContent = r;
+    tdLabel.textContent = rowLabels[r] || r;
     tr.appendChild(tdLabel);
 
     const rowBlock = varBlock[r];
@@ -120,50 +150,22 @@ function makeSetSectionTitle(titleText, subtitleText = "") {
   return section;
 }
 
-async function renderOneSet(sectionEl, endpointUrl) {
-  // loading indicator inside section
-  const loading = document.createElement("div");
-  loading.className = "text-muted";
-  loading.textContent = "Loading…";
-  sectionEl.appendChild(loading);
+function renderOneSetFromPayload(sectionEl, setPayload) {
+  // tables per variable
+  for (const v of setPayload.variables) {
+    const key = v?.key;
+    const label = v?.label || key;
+    if (!key) continue;
 
-  try {
-    const payload = await fetchJson(endpointUrl);
-
-    // remove loading
-    loading.remove();
-
-    if (!validatePayloadShape(payload)) {
-      const pre = document.createElement("pre");
-      pre.className = "alert alert-warning";
-      pre.textContent =
-        "Endpoint returned JSON but not in a recognized shape.\n\n" +
-        JSON.stringify(payload, null, 2);
-      sectionEl.appendChild(pre);
-      return;
-    }
-
-    // tables per variable
-    for (const v of payload.variables) {
-      const key = v?.key;
-      const label = v?.label || key;
-      if (!key) continue;
-
-      const block = buildTableForVariable(payload, key, label);
-      sectionEl.appendChild(block);
-    }
-  } catch (err) {
-    console.error("Failed to render NIR set:", endpointUrl, err);
-    loading.remove();
-    const div = document.createElement("div");
-    div.className = "alert alert-danger";
-    div.textContent = "Failed to load NIR tables. Check server logs.";
-    sectionEl.appendChild(div);
+    const block = buildTableForVariable(setPayload, key, label);
+    sectionEl.appendChild(block);
   }
 }
 
 /**
- * Public: render Sets 1–4 into the NIR tab.
+ * Public: render NIR tables into the NIR tab.
+ * New standard uses ONE endpoint returning all sets:
+ *   GET /api/get_nir_table
  */
 export async function renderNirTables() {
   const container = document.getElementById("nir-content");
@@ -177,37 +179,47 @@ export async function renderNirTables() {
 
   container.innerHTML = "";
 
-  // --- Set 1 ---
-  const set1 = makeSetSectionTitle(
-    "Set 1: Pasture Quality Metrics",
-    "Core forage-quality indicators (dry-basis where applicable)."
-  );
-  container.appendChild(set1);
-  await renderOneSet(set1, "/api/get_nir_set1_table");
+  // Loading indicator
+  const loading = document.createElement("div");
+  loading.className = "text-muted";
+  loading.textContent = "Loading…";
+  container.appendChild(loading);
 
-  // --- Set 2 ---
-  const set2 = makeSetSectionTitle(
-    "Set 2: Carbohydrates & Energy Partitioning",
-    "Energy-related metrics and carbohydrate fractions."
-  );
-  container.appendChild(set2);
-  await renderOneSet(set2, "/api/get_nir_set2_table");
+  try {
+    const payload = await fetchJson("/api/get_nir_table");
+    loading.remove();
 
-  // --- Set 3 ---
-  const set3 = makeSetSectionTitle(
-    "Set 3: Minerals & Ash",
-    "Ash/mineral indicators (placeholders until finalized)."
-  );
-  container.appendChild(set3);
-  await renderOneSet(set3, "/api/get_nir_set3_table");
+    if (!validatePayloadShape(payload)) {
+      const pre = document.createElement("pre");
+      pre.className = "alert alert-warning";
+      pre.textContent =
+        "Endpoint returned JSON but not in a recognized shape.\n\n" +
+        JSON.stringify(payload, null, 2);
+      container.appendChild(pre);
+      return;
+    }
 
-  // --- Set 4 ---
-  const set4 = makeSetSectionTitle(
-    "Set 4: Digestibility Metrics",
-    "Digestibility-oriented indicators (placeholders until finalized)."
-  );
-  container.appendChild(set4);
-  await renderOneSet(set4, "/api/get_nir_set4_table");
+    // Optional top title (if you want it displayed inside the tab)
+    // const top = document.createElement("h4");
+    // top.className = "mb-3";
+    // top.textContent = payload.title;
+    // container.appendChild(top);
 
-  container.dataset.rendered = "true";
+    for (const setPayload of payload.sets) {
+      // If you want custom subtitles, you can add a subtitle field in the backend later.
+      const section = makeSetSectionTitle(setPayload.label);
+      container.appendChild(section);
+      renderOneSetFromPayload(section, setPayload);
+    }
+
+    container.dataset.rendered = "true";
+  } catch (err) {
+    console.error("Failed to render NIR tables:", err);
+    loading.remove();
+
+    const div = document.createElement("div");
+    div.className = "alert alert-danger";
+    div.textContent = "Failed to load NIR tables. Check server logs.";
+    container.appendChild(div);
+  }
 }

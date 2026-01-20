@@ -493,137 +493,82 @@ h2 {
   max-width: 100%;
   height: auto;
 }
+
 /* ----------------------------------------------------
-   NIR + Soil tables: compact layout (wins over Bootstrap)
-   + force flush-left placement under headings
+   Metric tables (Pasture NIR + Soil Bio + Soil Chem)
+   Compact layout (wins over Bootstrap)
+   Uses existing structure:
+     - .nir-scroll
+     - .nir-content
 ---------------------------------------------------- */
 
-/* =========================
-   NIR
-========================= */
-
-/* Make sure the NIR section itself doesn't center content */
-#nir {
-  text-align: left;
-}
-
-/* If you have any centering wrapper, override it */
-#nir .nir-var-block {
-  margin-bottom: 0.9rem;
-
-  /* Force block flow and flush-left */
-  display: block;
-  text-align: left;
-}
-
-/* Titles: keep tight spacing */
-#nir .nir-var-title {
-  margin: 0.6rem 0 0.35rem 0;
-  font-size: 1.0rem;
-  font-weight: 600;
-  text-align: left;
-}
-
-/* Tables: compact and *not* centered */
-#nir .nir-table {
-  font-size: 0.82rem;
-  line-height: 1.05;
-
-  /* override bootstrap's width:100% */
-  width: auto !important;
-  max-width: 100%;
-
-  /* prevent bootstrap table centering via margins */
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-
-  /* keep table anchored on left edge */
-  display: table;
-  table-layout: fixed;
-}
-
-/* If the table is wrapped by a Bootstrap .table-responsive,
-   it can behave like a block with its own alignment. */
-#nir .table-responsive {
-  display: block;
-  width: 100%;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0;
-  padding-right: 0;
-  text-align: left;
-}
-
-/* Bootstrap sometimes applies margin/padding via utility classes;
-   this ensures the immediate wrapper doesn't center. */
-#nir .nir-var-block > * {
-  margin-left: 0 !important;
-}
-
-/* Cell styling */
-#nir .nir-table th,
-#nir .nir-table td {
-  padding: 0.20rem 0.35rem !important; /* tighter than before */
-  white-space: nowrap;
-  text-align: right;
-  vertical-align: middle;
-}
-
-#nir .nir-table th:first-child,
-#nir .nir-table td:first-child {
-  text-align: left;
-  width: 5.5rem !important;  /* narrower row label col */
-}
-
-#nir .nir-table th:not(:first-child),
-#nir .nir-table td:not(:first-child) {
-  width: 5.0rem !important;  /* narrower date cols */
-}
-
-/* Optional: slightly smaller header text */
-#nir .nir-table thead th {
-  font-weight: 600;
-  font-size: 0.80rem;
-}
-
-
-/* =========================
-   SOIL CHEM
-   (mirrors NIR compact table styling)
-========================= */
-
+/* Apply shared rules to the three metric tabs */
+#nir,
+#soilbio,
 #soilchem {
   text-align: left;
 }
 
-#soilchem .soilchem-var-block {
-  margin-bottom: 0.9rem;
+/* Keep the scroll wrapper flush-left and full width */
+#nir .nir-scroll,
+#soilbio .nir-scroll,
+#soilchem .nir-scroll {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  text-align: left;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Content inside the scroll area */
+#nir .nir-content,
+#soilbio .nir-content,
+#soilchem .nir-content {
   display: block;
   text-align: left;
 }
 
-#soilchem .soilchem-var-title {
+/* Section titles inside rendered blocks (your code uses <h5 class="mb-2">...) */
+#nir .nir-content h5,
+#soilbio .nir-content h5,
+#soilchem .nir-content h5 {
   margin: 0.6rem 0 0.35rem 0;
   font-size: 1.0rem;
   font-weight: 600;
   text-align: left;
 }
 
-#soilchem .soilchem-table {
+/* IMPORTANT:
+   Your global rule `table th, table td { text-align:center; padding:10px; ... }`
+   is what's forcing the soil tables to look wrong.
+   These scoped overrides beat that rule for these three tabs only. */
+#nir .nir-content table,
+#soilbio .nir-content table,
+#soilchem .nir-content table {
   font-size: 0.82rem;
   line-height: 1.05;
 
+  /* Don't force full-width like Bootstrap does */
   width: auto !important;
   max-width: 100%;
 
+  /* Keep table anchored left */
   margin-left: 0 !important;
   margin-right: 0 !important;
 
-  display: table;
+  /* Helps consistent column widths for dates */
   table-layout: fixed;
+
+  /* Some browsers will center inline tables without this */
+  display: table;
 }
 
-#soilchem .table-responsive {
+/* If wrapped in Bootstrap .table-responsive, keep wrapper flush-left */
+#nir .nir-content .table-responsive,
+#soilbio .nir-content .table-responsive,
+#soilchem .nir-content .table-responsive {
   display: block;
   width: 100%;
   margin-left: 0 !important;
@@ -633,105 +578,51 @@ h2 {
   text-align: left;
 }
 
-#soilchem .soilchem-var-block > * {
-  margin-left: 0 !important;
-}
-
-#soilchem .soilchem-table th,
-#soilchem .soilchem-table td {
-  padding: 0.20rem 0.35rem !important;
+/* Cell styling (override global table td/th rule) */
+#nir .nir-content table th,
+#nir .nir-content table td,
+#soilbio .nir-content table th,
+#soilbio .nir-content table td,
+#soilchem .nir-content table th,
+#soilchem .nir-content table td {
+  padding: 0.20rem 0.35rem !important; /* compact */
   white-space: nowrap;
-  text-align: right;
+  text-align: right !important;        /* override the global center */
   vertical-align: middle;
 }
 
-#soilchem .soilchem-table th:first-child,
-#soilchem .soilchem-table td:first-child {
-  text-align: left;
+/* Row label column: left aligned and narrower */
+#nir .nir-content table th:first-child,
+#nir .nir-content table td:first-child,
+#soilbio .nir-content table th:first-child,
+#soilbio .nir-content table td:first-child,
+#soilchem .nir-content table th:first-child,
+#soilchem .nir-content table td:first-child {
+  text-align: left !important;
   width: 5.5rem !important;
 }
 
-#soilchem .soilchem-table th:not(:first-child),
-#soilchem .soilchem-table td:not(:first-child) {
+/* Date/value columns: keep them narrow like the pasture tables */
+#nir .nir-content table th:not(:first-child),
+#nir .nir-content table td:not(:first-child),
+#soilbio .nir-content table th:not(:first-child),
+#soilbio .nir-content table td:not(:first-child),
+#soilchem .nir-content table th:not(:first-child),
+#soilchem .nir-content table td:not(:first-child) {
   width: 5.0rem !important;
 }
 
-#soilchem .soilchem-table thead th {
+/* Slightly smaller header text */
+#nir .nir-content table thead th,
+#soilbio .nir-content table thead th,
+#soilchem .nir-content table thead th {
   font-weight: 600;
   font-size: 0.80rem;
 }
 
-
-/* =========================
-   SOIL BIO
-   (mirrors NIR compact table styling)
-========================= */
-
-#soilbio {
-  text-align: left;
-}
-
-#soilbio .soilbio-var-block {
-  margin-bottom: 0.9rem;
-  display: block;
-  text-align: left;
-}
-
-#soilbio .soilbio-var-title {
-  margin: 0.6rem 0 0.35rem 0;
-  font-size: 1.0rem;
-  font-weight: 600;
-  text-align: left;
-}
-
-#soilbio .soilbio-table {
-  font-size: 0.82rem;
-  line-height: 1.05;
-
-  width: auto !important;
-  max-width: 100%;
-
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-
-  display: table;
-  table-layout: fixed;
-}
-
-#soilbio .table-responsive {
-  display: block;
-  width: 100%;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0;
-  padding-right: 0;
-  text-align: left;
-}
-
-#soilbio .soilbio-var-block > * {
-  margin-left: 0 !important;
-}
-
-#soilbio .soilbio-table th,
-#soilbio .soilbio-table td {
-  padding: 0.20rem 0.35rem !important;
-  white-space: nowrap;
-  text-align: right;
-  vertical-align: middle;
-}
-
-#soilbio .soilbio-table th:first-child,
-#soilbio .soilbio-table td:first-child {
-  text-align: left;
-  width: 5.5rem !important;
-}
-
-#soilbio .soilbio-table th:not(:first-child),
-#soilbio .soilbio-table td:not(:first-child) {
-  width: 5.0rem !important;
-}
-
-#soilbio .soilbio-table thead th {
-  font-weight: 600;
-  font-size: 0.80rem;
+/* Optional: tighten spacing between blocks (your generator wraps each in .mb-4) */
+#nir .nir-content .mb-4,
+#soilbio .nir-content .mb-4,
+#soilchem .nir-content .mb-4 {
+  margin-bottom: 0.9rem !important;
 }
