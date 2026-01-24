@@ -16,6 +16,11 @@ Design goals
 * Normalize:
   - strip/sample id variants -> "STRIP 1"..."STRIP 4"
   - date fields -> ISO "YYYY-MM-DD"
+
+Compatibility goals (important)
+------------------------------
+* Preserve legacy/stable column names expected by downstream code/UI, even when
+  Ward/Lobato source naming shifts. Example: ensure `nitrate_n_ppm` exists.
 """
 
 from __future__ import annotations
@@ -54,12 +59,93 @@ ADMIN_DROP_COLS = {
 # Machine name normalization (Excel headers -> snake_case)
 # ---------------------------------------------------------------------
 def make_machine_name(name: str) -> str:
+    """
+    Convert headers like:
+      "CEC/Sum of Cations me/100g" -> "cec_sum_of_cations_me_100g"
+      "1:1 Soil pH"               -> "1_1_soil_ph"
+    """
     s = str(name).strip().lower()
+
+    # normalize a few common tokens before regex collapsing
     s = s.replace("%", "pct")
+    s = s.replace("meq/100g", "meq_100g")
+    s = s.replace("me/100g", "me_100g")
+    s = s.replace("mg/kg", "mg_kg")
+
     # collapse punctuation to underscores
     s = re.sub(r"[^a-z0-9]+", "_", s)
     s = re.sub(r"_+", "_", s).strip("_")
     return s
+
+
+def coerce_numeric_series(s: pd.Series) -> pd.Series:
+    """
+    Best-effort numeric coercion for columns that might include commas,
+    whitespace, or stray symbols.
+    """
+    if s is None:
+        return s
+    # Ensure string, strip whitespace
+    ss = s.astype(str).str.strip()
+
+    # Treat common empties as NA
+    ss = ss.replace({"": pd.NA, "NA": pd.NA, "N/A": pd.NA, "na": pd.NA, "n/a": pd.NA})
+
+    # Remove commas and leading/trailing symbols that sometimes sneak in
+    ss = ss.str.replace(",", "", regex=False)
+
+    return pd.to_numeric(ss, errors="coerce")
+
+
+# ---------------------------------------------------------------------
+# Compatibility aliases (stabilize downstream expectations)
+# ---------------------------------------------------------------------
+def ensure_compatibility_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add stable/legacy column names expected by downstream code/UI if they are
+    missing but can be derived from newer/alternative Ward/Lobato naming.
+
+    Key case right now:
+      - Ensure `nitrate_n_ppm` exists (table expects it).
+        If missing, populate it from common alternatives like `h2o_no3_n`.
+    """
+    out = df.copy()
+
+    def first_present(*candidates: str) -> Optional[str]:
+        for c in candidates:
+            if c in out.columns:
+                return c
+        return None
+
+    # --- NITRATE: keep UI stable ---
+    # Preferred stable name: nitrate_n_ppm
+    if "nitrate_n_ppm" not in out.columns:
+        src = first_present(
+            # Common in your recent cleaned soil chem
+            "h2o_no3_n",
+            # Other plausible variants
+            "no3_n_ppm",
+            "no3_n",
+            "nitrate_n",
+            "nitrate_ppm",
+            "no3_ppm",
+        )
+        if src is not None:
+            out["nitrate_n_ppm"] = out[src]
+
+    # --- pH: optional stable alias (does not remove existing columns) ---
+    if "soil_ph" not in out.columns:
+        src = first_present("1_1_soil_ph", "soil_ph_1_1", "ph", "soil_pH")
+        if src is not None:
+            out["soil_ph"] = out[src]
+
+    # --- CEC: optional stable alias ---
+    if "cec_meq_100g" not in out.columns:
+        src = first_present("cec_sum_of_cations_me_100g", "cec_meq_100g", "cec")
+        if src is not None:
+            out["cec_meq_100g"] = out[src]
+
+    return out
 
 
 # ---------------------------------------------------------------------
@@ -178,7 +264,14 @@ def read_ward_two_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
     Returns:
       df (machine columns), header_map (machine -> human)
     """
-    raw = pd.read_csv(path, header=None, dtype=str, keep_default_na=False, na_filter=False, engine="python")
+    raw = pd.read_csv(
+        path,
+        header=None,
+        dtype=str,
+        keep_default_na=False,
+        na_filter=False,
+        engine="python",
+    )
     if raw.shape[0] < 3:
         raise ValueError(f"Expected >=3 rows (human header, machine header, data). Got {raw.shape[0]}")
 
@@ -191,6 +284,10 @@ def read_ward_two_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
 
     data.columns = machine
     header_map = {m: h for m, h in zip(machine, human)}
+
+    # Enforce compatibility column names for downstream consumers
+    data = ensure_compatibility_columns(data)
+
     return data, header_map
 
 
@@ -202,8 +299,18 @@ def read_clean_one_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]
     Returns:
       df, header_map where map is identity (machine -> machine)
     """
-    df = pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False, engine="python")
+    df = pd.read_csv(
+        path,
+        dtype=str,
+        keep_default_na=False,
+        na_filter=False,
+        engine="python",
+    )
     header_map = {c: c for c in df.columns}
+
+    # Enforce compatibility column names for downstream consumers
+    df = ensure_compatibility_columns(df)
+
     return df, header_map
 
 
@@ -272,6 +379,10 @@ def clean_compiled_workbook(
 
     header_map = {m: str(h) for m, h in zip(new_cols, orig_cols)}
     df = drop_admin_columns(df, extra_drop=list(admin_drop_cols))
+
+    # Enforce compatibility column names for downstream consumers
+    df = ensure_compatibility_columns(df)
+
     return df, header_map
 
 

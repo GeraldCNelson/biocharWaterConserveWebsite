@@ -112,7 +112,7 @@ WARD_MASTER_SOILBIO_CLEAN_CSV = (
     / "lab-tests"
     / "soil-tests-bio"
     / "csv-files"
-    / "ward_master_soilbio_clean.csv"
+    / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v2.csv"
 )
 
 WARD_MASTER_SOILCHEM_CLEAN_CSV = (
@@ -122,7 +122,7 @@ WARD_MASTER_SOILCHEM_CLEAN_CSV = (
     / "lab-tests"
     / "soil-tests-chem"
     / "csv-files"
-    / "ward_master_soilchem_clean.csv"
+    / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
 )
 
 # -----------------------------------------------------------------------------

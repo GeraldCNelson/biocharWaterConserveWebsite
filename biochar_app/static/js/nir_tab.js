@@ -1,6 +1,10 @@
 // static/js/nir_tab.js
 //
-// Updated to the new standard payload shape (same as soilchem/soilbio):
+// Robust renderer for the Pasture Qualitative Metrics (Ward NIR) tab.
+//
+// Supports BOTH payload shapes:
+//
+// 1) Standard multi-set:
 // {
 //   title: "Pasture Quality Metrics",
 //   sets: [
@@ -16,6 +20,19 @@
 //     ...
 //   ]
 // }
+//
+// 2) Legacy / single-set:
+// {
+//   title: "...",
+//   periods: [...],
+//   variables: [...],
+//   rows: [...],
+//   rowLabels: {...},
+//   data: {...}
+// }
+//
+// Also tolerates drift where set.key/set.label/variables/rows/rowLabels are missing,
+// and derives them from `data` where possible.
 
 function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -28,23 +45,145 @@ function formatNumber(v) {
   return n.toFixed(2);
 }
 
-function validatePayloadShape(payload) {
-  if (!isObject(payload)) return false;
-  if (typeof payload.title !== "string") return false;
-  if (!Array.isArray(payload.sets)) return false;
+function safeStr(x, fallback = "") {
+  return (typeof x === "string" && x.trim()) ? x : fallback;
+}
 
-  for (const s of payload.sets) {
-    if (!isObject(s)) return false;
-    if (typeof s.key !== "string") return false;
-    if (typeof s.label !== "string") return false;
-    if (!Array.isArray(s.periods)) return false;
-    if (!Array.isArray(s.variables)) return false;
-    if (!Array.isArray(s.rows)) return false;
-    if (!isObject(s.rowLabels)) return false;
-    if (!isObject(s.data)) return false;
+function normalizePeriod(p) {
+  if (!p) return { key: "", label: "" };
+  if (typeof p === "string") return { key: p, label: p };
+  if (isObject(p)) {
+    const key = safeStr(p.key, "");
+    const label = safeStr(p.label, key || "");
+    return { key, label };
+  }
+  return { key: "", label: "" };
+}
+
+function normalizeVariable(v) {
+  if (!v) return { key: "", label: "" };
+  if (typeof v === "string") return { key: v, label: v };
+  if (isObject(v)) {
+    const key = safeStr(v.key, "");
+    const label = safeStr(v.label, key || "");
+    return { key, label };
+  }
+  return { key: "", label: "" };
+}
+
+function deriveVariablesFromData(dataObj) {
+  if (!isObject(dataObj)) return [];
+  const keys = Object.keys(dataObj);
+  return keys.map((k) => ({ key: k, label: k }));
+}
+
+function deriveRowsFromData(dataObj) {
+  // data: { varKey: { rowKey: { periodKey: value } } }
+  if (!isObject(dataObj)) return [];
+  const vars = Object.keys(dataObj);
+  const rowSet = new Set();
+  for (const v of vars) {
+    const varBlock = dataObj[v];
+    if (!isObject(varBlock)) continue;
+    for (const r of Object.keys(varBlock)) rowSet.add(r);
+  }
+  return Array.from(rowSet);
+}
+
+function deriveRowLabels(rows) {
+  const out = {};
+  for (const r of rows) out[r] = r;
+  return out;
+}
+
+function normalizeOneSet(setPayload, setIndex = 0) {
+  const s = isObject(setPayload) ? { ...setPayload } : {};
+
+  // key / label
+  if (typeof s.key !== "string" || !s.key.trim()) {
+    s.key = `nir_set_${setIndex + 1}`;
+  }
+  if (typeof s.label !== "string" || !s.label.trim()) {
+    s.label = `Set ${setIndex + 1}`;
   }
 
-  return true;
+  // periods
+  if (!Array.isArray(s.periods)) s.periods = [];
+  s.periods = s.periods.map(normalizePeriod).filter((p) => p.key);
+
+  // data
+  if (!isObject(s.data)) s.data = {};
+
+  // variables: if missing, derive from data keys
+  if (!Array.isArray(s.variables) || s.variables.length === 0) {
+    const derived = deriveVariablesFromData(s.data);
+    if (derived.length > 0) {
+      console.warn("[nir_tab] set.variables missing; derived from data keys:", derived.map(d => d.key));
+    }
+    s.variables = derived;
+  }
+  s.variables = s.variables.map(normalizeVariable).filter((v) => v.key);
+
+  // rows: if missing, derive from data
+  if (!Array.isArray(s.rows) || s.rows.length === 0) {
+    const derivedRows = deriveRowsFromData(s.data);
+    if (derivedRows.length > 0) {
+      console.warn("[nir_tab] set.rows missing; derived from data row keys:", derivedRows);
+    }
+    s.rows = derivedRows;
+  }
+
+  // rowLabels: if missing, derive identity labels
+  if (!isObject(s.rowLabels)) {
+    console.warn("[nir_tab] set.rowLabels missing; using identity labels.");
+    s.rowLabels = deriveRowLabels(s.rows);
+  } else {
+    // ensure every row has a label
+    for (const r of s.rows) {
+      if (!s.rowLabels[r]) s.rowLabels[r] = r;
+    }
+  }
+
+  return s;
+}
+
+function normalizePayload(payload) {
+  // Returns canonical shape:
+  // { title: string, sets: [ {key,label,periods,variables,rows,rowLabels,data} ... ] }
+  if (!isObject(payload)) return null;
+
+  const title = safeStr(payload.title, "Pasture Qualitative Metrics");
+
+  // If already in standard shape
+  if (Array.isArray(payload.sets)) {
+    const sets = payload.sets.map((s, i) => normalizeOneSet(s, i));
+    return { title, sets };
+  }
+
+  // If it looks like a single-set payload
+  const looksSingleSet =
+    Array.isArray(payload.periods) ||
+    Array.isArray(payload.variables) ||
+    Array.isArray(payload.rows) ||
+    isObject(payload.data);
+
+  if (looksSingleSet) {
+    const single = normalizeOneSet(
+      {
+        key: "nir_set_1",
+        label: title,
+        periods: payload.periods,
+        variables: payload.variables,
+        rows: payload.rows,
+        rowLabels: payload.rowLabels,
+        data: payload.data,
+      },
+      0
+    );
+    return { title, sets: [single] };
+  }
+
+  return null;
 }
 
 function buildTableForVariable(setPayload, variableKey, variableLabel) {
@@ -77,8 +216,6 @@ function buildTableForVariable(setPayload, variableKey, variableLabel) {
 
   const th0 = document.createElement("th");
   th0.textContent = "Row";
-  // If you want sticky first column like soil tables, you can add inline style:
-  // th0.style.position = "sticky"; th0.style.left = "0"; th0.style.background = "white"; th0.style.zIndex = "2";
   headRow.appendChild(th0);
 
   for (const p of periods) {
@@ -152,7 +289,7 @@ function makeSetSectionTitle(titleText, subtitleText = "") {
 
 function renderOneSetFromPayload(sectionEl, setPayload) {
   // tables per variable
-  for (const v of setPayload.variables) {
+  for (const v of setPayload.variables || []) {
     const key = v?.key;
     const label = v?.label || key;
     if (!key) continue;
@@ -164,7 +301,7 @@ function renderOneSetFromPayload(sectionEl, setPayload) {
 
 /**
  * Public: render NIR tables into the NIR tab.
- * New standard uses ONE endpoint returning all sets:
+ * Standard uses ONE endpoint returning all sets:
  *   GET /api/get_nir_table
  */
 export async function renderNirTables() {
@@ -186,27 +323,22 @@ export async function renderNirTables() {
   container.appendChild(loading);
 
   try {
-    const payload = await fetchJson("/api/get_nir_table");
+    const rawPayload = await fetchJson("/api/get_nir_table");
     loading.remove();
 
-    if (!validatePayloadShape(payload)) {
+    const payload = normalizePayload(rawPayload);
+
+    if (!payload || !Array.isArray(payload.sets) || payload.sets.length === 0) {
       const pre = document.createElement("pre");
       pre.className = "alert alert-warning";
       pre.textContent =
         "Endpoint returned JSON but not in a recognized shape.\n\n" +
-        JSON.stringify(payload, null, 2);
+        JSON.stringify(rawPayload, null, 2);
       container.appendChild(pre);
       return;
     }
 
-    // Optional top title (if you want it displayed inside the tab)
-    // const top = document.createElement("h4");
-    // top.className = "mb-3";
-    // top.textContent = payload.title;
-    // container.appendChild(top);
-
     for (const setPayload of payload.sets) {
-      // If you want custom subtitles, you can add a subtitle field in the backend later.
       const section = makeSetSectionTitle(setPayload.label);
       container.appendChild(section);
       renderOneSetFromPayload(section, setPayload);
