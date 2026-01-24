@@ -61,6 +61,12 @@ data.tmp/
 biochar_app/data-raw/
 biochar_app/data-processed/
 biochar_app/data_temp/
+
+############################
+# Explicitly tracked processed data
+############################
+!biochar_app/data-processed/lab-tests/
+!biochar_app/data-processed/lab-tests/**
 ############################
 # Parquet & downloads
 ############################

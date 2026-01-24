@@ -715,6 +715,7 @@ def build_soilchem_table(clean_csv: Path, min_year: int = 2023) -> Dict[str, Any
             {
                 "key": grp["group_key"],
                 "label": grp["group_label"],
+                "note": grp.get("group_note"),  # ✅ ADD THIS
                 **payload,
             }
         )

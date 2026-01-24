@@ -12,9 +12,51 @@ function buildFilename(parts) {
 }
 
 /**
- * Generic helper to POST JSON and download the returned blob.
+ * Parse filename from Content-Disposition header (if present).
+ * Supports: attachment; filename="foo.csv"
+ * and (best-effort): filename*=UTF-8''foo.csv
  */
-async function postAndDownload(url, payload, filename) {
+function getFilenameFromContentDisposition(contentDisposition) {
+  if (!contentDisposition) return null;
+
+  // filename*=UTF-8''encoded
+  const starMatch = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (starMatch && starMatch[1]) {
+    try {
+      return decodeURIComponent(starMatch[1].trim());
+    } catch {
+      return starMatch[1].trim();
+    }
+  }
+
+  // filename="plain"
+  const match = contentDisposition.match(/filename\s*=\s*"([^"]+)"/i);
+  if (match && match[1]) return match[1].trim();
+
+  // filename=plain (no quotes)
+  const bare = contentDisposition.match(/filename\s*=\s*([^;]+)/i);
+  if (bare && bare[1]) return bare[1].replace(/"/g, "").trim();
+
+  return null;
+}
+
+/**
+ * Decide a safe extension from Content-Type.
+ */
+function extFromContentType(contentType) {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("application/zip")) return "zip";
+  if (ct.includes("text/csv")) return "csv";
+  if (ct.includes("application/octet-stream")) return null; // ambiguous
+  return null;
+}
+
+/**
+ * Generic helper to POST JSON and download the returned blob.
+ * If the server provides a Content-Disposition filename, we use it.
+ * Otherwise we fall back to the provided filename.
+ */
+async function postAndDownload(url, payload, fallbackFilename) {
   console.log("⬇️ postAndDownload →", url, payload);
 
   const resp = await fetch(url, {
@@ -29,8 +71,25 @@ async function postAndDownload(url, payload, filename) {
     throw new Error(`Download failed with status ${resp.status}`);
   }
 
-  const blob   = await resp.blob();
+  const blob = await resp.blob();
   const objUrl = window.URL.createObjectURL(blob);
+
+  // Prefer server-provided filename
+  const cd = resp.headers.get("content-disposition");
+  const ct = resp.headers.get("content-type");
+  let filename = getFilenameFromContentDisposition(cd);
+
+  // If server didn't send a name, ensure our fallback extension matches content-type
+  if (!filename) {
+    const ext = extFromContentType(ct);
+    if (ext && fallbackFilename) {
+      // replace whatever extension fallbackFilename had (or add one)
+      filename = fallbackFilename.replace(/\.[A-Za-z0-9]+$/, `.${ext}`);
+      if (!/\.[A-Za-z0-9]+$/.test(filename)) filename = `${filename}.${ext}`;
+    } else {
+      filename = fallbackFilename || "download";
+    }
+  }
 
   const a = document.createElement("a");
   a.href = objUrl;
@@ -40,7 +99,7 @@ async function postAndDownload(url, payload, filename) {
   a.remove();
 
   window.URL.revokeObjectURL(objUrl);
-  console.log("✅ Download triggered:", filename);
+  console.log("✅ Download triggered:", filename, { contentType: ct, contentDisposition: cd });
 }
 
 /* -------------------------------------------------------------------------
@@ -49,9 +108,6 @@ async function postAndDownload(url, payload, filename) {
 
 /**
  * Download trace data (raw / ratio / all) for the Main Data Display tab.
- *
- * This is exposed on window as `downloadTraceData` and is typically called
- * from the "Download Data" dropdown on the main tab.
  *
  * @param {string} kind - "raw" | "ratio" | "all"
  */
@@ -96,7 +152,6 @@ export async function downloadTraceData(kind = "all") {
         year,
       ]) + ".zip";
 
-    // NOTE: this assumes your FastAPI route is mounted at /api/download_data.
     await postAndDownload("/api/download_data", payload, fname);
   } catch (err) {
     console.error("❌ Error in downloadTraceData:", err);
@@ -138,7 +193,7 @@ export async function downloadSummaryData(mode = "all") {
     return;
   }
 
-  const effectiveMode = mode;
+  const effectiveMode = (mode || "all").toLowerCase().trim();
 
   // Use the last summary response we already fetched in tables.js
   const summaryStats = window.__lastSummaryData || null;
@@ -150,56 +205,30 @@ export async function downloadSummaryData(mode = "all") {
     granularity,
     depth,
     unitSystem,
-    mode,          // backend can use or ignore this
+
+    // ✅ IMPORTANT: backend expects downloadType
+    downloadType: effectiveMode,
+
+    // Keep mode for backwards compatibility (can remove later)
+    mode: effectiveMode,
+
     summaryStats,
   };
 
   console.log("⬇️ downloadSummaryData payload:", payload);
 
   try {
-    const resp = await fetch("/api/download_summary_data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    // Provide a reasonable fallback filename, but let server override.
+    // IMPORTANT: do NOT force .csv if server returns zip.
+    const wantZip = effectiveMode === "zip";
+    const ext = wantZip ? "zip" : "csv";
 
-    if (!resp.ok) {
-      const txt = await resp.text();
-      console.error("❌ Summary download failed:", resp.status, txt);
-      alert("Unable to download summary data.");
-      return;
-    }
-
-    const blob = await resp.blob();
-    const url  = window.URL.createObjectURL(blob);
-
-    // Decide extension from the *mode*, not the granularity
-    const isZip = effectiveMode === "zip";
-    const ext   = isZip ? "zip" : "csv";
-
-    // Base filename core
     let baseName = `summary_${granularity}_${variable}_${year}`;
+    if (!wantZip) baseName += `_${effectiveMode}`;
 
-    // For ZIP downloads (any granularity), omit the mode suffix:
-    //   summary_daily_VWC_2025.zip
-    //   summary_gseason_VWC_2025.zip
-    // For CSV downloads, append the mode suffix:
-    //   summary_daily_VWC_2025_raw.csv
-    //   summary_daily_VWC_2025_ratio.csv
-    //   summary_daily_VWC_2025_all.csv
-    if (!isZip) {
-      baseName += `_${effectiveMode}`;
-    }
+    const fallbackName = `${baseName}.${ext}`;
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${baseName}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-    console.log("✅ Summary data download triggered:", `${baseName}.${ext}`);
+    await postAndDownload("/api/download_summary_data", payload, fallbackName);
   } catch (err) {
     console.error("❌ Error in downloadSummaryData:", err);
     alert("An error occurred while downloading summary data.");
@@ -208,12 +237,6 @@ export async function downloadSummaryData(mode = "all") {
 
 /**
  * Wire the Summary tab's dropdown menu to the downloadSummaryData() helper.
- *
- * Expected HTML IDs:
- *   - #download-summary-raw
- *   - #download-summary-ratio
- *   - #download-summary-all
- *   - #download-summary-zip   (optional: All Summary (ZIP) menu item)
  */
 export function initSummaryDownloadMenu() {
   const rawBtn   = document.getElementById("download-summary-raw");
@@ -229,7 +252,6 @@ export function initSummaryDownloadMenu() {
   if (rawBtn) {
     rawBtn.addEventListener("click", (evt) => {
       evt.preventDefault();
-      // Explicitly ignore the Promise to avoid “Promise returned … is ignored” warnings
       void downloadSummaryData("raw");
     });
   }
@@ -262,13 +284,10 @@ export function initSummaryDownloadMenu() {
  *  PLOT IMAGE DOWNLOADS (JPEG/PNG of Plotly figures)
  * ---------------------------------------------------------------------- */
 
-
 /**
  * Download a Plotly figure as an image.
  *
- * This is exposed on window as `downloadPlot`. It accepts either:
- *   - the ID of a plot div (e.g., "raw-plot"), or
- *   - a DOM element reference.
+ * This is exposed on window as `downloadPlot`.
  */
 
 function buildPlotFilename({ plotType, format }) {
@@ -325,14 +344,11 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       return;
     }
 
-    // --- Debug: show exactly what we received ---
     console.log(
       "🎯 downloadPlot called with:",
       { target, format, sizeMode, targetType: typeof target }
     );
 
-    // --- Normalize format for Plotly ---
-    // Plotly expects "jpeg" not "jpg"
     let plotlyFormat = (format || "png").toLowerCase().trim();
     if (plotlyFormat === "jpg") plotlyFormat = "jpeg";
     if (!["png", "jpeg", "webp", "svg"].includes(plotlyFormat)) {
@@ -340,30 +356,24 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       plotlyFormat = "png";
     }
 
-    // File extension: use .jpg when user selected jpeg/jpg
     const fileExt = plotlyFormat === "jpeg" ? "jpg" : plotlyFormat;
 
-    // --- Resolve element ---
     let el = null;
 
-    // If they passed an element, use it.
     if (typeof target === "object" && target !== null) {
       el = target;
     } else {
       const t = String(target).toLowerCase().trim();
 
-      // Map friendly targets to your actual plot IDs
       const idCandidates = [];
       if (t === "raw") {
         idCandidates.push("plot-1");
       } else if (t === "ratio") {
         idCandidates.push("plot-2");
       } else {
-        // They might have passed an explicit ID
         idCandidates.push(target);
       }
 
-      // Try candidates first
       for (const id of idCandidates) {
         const candidate = document.getElementById(id);
         if (candidate) {
@@ -372,7 +382,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
         }
       }
 
-      // Fallback: find Plotly plot divs and pick first/second
       if (!el) {
         const plotDivs = Array.from(document.querySelectorAll(".js-plotly-plot"));
         console.log("🔎 Found .js-plotly-plot count:", plotDivs.length);
@@ -392,9 +401,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
     console.log("✅ downloadPlot resolved element:", { id: el.id, className: el.className });
 
-    // --- Choose export size ---
-    // screen: use current rendered size (good default)
-    // fixed: use a larger consistent export
     let width, height, scale;
 
     if (String(sizeMode).toLowerCase().trim() === "fixed") {
@@ -402,7 +408,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       height = 900;
       scale = 2;
     } else {
-      // "screen" behavior: approximate the current plot size
       const rect = el.getBoundingClientRect();
       width = Math.max(600, Math.round(rect.width));
       height = Math.max(450, Math.round(rect.height));
@@ -411,13 +416,11 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
     console.log("🖼️ Export settings:", { plotlyFormat, fileExt, width, height, scale });
 
-    // --- Build filename (descriptive) ---
     const plotType = String(target).toLowerCase().trim() === "ratio" ? "ratio" : "raw";
     const filename = buildPlotFilename({ plotType, format: plotlyFormat });
 
     console.log("⬇️ Downloading plot image:", filename);
 
-    // --- Render image ---
     // noinspection JSUnresolvedFunction
     const dataUrl = await Plotly.toImage(el, {
       format: plotlyFormat,
@@ -426,7 +429,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       scale,
     });
 
-    // --- Trigger download ---
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = filename;
@@ -445,13 +447,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
  *  BULK DOWNLOAD TAB INITIALIZATION
  * ---------------------------------------------------------------------- */
 
-/**
- * Initialize any handlers needed for the Bulk Downloads tab.
- *
- * If your Bulk Downloads tab is mostly simple links that hit static routes,
- * this can safely be a no-op with some debugging logs.
- */
 export async function initBulkDownloadTab() {
-  // Placeholder for any future wiring logic.
   console.log("📦 initBulkDownloadTab: nothing to wire at the moment.");
 }

@@ -5,6 +5,7 @@ routes.py — API Endpoints & Orchestration for Biochar Dashboard
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import math
@@ -14,7 +15,7 @@ import textwrap
 from io import BytesIO
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
@@ -24,6 +25,8 @@ from fastapi.responses import (
     Response,
     StreamingResponse,
 )
+
+from starlette.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -941,299 +944,202 @@ class SummaryStatsRequest(BaseModel):
     variable: str
     strip: str
     granularity: str
+    downloadType: Literal["raw", "ratio", "all", "zip"] = "zip"
     summaryStats: Dict[str, Any]
 
 
 @api_router.post("/download_summary_data")
 async def download_summary_data(req: SummaryStatsRequest):
     """
-    (Unchanged from your version)
+    Download summary statistics in one of four formats:
+      - raw   -> single CSV (raw rows only)
+      - ratio -> single CSV (ratio rows only)
+      - all   -> single CSV (raw + ratio rows combined)
+      - zip   -> ZIP bundle (raw.csv + ratio.csv + README.txt)
     """
-    year        = req.year
-    variable    = req.variable
-    strip       = req.strip
-    granularity = req.granularity
-    stats       = req.summaryStats or {}
+    download_type = (getattr(req, "downloadType", None) or "zip").lower().strip()
 
-    print(
-        f"[download_summary_data] year={year}, variable={variable}, "
-        f"strip={strip}, granularity={granularity}, has_stats={bool(stats)}"
-    )
+    # These should already exist on your request model (based on your current code)
+    year: int = int(req.year)
+    variable: str = str(req.variable)
+    granularity: str = str(req.granularity)
+    strip: str = str(req.strip)
 
+    stats: Dict[str, Any] = req.summaryStats or {}
     if not isinstance(stats, dict):
-        raise HTTPException(
-            status_code=400,
-            detail="summaryStats must be a JSON object",
-        )
+        raise HTTPException(status_code=400, detail="summaryStats must be a JSON object")
 
-    depth_idx = stats.get("depth")
-    unit_system = stats.get("unitSystem", "us")
+    # ---------------------------------------------------------------------
+    # Build raw_df / ratio_df using your EXISTING logic (gseason vs non-gseason)
+    # ---------------------------------------------------------------------
 
-    depth_idx_str = str(depth_idx) if depth_idx is not None else ""
+    raw_rows: List[Dict[str, Any]] = []
+    ratio_rows: List[Dict[str, Any]] = []
 
-    depth_label = depth_idx_str
-    if depth_idx_str and depth_idx_str in sensor_depth_mapping:
-        depth_label = (
-            sensor_depth_mapping[depth_idx_str].get(unit_system)
-            or sensor_depth_mapping[depth_idx_str].get("us")
-            or depth_idx_str
-        )
+    if granularity == "gseason":
+        # stats structure (your existing): { season: { variable: { strip_depth: {raw_statistics, ratio_statistics}}}}
+        # We flatten to rows with Season + Variable + StripDepth + stats columns
+        for season, season_block in stats.items():
+            if not isinstance(season_block, dict):
+                continue
 
-    def _depth_value_for_csv() -> str:
-        if variable == "SWC" and granularity == "gseason":
-            return ""
-        return depth_label
+            var_block = season_block.get(variable)
+            if not isinstance(var_block, dict):
+                continue
 
-    def _clean_numbers(obj: Any) -> Any:
-        if isinstance(obj, dict):
-            return {k: _clean_numbers(v) for k, v in obj.items()}
-        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
-            return None
-        return obj
-
-    def _extract_logger_id(trace: str) -> str:
-        tokens = trace.split("_")
-        for tok in reversed(tokens):
-            if tok in logger_location_mapping:
-                return tok
-        for tok in reversed(tokens):
-            if not tok.isdigit():
-                return tok
-        return ""
-
-    label_block = label_name_mapping.get(variable, {})
-    if isinstance(label_block, dict):
-        var_full_label = (
-            label_block.get(unit_system)
-            or label_block.get("us")
-            or variable_name_mapping.get(variable, variable)
-        )
-    else:
-        var_full_label = variable_name_mapping.get(variable, variable)
-
-    if granularity == "15min":
-        granularity_desc = (
-            "15-minute time step (high-frequency data; no additional temporal averaging)."
-        )
-    elif granularity == "hourly":
-        granularity_desc = "Hourly averages (or sums for precipitation/irrigation)."
-    elif granularity == "daily":
-        granularity_desc = "Daily averages (or sums for precipitation/irrigation)."
-    elif granularity == "monthly":
-        granularity_desc = "Monthly averages (or sums for precipitation/irrigation)."
-    elif granularity == "gseason":
-        parts = []
-        for code, spec in DEFAULT_GSEASON_PERIODS.items():
-            parts.append(f"- {code}: {spec['start']} to {spec['end']} (MM-DD)")
-        periods_text = "\n".join(parts) if parts else "- (see Technical Details tab)."
-        granularity_desc = (
-            "Custom growing-season periods, each summarizing a multi-month window.\n"
-            "The default seasons are:\n"
-            f"{periods_text}"
-        )
-    else:
-        granularity_desc = f"Custom granularity '{granularity}' (see Technical Details tab)."
-
-    def build_readme(title_suffix: str) -> str:
-        return textwrap.dedent(
-            f"""
-            Biochar Fruita CSU – Summary Statistics Download
-            ================================================
-
-            This ZIP file was generated from the Summary Statistics tab.
-
-            Selection summary
-            -----------------
-            • Year:        {year}
-            • Variable:    {variable} — {var_full_label}
-            • Strip:       {strip}
-            • Depth:       {_depth_value_for_csv() or '(integrated over depths)' if variable == 'SWC' else _depth_value_for_csv()}
-            • Granularity: {granularity}
-
-            Granularity details
-            -------------------
-            {granularity_desc}
-
-            Units and interpretation
-            ------------------------
-            • Raw values use the same units as shown in the plots/tables for this variable.
-            • Ratio rows (Type = 'ratio') are unitless ratios between strip groupings
-              (e.g., S1/S2 and S3/S4 for volumetric water content).
-            • For SWC, seasonal volumes are already integrated over sensor depths.
-
-            Additional documentation
-            ------------------------
-            • For equations, exact units, and data-processing details, see the
-              “Technical Details” tab on the website.
-
-            Archive contents
-            ----------------
-            • {title_suffix}
-            """
-        ).strip() + "\n"
-
-    bioio = BytesIO()
-    with zipfile.ZipFile(bioio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-
-        if granularity == "gseason":
-            rows: List[Dict[str, Any]] = []
-
-            season_data = stats.get("gseason_stats")
-            if not isinstance(season_data, dict):
-                season_data = stats
-
-            if not isinstance(season_data, dict):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not interpret seasonal summary structure",
-                )
-
-            for season_code, season_block in season_data.items():
-                if not isinstance(season_block, dict):
+            for strip_depth, sd_block in var_block.items():
+                if not isinstance(sd_block, dict):
                     continue
 
-                raw_map = season_block.get("raw_statistics", {}) or {}
-                ratio_map = season_block.get("ratio_statistics", {}) or {}
+                raw_stats = sd_block.get("raw_statistics") or {}
+                ratio_stats = sd_block.get("ratio_statistics") or {}
 
-                spec = DEFAULT_GSEASON_PERIODS.get(season_code)
-                if spec:
-                    sm, sd = map(int, spec["start"].split("-"))
-                    em, ed = map(int, spec["end"].split("-"))
-                    start_year = year - 1 if sm > em else year
-                    end_year = year
-                    start_date_str = f"{start_year}-{spec['start']}"
-                    end_date_str = f"{end_year}-{spec['end']}"
-                else:
-                    start_date_str = ""
-                    end_date_str = ""
+                if isinstance(raw_stats, dict) and raw_stats:
+                    row = {"Season": season, "StripDepth": strip_depth, "Type": "raw"}
+                    # include StartDate/EndDate if present in your seasonal structure
+                    if "StartDate" in raw_stats:
+                        row["StartDate"] = raw_stats.get("StartDate", "")
+                    if "EndDate" in raw_stats:
+                        row["EndDate"] = raw_stats.get("EndDate", "")
+                    for k in ("min", "mean", "max", "std"):
+                        if k in raw_stats:
+                            row[k] = raw_stats.get(k)
+                    raw_rows.append(row)
 
-                for trace, vals in (raw_map or {}).items():
-                    if not isinstance(vals, dict):
-                        continue
-                    logger_id = _extract_logger_id(trace)
-                    rows.append(
-                        {
-                            "Year": year,
-                            "Depth": _depth_value_for_csv(),
-                            "Variable": variable,
-                            "Type": "raw",
-                            "Strips": strip,
-                            "Logger": logger_id,
-                            "Season": season_code,
-                            "StartDate": start_date_str,
-                            "EndDate": end_date_str,
-                            **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
-                        }
-                    )
+                if isinstance(ratio_stats, dict) and ratio_stats:
+                    row = {"Season": season, "StripDepth": strip_depth, "Type": "ratio"}
+                    if "StartDate" in ratio_stats:
+                        row["StartDate"] = ratio_stats.get("StartDate", "")
+                    if "EndDate" in ratio_stats:
+                        row["EndDate"] = ratio_stats.get("EndDate", "")
+                    for k in ("min", "mean", "max", "std"):
+                        if k in ratio_stats:
+                            row[k] = ratio_stats.get(k)
+                    ratio_rows.append(row)
 
-                for trace, vals in (ratio_map or {}).items():
-                    if not isinstance(vals, dict):
-                        continue
-                    strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
-                    strips_ = strips_match.group(1) if strips_match else ""
-                    logger_id = _extract_logger_id(trace)
-                    rows.append(
-                        {
-                            "Year": year,
-                            "Depth": _depth_value_for_csv(),
-                            "Variable": variable,
-                            "Type": "ratio",
-                            "Strips": strips_,
-                            "Logger": logger_id,
-                            "Season": season_code,
-                            "StartDate": start_date_str,
-                            "EndDate": end_date_str,
-                            **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
-                        }
-                    )
+    else:
+        # Non-gseason structure: you already have this working today in routes.py.
+        # Most commonly you have something like:
+        #   stats = {"raw_statistics": {...}, "ratio_statistics": {...}}
+        # where each inner dict is keyed by a row label like "S1_D1" or "S1/S2_T" etc.
 
-            if not rows:
-                raise HTTPException(status_code=400, detail="No seasonal summary statistics found.")
+        raw_stats_block = stats.get("raw_statistics") or {}
+        ratio_stats_block = stats.get("ratio_statistics") or {}
 
-            df_gs = pd.DataFrame(rows)
-            df_gs = df_gs.applymap(
-                lambda v: None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v
-            )
-
-            csv_name = f"summary_gseason_{variable}_{year}_{strip}.csv"
-            zf.writestr(csv_name, df_gs.to_csv(index=False))
-            zf.writestr(
-                "README.txt",
-                build_readme(
-                    f"{csv_name} – seasonal statistics (raw + ratio) for custom growing-season periods."
-                ),
-            )
-
-        else:
-            raw_map = stats.get("raw_statistics", {}) or {}
-            ratio_map = stats.get("ratio_statistics", {}) or {}
-
-            rows: List[Dict[str, Any]] = []
-
-            for trace, vals in raw_map.items():
+        if isinstance(raw_stats_block, dict):
+            for row_key, vals in raw_stats_block.items():
                 if not isinstance(vals, dict):
                     continue
-                parts = trace.split("_")
-                strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
-                strips_ = strips_match.group(1) if strips_match else ""
-                logger_id = _extract_logger_id(trace)
-                rows.append(
+                raw_rows.append(
                     {
-                        "Year": year,
-                        "Depth": _depth_value_for_csv(),
-                        "Variable": parts[0] if parts else "",
+                        "Row": row_key,
                         "Type": "raw",
-                        "Strips": strips_ or strip,
-                        "Logger": logger_id,
-                        **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
+                        "min": vals.get("min"),
+                        "mean": vals.get("mean"),
+                        "max": vals.get("max"),
+                        "std": vals.get("std"),
                     }
                 )
 
-            for trace, vals in ratio_map.items():
+        if isinstance(ratio_stats_block, dict):
+            for row_key, vals in ratio_stats_block.items():
                 if not isinstance(vals, dict):
                     continue
-                parts = trace.split("_")
-                strips_match = re.search(r"_(S\d(?:_S\d)*)_", trace)
-                strips_ = strips_match.group(1) if strips_match else ""
-                logger_id = _extract_logger_id(trace)
-                rows.append(
+                ratio_rows.append(
                     {
-                        "Year": year,
-                        "Depth": _depth_value_for_csv(),
-                        "Variable": parts[0] if parts else "",
+                        "Row": row_key,
                         "Type": "ratio",
-                        "Strips": strips_,
-                        "Logger": logger_id,
-                        **{k: round(vals.get(k, 0), 4) for k in ("min", "mean", "max", "std")},
+                        "min": vals.get("min"),
+                        "mean": vals.get("mean"),
+                        "max": vals.get("max"),
+                        "std": vals.get("std"),
                     }
                 )
 
-            if not rows:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No summary statistics found in raw_statistics or ratio_statistics.",
-                )
+    raw_df = pd.DataFrame(raw_rows)
+    ratio_df = pd.DataFrame(ratio_rows)
 
-            df_out = pd.DataFrame(rows)
-            df_out = df_out.applymap(
-                lambda v: None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v
-            )
+    # Optional: enforce a stable column order
+    def _reorder(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return df
+        preferred = []
+        for c in ("Season", "StartDate", "EndDate", "Row", "StripDepth", "Type", "min", "mean", "max", "std"):
+            if c in df.columns:
+                preferred.append(c)
+        rest = [c for c in df.columns if c not in preferred]
+        return df[preferred + rest]
 
-            strip_part = strip if strip != "all" else "all"
-            csv_name = f"summary_{granularity}_{variable}_{year}_{strip_part}.csv"
+    raw_df = _reorder(raw_df)
+    ratio_df = _reorder(ratio_df)
 
-            zf.writestr(csv_name, df_out.to_csv(index=False))
-            zf.writestr(
-                "README.txt",
-                build_readme(
-                    f"{csv_name} – summary statistics (raw + ratio) for granularity '{granularity}'."
-                ),
-            )
+    # ---------------------------------------------------------------------
+    # Helpers to return real CSV (bytes) so browsers don’t “helpfully” zip it.
+    # ---------------------------------------------------------------------
+    def _csv_response(df: pd.DataFrame, filename: str) -> StreamingResponse:
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
-    bioio.seek(0)
-    zip_fname = f"summary_{granularity}_{variable}_{year}.zip"
+    # ---------------------------------------------------------------------
+    # Return requested type
+    # ---------------------------------------------------------------------
+    safe_var = re.sub(r"[^A-Za-z0-9_\\-]+", "_", variable).strip("_")
+    safe_gran = re.sub(r"[^A-Za-z0-9_\\-]+", "_", granularity).strip("_")
+    safe_strip = re.sub(r"[^A-Za-z0-9_\\-]+", "_", strip).strip("_")
+
+    if download_type == "raw":
+        fname = f"summary_raw_{safe_gran}_{safe_var}_{year}_{safe_strip}.csv"
+        return _csv_response(raw_df, fname)
+
+    if download_type == "ratio":
+        fname = f"summary_ratio_{safe_gran}_{safe_var}_{year}_{safe_strip}.csv"
+        return _csv_response(ratio_df, fname)
+
+    if download_type == "all":
+        combined_df = pd.concat(
+            [raw_df, ratio_df],
+            ignore_index=True,
+        )
+        fname = f"summary_all_{safe_gran}_{safe_var}_{year}_{safe_strip}.csv"
+        return _csv_response(combined_df, fname)
+
+    if download_type != "zip":
+        raise HTTPException(status_code=400, detail=f"Unknown downloadType={download_type!r}")
+
+    # ZIP bundle: raw.csv + ratio.csv + README.txt
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            f"summary_raw_{safe_gran}_{safe_var}_{year}_{safe_strip}.csv",
+            raw_df.to_csv(index=False),
+        )
+        zf.writestr(
+            f"summary_ratio_{safe_gran}_{safe_var}_{year}_{safe_strip}.csv",
+            ratio_df.to_csv(index=False),
+        )
+
+        readme = (
+            f"Biochar Fruita CSU – Summary Statistics Download\n"
+            f"\n"
+            f"Year: {year}\n"
+            f"Granularity: {granularity}\n"
+            f"Variable: {variable}\n"
+            f"Selection (strip dropdown): {strip}\n"
+            f"\n"
+            f"Files:\n"
+            f"  - summary_raw_*.csv   : raw statistics rows\n"
+            f"  - summary_ratio_*.csv : ratio statistics rows (unitless)\n"
+        )
+        zf.writestr("README.txt", readme)
+
+    zip_buf.seek(0)
+    zip_fname = f"summary_bundle_{safe_gran}_{safe_var}_{year}_{safe_strip}.zip"
     return StreamingResponse(
-        bioio,
+        zip_buf,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{zip_fname}"'},
     )
