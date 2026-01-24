@@ -59,15 +59,15 @@ data.tmp/
 # Raw & processed data
 ############################
 biochar_app/data-raw/
-biochar_app/data-processed/
 biochar_app/data_temp/
 
-############################
-# Explicitly tracked processed data
-############################
+# Ignore processed data by default…
+biochar_app/data-processed/*
+
+# …but explicitly track authoritative lab tests
 !biochar_app/data-processed/lab-tests/
 !biochar_app/data-processed/lab-tests/**
-############################
+
 # Parquet & downloads
 ############################
 biochar_app/data-processed/parquet/
