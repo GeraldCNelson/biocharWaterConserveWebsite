@@ -625,97 +625,145 @@
       </div>
     </div>
 
-    <!-- Bulk Downloads pane -->
-    <div class="tab-pane fade" id="bulk-pane" role="tabpanel" aria-labelledby="bulk-tab">
-      <div class="container mt-3">
+<!-- Bulk Downloads pane -->
+<div class="tab-pane fade" id="bulk-pane" role="tabpanel" aria-labelledby="bulk-tab">
+  <div class="container-fluid mt-3">
 
-        <p class="mb-3">
-          Use this tab to download full-year datasets. Files are bundled into ZIP archives with a README.
-          Select a year to enable downloads.
+    <div class="row g-3">
+      <!-- Make the card wide -->
+      <div class="col-12 col-xl-10 col-xxl-9">
+
+        <p class="mb-2">
+          Download datasets as ZIP archives that include CSV export(s) plus a README.
         </p>
 
-        <div class="row">
-          <div class="col-md-6 col-lg-5">
-            <div class="card">
-              <div class="card-header">
-                Bulk Downloads (Full-Year ZIPs)
+        <div class="card">
+          <div class="card-header">
+            Bulk Downloads
+          </div>
+
+          <div class="card-body">
+
+            <!-- Put the gray explainer INSIDE the wide card so it doesn't float far right -->
+            <div class="alert alert-secondary py-2 mb-3">
+              <small>
+                <b>Year + Granularity apply to:</b> Logger and Weather downloads.<br/>
+                <b>Year applies to:</b> Irrigation and Fertilizing downloads.<br/>
+                <b>All-years files:</b> Soil chemistry/biology and Biomass/Hay downloads include all available years (when available).
+              </small>
+            </div>
+
+            <!-- Controls -->
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label for="bulk-year" class="form-label">Year</label>
+                <select id="bulk-year" class="form-select">
+                  <!-- filled by JS -->
+                </select>
               </div>
-              <div class="card-body">
-                <div class="mb-3">
-                  <label for="bulk-year" class="form-label">Year</label>
-                  <select id="bulk-year" class="form-select">
-                    <!-- filled by JS from /bulk_download/options -->
-                  </select>
-                </div>
 
-                <div class="d-grid gap-2">
-                  <button id="bulk-download-loggers"
-                          class="btn btn-primary bulk-download-btn"
-                          type="button"
-                          data-dataset="loggers"
-                          disabled>
-                    Download logger data (15-min, zipped CSVs)
-                  </button>
-
-                  <button id="bulk-download-weather"
-                          class="btn btn-secondary bulk-download-btn"
-                          type="button"
-                          data-dataset="weather"
-                          disabled>
-                    Download weather data (15-min, zipped CSV)
-                  </button>
-
-                  <hr class="my-2"/>
-
-                  <button id="bulk-download-irrigation"
-                          class="btn btn-outline-primary bulk-download-btn"
-                          type="button"
-                          data-dataset="irrigation"
-                          disabled>
-                    Download irrigation data (zipped CSV)
-                  </button>
-
-                  <button id="bulk-download-soil-chem"
-                          class="btn btn-outline-primary bulk-download-btn"
-                          type="button"
-                          data-dataset="soil_chem"
-                          disabled>
-                    Download soil chemistry (zipped CSV)
-                  </button>
-
-                  <button id="bulk-download-soil-bio"
-                          class="btn btn-outline-primary bulk-download-btn"
-                          type="button"
-                          data-dataset="soil_bio"
-                          disabled>
-                    Download soil biology (zipped CSV)
-                  </button>
-
-                  <button id="bulk-download-biomass"
-                          class="btn btn-outline-primary bulk-download-btn"
-                          type="button"
-                          data-dataset="biomass"
-                          disabled>
-                    Download biomass / hay data (zipped CSV)
-                  </button>
-                </div>
-
-                <small class="text-muted d-block mt-3">
-                  Each download is a full-year ZIP bundle with a README.
-                  Irrigation is collected periodically during the irrigation season.
-                  Soil chemistry/biology are typically sampled ~2× per year.
-                  Biomass/hay includes yield + chemical analysis.
+              <div class="col-12 col-md-6">
+                <label for="bulk-granularity" class="form-label">Granularity</label>
+                <select id="bulk-granularity" class="form-select">
+                  <!-- filled by JS -->
+                </select>
+                <small class="text-muted d-block mt-1">
+                  Used only for Logger + Weather downloads.
                 </small>
               </div>
             </div>
-          </div>
 
-          <div class="col-md-6 col-lg-7">
-            <!-- Reserved for future: explanatory notes, file inventory, etc. -->
+            <hr class="my-3"/>
+
+            <!-- Buttons: lay out in two columns on wider screens -->
+            <div class="row g-2">
+              <div class="col-12 col-lg-6">
+                <button id="bulk-download-loggers"
+                        class="btn btn-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="loggers"
+                        disabled>
+                  Download logger data (CSV + ratios, zipped)
+                </button>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <button id="bulk-download-weather"
+                        class="btn btn-secondary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="weather"
+                        disabled>
+                  Download weather data (CSV, zipped)
+                </button>
+              </div>
+
+              <div class="col-12"><hr class="my-2"/></div>
+
+              <div class="col-12 col-lg-6">
+                <button id="bulk-download-irrigation"
+                        class="btn btn-outline-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="irrigation"
+                        disabled>
+                  Download irrigation (CSV, zipped)
+                </button>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <button id="bulk-download-fertilizing"
+                        class="btn btn-outline-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="fertilizing"
+                        disabled>
+                  Download fertilizing (CSV, zipped)
+                </button>
+              </div>
+
+              <div class="col-12"><hr class="my-2"/></div>
+
+              <div class="col-12 col-lg-4">
+                <button id="bulk-download-soil-chem"
+                        class="btn btn-outline-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="soil_chem"
+                        disabled>
+                  Download soil chemistry (all years, zipped)
+                </button>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <button id="bulk-download-soil-bio"
+                        class="btn btn-outline-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="soil_bio"
+                        disabled>
+                  Download soil biology (all years, zipped)
+                </button>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <button id="bulk-download-biomass"
+                        class="btn btn-outline-primary bulk-download-btn w-100"
+                        type="button"
+                        data-dataset="biomass"
+                        disabled>
+                  Download biomass / hay (all years, zipped)
+                </button>
+              </div>
+            </div>
+
+            <small class="text-muted d-block mt-3">
+              Each download is a ZIP bundle with CSV export(s) plus a README.
+            </small>
+
           </div>
         </div>
+
       </div>
     </div>
+
+  </div>
+</div>
 
   </div>
 </div>

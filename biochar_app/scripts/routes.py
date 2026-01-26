@@ -16,6 +16,7 @@ from io import BytesIO
 import zipfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
+from biochar_app.scripts.bulk_downloads import bulk_router
 
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
@@ -246,6 +247,7 @@ logger = logging.getLogger(__name__)
 
 main_router = APIRouter()
 api_router = APIRouter(prefix="/api")
+api_router.include_router(bulk_router)
 
 templates = Jinja2Templates(
     directory=os.path.join(os.path.dirname(__file__), "../templates")
@@ -1557,7 +1559,7 @@ class BulkDownloadRequest(BaseModel):
     keys: List[str]
 
 
-@api_router.get("/bulk_download_manifest")
+
 async def api_bulk_download_manifest():
     manifest = build_manifest(BIOCHAR_MASTER_XLSX)
     return JSONResponse(manifest)
