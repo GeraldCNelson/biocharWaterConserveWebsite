@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 from biochar_app.scripts.bulk_downloads import bulk_router
 
+logger = logging.getLogger(__name__)
+
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
 from fastapi.responses import (
@@ -393,25 +395,62 @@ def _add_unit_suffixes_for_download(df: pd.DataFrame, variable: str) -> pd.DataF
 # ---------------------------------------------------------------------------
 # Bulk download endpoints (loggers + weather)  [NON-API routes]
 # ---------------------------------------------------------------------------
+
 @main_router.get("/bulk_download/options")
 async def get_bulk_download_options():
     """Report which bulk-download ZIPs exist for each year."""
+    logger.info("📦 get_bulk_download_options() called")
+
     available: Dict[str, Dict[str, bool]] = {}
 
     for year in YEARS:
+        logger.info("📅 Checking bulk-download availability for year=%s", year)
+
         loggers_zip = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
         weather_zip = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
-        ancillary = {
-            k: _ancillary_available_for_year(BIOCHAR_MASTER_XLSX, k, int(year))
-            for k in ANCILLARY_DATASETS.keys()
-        }
+        logger.info(
+            "   🗂 Logger ZIP: %s → exists=%s",
+            loggers_zip,
+            loggers_zip.exists(),
+        )
+        logger.info(
+            "   🌦 Weather ZIP: %s → exists=%s",
+            weather_zip,
+            weather_zip.exists(),
+        )
+
+        ancillary = {}
+        for key in ANCILLARY_DATASETS.keys():
+            try:
+                exists = _ancillary_available_for_year(
+                    BIOCHAR_MASTER_XLSX,
+                    key,
+                    int(year),
+                )
+                ancillary[key] = exists
+                logger.info(
+                    "   🧪 Ancillary %-12s year=%s → exists=%s",
+                    key,
+                    year,
+                    exists,
+                )
+            except Exception as e:
+                ancillary[key] = False
+                logger.exception(
+                    "   ❌ Ancillary check failed for key=%s year=%s",
+                    key,
+                    year,
+                )
 
         available[str(year)] = {
             "loggers": loggers_zip.exists(),
             "weather": weather_zip.exists(),
             **ancillary,
         }
+
+    logger.info("✅ Bulk download availability computed successfully")
+    logger.debug("📤 Availability payload: %s", available)
 
     return JSONResponse({"available": available})
 
@@ -1567,6 +1606,25 @@ async def api_bulk_download_manifest():
 
 @api_router.post("/bulk_download")
 async def api_bulk_download(req: BulkDownloadRequest):
-    zip_bytes = build_zip_for_selection(BIOCHAR_MASTER_XLSX, req.keys)
+    logger.info("📦 /api/bulk_download called with keys=%s", req.keys)
+
+    try:
+        # Show what the backend considers valid keys
+        reg = default_bulk_registry()
+        valid = sorted([s.dataset_key for s in reg])
+        logger.info("✅ Valid registry keys (%d): %s", len(valid), valid)
+
+        missing = [k for k in req.keys if k not in valid]
+        if missing:
+            logger.error("❌ Missing/unknown keys from request: %s", missing)
+        else:
+            logger.info("✅ All requested keys recognized.")
+
+        zip_bytes = build_zip_for_selection(BIOCHAR_MASTER_XLSX, req.keys, registry=reg)
+
+    except Exception as e:
+        logger.exception("❌ build_zip_for_selection failed")
+        raise HTTPException(status_code=400, detail=str(e))
+
     headers = {"Content-Disposition": 'attachment; filename="biochar_bulk_download.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
