@@ -67,6 +67,7 @@ biochar_app/data-processed/*
 # …but explicitly track authoritative lab tests
 !biochar_app/data-processed/lab-tests/
 !biochar_app/data-processed/lab-tests/**
+!biochar_app/data-processed/biomass_samples.csv
 
 # Parquet & downloads
 ############################
