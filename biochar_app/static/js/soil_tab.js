@@ -19,6 +19,8 @@
 
 import { debugLog } from "./plots.js";
 
+import { makeSetSectionTitle } from "./tab_ui.js";
+
 function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
 }
@@ -200,24 +202,6 @@ function buildTableForVariable(setPayload, variableKey, variableLabel) {
   return wrapper;
 }
 
-function makeSetSectionTitle(titleText, subtitleText = "") {
-  const section = document.createElement("div");
-  section.className = "soil-set-section mb-4";
-
-  const h4 = document.createElement("h4");
-  h4.className = "soil-set-title mb-2";
-  h4.textContent = titleText;
-  section.appendChild(h4);
-
-  if (subtitleText) {
-    const p = document.createElement("p");
-    p.className = "text-muted soil-set-subtitle";
-    p.textContent = subtitleText;
-    section.appendChild(p);
-  }
-
-  return section;
-}
 
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });

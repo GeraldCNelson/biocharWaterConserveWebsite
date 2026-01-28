@@ -17,6 +17,8 @@ import zipfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 from biochar_app.scripts.bulk_downloads import bulk_router
+from biochar_app.scripts.biomass_field_tables import get_biomass_field_table_payload
+from bulk_download_utils import default_bulk_registry
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,16 @@ WARD_MASTER_SOILCHEM_CLEAN_CSV = (
     / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
 )
 
+WARD_MASTER_BIOMASS_FIELD_CLEAN_CSV = (
+    PROJECT_ROOT
+    / "biochar_app"
+    / "data-processed"
+    / "lab-tests"
+    / "biomass-field"
+    / "csv-files"
+    / "field_biomass_dry_g_wide_clean.csv"
+)
+
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -243,10 +255,6 @@ def _clean_for_json(obj):
 
 
 # ---- Paths ----
-BIOCHAR_APP_DIR = Path(__file__).resolve().parents[1]  # .../biochar_app
-
-logger = logging.getLogger(__name__)
-
 main_router = APIRouter()
 api_router = APIRouter(prefix="/api")
 api_router.include_router(bulk_router)
@@ -1626,5 +1634,7 @@ async def api_bulk_download(req: BulkDownloadRequest):
         logger.exception("❌ build_zip_for_selection failed")
         raise HTTPException(status_code=400, detail=str(e))
 
-    headers = {"Content-Disposition": 'attachment; filename="biochar_bulk_download.zip"'}
-    return Response(content=zip_bytes, media_type="application/zip", headers=headers)
+api_router.get("/get_biomass_field_table")
+async def api_get_biomass_field_table():
+    payload = get_biomass_field_table_payload(WARD_MASTER_BIOMASS_FIELD_CLEAN_CSV, min_year=2023)
+    return JSONResponse(payload)

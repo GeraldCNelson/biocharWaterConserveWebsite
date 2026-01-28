@@ -1,6 +1,6 @@
 // static/js/nir_tab.js
 //
-// Robust renderer for the Pasture Qualitative Metrics (Ward NIR) tab.
+// Robust renderer for the Pasture Quality Metrics tab.
 //
 // Supports BOTH payload shapes:
 //
@@ -33,6 +33,8 @@
 //
 // Also tolerates drift where set.key/set.label/variables/rows/rowLabels are missing,
 // and derives them from `data` where possible.
+
+import { makeSetSectionTitle } from "./tab_ui.js";
 
 function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -152,7 +154,7 @@ function normalizePayload(payload) {
   // { title: string, sets: [ {key,label,periods,variables,rows,rowLabels,data} ... ] }
   if (!isObject(payload)) return null;
 
-  const title = safeStr(payload.title, "Pasture Qualitative Metrics");
+  const title = safeStr(payload.title, "Pasture Quality Metrics");
 
   // If already in standard shape
   if (Array.isArray(payload.sets)) {
@@ -266,25 +268,6 @@ async function fetchJson(url) {
   }
 
   return await resp.json();
-}
-
-function makeSetSectionTitle(titleText, subtitleText = "") {
-  const section = document.createElement("div");
-  section.className = "nir-set-section";
-
-  const h4 = document.createElement("h4");
-  h4.className = "nir-set-title";
-  h4.textContent = titleText;
-  section.appendChild(h4);
-
-  if (subtitleText) {
-    const p = document.createElement("p");
-    p.className = "text-muted nir-set-subtitle";
-    p.textContent = subtitleText;
-    section.appendChild(p);
-  }
-
-  return section;
 }
 
 function renderOneSetFromPayload(sectionEl, setPayload) {

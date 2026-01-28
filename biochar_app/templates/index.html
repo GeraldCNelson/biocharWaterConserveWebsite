@@ -114,7 +114,15 @@
     <li class="nav-item" role="presentation">
       <a id="nir-tab" class="nav-link" data-bs-toggle="tab"
          href="#nir" role="tab" aria-controls="nir" aria-selected="false">
-        Pasture Qualitative Metrics
+        Pasture Quality Metrics
+      </a>
+    </li>
+
+    <!-- NEW: Biomass (Field Samples) tab -->
+    <li class="nav-item" role="presentation">
+      <a id="biomass-field-tab" class="nav-link" data-bs-toggle="tab"
+         href="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
+        Biomass (Field Samples)
       </a>
     </li>
 
@@ -583,6 +591,21 @@
         <!-- Horizontal scroll wrapper (CSS must live in styles.css) -->
         <div class="nir-scroll">
           <div id="nir-content" class="nir-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW: Biomass (Field Samples) Pane -->
+    <div class="tab-pane fade" id="biomass-field" role="tabpanel" aria-labelledby="biomass-field-tab">
+      <div class="container-fluid mt-3">
+        <h4 class="mb-2">Biomass (Field Samples)</h4>
+        <p class="text-muted mb-2">
+          Rows: field locations (e.g., S1M, S1B). Columns: sampling dates. Values are dry biomass (g).
+        </p>
+
+        <!-- Reuse the same horizontal scroll wrapper styles -->
+        <div class="nir-scroll">
+          <div id="biomass-field-content" class="nir-content"></div>
         </div>
       </div>
     </div>
