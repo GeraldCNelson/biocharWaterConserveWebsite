@@ -251,3 +251,13 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
   html += "</div>";
   return html;
 }
+
+
+export async function fetchJson(url) {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`${url} failed: ${res.status} ${res.statusText} — ${txt}`);
+  }
+  return await res.json();
+}

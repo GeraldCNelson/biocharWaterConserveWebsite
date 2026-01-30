@@ -21,9 +21,10 @@ import { debugLog } from "./plots.js";
 
 import { makeSetSectionTitle } from "./tab_ui.js";
 
-function isObject(x) {
-  return x !== null && typeof x === "object" && !Array.isArray(x);
-}
+
+import {isObject} from "./tables.js"
+import { normalizePayload, renderOneSetFromPayload, safeStr} from "./tables.js";
+import { fetchJson } from "./api_requests.js";
 
 function humanizeKey(key) {
   if (!key) return "";
@@ -203,14 +204,6 @@ function buildTableForVariable(setPayload, variableKey, variableLabel) {
 }
 
 
-async function fetchJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`${url} failed: ${res.status} ${res.statusText} — ${txt}`);
-  }
-  return await res.json();
-}
 
 function renderOneSetIntoSection(sectionEl, setPayload) {
   // tables per variable

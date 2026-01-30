@@ -101,11 +101,11 @@ export function generateSummaryTable(stats, displayVar, unitLabel) {
  *   - displayLabelRatio: abbreviation / base label (NO units)
  */
 function renderSplitRatioTables(
-  ratioStats,
-  variable,
-  unitSystem,
-  displayLabelRaw,
-  displayLabelRatioBase
+    ratioStats,
+    variable,
+    unitSystem,
+    displayLabelRaw,
+    displayLabelRatioBase
 ) {
   const s1s2 = {};
   const s3s4 = {};
@@ -118,7 +118,7 @@ function renderSplitRatioTables(
 
   // Raw display label (fallback to local mapping if backend didn't provide it)
   const rawDisplayVar =
-    displayLabelRaw || resolveDisplayName(variable, unitSystem);
+      displayLabelRaw || resolveDisplayName(variable, unitSystem);
 
   // For ratios, we want a *unitless* base label (from backend if available).
   // displayLabelRatioBase is expected to be an abbreviation (e.g., "SWC").
@@ -134,13 +134,13 @@ function renderSplitRatioTables(
       let reason;
       if (variable === "T") {
         reason =
-          "Temperature-based ratio summaries are not shown for this variable.";
+            "Temperature-based ratio summaries are not shown for this variable.";
       } else if (variable === "SWC") {
         reason =
-          "Soil Water Content (per-cylinder volume) ratio summaries are not shown in this version of the dashboard.";
+            "Soil Water Content (per-cylinder volume) ratio summaries are not shown in this version of the dashboard.";
       } else {
         reason =
-          "No ratio summaries are available for this selection.";
+            "No ratio summaries are available for this selection.";
       }
 
       return `
@@ -223,11 +223,11 @@ async function updateSummaryStatistics() {
 
   // Prefer backend-provided labels; fall back to local resolution.
   const displayLabelRaw =
-    data.display_label_raw ||
-    resolveDisplayName(variable, effectiveUnitSystem);
+      data.display_label_raw ||
+      resolveDisplayName(variable, effectiveUnitSystem);
 
   const displayLabelRatioBase =
-    data.display_label_ratio || displayLabelRaw;
+      data.display_label_ratio || displayLabelRaw;
 
   const rawUnit = getUnitLabel(variable, effectiveUnitSystem, false);
 
@@ -248,15 +248,15 @@ async function updateSummaryStatistics() {
 
   // ---- Seasonal (gseason) path using accordion ----
   const hasSeasonal =
-    data.gseason_stats && Object.keys(data.gseason_stats).length > 0;
+      data.gseason_stats && Object.keys(data.gseason_stats).length > 0;
 
   if (granularity === "gseason" && hasSeasonal) {
     console.log("🌱 Rendering seasonal summaries with accordion…",
-                data.gseason_stats);
+        data.gseason_stats);
 
     container.innerHTML = generateSeasonalSummaryAccordion(
-      data.gseason_stats,
-      variable
+        data.gseason_stats,
+        variable
     );
     console.log("✅ Seasonal summary accordion rendered.");
     return;
@@ -268,21 +268,21 @@ async function updateSummaryStatistics() {
   const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
 
   const rawSubtitle =
-    `Raw Values – ${displayLabelRaw}${unitSuffix} ` +
-    `by logger location in strip ${strip}, depth = ${depthLabel}, year = ${year}`;
+      `Raw Values – ${displayLabelRaw}${unitSuffix} ` +
+      `by logger location in strip ${strip}, depth = ${depthLabel}, year = ${year}`;
 
   const rawHTML = generateSummaryTable(
-    data.raw_statistics,
-    displayLabelRaw,
-    rawUnit
+      data.raw_statistics,
+      displayLabelRaw,
+      rawUnit
   );
 
   const ratioHTML = renderSplitRatioTables(
-    data.ratio_statistics,
-    variable,
-    effectiveUnitSystem,
-    displayLabelRaw,
-    displayLabelRatioBase
+      data.ratio_statistics,
+      variable,
+      effectiveUnitSystem,
+      displayLabelRaw,
+      displayLabelRatioBase
   );
 
   container.innerHTML = `
@@ -295,3 +295,99 @@ async function updateSummaryStatistics() {
 }
 
 export { updateSummaryStatistics };
+
+
+export function renderOneSetFromPayload(sectionEl, setPayload) {
+  // tables per variable
+  for (const v of setPayload.variables || []) {
+    const key = v?.key;
+    const label = v?.label || key;
+    if (!key) continue;
+
+    const block = buildTableForVariable(setPayload, key, label);
+    sectionEl.appendChild(block);
+  }
+}
+
+// basic helpers
+export function isObject(x) {
+  return x !== null && typeof x === "object" && !Array.isArray(x);
+}
+
+export function safeStr(v, fallback = "") {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v).trim();
+  return s ? s : fallback;
+}
+
+// ✅ NEW: required by normalizePayload
+export function normalizeOneSet(s, idx = 0) {
+  const set = isObject(s) ? s : {};
+
+  // Accept either "label" or "title" as the display label
+  const label =
+    safeStr(set.label, "") ||
+    safeStr(set.title, "") ||
+    `Set ${idx + 1}`;
+
+  const key = safeStr(set.key, "") || `set_${idx + 1}`;
+
+  const periods = Array.isArray(set.periods) ? set.periods.map(String) : [];
+  const variables = Array.isArray(set.variables) ? set.variables.map(String) : [];
+  const rows = Array.isArray(set.rows) ? set.rows.map(String) : [];
+
+  const rowLabels = isObject(set.rowLabels) ? set.rowLabels : {};
+  const data = isObject(set.data) ? set.data : {};
+
+  const note = safeStr(set.note, "");
+
+  return {
+    key,
+    label,
+    periods,
+    variables,
+    rows,
+    rowLabels,
+    data,
+    note,
+  };
+}
+
+export function normalizePayload(payload) {
+  // Returns canonical shape:
+  // { title: string, sets: [ {key,label,periods,variables,rows,rowLabels,data} ... ] }
+  if (!isObject(payload)) return null;
+
+  const title = safeStr(payload.title, "Pasture Quality Metrics");
+
+  // If already in standard shape
+  if (Array.isArray(payload.sets)) {
+    const sets = payload.sets.map((s, i) => normalizeOneSet(s, i));
+    return { title, sets };
+  }
+
+  // If it looks like a single-set payload
+  const looksSingleSet =
+      Array.isArray(payload.periods) ||
+      Array.isArray(payload.variables) ||
+      Array.isArray(payload.rows) ||
+      isObject(payload.data);
+
+  if (looksSingleSet) {
+    const single = normalizeOneSet(
+        {
+          key: "nir_set_1",
+          label: title,
+          periods: payload.periods,
+          variables: payload.variables,
+          rows: payload.rows,
+          rowLabels: payload.rowLabels,
+          data: payload.data,
+        },
+        0
+    );
+    return { title, sets: [single] };
+  }
+
+  return null;
+}

@@ -62,56 +62,36 @@ window.downloadSummaryData = downloadSummaryData;
 document.addEventListener("DOMContentLoaded", async () => {
   debugLog("🌐 Initializing application...");
 
-  // ----------------------------------------------------
-  // Tab wiring helper (adds console breadcrumbs + safe error handling)
-  // ----------------------------------------------------
-  function wireTabRender({
-    tabId = null,                 // e.g. "biomass-field-tab"
-    href = null,                  // e.g. "#biomass-field"
-    paneId = null,                // e.g. "biomass-field"
-    renderFn = null,              // e.g. renderBiomassFieldTables
-    label = "tab",
-    renderOnLoadIfActive = true,
-  }) {
-    // Find the tab link
-    let tabEl = null;
-    if (tabId) tabEl = document.getElementById(tabId);
-    if (!tabEl && href) tabEl = document.querySelector(`a[href="${href}"]`);
+// ----------------------------------------------------
+// Tab wiring helper
+// ----------------------------------------------------
+function wireTabRender({ href, tabId, paneId, renderFn, label }) {
+  // Prefer explicit tabId if provided; fallback to href selector
+  const tabLink =
+    (tabId ? document.getElementById(tabId) : null) ||
+    (href ? document.querySelector(`a[href="${href}"]`) : null);
 
-    if (!tabEl) {
-      console.warn(`❌ [wireTabRender] Missing tab link for ${label} (tabId=${tabId}, href=${href})`);
-      return;
-    }
-
-    // Sanity checks (helpful when Network shows "nothing")
-    if (paneId && !document.getElementById(paneId)) {
-      console.warn(`⚠️ [wireTabRender] Pane #${paneId} not found for ${label}`);
-    }
-    if (typeof renderFn !== "function") {
-      console.error(`❌ [wireTabRender] renderFn is not a function for ${label}. Got:`, renderFn);
-      // Still wire the tab event so you see "shown" logs even if render fn is missing
-    }
-
-    async function runRender(reason) {
-      console.log(`✅ [wireTabRender] ${label} render triggered (${reason})`);
-      try {
-        if (typeof renderFn === "function") {
-          await renderFn();
-        } else {
-          console.error(`❌ [wireTabRender] No valid renderFn for ${label}; nothing to run.`);
-        }
-      } catch (err) {
-        console.error(`❌ [wireTabRender] Render failed for ${label}:`, err);
-      }
-    }
-
-    tabEl.addEventListener("shown.bs.tab", () => runRender("shown.bs.tab"));
-
-    if (renderOnLoadIfActive && tabEl.classList.contains("active")) {
-      // don't block the rest of init; render after the current call stack
-      Promise.resolve().then(() => runRender("active on load"));
-    }
+  if (!tabLink) {
+    console.warn(`[wireTabRender] Tab link not found`, { href, tabId, paneId, label });
+    return;
   }
+
+  if (typeof renderFn !== "function") {
+    console.error(`[wireTabRender] renderFn is not a function`, { href, tabId, paneId, label, renderFnType: typeof renderFn });
+    return;
+  }
+
+  tabLink.addEventListener("shown.bs.tab", () => {
+    console.debug(`[wireTabRender] ${label || href || tabId} render triggered`);
+    renderFn();
+  });
+
+  // Render immediately if already active
+  if (tabLink.classList.contains("active")) {
+    console.debug(`[wireTabRender] ${label || href || tabId} already active — rendering`);
+    renderFn();
+  }
+}
 
   // Fetch defaults & options from the server
   const options = await fetchDefaultsAndOptions();
@@ -225,18 +205,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ✅ Biomass (Field Samples)
-  // Requires:
-  // - tab link: <a id="biomass-field-tab" ... href="#biomass-field">
-  // - pane:     <div id="biomass-field" ...>
-  // - render fn exists in scope (imported into main.js):
-  //     renderBiomassFieldTables()
   wireTabRender({
-    tabId: "biomass-field-tab",
     href: "#biomass-field",     // fallback if tabId ever changes
     paneId: "biomass-field",
-    renderFn: (typeof renderBiomassFieldTables === "function")
-      ? renderBiomassFieldTables
-      : null,
+    renderFn: renderBiomassFieldTables,
     label: "Biomass (Field Samples)",
   });
 

@@ -1634,7 +1634,7 @@ async def api_bulk_download(req: BulkDownloadRequest):
         logger.exception("❌ build_zip_for_selection failed")
         raise HTTPException(status_code=400, detail=str(e))
 
-api_router.get("/get_biomass_field_table")
+@api_router.get("/get_biomass_field_table")
 async def api_get_biomass_field_table():
     payload = get_biomass_field_table_payload(WARD_MASTER_BIOMASS_FIELD_CLEAN_CSV, min_year=2023)
     return JSONResponse(payload)
