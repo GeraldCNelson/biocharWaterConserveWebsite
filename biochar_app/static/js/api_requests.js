@@ -1,6 +1,5 @@
 // api_requests.js
 import { getDropdownValue } from "./ui_utils.js";
-import { generateSummaryTable } from "./tables.js";
 
 /**
  * Simple helper to capitalize the first letter of a string.
@@ -252,12 +251,271 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
   return html;
 }
 
+// api_requests.js
+export async function fetchJson(url, init = {}) {
+  // Normalize/merge headers (case-insensitive safe)
+  const headers = new Headers(init.headers || {});
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-export async function fetchJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  // If we're sending a body and caller didn't specify content-type, default to JSON
+  const hasBody =
+    init.body !== undefined && init.body !== null && String(init.body).length > 0;
+
+  if (hasBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(url, { ...init, headers });
+
+  // Handle non-OK with readable error
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`${url} failed: ${res.status} ${res.statusText} — ${txt}`);
   }
+
+  // Some endpoints might return empty body (204) — avoid JSON parse blowups
+  const contentType = res.headers.get("Content-Type") || "";
+  if (!contentType.includes("application/json")) {
+    const txt = await res.text();
+    throw new Error(`${url} did not return JSON — ${txt.slice(0, 200)}`);
+  }
+
   return await res.json();
+}
+
+export function generateSummaryTable(stats, variable, opts = {}) {
+  const {
+    decimals = null,          // e.g. 3 for ratios
+    rowHeader = "Row",        // first column header
+    emptyMessage = "No summary statistics available."
+  } = opts || {};
+
+  // Always return a Node
+  const wrap = document.createElement("div");
+
+  // Null/empty guard
+  if (!stats || (typeof stats !== "object")) {
+    wrap.className = "alert alert-warning";
+    wrap.textContent = emptyMessage;
+    return wrap;
+  }
+
+  // Helpers
+  const isPlainObject = (v) =>
+    v !== null && typeof v === "object" && !Array.isArray(v);
+
+  const toDisplay = (v) => {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v; // keep "ALL PREY", etc.
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) return "";
+      if (typeof decimals === "number") return v.toFixed(decimals);
+      return String(v);
+    }
+    return String(v);
+  };
+
+  // ------------------------------------------------------------
+  // Case A) stats is an ARRAY of objects
+  // e.g. [{strip:"S1", mean:..., min:...}, ...]
+  // ------------------------------------------------------------
+  if (Array.isArray(stats)) {
+    if (stats.length === 0) {
+      wrap.className = "alert alert-warning";
+      wrap.textContent = emptyMessage;
+      return wrap;
+    }
+
+    const table = document.createElement("table");
+    table.className = "table table-sm table-striped table-bordered";
+
+    const cols = Array.from(
+      stats.reduce((s, row) => {
+        if (isPlainObject(row)) Object.keys(row).forEach((k) => s.add(k));
+        return s;
+      }, new Set())
+    );
+
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    cols.forEach((k) => {
+      const th = document.createElement("th");
+      th.textContent = k;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    stats.forEach((row) => {
+      const tr = document.createElement("tr");
+      cols.forEach((k) => {
+        const td = document.createElement("td");
+        td.textContent = isPlainObject(row) ? toDisplay(row[k]) : "";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // ------------------------------------------------------------
+  // Case B) "new standard table payload" shape:
+  // { periods:[...], rows:[...], rowLabels:{...}, data:{varKey:{rowKey:{periodKey:val}}}}
+  // or in summary-land: { periods, rows, data } etc.
+  // ------------------------------------------------------------
+  if (Array.isArray(stats.periods) && Array.isArray(stats.rows) && isPlainObject(stats.data)) {
+    const periods = stats.periods;
+    const rows = stats.rows;
+    const rowLabels = isPlainObject(stats.rowLabels) ? stats.rowLabels : {};
+    const data = stats.data;
+
+    // Heuristic: choose a variable block if present
+    let varKey = variable;
+    if (!isPlainObject(data[varKey])) {
+      const keys = Object.keys(data);
+      if (keys.length) varKey = keys[0];
+    }
+    const varBlock = data[varKey];
+
+    if (!isPlainObject(varBlock)) {
+      wrap.className = "alert alert-warning";
+      wrap.textContent = emptyMessage;
+      return wrap;
+    }
+
+    const table = document.createElement("table");
+    table.className = "table table-sm table-striped table-bordered";
+
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+
+    const th0 = document.createElement("th");
+    th0.textContent = rowHeader;
+    trh.appendChild(th0);
+
+    periods.forEach((p) => {
+      const th = document.createElement("th");
+      th.textContent = (p && (p.label || p.key)) ? (p.label || p.key) : "";
+      trh.appendChild(th);
+    });
+
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach((rowKey) => {
+      const tr = document.createElement("tr");
+
+      const td0 = document.createElement("td");
+      td0.textContent = rowLabels[rowKey] || rowKey;
+      tr.appendChild(td0);
+
+      const rowMap = varBlock[rowKey];
+      periods.forEach((p) => {
+        const pk = (p && p.key) ? String(p.key) : "";
+        const td = document.createElement("td");
+        const v = (isPlainObject(rowMap) && pk) ? rowMap[pk] : null;
+        td.textContent = toDisplay(v);
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // ------------------------------------------------------------
+  // Case C) "dict of dict" summary shape:
+  // { "STRIP 1": {min, mean, max, std, n}, "STRIP 2": {...}, ... }
+  // ------------------------------------------------------------
+  const rowKeys = Object.keys(stats);
+  if (rowKeys.length === 0) {
+    wrap.className = "alert alert-warning";
+    wrap.textContent = emptyMessage;
+    return wrap;
+  }
+
+  // Find metric keys from the first object-like row
+  const firstRowObj = rowKeys.map((k) => stats[k]).find(isPlainObject);
+  const metricKeys = firstRowObj ? Object.keys(firstRowObj) : [];
+
+  if (metricKeys.length === 0) {
+    // Fallback: render as two-column key/value table
+    const table = document.createElement("table");
+    table.className = "table table-sm table-striped table-bordered";
+
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    const thA = document.createElement("th");
+    thA.textContent = rowHeader;
+    const thB = document.createElement("th");
+    thB.textContent = "Value";
+    trh.appendChild(thA);
+    trh.appendChild(thB);
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rowKeys.forEach((k) => {
+      const tr = document.createElement("tr");
+      const tdK = document.createElement("td");
+      tdK.textContent = k;
+      const tdV = document.createElement("td");
+      tdV.textContent = toDisplay(stats[k]);
+      tr.appendChild(tdK);
+      tr.appendChild(tdV);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // Render metric table
+  const table = document.createElement("table");
+  table.className = "table table-sm table-striped table-bordered";
+
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+  const th0 = document.createElement("th");
+  th0.textContent = rowHeader;
+  trh.appendChild(th0);
+
+  metricKeys.forEach((m) => {
+    const th = document.createElement("th");
+    th.textContent = m;
+    trh.appendChild(th);
+  });
+
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  rowKeys.forEach((rk) => {
+    const tr = document.createElement("tr");
+
+    const td0 = document.createElement("td");
+    td0.textContent = rk;
+    tr.appendChild(td0);
+
+    const rowObj = stats[rk];
+    metricKeys.forEach((m) => {
+      const td = document.createElement("td");
+      td.textContent = isPlainObject(rowObj) ? toDisplay(rowObj[m]) : "";
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
 }

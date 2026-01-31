@@ -44,10 +44,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-logger.info("📅 Date ranges loaded:")
-for y, gmap in state.DATE_RANGES.items():
-    for g, r in gmap.items():
-        logger.info(f"  {y} {g}: {r['min']} → {r['max']}")
+# logger.info("📅 Date ranges loaded:")
+# for y, gmap in state.DATE_RANGES.items():
+#     for g, r in gmap.items():
+#         logger.info(f"  {y} {g}: {r['min']} → {r['max']}")
 
 # ─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

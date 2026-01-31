@@ -2,7 +2,7 @@
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
 import { updateDepthLabels } from "./ui_controls.js";
-import { updateSummaryStatistics } from "./tables.js";
+import { updateSummaryStatistics } from "./tab_summary.js";
 import { renderMainPlots } from "./plot_utils.js";
 
 let dateDebounceTimer;

@@ -5,6 +5,7 @@ import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./nir_tab.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
 import { renderBiomassFieldTables } from "./biomass_field_tab.js";
+import { initSummaryTab } from "./tab_summary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -44,7 +45,7 @@ import {
 import { renderMainPlots, waitForAllDropdowns } from "./plot_utils.js";
 
 // 7) Summary-table updater
-import { updateSummaryStatistics } from "./tables.js";
+import { updateSummaryStatistics } from "./tab_summary.js";
 
 // 8) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";
@@ -247,6 +248,8 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
   if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
     initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
   }
+
+  initSummaryTab();
 
   // Bulk downloads tab
   try {

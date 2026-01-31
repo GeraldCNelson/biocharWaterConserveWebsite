@@ -1,44 +1,25 @@
 // static/js/nir_tab.js
 //
 // Renderer for the Pasture Quality Metrics tab.
+// Expects endpoint:
+//   GET /api/get_nir_table
 //
-// Expected (preferred) payload shape:
-// {
-//   title: "Pasture Quality Metrics",
-//   sets: [
-//     {
-//       key: "nir_set1",
-//       label: "Pasture Quality Metrics — Set 1",
-//       periods: [{key,label}, ...]  OR ["2023-05-01", ...],
-//       variables: [{key,label}, ...] OR ["cp_pct", ...],
-//       rows: ["strip_1", ...],
-//       rowLabels: {"strip_1":"STRIP 1", ...},
-//       data: { varKey: { rowKey: { periodKey: value|null } } }
-//     },
-//     ...
-//   ]
-// }
-//
-// Also tolerates legacy / single-set payloads where the top-level contains
-// periods/variables/rows/rowLabels/data directly. We normalize via tables.js.
+// Payload supported:
+// - Standard multi-set: { title, sets: [ ... ] }
+// - Legacy single-set:  { title, periods, variables, rows, rowLabels, data }
 
 import { makeSetSectionTitle } from "./tab_ui.js";
 import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
 
-/**
- * Public: render NIR tables into the NIR tab.
- * Endpoint:
- *   GET /api/get_nir_table
- */
 export async function renderNirTables() {
   const container = document.getElementById("nir-content");
   if (!container) {
-    console.warn("[renderNirTables] Container #nir-content not found.");
+    console.warn("NIR container #nir-content not found.");
     return;
   }
 
-  // Prevent double-render if user clicks the tab repeatedly
+  // Prevent double-render if the user clicks tabs repeatedly
   if (container.dataset.rendered === "true") return;
 
   container.innerHTML = "";
@@ -50,9 +31,9 @@ export async function renderNirTables() {
 
   try {
     const rawPayload = await fetchJson("/api/get_nir_table");
-    const payload = normalizePayload(rawPayload);
-
     loading.remove();
+
+    const payload = normalizePayload(rawPayload);
 
     if (!payload || !Array.isArray(payload.sets) || payload.sets.length === 0) {
       const pre = document.createElement("pre");
@@ -65,11 +46,8 @@ export async function renderNirTables() {
     }
 
     for (const setPayload of payload.sets) {
-      const label = setPayload?.label || setPayload?.key || "Set";
-      const section = makeSetSectionTitle(label);
+      const section = makeSetSectionTitle(setPayload.label);
       container.appendChild(section);
-
-      // tables.js handles rendering the table (and any optional setPayload.note)
       renderOneSetFromPayload(section, setPayload);
     }
 
@@ -80,7 +58,7 @@ export async function renderNirTables() {
 
     const div = document.createElement("div");
     div.className = "alert alert-danger";
-    div.textContent = "Failed to load Pasture Quality Metrics tables. Check server and browser logs.";
+    div.textContent = "Failed to load NIR tables. Check server logs.";
     container.appendChild(div);
   }
 }

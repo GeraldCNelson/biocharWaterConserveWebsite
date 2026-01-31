@@ -1,315 +1,16 @@
-// tables.js
-import { formatValue } from "./ui_utils.js";
-import { generateSeasonalSummaryAccordion } from "./api_requests.js";
+// static/js/tables.js
+//
+// Shared helpers for rendering table payloads.
+// This file contains:
+// - isObject, safeStr
+// - normalizePayload (supports multi-set and legacy single-set)
+// - renderOneSetFromPayload
+// - buildTableForVariable
+//
+// IMPORTANT FIX (Jan 2026):
+// normalizeOneSet must preserve {key,label} objects for periods/variables.
+// Converting them to strings breaks renderOneSetFromPayload (expects v.key / p.key).
 
-/**
- * Unit labels for each variable and unit system.
- * These are used in the summary subtitles, *not* for table headers.
- */
-const VARIABLE_UNITS = {
-  VWC: { us: "%",    metric: "%" },
-  T:   { us: "°F",   metric: "°C" },
-  EC:  { us: "dS/m", metric: "dS/m" },
-  SWC: {
-    us:     "gal per sensor cylinder",
-    metric: "L per sensor cylinder",
-  },
-};
-
-/**
- * Resolve a nice display name for the variable, including SWC special-case.
- * Note: units are *not* included here; subtitles add them separately.
- */
-function resolveDisplayName(variable, unitSystem) {
-  const mapping = window.variableNameMapping || {};
-  const base = mapping[variable] || variable;
-
-  if (variable === "SWC") {
-    // Explicit SWC label, without units (those come from VARIABLE_UNITS)
-    return "Soil Water Content";
-  }
-  return base;
-}
-
-/**
- * Get the unit label for subtitle usage.
- * For ratio summaries we now keep subtitles/headers unit-free.
- */
-function getUnitLabel(variable, unitSystem, isRatio = false) {
-  if (isRatio) return "";
-  const varUnits = VARIABLE_UNITS[variable];
-  if (!varUnits) return "";
-  return varUnits[unitSystem] || "";
-}
-
-/**
- * Build an HTML table for a flat set of summary stats.
- *
- * Table headers are intentionally unit-free:
- *   Variable (Logger) | Min | Mean | Max | Std Dev
- */
-export function generateSummaryTable(stats, displayVar, unitLabel) {
-  if (!stats || Object.keys(stats).length === 0) {
-    return `
-      <p class="text-muted mb-0">
-        No summary statistics are available for this selection.
-      </p>
-    `;
-  }
-
-  let table = `
-    <table class="table table-striped table-bordered mb-3">
-      <thead class="table-dark">
-        <tr>
-          <th>Variable (Logger)</th>
-          <th>Min</th>
-          <th>Mean</th>
-          <th>Max</th>
-          <th>Std Dev</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-  for (const [key, value] of Object.entries(stats)) {
-    // Expect keys like VWC_1_raw_S1_T, EC_2_raw_S1_M, etc.
-    const match  = key.match(/_(B|M|T)$/);
-    const logger = match ? match[1] : key;
-    const displayName = `${displayVar} (${logger})`;
-    const { min, mean, max, std } = value || {};
-
-    table += `
-      <tr>
-        <td>${displayName}</td>
-        <td>${formatValue(min)}</td>
-        <td>${formatValue(mean)}</td>
-        <td>${formatValue(max)}</td>
-        <td>${formatValue(std)}</td>
-      </tr>
-    `;
-  }
-
-  table += "</tbody></table>";
-  return table;
-}
-
-/**
- * Split ratio stats into S1/S2 and S3/S4 sections and render them.
- *
- * Now uses backend-provided labels where available:
- *   - displayLabelRaw:   full human-readable label (may include units)
- *   - displayLabelRatio: abbreviation / base label (NO units)
- */
-function renderSplitRatioTables(
-    ratioStats,
-    variable,
-    unitSystem,
-    displayLabelRaw,
-    displayLabelRatioBase
-) {
-  const s1s2 = {};
-  const s3s4 = {};
-
-  for (const [trace, values] of Object.entries(ratioStats || {})) {
-    const key = trace.trim().toUpperCase();
-    if (key.includes("S1_S2"))      s1s2[trace] = values;
-    else if (key.includes("S3_S4")) s3s4[trace] = values;
-  }
-
-  // Raw display label (fallback to local mapping if backend didn't provide it)
-  const rawDisplayVar =
-      displayLabelRaw || resolveDisplayName(variable, unitSystem);
-
-  // For ratios, we want a *unitless* base label (from backend if available).
-  // displayLabelRatioBase is expected to be an abbreviation (e.g., "SWC").
-  const fallbackBase = rawDisplayVar.replace(/\s*\([^)]*\)\s*$/, "");
-  const ratioBase = displayLabelRatioBase || fallbackBase;
-  const ratioDisplayVar = `${ratioBase} ratio`;
-
-  const ratioUnit = getUnitLabel(variable, unitSystem, true); // currently ""
-
-  const build = (label, group) => {
-    if (!group || Object.keys(group).length === 0) {
-      // Variable-aware explanation for missing ratios
-      let reason;
-      if (variable === "T") {
-        reason =
-            "Temperature-based ratio summaries are not shown for this variable.";
-      } else if (variable === "SWC") {
-        reason =
-            "Soil Water Content (per-cylinder volume) ratio summaries are not shown in this version of the dashboard.";
-      } else {
-        reason =
-            "No ratio summaries are available for this selection.";
-      }
-
-      return `
-        <p class="text-muted">
-          ${label} Ratio: ${reason}
-          See the Technical Details tab for an extended explanation.
-        </p>
-      `;
-    }
-
-    const unitSuffix = ratioUnit ? ` (${ratioUnit})` : "";
-    const subtitle   = `${label} Ratio – ${ratioDisplayVar}${unitSuffix} by logger location`;
-
-    return `
-      <h5 class="mt-3 mb-1">${subtitle}</h5>
-      ${generateSummaryTable(group, ratioDisplayVar, ratioUnit)}
-    `;
-  };
-
-  return build("S1/S2", s1s2) + build("S3/S4", s3s4);
-}
-
-/**
- * 📊 Fetch & render summary statistics (both standard & growing-season).
- */
-async function updateSummaryStatistics() {
-  console.log("📊 updateSummaryStatistics: starting…");
-
-  const yearEl     = document.getElementById("summary-year");
-  const variableEl = document.getElementById("summary-variable");
-  const stripEl    = document.getElementById("summary-strip");
-  const granEl     = document.getElementById("summary-granularity");
-  const depthEl    = document.getElementById("summary-depth");
-
-  if (!yearEl || !variableEl || !stripEl || !granEl || !depthEl) {
-    console.error("❌ Summary controls not found in DOM!");
-    alert("⚠️ Internal error: summary controls missing.");
-    return;
-  }
-
-  const year        = parseInt(yearEl.value, 10);
-  const variable    = variableEl.value;
-  const strip       = stripEl.value;
-  const granularity = granEl.value;
-  const depth       = depthEl.value;     // e.g. "1"
-  const unitSystem  = window.unitSystem || "us";
-
-  console.log("🔍 Summary request:", {
-    year, variable, strip, granularity, depth, unitSystem,
-  });
-
-  if (isNaN(year)) {
-    alert("⚠️ Please select a valid year.");
-    return;
-  }
-
-  const payload = { year, variable, strip, granularity, depth, unitSystem };
-  const resp = await fetch("/api/get_summary_stats", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!resp.ok) {
-    const txt = await resp.text();
-    console.error("❌ Summary API error:", resp.status, txt);
-    alert("⚠️ Error retrieving summary statistics.");
-    return;
-  }
-
-  const data = await resp.json();
-  console.log("✅ Summary stats received:", data);
-  // 🔍 Make the most recent payload available in DevTools
-  window.__lastSummaryData = data;
-  console.log("🔍 Cached summary data on window.__lastSummaryData");
-  const container = document.getElementById("summary-table-container");
-  if (!container) return;
-
-  const effectiveUnitSystem = data.unitSystem || unitSystem;
-
-  // Prefer backend-provided labels; fall back to local resolution.
-  const displayLabelRaw =
-      data.display_label_raw ||
-      resolveDisplayName(variable, effectiveUnitSystem);
-
-  const displayLabelRatioBase =
-      data.display_label_ratio || displayLabelRaw;
-
-  const rawUnit = getUnitLabel(variable, effectiveUnitSystem, false);
-
-  // Depth label via mapping from backend (sensor_depth_mapping)
-  const depthMapping = window.depthMapping || {};
-  let depthLabel     = depth;
-
-  if (depth && depthMapping[depth]) {
-    if (depthMapping[depth][effectiveUnitSystem]) {
-      depthLabel = depthMapping[depth][effectiveUnitSystem];
-    } else if (depthMapping[depth].us) {
-      depthLabel = depthMapping[depth].us;
-    } else {
-      const firstKey = Object.keys(depthMapping[depth])[0];
-      if (firstKey) depthLabel = depthMapping[depth][firstKey];
-    }
-  }
-
-  // ---- Seasonal (gseason) path using accordion ----
-  const hasSeasonal =
-      data.gseason_stats && Object.keys(data.gseason_stats).length > 0;
-
-  if (granularity === "gseason" && hasSeasonal) {
-    console.log("🌱 Rendering seasonal summaries with accordion…",
-        data.gseason_stats);
-
-    container.innerHTML = generateSeasonalSummaryAccordion(
-        data.gseason_stats,
-        variable
-    );
-    console.log("✅ Seasonal summary accordion rendered.");
-    return;
-  }
-
-  // ---- Default non-seasonal layout ----
-  console.log("📅 Rendering standard (non-seasonal) summaries…");
-
-  const unitSuffix = rawUnit ? ` (${rawUnit})` : "";
-
-  const rawSubtitle =
-      `Raw Values – ${displayLabelRaw}${unitSuffix} ` +
-      `by logger location in strip ${strip}, depth = ${depthLabel}, year = ${year}`;
-
-  const rawHTML = generateSummaryTable(
-      data.raw_statistics,
-      displayLabelRaw,
-      rawUnit
-  );
-
-  const ratioHTML = renderSplitRatioTables(
-      data.ratio_statistics,
-      variable,
-      effectiveUnitSystem,
-      displayLabelRaw,
-      displayLabelRatioBase
-  );
-
-  container.innerHTML = `
-    <h5 class="mb-1">${rawSubtitle}</h5>
-    ${rawHTML}
-    ${ratioHTML}
-  `;
-
-  console.log("✅ Summary tables updated (standard mode).");
-}
-
-export { updateSummaryStatistics };
-
-
-export function renderOneSetFromPayload(sectionEl, setPayload) {
-  // tables per variable
-  for (const v of setPayload.variables || []) {
-    const key = v?.key;
-    const label = v?.label || key;
-    if (!key) continue;
-
-    const block = buildTableForVariable(setPayload, key, label);
-    sectionEl.appendChild(block);
-  }
-}
-
-// basic helpers
 export function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
 }
@@ -317,11 +18,14 @@ export function isObject(x) {
 export function safeStr(v, fallback = "") {
   if (v === null || v === undefined) return fallback;
   const s = String(v).trim();
-  return s ? s : fallback;
+  return s.length ? s : fallback;
 }
 
-// ✅ NEW: required by normalizePayload
-export function normalizeOneSet(s, idx = 0) {
+// ------------------------------------------------------------
+// Normalization
+// ------------------------------------------------------------
+
+function normalizeOneSet(s, idx = 0) {
   const set = isObject(s) ? s : {};
 
   // Accept either "label" or "title" as the display label
@@ -332,8 +36,39 @@ export function normalizeOneSet(s, idx = 0) {
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
 
-  const periods = Array.isArray(set.periods) ? set.periods.map(String) : [];
-  const variables = Array.isArray(set.variables) ? set.variables.map(String) : [];
+  // Normalize {key,label} items (periods/variables).
+  // - If entry is a string/number, treat it as both key and label.
+  // - If entry is an object, preserve it but ensure it has key/label.
+  function normalizeKeyLabelItem(x) {
+    if (x === null || x === undefined) return null;
+
+    if (typeof x === "string" || typeof x === "number") {
+      const s = String(x);
+      return { key: s, label: s };
+    }
+
+    if (isObject(x)) {
+      const k = safeStr(x.key, "") || safeStr(x.id, "") || safeStr(x.name, "");
+      const lbl = safeStr(x.label, "") || safeStr(x.title, "") || k;
+
+      if (!k && !lbl) return null;
+
+      // Preserve any extra fields (e.g., note, unit, etc.)
+      return { ...x, key: k || lbl, label: lbl || k };
+    }
+
+    return null;
+  }
+
+  function normalizeKeyLabelList(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map(normalizeKeyLabelItem)
+      .filter((v) => v && v.key);
+  }
+
+  const periods = normalizeKeyLabelList(set.periods);
+  const variables = normalizeKeyLabelList(set.variables);
   const rows = Array.isArray(set.rows) ? set.rows.map(String) : [];
 
   const rowLabels = isObject(set.rowLabels) ? set.rowLabels : {};
@@ -353,41 +88,282 @@ export function normalizeOneSet(s, idx = 0) {
   };
 }
 
-export function normalizePayload(payload) {
-  // Returns canonical shape:
-  // { title: string, sets: [ {key,label,periods,variables,rows,rowLabels,data} ... ] }
-  if (!isObject(payload)) return null;
+/**
+ * normalizePayload supports BOTH:
+ *  A) Standard multi-set: { title, sets: [ {key,label,periods,variables,rows,rowLabels,data,note?}, ... ] }
+ *  B) Legacy single-set:  { title, periods, variables, rows, rowLabels, data, note? }
+ */
+export function normalizePayload(raw) {
+  if (!isObject(raw)) return { title: "", sets: [] };
 
-  const title = safeStr(payload.title, "Pasture Quality Metrics");
-
-  // If already in standard shape
-  if (Array.isArray(payload.sets)) {
-    const sets = payload.sets.map((s, i) => normalizeOneSet(s, i));
-    return { title, sets };
+  // Multi-set (preferred)
+  if (Array.isArray(raw.sets)) {
+    return {
+      title: safeStr(raw.title, ""),
+      sets: raw.sets.map((s, i) => normalizeOneSet(s, i)),
+    };
   }
 
-  // If it looks like a single-set payload
+  // Legacy single-set payload
   const looksSingleSet =
-      Array.isArray(payload.periods) ||
-      Array.isArray(payload.variables) ||
-      Array.isArray(payload.rows) ||
-      isObject(payload.data);
+    Array.isArray(raw.periods) &&
+    Array.isArray(raw.variables) &&
+    Array.isArray(raw.rows) &&
+    isObject(raw.data);
 
   if (looksSingleSet) {
-    const single = normalizeOneSet(
-        {
-          key: "nir_set_1",
-          label: title,
-          periods: payload.periods,
-          variables: payload.variables,
-          rows: payload.rows,
-          rowLabels: payload.rowLabels,
-          data: payload.data,
-        },
-        0
+    const set = normalizeOneSet(
+      {
+        key: "set_1",
+        label: safeStr(raw.title, "Set 1"),
+        periods: raw.periods,
+        variables: raw.variables,
+        rows: raw.rows,
+        rowLabels: raw.rowLabels,
+        data: raw.data,
+        note: raw.note,
+      },
+      0
     );
-    return { title, sets: [single] };
+
+    return { title: safeStr(raw.title, ""), sets: [set] };
   }
 
-  return null;
+  // Unknown shape
+  return { title: safeStr(raw.title, ""), sets: [] };
+}
+
+// ------------------------------------------------------------
+// Rendering helpers
+// ------------------------------------------------------------
+
+export function renderOneSetFromPayload(parentEl, setPayload) {
+  if (!parentEl) return;
+
+  const periods = Array.isArray(setPayload.periods) ? setPayload.periods : [];
+  const variables = Array.isArray(setPayload.variables) ? setPayload.variables : [];
+  const rows = Array.isArray(setPayload.rows) ? setPayload.rows : [];
+  const rowLabels = isObject(setPayload.rowLabels) ? setPayload.rowLabels : {};
+  const data = isObject(setPayload.data) ? setPayload.data : {};
+
+  // Optional note snippet just below section title
+  if (safeStr(setPayload.note, "")) {
+    const noteDiv = document.createElement("div");
+    noteDiv.className = "text-muted mb-2";
+    noteDiv.textContent = setPayload.note;
+    parentEl.appendChild(noteDiv);
+  }
+
+  // STRICT: variables must be provided by backend (or by set builder).
+  if (variables.length === 0) {
+    const dataKeys = isObject(data) ? Object.keys(data) : [];
+    const diag = {
+      setKey: setPayload.key,
+      setLabel: setPayload.label,
+      hasPeriods: periods.length,
+      hasRows: rows.length,
+      hasRowLabels: isObject(rowLabels) ? Object.keys(rowLabels).length : 0,
+      hasVariables: variables.length,
+      dataKeysSample: dataKeys.slice(0, 25),
+      dataKeysCount: dataKeys.length,
+      variableShape: setPayload.variables,
+    };
+
+    console.error("[tables.js] ❌ Missing variables[] for set; cannot render tables.", diag);
+
+    const warn = document.createElement("div");
+    warn.className = "alert alert-warning";
+    warn.innerHTML =
+      "<div><strong>No variables available for this table set.</strong></div>" +
+      "<div class='mt-2'>This usually means the backend payload did not include <code>variables</code>.</div>" +
+      "<div class='mt-2'><strong>Diagnostics:</strong></div>" +
+      "<pre class='mb-0' style='white-space:pre-wrap'>" +
+      escapeHtml(JSON.stringify(diag, null, 2)) +
+      "</pre>";
+    parentEl.appendChild(warn);
+    return;
+  }
+
+  for (const v of variables) {
+    const varKey = safeStr(v.key, "");
+    const varLabel = safeStr(v.label, varKey);
+    if (!varKey) continue;
+
+    const tableEl = buildTableForVariable(
+      { label: setPayload.label, periods, rows, rowLabels, data },
+      varKey,
+      varLabel
+    );
+
+    parentEl.appendChild(tableEl);
+  }
+}
+
+// Small helper for safe inline JSON display in HTML warnings.
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/**
+ * Build a single variable table.
+ * Expects:
+ *   periods: [{key,label}, ...]
+ *   rows: [rowKey, ...]
+ *   rowLabels: {rowKey: label}
+ *   data: { varKey: { rowKey: { periodKey: value|null } } }
+ */
+
+export function buildTableForVariable(setPayload, variableKey, variableLabel) {
+  const periods = Array.isArray(setPayload.periods) ? setPayload.periods : [];
+  const rows = Array.isArray(setPayload.rows) ? setPayload.rows : [];
+  const rowLabels = isObject(setPayload.rowLabels) ? setPayload.rowLabels : {};
+  const data = isObject(setPayload.data) ? setPayload.data : {};
+
+  const varBlock = data[variableKey];
+  if (!isObject(varBlock)) {
+    const div = document.createElement("div");
+    div.className = "alert alert-warning";
+    div.textContent = `No data found for variable: ${variableLabel || variableKey}`;
+    return div;
+  }
+
+  // ----------------------------
+  // Helpers
+  // ----------------------------
+  const norm = (s) => String(s ?? "").trim().toLowerCase();
+
+  // Accept a few common ratio-row spellings just in case payload differs
+  const isRatioRowKey = (rowKey) => {
+    const k = norm(rowKey).replace(/\s+/g, "");
+    return k === "s1/s2" || k === "s3/s4" || k === "s1:s2" || k === "s3:s4";
+  };
+
+  const looksNumeric = (s) => {
+    // Allows: 1, -1, 1.23, .5, 1e-3, -2.4E+2
+    return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s);
+  };
+
+  const formatValue = (v, rowKey) => {
+    if (v === null || v === undefined) return "";
+
+    // Strings can be:
+    // - real text like "ALL PREY" -> preserve
+    // - numeric strings like "0.96875" -> treat as number (esp for ratio rows)
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return "";
+
+      const sLower = s.toLowerCase();
+      if (sLower === "nan" || sLower === "none" || sLower === "null" || sLower === "undefined") return "";
+
+      // If it looks numeric, parse and run through numeric formatting
+      if (looksNumeric(s)) {
+        const numFromString = Number(s);
+        if (Number.isFinite(numFromString)) {
+          // fall through to numeric formatting below by reassigning v
+          v = numFromString;
+        } else {
+          return "";
+        }
+      } else {
+        // Non-numeric string like "ALL PREY" -> preserve
+        return s;
+      }
+    }
+
+    // Numeric formatting path
+    const num = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(num)) return "";
+
+    if (isRatioRowKey(rowKey)) {
+      return num.toFixed(3); // fixed 3 decimals (0.800, 1.000, etc.)
+    }
+
+    // Non-ratio: keep natural display
+    if (Math.abs(num - Math.round(num)) < 1e-12) return String(Math.round(num));
+    return String(Number(num.toPrecision(6)));
+  };
+
+  // Avoid duplicate headings when the set label already equals the variable label
+  const setLabel = safeStr(setPayload.label, "");
+  const rawVarLabel = variableLabel || variableKey;
+
+  const prettyTitle =
+    typeof dedupePercentTitle === "function"
+      ? dedupePercentTitle(setLabel, rawVarLabel)
+      : rawVarLabel;
+
+  const shouldShowVarHeading = norm(prettyTitle) !== norm(setLabel);
+
+  // ----------------------------
+  // Build DOM
+  // ----------------------------
+  const wrapper = document.createElement("div");
+  wrapper.className = "mb-4";
+
+  if (shouldShowVarHeading) {
+    const h6 = document.createElement("h6");
+    h6.className = "mt-3 mb-2 fw-bold";
+    h6.textContent = prettyTitle;
+    wrapper.appendChild(h6);
+  }
+
+  const tableResponsive = document.createElement("div");
+  tableResponsive.className = "table-responsive";
+
+  const table = document.createElement("table");
+  table.className = "table table-sm table-striped table-bordered";
+
+  // Header
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  const th0 = document.createElement("th");
+  th0.textContent = "Location";
+  trh.appendChild(th0);
+
+  for (const p of periods) {
+    const th = document.createElement("th");
+    th.textContent = safeStr(p.label, safeStr(p.key, ""));
+    trh.appendChild(th);
+  }
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  // Body
+  const tbody = document.createElement("tbody");
+
+  for (const rowKey of rows) {
+    const tr = document.createElement("tr");
+
+    const td0 = document.createElement("td");
+    td0.textContent = safeStr(rowLabels[rowKey], rowKey);
+    tr.appendChild(td0);
+
+    const rowMap = varBlock[rowKey];
+
+    for (const p of periods) {
+      const pk = safeStr(p.key, "");
+      const td = document.createElement("td");
+
+      let v = null;
+      if (isObject(rowMap) && pk) v = rowMap[pk];
+
+      td.textContent = formatValue(v, rowKey);
+      tr.appendChild(td);
+    }
+
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  tableResponsive.appendChild(table);
+  wrapper.appendChild(tableResponsive);
+
+  return wrapper;
 }

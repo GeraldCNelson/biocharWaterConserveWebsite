@@ -1598,7 +1598,6 @@ async def download_ratio_data(
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
-
 # ---------------------------------------------------------------------------
 # Registry-based bulk download (checkbox UI) [API routes]
 # ---------------------------------------------------------------------------
