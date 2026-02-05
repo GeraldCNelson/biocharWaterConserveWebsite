@@ -4,7 +4,7 @@
 // Uses shared helpers in tables.js so Soil/NIR/Biomass all behave consistently.
 
 import { makeSetSectionTitle } from "./tab_ui.js";
-import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
+import { normalizePayload, renderOneSetFromPayload, safeStr } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
 
 async function renderSoilTab({
@@ -48,13 +48,26 @@ async function renderSoilTab({
 
     for (const setPayload of payload.sets) {
       const label = setPayload.label || fallbackLabel;
-      const note = setPayload.note || subtitleText;
 
-      // variant="soil" -> uses soil-* CSS classes
-      const section = makeSetSectionTitle(label, note, "soil");
-      container.appendChild(section);
+      // Prefer setPayload.notes if present; else fallback
+      const note = setPayload.notes || setPayload.note || subtitleText || "";
 
-      renderOneSetFromPayload(section, setPayload);
+      // --- Create a per-set wrapper so each set is clearly separated ---
+      const setWrapper = document.createElement("div");
+      setWrapper.className = "mb-4";
+      container.appendChild(setWrapper);
+
+      // Title (and note)
+      const titleEl = makeSetSectionTitle(label, note, "soil");
+      setWrapper.appendChild(titleEl);
+
+      // Body container for the tables
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "soil-set-body";
+      setWrapper.appendChild(bodyEl);
+
+      // Render tables INTO the body, not into the title element
+      renderOneSetFromPayload(bodyEl, setPayload);
     }
 
     container.dataset.rendered = "true";

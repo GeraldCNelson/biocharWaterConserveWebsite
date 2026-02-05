@@ -74,7 +74,8 @@ function normalizeOneSet(s, idx = 0) {
   const rowLabels = isObject(set.rowLabels) ? set.rowLabels : {};
   const data = isObject(set.data) ? set.data : {};
 
-  const note = safeStr(set.note, "");
+  // IMPORTANT: support both "note" and "notes" from backend
+  const note = safeStr(set.note, "") || safeStr(set.notes, "");
 
   return {
     key,
@@ -90,8 +91,8 @@ function normalizeOneSet(s, idx = 0) {
 
 /**
  * normalizePayload supports BOTH:
- *  A) Standard multi-set: { title, sets: [ {key,label,periods,variables,rows,rowLabels,data,note?}, ... ] }
- *  B) Legacy single-set:  { title, periods, variables, rows, rowLabels, data, note? }
+ *  A) Standard multi-set: { title, sets: [ {key,label,periods,variables,rows,rowLabels,data,note/notes?}, ... ] }
+ *  B) Legacy single-set:  { title, periods, variables, rows, rowLabels, data, note/notes? }
  */
 export function normalizePayload(raw) {
   if (!isObject(raw)) return { title: "", sets: [] };
@@ -121,7 +122,7 @@ export function normalizePayload(raw) {
         rows: raw.rows,
         rowLabels: raw.rowLabels,
         data: raw.data,
-        note: raw.note,
+        note: safeStr(raw.note, "") || safeStr(raw.notes, ""),
       },
       0
     );
@@ -146,13 +147,10 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
   const rowLabels = isObject(setPayload.rowLabels) ? setPayload.rowLabels : {};
   const data = isObject(setPayload.data) ? setPayload.data : {};
 
-  // Optional note snippet just below section title
-  if (safeStr(setPayload.note, "")) {
-    const noteDiv = document.createElement("div");
-    noteDiv.className = "text-muted mb-2";
-    noteDiv.textContent = setPayload.note;
-    parentEl.appendChild(noteDiv);
-  }
+  // NOTE:
+  // We intentionally DO NOT inject set-level notes here anymore,
+  // because the tab renderer can place the shared note once at the top.
+  // (This prevents duplicate "Rows: ... Columns: ..." text.)
 
   // STRICT: variables must be provided by backend (or by set builder).
   if (variables.length === 0) {
@@ -192,7 +190,8 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
     const tableEl = buildTableForVariable(
       { label: setPayload.label, periods, rows, rowLabels, data },
       varKey,
-      varLabel
+      varLabel,
+      safeStr(v.note, "") // pass variable note through
     );
 
     parentEl.appendChild(tableEl);
@@ -217,8 +216,7 @@ function escapeHtml(s) {
  *   rowLabels: {rowKey: label}
  *   data: { varKey: { rowKey: { periodKey: value|null } } }
  */
-
-export function buildTableForVariable(setPayload, variableKey, variableLabel) {
+export function buildTableForVariable(setPayload, variableKey, variableLabel, variableNote = "") {
   const periods = Array.isArray(setPayload.periods) ? setPayload.periods : [];
   const rows = Array.isArray(setPayload.rows) ? setPayload.rows : [];
   const rowLabels = isObject(setPayload.rowLabels) ? setPayload.rowLabels : {};
@@ -240,7 +238,16 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel) {
   // Accept a few common ratio-row spellings just in case payload differs
   const isRatioRowKey = (rowKey) => {
     const k = norm(rowKey).replace(/\s+/g, "");
-    return k === "s1/s2" || k === "s3/s4" || k === "s1:s2" || k === "s3:s4";
+
+    // handle both display labels and backend row keys
+    return (
+      k === "s1/s2" ||
+      k === "s3/s4" ||
+      k === "s1:s2" ||
+      k === "s3:s4" ||
+      k === "s1_s2" ||
+      k === "s3_s4"
+    );
   };
 
   const looksNumeric = (s) => {
@@ -261,12 +268,10 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel) {
       const sLower = s.toLowerCase();
       if (sLower === "nan" || sLower === "none" || sLower === "null" || sLower === "undefined") return "";
 
-      // If it looks numeric, parse and run through numeric formatting
       if (looksNumeric(s)) {
         const numFromString = Number(s);
         if (Number.isFinite(numFromString)) {
-          // fall through to numeric formatting below by reassigning v
-          v = numFromString;
+          v = numFromString; // fall through to numeric formatting
         } else {
           return "";
         }
@@ -276,12 +281,12 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel) {
       }
     }
 
-    // Numeric formatting path
     const num = typeof v === "number" ? v : Number(v);
     if (!Number.isFinite(num)) return "";
 
+    // ✅ Always format ratio rows to 3 decimals
     if (isRatioRowKey(rowKey)) {
-      return num.toFixed(3); // fixed 3 decimals (0.800, 1.000, etc.)
+      return num.toFixed(3);
     }
 
     // Non-ratio: keep natural display
@@ -298,19 +303,25 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel) {
       ? dedupePercentTitle(setLabel, rawVarLabel)
       : rawVarLabel;
 
-  const shouldShowVarHeading = norm(prettyTitle) !== norm(setLabel);
-
   // ----------------------------
   // Build DOM
   // ----------------------------
   const wrapper = document.createElement("div");
   wrapper.className = "mb-4";
 
-  if (shouldShowVarHeading) {
-    const h6 = document.createElement("h6");
-    h6.className = "mt-3 mb-2 fw-bold";
-    h6.textContent = prettyTitle;
-    wrapper.appendChild(h6);
+  // Variable heading
+  const h6 = document.createElement("h6");
+  h6.className = "mt-3 mb-2 fw-bold";
+  h6.textContent = prettyTitle;
+  wrapper.appendChild(h6);
+
+  // ✅ Variable note directly under heading
+  const noteText = safeStr(variableNote, "");
+  if (noteText) {
+    const p = document.createElement("p");
+    p.className = "text-muted mb-2";
+    p.textContent = noteText;
+    wrapper.appendChild(p);
   }
 
   const tableResponsive = document.createElement("div");

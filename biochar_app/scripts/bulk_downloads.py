@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import io
-import json
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,69 +18,164 @@ from fastapi.responses import StreamingResponse
 bulk_router = APIRouter()
 
 # --------------------------------------------------------------------------------------
-# Paths / conventions (adjust if your project differs)
+# Paths / conventions
 # --------------------------------------------------------------------------------------
 
-PARQUET_ROOT = Path("biochar_app/data-processed/parquet")  # matches your Finder screenshot
-WEATHER_DIRNAME = "weather"  # you have /{year}/{resolution}/weather/...
+# Resolve paths relative to this file so uvicorn CWD never matters.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-IRRIGATION_WORKBOOK_PATH = Path("biochar_app/data-raw/biochar-data-master.xlsx")
+PARQUET_ROOT = REPO_ROOT / "biochar_app" / "data-processed" / "parquet"
+SUMMARY_ROOT = PARQUET_ROOT / "summary"
 
-# If you want to expose only a subset
+IRRIGATION_WORKBOOK_PATH = REPO_ROOT / "biochar_app" / "data-raw" / "biochar-data-master.xlsx"
+
+# What the UI uses
 ALLOWED_RESOLUTIONS = ["15min", "hourly", "daily", "monthly", "gseason"]
 
+# --------------------------------------------------------------------------------------
+# Small helpers
+# --------------------------------------------------------------------------------------
 
-# --------------------------------------------------------------------------------------
-# Helpers
-# --------------------------------------------------------------------------------------
 
 def _safe_int(v: Any) -> Optional[int]:
     try:
-        i = int(v)
-        return i
+        return int(v)
     except Exception:
         return None
 
 
 def _list_years_on_disk() -> list[int]:
-    if not PARQUET_ROOT.exists():
-        return []
-    years: list[int] = []
-    for p in PARQUET_ROOT.iterdir():
-        if p.is_dir():
-            y = _safe_int(p.name)
-            if y is not None:
-                years.append(y)
-    return sorted(set(years))
+    """
+    Years visible for parquet datasets.
+    We look in SUMMARY_ROOT first (preferred), then fall back to PARQUET_ROOT children.
+    """
+    years: set[int] = set()
+
+    if SUMMARY_ROOT.exists():
+        # summary/<res>/<year>_<res>.parquet
+        for res_dir in SUMMARY_ROOT.iterdir():
+            if not res_dir.is_dir():
+                continue
+            for p in res_dir.glob("*.parquet"):
+                # e.g., 2024_daily.parquet, 2024_daily_ratios.parquet
+                stem = p.stem
+                # grab leading 4-digit year
+                y = _safe_int(stem.split("_", 1)[0])
+                if y is not None and 1900 <= y <= 2100:
+                    years.add(y)
+
+    # Fallback: PARQUET_ROOT/<year> folders
+    if PARQUET_ROOT.exists():
+        for p in PARQUET_ROOT.iterdir():
+            if p.is_dir():
+                y = _safe_int(p.name)
+                if y is not None:
+                    years.add(y)
+
+    return sorted(years)
 
 
 def _list_resolutions_on_disk(year: int) -> list[str]:
-    ydir = PARQUET_ROOT / str(year)
-    if not ydir.exists():
-        return []
-    res = [p.name for p in ydir.iterdir() if p.is_dir() and p.name in ALLOWED_RESOLUTIONS]
-    return sorted(set(res), key=lambda s: ALLOWED_RESOLUTIONS.index(s) if s in ALLOWED_RESOLUTIONS else 999)
+    """
+    Determine which resolutions exist for a given year, using the current layout:
+      parquet/summary/<res>/<year>_<res>.parquet
+    """
+    found: list[str] = []
+
+    for res in ALLOWED_RESOLUTIONS:
+        if _summary_logger_parquet_path(year, res).exists():
+            found.append(res)
+
+    # preserve ALLOWED_RESOLUTIONS ordering
+    return [r for r in ALLOWED_RESOLUTIONS if r in found]
+
+
+# --------------------------------------------------------------------------------------
+# Parquet path resolution (robust to multiple layouts)
+# --------------------------------------------------------------------------------------
+
+
+def _summary_logger_parquet_path(year: int, resolution: str) -> Path:
+    return SUMMARY_ROOT / resolution / f"{year}_{resolution}.parquet"
+
+
+def _summary_logger_ratios_parquet_path(year: int, resolution: str) -> Path:
+    return SUMMARY_ROOT / resolution / f"{year}_{resolution}_ratios.parquet"
+
+
+def _summary_weather_parquet_candidates(year: int, resolution: str) -> list[Path]:
+    """
+    Your actual layout (per your screenshot):
+      parquet/summary/weather/<res>/<year>_<res>.parquet
+
+    Also try a couple legacy/alternate names, just in case.
+    """
+    # ✅ current layout
+    base = SUMMARY_ROOT / "weather" / resolution
+    return [
+        base / f"{year}_{resolution}.parquet",
+        base / f"{year}_{resolution}_weather.parquet",
+        base / f"weather_{year}_{resolution}.parquet",
+    ]
 
 
 def _logger_parquet_path(year: int, resolution: str) -> Path:
-    # In your screenshot: .../parquet/2025/monthly/2025_monthly.parquet
-    return PARQUET_ROOT / str(year) / resolution / f"{year}_{resolution}.parquet"
+    """
+    Preferred: summary layout
+    Fallback: old layout (per-year/per-resolution)
+    """
+    preferred = _summary_logger_parquet_path(year, resolution)
+    if preferred.exists():
+        return preferred
+
+    # old layout fallback:
+    # parquet/<year>/<resolution>/<year>_<resolution>.parquet
+    old = PARQUET_ROOT / str(year) / resolution / f"{year}_{resolution}.parquet"
+    return old
 
 
-def _weather_parquet_path(year: int, resolution: str) -> Path:
-    # In your screenshot: .../parquet/2025/monthly/weather/2025_monthly_weather.parquet (or similar)
-    # We’ll try a couple common patterns.
-    base = PARQUET_ROOT / str(year) / resolution / WEATHER_DIRNAME
-    candidates = [
-        base / f"{year}_{resolution}_weather.parquet",
-        base / f"{year}_{resolution}.parquet",
-        base / f"weather_{year}_{resolution}.parquet",
-    ]
-    for c in candidates:
+def _logger_ratios_parquet_path(year: int, resolution: str) -> Optional[Path]:
+    """
+    Preferred: summary layout ratios
+    Fallback: old layout ratios (if you ever had it)
+    """
+    preferred = _summary_logger_ratios_parquet_path(year, resolution)
+    if preferred.exists():
+        return preferred
+
+    old = PARQUET_ROOT / str(year) / resolution / f"{year}_{resolution}_ratios.parquet"
+    if old.exists():
+        return old
+
+    return None
+
+
+def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
+    """
+    Return the first weather parquet that exists, else None.
+    """
+    for c in _summary_weather_parquet_candidates(year, resolution):
         if c.exists():
             return c
-    # If none exist, return the first candidate for error messaging
-    return candidates[0]
+
+    # old layout fallback:
+    # parquet/<year>/<resolution>/weather/<year>_<resolution>_weather.parquet
+    old_base = PARQUET_ROOT / str(year) / resolution / "weather"
+    old_candidates = [
+        old_base / f"{year}_{resolution}_weather.parquet",
+        old_base / f"{year}_{resolution}.parquet",
+        old_base / f"weather_{year}_{resolution}.parquet",
+    ]
+    for c in old_candidates:
+        if c.exists():
+            return c
+
+    return None
+
+
+# --------------------------------------------------------------------------------------
+# File reading helpers
+# --------------------------------------------------------------------------------------
 
 
 def _read_parquet_to_csv_bytes(path: Path) -> bytes:
@@ -92,7 +185,6 @@ def _read_parquet_to_csv_bytes(path: Path) -> bytes:
         df = pd.read_parquet(path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read parquet {path}: {e}")
-    # NOTE: index usually not desired for downloads
     return df.to_csv(index=False).encode("utf-8")
 
 
@@ -141,40 +233,47 @@ Generated by the Biochar dashboard bulk download endpoint.
 # Manifest
 # --------------------------------------------------------------------------------------
 
+
 @bulk_router.get("/bulk_download_manifest")
 def bulk_download_manifest() -> list[dict[str, Any]]:
     """
     Returns a manifest of what can be downloaded.
-    We derive logger/weather availability from the parquet folder layout on disk.
-    We derive workbook-based (irrigation/fertilizing/biomass) availability from sheet names.
+
+    Logger/weather availability:
+      - primary: biochar_app/data-processed/parquet/summary/<res>/<year>_<res>.parquet
+      - fallback: old per-year/per-res layout (if present)
     """
     items: list[dict[str, Any]] = []
 
-    # 1) Logger + weather: per year + per resolution, derived from disk
     years = _list_years_on_disk()
     for y in years:
         res_list = _list_resolutions_on_disk(y)
         for res in res_list:
             lp = _logger_parquet_path(y, res)
             if lp.exists():
-                items.append({
-                    "key": f"loggers_{y}_{res}",
-                    "dataset": "loggers",
-                    "year": y,
-                    "resolution": res,
-                    "label": f"Logger data ({y}, {res})",
-                })
-            wp = _weather_parquet_path(y, res)
-            if wp.exists():
-                items.append({
-                    "key": f"weather_{y}_{res}",
-                    "dataset": "weather",
-                    "year": y,
-                    "resolution": res,
-                    "label": f"Weather data ({y}, {res})",
-                })
+                items.append(
+                    {
+                        "key": f"loggers_{y}_{res}",
+                        "dataset": "loggers",
+                        "year": y,
+                        "resolution": res,
+                        "label": f"Logger data ({y}, {res})",
+                    }
+                )
 
-    # 2) Workbook-derived datasets: expose by year if sheets exist
+            wp = _weather_parquet_path(y, res)
+            if wp is not None and wp.exists():
+                items.append(
+                    {
+                        "key": f"weather_{y}_{res}",
+                        "dataset": "weather",
+                        "year": y,
+                        "resolution": res,
+                        "label": f"Weather data ({y}, {res})",
+                    }
+                )
+
+    # Workbook-derived datasets
     if IRRIGATION_WORKBOOK_PATH.exists():
         try:
             xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
@@ -182,8 +281,6 @@ def bulk_download_manifest() -> list[dict[str, Any]]:
         except Exception:
             sheets = []
 
-        # Map “dataset base” -> sheet contains token
-        # Adjust tokens to match your actual workbook sheet naming conventions.
         workbook_rules = [
             ("irrigation", "IRRIGATION"),
             ("fertilizing", "FERTIL"),
@@ -193,7 +290,6 @@ def bulk_download_manifest() -> list[dict[str, Any]]:
         for base, token in workbook_rules:
             for s in sheets:
                 if token in s.upper():
-                    # infer year from sheet name: any 4-digit number
                     year = None
                     for part in s.replace("-", " ").replace("_", " ").split():
                         if len(part) == 4 and part.isdigit():
@@ -201,14 +297,35 @@ def bulk_download_manifest() -> list[dict[str, Any]]:
                             break
                     if year is None:
                         continue
-                    items.append({
-                        "key": f"{base}_{year}",
-                        "dataset": base,
-                        "year": year,
-                        "resolution": None,
-                        "label": f"{base.title()} ({year})",
-                        "workbook_sheet": s,
-                    })
+                    items.append(
+                        {
+                            "key": f"{base}_{year}",
+                            "dataset": base,
+                            "year": year,
+                            "resolution": None,
+                            "label": f"{base.title()} ({year})",
+                            "workbook_sheet": s,
+                        }
+                    )
+
+    # File-backed “all years” datasets (these are already in your manifest output)
+    file_rules = [
+        ("soil_chem_all", "Soil Chemistry (all years)", REPO_ROOT / "biochar_app/data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv"),
+        ("soil_bio_all", "Soil Biology (all years)", REPO_ROOT / "biochar_app/data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv"),
+        ("hay_all", "Biomass / Hay NIR (all years)", REPO_ROOT / "biochar_app/data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv"),
+    ]
+    for key, label, p in file_rules:
+        if p.exists():
+            items.append(
+                {
+                    "key": key,
+                    "dataset": "file",
+                    "year": None,
+                    "resolution": None,
+                    "label": label,
+                    "file_path": str(p),
+                }
+            )
 
     return items
 
@@ -217,12 +334,13 @@ def bulk_download_manifest() -> list[dict[str, Any]]:
 # Download
 # --------------------------------------------------------------------------------------
 
+
 @bulk_router.post("/bulk_download")
 async def bulk_download(payload: dict[str, Any]):
     """
     Payload supports:
       - {"key": "loggers_2025_daily"} OR
-      - {"keys": ["loggers_2025_daily"]}  (your current JS uses keys: [key])
+      - {"keys": ["loggers_2025_daily"]}
     """
     keys = payload.get("keys")
     if isinstance(keys, list) and keys:
@@ -233,22 +351,13 @@ async def bulk_download(payload: dict[str, Any]):
     if not key:
         raise HTTPException(status_code=400, detail="Missing key (or keys[0])")
 
-    # Parse key patterns
-    #  - loggers_{year}_{res}
-    #  - weather_{year}_{res}
-    #  - irrigation_{year}
-    #  - fertilizing_{year}
-    #  - biomass_{year}
     parts = key.split("_")
-    if len(parts) < 2:
-        raise HTTPException(status_code=400, detail=f"Unrecognized key format: {key}")
-
     dataset = parts[0].lower()
 
     files: list[tuple[str, bytes]] = []
     zip_name = f"biochar_{key}.zip"
 
-    # Logger / Weather (parquet → csv)
+    # Logger / Weather
     if dataset in {"loggers", "weather"}:
         if len(parts) < 3:
             raise HTTPException(status_code=400, detail=f"Expected {dataset}_YYYY_resolution key, got: {key}")
@@ -262,24 +371,37 @@ async def bulk_download(payload: dict[str, Any]):
         if dataset == "loggers":
             pq = _logger_parquet_path(year, resolution)
             csv_bytes = _read_parquet_to_csv_bytes(pq)
-            csv_name = f"biochar_loggers_{year}_{resolution}.csv"
-            readme = _readme_text("logger", year, resolution, notes=f"Source: {pq}")
-        else:
-            pq = _weather_parquet_path(year, resolution)
-            csv_bytes = _read_parquet_to_csv_bytes(pq)
-            csv_name = f"biochar_weather_{year}_{resolution}.csv"
-            readme = _readme_text("weather", year, resolution, notes=f"Source: {pq}")
+            files.append((f"biochar_loggers_{year}_{resolution}.csv", csv_bytes))
 
-        files.append((csv_name, csv_bytes))
+            # Include ratios if present
+            ratios_pq = _logger_ratios_parquet_path(year, resolution)
+            if ratios_pq is not None and ratios_pq.exists():
+                ratios_bytes = _read_parquet_to_csv_bytes(ratios_pq)
+                files.append((f"biochar_loggers_{year}_{resolution}_ratios.csv", ratios_bytes))
+
+            readme = _readme_text(
+                "logger",
+                year,
+                resolution,
+                notes=f"Source parquet: {pq}\nRatios included: {'yes' if ratios_pq and ratios_pq.exists() else 'no'}",
+            )
+
+        else:
+            wp = _weather_parquet_path(year, resolution)
+            if wp is None or not wp.exists():
+                raise HTTPException(status_code=404, detail=f"No weather parquet found for {year} {resolution}")
+            csv_bytes = _read_parquet_to_csv_bytes(wp)
+            files.append((f"biochar_weather_{year}_{resolution}.csv", csv_bytes))
+            readme = _readme_text("weather", year, resolution, notes=f"Source parquet: {wp}")
+
         files.append(("README.txt", readme.encode("utf-8")))
 
-    # Workbook-based (sheet → csv)
+    # Workbook-based
     elif dataset in {"irrigation", "fertilizing", "biomass"}:
         year = _safe_int(parts[1]) if len(parts) >= 2 else None
         if year is None:
             raise HTTPException(status_code=400, detail=f"Invalid year in key: {key}")
 
-        # Find the matching sheet from the manifest logic
         try:
             xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
             sheets = [s.strip() for s in xls.sheet_names]
@@ -303,10 +425,27 @@ async def bulk_download(payload: dict[str, Any]):
             raise HTTPException(status_code=404, detail=f"No workbook sheet found for {dataset} {year}")
 
         csv_bytes = _read_workbook_sheet_to_csv_bytes(sheet)
-        csv_name = f"biochar_{dataset}_{year}.csv"
+        files.append((f"biochar_{dataset}_{year}.csv", csv_bytes))
         readme = _readme_text(dataset, year, None, notes=f"Source workbook: {IRRIGATION_WORKBOOK_PATH}\nSheet: {sheet}")
+        files.append(("README.txt", readme.encode("utf-8")))
 
-        files.append((csv_name, csv_bytes))
+    # File-backed “all years” datasets
+    elif dataset == "soil":
+        raise HTTPException(status_code=400, detail=f"Unknown dataset in key: {key} (did you mean soil_chem_all / soil_bio_all?)")
+
+    elif dataset == "hay" or dataset == "file" or key in {"soil_chem_all", "soil_bio_all", "hay_all"}:
+        # Handle exact keys that your manifest returns
+        file_map = {
+            "soil_chem_all": REPO_ROOT / "biochar_app/data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv",
+            "soil_bio_all": REPO_ROOT / "biochar_app/data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv",
+            "hay_all": REPO_ROOT / "biochar_app/data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv",
+        }
+        p = file_map.get(key)
+        if p is None or not p.exists():
+            raise HTTPException(status_code=404, detail=f"File dataset not found for key: {key}")
+        csv_bytes = p.read_bytes()
+        files.append((p.name, csv_bytes))
+        readme = _readme_text("file", None, None, notes=f"Source file: {p}")
         files.append(("README.txt", readme.encode("utf-8")))
 
     else:

@@ -10,6 +10,10 @@ Key behaviors:
 - Normalize dates
 - Enforce fixed depth 0–8 inches
 - Drop admin columns AFTER strip is created
+- Create canonical “expected” columns used by table builders:
+    - soil_ph_1_1 from 1_1_soil_ph (if needed)
+    - ec_1_1 from 1_1_s_salts_mmho_cm (if needed)
+    - cec_meq_100g and sum_of_cations_meq_100g from cec_sum_of_cations_me_100g (if needed)
 - Write:
   - ward_master_soilchem_clean.csv
   - ward_master_soilChem_headers_machine_to_human.json
@@ -49,7 +53,7 @@ MASTER_XLSX = (
 )
 
 # ------------------------------------------------------------
-# OUTPUTS (match your actual cleaned-file naming pattern)
+# OUTPUTS
 # ------------------------------------------------------------
 OUT_CLEAN_CSV = (
     PROJECT_ROOT
@@ -73,10 +77,6 @@ OUT_HEADERS_JSON = (
 
 
 def _find_machine_col_by_human_header(header_map: dict, human_name: str) -> Optional[str]:
-    """
-    header_map is machine_col -> human_header (as produced by clean_compiled_workbook()).
-    Return the machine_col whose human_header matches human_name (case/space-insensitive).
-    """
     target = " ".join(str(human_name).strip().split()).lower()
     for machine, human in header_map.items():
         h = " ".join(str(human).strip().split()).lower()
@@ -86,29 +86,19 @@ def _find_machine_col_by_human_header(header_map: dict, human_name: str) -> Opti
 
 
 def _coerce_sample_id_column(df_clean: pd.DataFrame, header_map: dict) -> pd.DataFrame:
-    """
-    Ensure df_clean has a 'sample_id' machine column representing the human header 'Sample ID'.
-    If the cleaner already produced sample_id, keep it.
-    Otherwise locate the machine column via header_map and copy/rename.
-    """
     df = df_clean.copy()
 
-    # If already present, we're done
     if "sample_id" in df.columns:
         return df
 
-    # Preferred: look up exact human header "Sample ID"
     machine = _find_machine_col_by_human_header(header_map, "Sample ID")
 
-    # Fallback: sometimes the human header is slightly different
     if machine is None:
-        # try any header_map human values containing "sample id"
         for m, h in header_map.items():
             if "sample id" in str(h).strip().lower():
                 machine = m
                 break
 
-    # Final fallback: any column that looks like sample id
     if machine is None:
         for c in df.columns:
             if str(c).strip().lower() in ("sample_id", "sample_id_1", "sampleid"):
@@ -116,7 +106,6 @@ def _coerce_sample_id_column(df_clean: pd.DataFrame, header_map: dict) -> pd.Dat
                 break
 
     if machine is None or machine not in df.columns:
-        # Helpful debug
         sampleish = [c for c in df.columns if "sample" in c.lower()]
         raise ValueError(
             "Could not locate a cleaned Sample ID column. "
@@ -129,16 +118,11 @@ def _coerce_sample_id_column(df_clean: pd.DataFrame, header_map: dict) -> pd.Dat
 
 
 def _normalize_strip_from_sample_id(df_clean: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build 'strip' from sample_id and normalize to strip_1..strip_4.
-    Special case: 'WEST FIELD' -> STRIP 4.
-    """
     df = df_clean.copy()
 
     if "sample_id" not in df.columns:
         raise ValueError("Expected 'sample_id' to exist before building strip.")
 
-    # Special-case fix before normalization
     def _fix_sample_id(x: object) -> str:
         s = str(x).strip()
         if s == "":
@@ -149,9 +133,37 @@ def _normalize_strip_from_sample_id(df_clean: pd.DataFrame) -> pd.DataFrame:
 
     df["sample_id"] = df["sample_id"].map(_fix_sample_id)
 
-    # Use sample_id as the source for strip then normalize
     df["strip"] = df["sample_id"]
     df = normalize_strip_column(df, strip_col="strip")
+    return df
+
+
+def _ensure_expected_soilchem_columns(df_clean: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create the canonical columns your table builder expects, based on what Ward actually provides.
+    We do NOT recompute values—just copy into stable names.
+
+    - soil_ph_1_1 <- 1_1_soil_ph
+    - ec_1_1      <- 1_1_s_salts_mmho_cm
+    - cec_meq_100g, sum_of_cations_meq_100g <- cec_sum_of_cations_me_100g
+    """
+    df = df_clean.copy()
+
+    # pH (1:1)
+    if "soil_ph_1_1" not in df.columns and "1_1_soil_ph" in df.columns:
+        df["soil_ph_1_1"] = df["1_1_soil_ph"]
+
+    # EC / salts (1:1)
+    if "ec_1_1" not in df.columns and "1_1_s_salts_mmho_cm" in df.columns:
+        df["ec_1_1"] = df["1_1_s_salts_mmho_cm"]
+
+    # Ward combined CEC/Sum-of-cations column
+    if "cec_sum_of_cations_me_100g" in df.columns:
+        if "cec_meq_100g" not in df.columns:
+            df["cec_meq_100g"] = df["cec_sum_of_cations_me_100g"]
+        if "sum_of_cations_meq_100g" not in df.columns:
+            df["sum_of_cations_meq_100g"] = df["cec_sum_of_cations_me_100g"]
+
     return df
 
 
@@ -163,24 +175,16 @@ def clean_ward_master_soilchem(sheet: Optional[str] = None) -> None:
     print(f"📥 Reading Soil Chem master: {MASTER_XLSX}")
     print(f"🧠 Loaded {df_raw.shape[0]} rows × {df_raw.shape[1]} columns")
 
-    # ------------------------------------------------------------
-    # 1) Clean headers / normalize names
-    # IMPORTANT: do NOT admin-drop yet, or we may lose Sample ID
-    # ------------------------------------------------------------
+    # 1) Clean headers / normalize names (do NOT admin-drop yet)
     df_clean, header_map = clean_compiled_workbook(df_raw, admin_drop_cols=[])
 
-    # Ensure sample_id survives (even if cleaner chose a different machine name)
+    # Ensure sample_id survives
     df_clean = _coerce_sample_id_column(df_clean, header_map)
 
-    # ------------------------------------------------------------
-    # 2) Build strip from sample_id (handles WEST FIELD -> STRIP 4)
-    # ------------------------------------------------------------
+    # 2) Build strip from sample_id
     df_clean = _normalize_strip_from_sample_id(df_clean)
 
-    # ------------------------------------------------------------
     # 3) Normalize dates
-    # ------------------------------------------------------------
-    # Map common variants produced by the cleaner to canonical names
     date_map = {}
     if "date_recd" in df_clean.columns:
         date_map["date_recd"] = "date_rec"
@@ -199,19 +203,16 @@ def clean_ward_master_soilchem(sheet: Optional[str] = None) -> None:
     if date_map:
         df_clean = normalize_date_columns(df_clean, date_cols=date_map)
 
-    # ------------------------------------------------------------
-    # 4) Fixed depth 0–8 in (your decision)
-    # ------------------------------------------------------------
+    # 4) Fixed depth 0–8 in
     df_clean = add_fixed_depth_columns(df_clean, begin_in=0, end_in=8)
 
-    # ------------------------------------------------------------
-    # 5) Drop admin columns AFTER strip is created
-    # ------------------------------------------------------------
+    # 5) Create canonical columns expected by table builder
+    df_clean = _ensure_expected_soilchem_columns(df_clean)
+
+    # 6) Drop admin columns AFTER strip is created
     df_clean = drop_admin_columns(df_clean, extra_drop=list(ADMIN_DROP_COLS))
 
-    # ------------------------------------------------------------
-    # 6) Write outputs
-    # ------------------------------------------------------------
+    # 7) Write outputs
     OUT_CLEAN_CSV.parent.mkdir(parents=True, exist_ok=True)
     OUT_HEADERS_JSON.parent.mkdir(parents=True, exist_ok=True)
 

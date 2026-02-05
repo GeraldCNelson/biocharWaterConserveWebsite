@@ -357,19 +357,22 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
  *  BULK DOWNLOAD TAB INITIALIZATION
  * ---------------------------------------------------------------------- */
 
-/**
- * Bulk download behavior (important):
- * - Do NOT invent keys like "irrigation:2024" etc.
- * - Always send manifest keys verbatim (e.g. "irrigation_2024", "loggers_2024_monthly", ...)
- *
- * The backend expects req.keys: string[] and validates them against its own key format/dataset list.
- * Your manifest already contains the canonical keys; use those.
- */
+const ALL_YEARS_MANIFEST_KEYS = new Set([
+  "soil_chem_all",
+  "soil_bio_all",
+  "hay_all",
+]);
 
-/**
- * Normalize dataset tokens so UI data-dataset values map to manifest dataset names.
- * (Manifest shows e.g. "biomass" not "biomass_hay".)
- */
+const ALL_YEARS_UI_ALIASES = {
+  soil_chem: "soil_chem_all",
+  soil_chemistry: "soil_chem_all",
+  soil_bio: "soil_bio_all",
+  soil_biology: "soil_bio_all",
+  biomass: "hay_all",
+  biomass_hay: "hay_all",
+  hay: "hay_all",
+};
+
 const BULK_DATASET_TOKEN = {
   loggers: "loggers",
   weather: "weather",
@@ -377,44 +380,80 @@ const BULK_DATASET_TOKEN = {
   fertilizing: "fertilizing",
   biomass: "biomass",
   biomass_hay: "biomass",
-
-  // keep these for later; they may not exist in the manifest yet
-  soil_chem: "soil_chem",
-  soil_bio: "soil_bio",
 };
 
-/**
- * Find the correct manifest key for a requested dataset selection.
- *
- * Manifest can be either:
- *  A) { years:[], granularities:[], availability:{...}, entries:[...] }
- *  B) a direct array of entries: [{key,dataset,year,resolution,label,...}, ...]
- *
- * We support both and return entry.key.
- */
+function normalizeBulkDataset(uiDatasetRaw) {
+  const ui = String(uiDatasetRaw || "").trim();
+  return ALL_YEARS_UI_ALIASES[ui] || ui;
+}
+
+function isAllYearsDataset(normalizedDataset) {
+  return ALL_YEARS_MANIFEST_KEYS.has(normalizedDataset);
+}
+
+function normalizeResolution(raw) {
+  if (raw == null) return null;
+  let g = String(raw).trim().toLowerCase();
+  if (!g) return null;
+
+  // Common UI variants → manifest/backend tokens
+  const map = {
+    "15-min": "15min",
+    "15 min": "15min",
+    "15m": "15min",
+    "15 minutes": "15min",
+    "hour": "hourly",
+    "hours": "hourly",
+    "day": "daily",
+    "days": "daily",
+    "month": "monthly",
+    "months": "monthly",
+    "g-season": "gseason",
+    "g season": "gseason",
+    "g_season": "gseason",
+  };
+  if (map[g]) g = map[g];
+
+  return g;
+}
+
+function getManifestEntries(manifest) {
+  if (!manifest) return null;
+  if (Array.isArray(manifest)) return manifest;
+  if (Array.isArray(manifest.entries)) return manifest.entries;
+  return null;
+}
+
+function findEntryByKey(manifest, key) {
+  const entries = getManifestEntries(manifest);
+  if (!Array.isArray(entries)) return null;
+  return entries.find((e) => e && typeof e === "object" && e.key === key) || null;
+}
+
 function findManifestKey(manifest, { dataset, year, granularity }) {
   if (!manifest) return null;
 
+  // If dataset is already a manifest key, return it if present.
+  if (isAllYearsDataset(dataset)) {
+    return findEntryByKey(manifest, dataset)?.key || null;
+  }
+
   const token = BULK_DATASET_TOKEN[dataset] || dataset;
   const y = year == null ? null : parseInt(year, 10);
-  const g = granularity ? String(granularity).trim() : null;
+  const g = normalizeResolution(granularity);
 
-  const entries = Array.isArray(manifest)
-    ? manifest
-    : (Array.isArray(manifest.entries) ? manifest.entries : null);
-
+  const entries = getManifestEntries(manifest);
   if (!Array.isArray(entries)) return null;
 
   return (
     entries.find((e) => {
       if (!e || typeof e !== "object") return false;
-      if (e.dataset !== token) return false;
+      if (String(e.dataset || "").trim().toLowerCase() !== String(token).trim().toLowerCase()) return false;
+
       if (y != null && parseInt(e.year, 10) !== y) return false;
 
-      // Some manifests use `resolution`, some might use `granularity`
-      // For parquet-ish datasets, we require a match when provided.
-      const res = e.resolution ?? e.granularity ?? null;
-      if (g && (res == null || String(res).trim() !== g)) return false;
+      const res = normalizeResolution(e.resolution ?? e.granularity ?? null);
+      if (g && res !== g) return false;
 
       return Boolean(e.key);
     })?.key || null
@@ -451,8 +490,7 @@ export async function initBulkDownloadTab() {
 
   function selectedGranularity() {
     if (!granEl) return null;
-    const g = String(granEl.value || "").trim();
-    return g || null;
+    return normalizeResolution(granEl.value);
   }
 
   function setButtonEnabled(btn, enabled) {
@@ -474,11 +512,9 @@ export async function initBulkDownloadTab() {
     return;
   }
 
-  // Support both possible shapes
   const years = Array.isArray(manifest?.years) ? manifest.years : [];
   const granularities = Array.isArray(manifest?.granularities) ? manifest.granularities : [];
 
-  // Populate dropdowns
   if (yearEl && yearEl.options.length === 0) {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
       .map((y) => `<option value="${y}">${y}</option>`)
@@ -493,103 +529,142 @@ export async function initBulkDownloadTab() {
       gList.map((g) => `<option value="${g}">${g}</option>`).join("");
   }
 
-  // Availability helpers (work with the old manifest style if it exists)
-  function isParquetAvailable(dataset, y, g) {
-    const avail = manifest?.availability?.[dataset];
-    if (!avail || !y || !g) return false;
-    const arr = avail[String(y)];
-    return Array.isArray(arr) ? arr.includes(g) : false;
-  }
+function normalizeGranularityToken(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "";
 
-  function isWorkbookAvailable(dataset, y) {
-    const avail = manifest?.availability?.[dataset];
-    if (!avail || !y) return true; // if not provided, don’t block
-    const flag = avail[String(y)];
-    if (typeof flag === "boolean") return flag;
-    return true;
-  }
+  // Normalize common variants to manifest tokens
+  // e.g. "15-min", "15 min", "15_min" -> "15min"
+  const compact = s.replace(/\s+/g, "").replace(/_/g, "-");
+  if (compact === "15-min" || compact === "15min") return "15min";
 
-  function refreshEnabledState() {
-    const y = selectedYear();
-    const g = selectedGranularity();
+  // pass-through for known tokens
+  if (["hourly", "daily", "monthly", "gseason"].includes(compact)) return compact;
 
-    for (const btn of buttons) {
-      const ds = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
+  // last resort: strip hyphens
+  return compact.replace(/-/g, "");
+}
 
-      // Parquet datasets require year + granularity
+function normalizeDatasetToken(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function refreshEnabledState() {
+  const y = selectedYear();
+  const gRaw = selectedGranularity();
+  const g = normalizeGranularityToken(gRaw);
+
+  const entries = getManifestEntries(manifest);
+  const hasEntries = Array.isArray(entries) && entries.length > 0;
+
+  for (const btn of buttons) {
+    const uiDsRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
+    const ds = normalizeBulkDataset(uiDsRaw);
+
+    // If we have an entry-based manifest, be strict: only enable if we can resolve a manifest key.
+    if (hasEntries) {
+      // All-years (file) datasets: soil_chem_all, soil_bio_all, hay_all
+      if (isAllYearsDataset(ds)) {
+        const entry = findEntryByKey(manifest, ds);
+        setButtonEnabled(btn, Boolean(entry?.key));
+        continue;
+      }
+
+      // Logger / Weather require year + granularity
       if (ds === "loggers" || ds === "weather") {
         if (!y || !g) {
           setButtonEnabled(btn, false);
           continue;
         }
 
-        // Prefer manifest entries if present; fallback to availability map
-        const key = findManifestKey(manifest, { dataset: ds, year: y, granularity: g });
-        if (key) {
-          setButtonEnabled(btn, true);
-        } else {
-          setButtonEnabled(btn, isParquetAvailable(ds, y, g));
-        }
+        // Make sure findManifestKey sees normalized dataset + granularity
+        const key = findManifestKey(manifest, {
+          dataset: normalizeDatasetToken(ds),
+          year: y,
+          granularity: g,
+        });
+
+        setButtonEnabled(btn, Boolean(key));
         continue;
       }
 
-      // Year-only datasets (irrigation/fertilizing/biomass + others)
+      // Year-only datasets (irrigation/fertilizing/biomass)
       if (!y) {
         setButtonEnabled(btn, false);
         continue;
       }
 
-      if (ds === "irrigation" || ds === "fertilizing") {
-        // If availability exists and says false, disable
-        setButtonEnabled(btn, isWorkbookAvailable(ds, y));
+      const key = findManifestKey(manifest, {
+        dataset: normalizeDatasetToken(ds),
+        year: y,
+        granularity: null,
+      });
+
+      setButtonEnabled(btn, Boolean(key));
+      continue;
+    }
+
+    // Fallback mode (old manifest shape)
+    if (isAllYearsDataset(ds)) {
+      setButtonEnabled(btn, true);
+      continue;
+    }
+
+    if (ds === "loggers" || ds === "weather") {
+      if (!y || !g) {
+        setButtonEnabled(btn, false);
         continue;
       }
-
-      // For everything else, enable only if a manifest key exists when the manifest is entry-based.
-      const key = findManifestKey(manifest, { dataset: ds, year: y, granularity: null });
-
-      // If we have entry-style manifest (array or manifest.entries), respect it strictly.
-      const entries = Array.isArray(manifest) ? manifest : (Array.isArray(manifest?.entries) ? manifest.entries : null);
-      if (Array.isArray(entries)) {
-        setButtonEnabled(btn, Boolean(key));
-      } else {
-        // If we don't have entries, don't block here.
-        setButtonEnabled(btn, true);
-      }
+      setButtonEnabled(btn, isParquetAvailable(ds, y, g));
+      continue;
     }
+
+    if (!y) {
+      setButtonEnabled(btn, false);
+      continue;
+    }
+
+    if (ds === "irrigation" || ds === "fertilizing" || ds === "biomass") {
+      setButtonEnabled(btn, isWorkbookAvailable(ds, y));
+      continue;
+    }
+
+    setButtonEnabled(btn, true);
   }
+}
 
   if (yearEl) yearEl.addEventListener("change", refreshEnabledState);
   if (granEl) granEl.addEventListener("change", refreshEnabledState);
 
-  // Wire clicks
   for (const btn of buttons) {
     btn.addEventListener("click", async (evt) => {
       evt.preventDefault();
 
-      const uiDataset = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
+      const uiDatasetRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
+      const uiDataset = String(uiDatasetRaw || "").trim();
+      const ds = normalizeBulkDataset(uiDataset);
+
       const y = selectedYear();
       const g = selectedGranularity();
+      const allYears = isAllYearsDataset(ds);
 
-      // Validate based on dataset type
-      if ((uiDataset === "loggers" || uiDataset === "weather") && (!y || !g)) {
+      if ((ds === "loggers" || ds === "weather") && (!y || !g)) {
         alert("Please select both a year and a granularity.");
         return;
       }
-      if (!y) {
+      if (!allYears && !y) {
         alert("Please select a year.");
         return;
       }
 
-      // Find the canonical manifest key and send it verbatim
       const key = findManifestKey(manifest, {
-        dataset: uiDataset,
-        year: y,
-        granularity: (uiDataset === "loggers" || uiDataset === "weather") ? g : null,
+        dataset: ds,
+        year: (ds === "loggers" || ds === "weather") ? y : (allYears ? null : y),
+        granularity: (ds === "loggers" || ds === "weather") ? g : null,
       });
 
       if (!key) {
-        console.error("❌ No manifest key found for selection:", { uiDataset, year: y, granularity: g, manifest });
+        console.error("❌ No manifest key found for selection:", { uiDataset, normalized: ds, year: y, granularity: g, manifest });
         alert("That dataset/year (and granularity, if applicable) is not available.");
         return;
       }
@@ -597,13 +672,12 @@ export async function initBulkDownloadTab() {
       const payload = { keys: [key] };
       console.log("🧾 Bulk download request:", payload);
 
-      // Fallback filename if server doesn't provide one
-      const suffix =
-        (uiDataset === "loggers" || uiDataset === "weather")
-          ? `${y}_${g}`
-          : String(y);
+      let suffix = "";
+      if (ds === "loggers" || ds === "weather") suffix = `${y}_${g}`;
+      else if (allYears) suffix = "all_years";
+      else suffix = String(y);
 
-      const fallbackZipName = buildFilename(["biochar", "bulk", uiDataset, suffix]) + ".zip";
+      const fallbackZipName = buildFilename(["biochar", key, suffix]) + ".zip";
 
       try {
         await postAndDownload("/api/bulk_download", payload, fallbackZipName);
@@ -619,6 +693,6 @@ export async function initBulkDownloadTab() {
     years: years.length,
     granularities: granularities.length,
     buttons: buttons.length,
-    hasEntries: Array.isArray(manifest) || Array.isArray(manifest?.entries),
+    hasEntries: Array.isArray(getManifestEntries(manifest)),
   });
 }

@@ -1,8 +1,16 @@
-// biomass_field_tab.js
+// tab_biomass_field.js
 import { fetchJson } from "./api_requests.js";
 import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { makeSetSectionTitle } from "./tab_ui.js";
 
+/**
+ * Biomass (Field Samples) tab renderer.
+ *
+ * Notes:
+ * - Styling is handled via styles.css (tab-scoped rules), not JS.
+ * - We only render once per page load by default (dataset.rendered guard).
+ * - If you want “always refresh” behavior, remove the dataset.rendered guard.
+ */
 export async function renderBiomassFieldTables() {
   const container = document.getElementById("biomass-field-content");
   if (!container) {
@@ -41,7 +49,12 @@ export async function renderBiomassFieldTables() {
     for (const setPayload of payload.sets) {
       const label = setPayload.label || "Biomass (Field Samples)";
 
-      // One section per set
+      // One section per set.
+      // IMPORTANT: use the same CSS variant as your other “compact metric tables”.
+      // If your compact CSS is scoped to #nir/#soilbio/#soilchem, you can either:
+      //  - change that CSS to also include the biomass container, OR
+      //  - introduce a "biomass" variant in tab_ui.js later.
+      // For now, keep "nir" so the section uses nir-* wrapper classes if you extend CSS.
       const section = makeSetSectionTitle(
         label,
         "Rows: field locations (e.g., S1M, S1B). Columns: sampling dates. Values are dry biomass (g).",

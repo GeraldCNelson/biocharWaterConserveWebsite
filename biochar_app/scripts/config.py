@@ -547,3 +547,20 @@ PLOT_COLORS = {
     "depth_2": OKABE_ITO["orange"],       # 12 inches (Depth "2")
     "depth_3": OKABE_ITO["bluish_green"], # 18 inches (Depth "3")
 }
+
+BASE_DIR = Path(__file__).resolve().parents[1]  # adjust if needed
+DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
+
+DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
+
+LAB_TESTS_DIR = DATA_PROCESSED_DIR / "lab-tests"
+HAY_TESTS_DIR = LAB_TESTS_DIR / "hay-tests" / "csv-files"
+SOIL_BIO_DIR  = LAB_TESTS_DIR / "soil-tests-bio" / "csv-files"
+SOIL_CHEM_DIR = LAB_TESTS_DIR / "soil-tests-chem" / "csv-files"
+BIOMASS_DIR   = LAB_TESTS_DIR / "biomass-field" / "csv-files"
+
+# Authoritative cleaned masters (these are the ones routes should use)
+WARD_MASTER_NIR_CSV     = HAY_TESTS_DIR / "ward_master_nir_clean.csv"
+WARD_MASTER_SOILBIO_CSV = SOIL_BIO_DIR  / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v2.csv"
+WARD_MASTER_SOILCHEM_CSV= SOIL_CHEM_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
+BIOMASS_FIELD_CSV       = BIOMASS_DIR   / "field_biomass_dry_g_wide_clean.csv"

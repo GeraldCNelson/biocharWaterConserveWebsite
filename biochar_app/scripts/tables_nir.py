@@ -1,14 +1,20 @@
-# biochar_app/scripts/nir_tables.py
+# biochar_app/scripts/tables_nir.py
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+from biochar_app.scripts.csv_validation import normalize_dates
 
 import logging
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+from biochar_app.scripts.config import ( WARD_MASTER_NIR_CSV,
+    WARD_MASTER_SOILBIO_CSV,
+    WARD_MASTER_SOILCHEM_CSV,
+    BIOMASS_FIELD_CSV,)
 
 # ---------------------------------------------------------------------
 # Periods (preferred order)

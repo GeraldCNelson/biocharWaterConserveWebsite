@@ -32,7 +32,6 @@ class BulkSheetSpec:
 def _inject_year_if_missing(df: pd.DataFrame, year: Optional[int]) -> pd.DataFrame:
     if year is None:
         return df
-    # Be tolerant: if there is already a Year column, leave it
     if "Year" not in df.columns:
         df = df.copy()
         df["Year"] = int(year)
@@ -40,45 +39,29 @@ def _inject_year_if_missing(df: pd.DataFrame, year: Optional[int]) -> pd.DataFra
 
 
 def load_sheet_as_dataframe(xlsx_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
-    """
-    Existing behavior: load a dataset from an Excel tab.
-    """
     if not spec.sheet_name:
         raise ValueError(f"Spec {spec.dataset_key} has no sheet_name (file-backed?)")
-
     df = pd.read_excel(xlsx_path, sheet_name=spec.sheet_name, engine="openpyxl")
     df = _inject_year_if_missing(df, spec.year)
     return df
 
 
 def load_csv_as_dataframe(csv_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
-    """
-    New behavior: load a dataset from a disk CSV.
-    """
     p = Path(csv_path)
     if not p.exists():
         raise FileNotFoundError(f"CSV path not found for {spec.dataset_key}: {p}")
-
     df = pd.read_csv(p)
     df = _inject_year_if_missing(df, spec.year)
     return df
 
 
 def load_spec_as_dataframe(xlsx_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
-    """
-    Unified loader:
-      - if spec.csv_path is set -> load from disk CSV
-      - else -> load from workbook sheet
-    """
     if spec.csv_path:
         return load_csv_as_dataframe(spec.csv_path, spec)
     return load_sheet_as_dataframe(xlsx_path, spec)
 
 
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
-    """
-    Convert a DataFrame to CSV bytes (UTF-8).
-    """
     buf = io.StringIO()
     df.to_csv(buf, index=False)
     return buf.getvalue().encode("utf-8")
@@ -96,17 +79,13 @@ def build_zip_for_selection(
     reg = registry or default_bulk_registry()
     lookup = {s.dataset_key: s for s in reg}
 
-    # ---------------- DEBUG BLOCK ----------------
     print("\n🧾 build_zip_for_selection() called")
     print("   requested keys:", selected_keys)
     print("   registry keys (expected):", sorted(lookup.keys()))
-    # ---------------------------------------------
 
     missing = [k for k in selected_keys if k not in lookup]
     if missing:
-        # ---------------- DEBUG BLOCK ----------------
         print("❌ missing keys:", missing)
-        # ---------------------------------------------
         raise ValueError(f"Unknown dataset keys: {missing}")
 
     out = io.BytesIO()
@@ -114,17 +93,19 @@ def build_zip_for_selection(
         for key in selected_keys:
             spec = lookup[key]
 
-            # ---------------- DEBUG BLOCK ----------------
             print(f"✅ key matched: {key}")
             print(f"   sheet_name expected: {spec.sheet_name!r}")
+            print(f"   csv_path:            {spec.csv_path!r}")
             print(f"   zip filename:        {spec.filename}")
-            # ---------------------------------------------
 
-            df = load_sheet_as_dataframe(xlsx_path, spec)
+            # ✅ IMPORTANT: use unified loader (sheet OR csv)
+            df = load_spec_as_dataframe(xlsx_path, spec)
+
             csv_bytes = dataframe_to_csv_bytes(df)
             zf.writestr(spec.filename, csv_bytes)
 
     return out.getvalue()
+
 
 # -----------------------------------------------------------------------------
 # Registry
@@ -139,36 +120,25 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
       sheet_name=None
       csv_path="path/to/file.csv"
     """
-    # ---- EDIT THESE 3 PATHS to match your repo layout ----
-    # If your project root differs, adjust accordingly.
-    soil_chem_csv = "data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv"
-    soil_bio_csv  = "data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv"
-    hay_nir_csv   = "data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv"
+    soil_chem_csv = "biochar_app/data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv"
+    soil_bio_csv  = "biochar_app/data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv"
+    hay_nir_csv   = "biochar_app/data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv"
 
     return [
-        # ---------------------------------------------------------------------
-        # Workbook-backed datasets (existing)
-        # ---------------------------------------------------------------------
-
-        # Irrigation (already used elsewhere)
+        # Workbook-backed datasets
         BulkSheetSpec("irrigation_2023", "Irrigation (2023)", "2023 IRRIGATION ", 2023, "irrigation_2023.csv"),
         BulkSheetSpec("irrigation_2024", "Irrigation (2024)", "2024 IRRIGATION",  2024, "irrigation_2024.csv"),
         BulkSheetSpec("irrigation_2025", "Irrigation (2025)", "2025 IRRIGATION",  2025, "irrigation_2025.csv"),
 
-        # Fertilizer
         BulkSheetSpec("fertilizing_2023", "Fertilizing (2023)", "2023 FERTILIZING", 2023, "fertilizing_2023.csv"),
         BulkSheetSpec("fertilizing_2024", "Fertilizing (2024)", "2024 FERTILIZING", 2024, "fertilizing_2024.csv"),
         BulkSheetSpec("fertilizing_2025", "Fertilizing (2025)", "2025 FERTILIZING", 2025, "fertilizing_2025.csv"),
 
-        # Biomass
         BulkSheetSpec("biomass_2023", "Biomass (2023)", "2023 BIOMASS", 2023, "biomass_2023.csv"),
         BulkSheetSpec("biomass_2024", "Biomass (2024)", "2024 BIOMASS", 2024, "biomass_2024.csv"),
         BulkSheetSpec("biomass_2025", "Biomass (2025)", "2025 BIOMASS", 2025, "biomass_2025.csv"),
 
-        # ---------------------------------------------------------------------
-        # File-backed datasets (NEW): already-clean CSV masters on disk
-        # ---------------------------------------------------------------------
-
+        # File-backed datasets
         BulkSheetSpec(
             dataset_key="soil_chem_all",
             label="Soil Chemistry (all years)",
@@ -196,20 +166,9 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
     ]
 
 
-
 def build_manifest(xlsx_path: str) -> List[Dict[str, Any]]:
     """
-    Compatibility wrapper for routes.py.
-
-    We already implement the manifest generation in bulk_downloads.py
-    (disk-derived parquet + workbook sheet inspection). routes.py expects
-    a function named build_manifest(xlsx_path).
-
-    xlsx_path is kept for signature compatibility; the underlying manifest
-    builder uses module-level paths.
+    Compatibility wrapper for routes.py (if still used somewhere).
     """
-    # Local import to avoid circular imports at import-time
     from biochar_app.scripts.bulk_downloads import bulk_download_manifest
-
-    # bulk_download_manifest() returns list[dict[str, Any]]
     return bulk_download_manifest()

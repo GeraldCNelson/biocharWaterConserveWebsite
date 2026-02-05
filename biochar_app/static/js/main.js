@@ -4,7 +4,7 @@
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./nir_tab.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
-import { renderBiomassFieldTables } from "./biomass_field_tab.js";
+import { renderBiomassFieldTables } from "./tab_biomass_field.js";
 import { initSummaryTab } from "./tab_summary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
