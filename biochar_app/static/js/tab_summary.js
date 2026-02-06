@@ -235,12 +235,48 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
   return html;
 }
 
+function startLoadingDots(elId, baseText = "Loading") {
+  const el = document.getElementById(elId);
+  if (!el) return null;
+
+  stopLoadingDots(elId);
+
+  let dots = 0;
+  el.textContent = baseText;
+
+  const timer = window.setInterval(() => {
+    dots = (dots + 1) % 4;
+    el.textContent = baseText + ".".repeat(dots);
+  }, 350);
+
+  el.dataset.loadingTimer = String(timer);
+  el.style.display = "";
+  return timer;
+}
+
+function stopLoadingDots(elId, finalText = "") {
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  const raw = el.dataset.loadingTimer;
+  if (raw) {
+    window.clearInterval(parseInt(raw, 10));
+    delete el.dataset.loadingTimer;
+  }
+
+  if (finalText) el.textContent = finalText;
+}
+
 export async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: Updating summary statistics...");
+
+  // Status line (animated)
+  startLoadingDots("summary-status", "Loading summary tables");
 
   const container = document.getElementById("summary-table-container");
   if (!container) {
     console.warn("❌ #summary-table-container not found.");
+    stopLoadingDots("summary-status", "Summary container missing.");
     return;
   }
 
@@ -268,6 +304,8 @@ export async function updateSummaryStatistics() {
       warn.className = "alert alert-warning";
       warn.textContent = "Please select Year, Variable, Time averages, and Depth before updating the summary.";
       container.appendChild(warn);
+
+      stopLoadingDots("summary-status", "Missing required selections.");
       return;
     }
 
@@ -286,7 +324,10 @@ export async function updateSummaryStatistics() {
       meta: { year, variable, strip, granularity, depth, unitSystem },
     };
 
-    // ✅ Title: ignore backend title completely, always build clean + unit-aware
+    // Compatibility with downloads.js (some versions read __lastSummaryData)
+    window.__lastSummaryData = data;
+
+    // Title
     const titleEl = document.getElementById("summary-title");
     if (titleEl) {
       titleEl.textContent = buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
@@ -298,6 +339,7 @@ export async function updateSummaryStatistics() {
     if (granularity === "gseason") {
       container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
       console.log("✅ Seasonal accordion rendered.");
+      stopLoadingDots("summary-status", "Summary updated.");
       return;
     }
 
@@ -330,6 +372,7 @@ export async function updateSummaryStatistics() {
     }
 
     console.log("✅ Summary statistics tables updated.");
+    stopLoadingDots("summary-status", "Summary updated.");
   } catch (error) {
     console.error("❌ Unexpected error in updateSummaryStatistics:", error);
 
@@ -338,8 +381,11 @@ export async function updateSummaryStatistics() {
     div.className = "alert alert-danger";
     div.textContent = "Failed to load summary statistics. Check server logs and browser console.";
     container.appendChild(div);
+
+    stopLoadingDots("summary-status", "Failed to load summary.");
   }
 }
+
 
 export function initSummaryTab() {
   const btn = document.getElementById("update-summary");

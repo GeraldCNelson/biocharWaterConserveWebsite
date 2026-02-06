@@ -79,6 +79,33 @@ html, body {
     color: white;
 }
 
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.75);
+  z-index: 10;
+  font-weight: 600;
+}
+
+.loading-overlay .dots::after {
+  content: "";
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0%   { content: ""; }
+  25%  { content: "."; }
+  50%  { content: ".."; }
+  75%  { content: "..."; }
+  100% { content: ""; }
+}
+
 /* --- Growing-season summary accordion & compact tables --- */
 
 /* Make accordion headers clearly clickable */
