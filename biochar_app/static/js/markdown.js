@@ -27,6 +27,11 @@ function getMarkdownRenderer() {
  * Fetch a Markdown file, render it to HTML, and inject into the container.
  * Then, if MathJax is present, re-typeset that container so TeX equations render.
  */
+// markdown.js
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
+import { debugLog } from "./plots.js"; // or wherever debugLog lives
+import { getMarkdownRenderer } from "./markdown_renderer.js"; // adjust if your import differs
+
 export async function loadMarkdownContent(containerId, markdownPath) {
   const container = document.getElementById(containerId);
   if (!container) {
@@ -36,12 +41,33 @@ export async function loadMarkdownContent(containerId, markdownPath) {
 
   debugLog(`📖 Loading markdown for #${containerId} from ${markdownPath} …`);
 
+  // Optional: if you have a <div id="intro-status"> etc.
+  const statusEl = document.getElementById(`${containerId}-status`);
+
+  // Create a human-friendly label from id: "intro-content" -> "introduction"
+  const pretty =
+    containerId === "intro-content"
+      ? "introduction"
+      : containerId
+          .replace(/-content$/i, "")
+          .replace(/[-_]/g, " ")
+          .trim();
+
   try {
-    const resp = await fetch(markdownPath);
+    // ✅ Animated overlay (dots)
+    showLoadingOverlay(container, `Loading ${pretty}`);
+
+    if (statusEl) {
+      statusEl.textContent = `Loading ${pretty}…`;
+      statusEl.style.display = "";
+    }
+
+    const resp = await fetch(markdownPath, { cache: "no-store" });
     if (!resp.ok) {
-      console.error(
-        `❌ Failed to fetch ${markdownPath}: HTTP ${resp.status}`
-      );
+      const msg = `Failed to fetch ${markdownPath}: HTTP ${resp.status}`;
+      console.error(`❌ ${msg}`);
+
+      container.innerHTML = `<div class="alert alert-warning mb-0">${msg}</div>`;
       return;
     }
 
@@ -64,5 +90,12 @@ export async function loadMarkdownContent(containerId, markdownPath) {
     debugLog(`✅ Markdown loaded into #${containerId}`);
   } catch (err) {
     console.error(`❌ Error loading markdown for #${containerId}:`, err);
+    container.innerHTML =
+      `<div class="alert alert-danger mb-0">` +
+      `Error loading content. Please refresh the page.</div>`;
+  } finally {
+    // ✅ Always remove overlay + status
+    hideLoadingOverlay(container);
+    if (statusEl) statusEl.style.display = "none";
   }
 }

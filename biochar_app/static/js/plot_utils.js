@@ -2,6 +2,7 @@
 
 import { getSelectedFilters } from "./ui_controls.js";
 import { isMobileDevice } from "./ui_utils.js";
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 /**
  * Pause until each of the given dropdown IDs exists in the DOM
@@ -95,10 +96,33 @@ function maybeAttachZoomSyncHandlers() {
  */
 export async function fetchAndRenderPlot(plotType, plotDivId) {
   const targetId = plotDivId || `plot-${plotType}`;
-  const label   = `🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`;
+  const label = `🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`;
   console.group(label);
 
+  // ✅ Find plot container EARLY so we can show overlay during fetch
+  const container = document.getElementById(targetId);
+  if (!container) {
+    console.error(`❌ Container "#${targetId}" not found`);
+    console.groupEnd();
+    return;
+  }
+
+  // ✅ Attach overlay to the parent wrapper so Plotly doesn't wipe it out
+  const overlayHost = container.parentElement || container;
+
+  // Optional: update the status line in index.html if present
+  const statusEl = document.getElementById("plots-status");
+
   try {
+    // 🔄 SHOW animated overlay
+    const msg = plotType === "raw" ? "Loading plots" : "Loading plot";
+    showLoadingOverlay(overlayHost, msg);
+
+    if (statusEl) {
+      statusEl.textContent = "Loading plots…";
+      statusEl.style.display = "";
+    }
+
     // 1) Gather filters from the DOM
     const filters = getSelectedFilters("main");
 
@@ -120,15 +144,16 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     // 6) Send request
     const resp = await fetch(url, {
-      method:      "POST",
-      headers:     { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body:        JSON.stringify(filters),
+      body: JSON.stringify(filters),
     });
 
     // 7) Read and log response
     const text = await resp.text();
     console.log("⏳ Response →", resp.status, resp.statusText);
+
     const snippet =
       text.length > 200
         ? text.slice(0, 200).replace(/\s+/g, " ") + "…"
@@ -144,56 +169,45 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     const plotData = JSON.parse(text);
     console.log("❓ payload for", plotType, plotData);
 
-    // --- NEW: synchronize INITIAL x-axis range between raw & ratio ---
-    // We only care about the Main Data Display pair: #plot-1 (raw) and #plot-2 (ratio).
+    // --- Sync initial x-range between raw & ratio ---
     if (plotType === "raw" && targetId === "plot-1") {
-      // Save whatever x-axis range the backend gave the raw plot
       const rawRange = plotData?.layout?.xaxis?.range || null;
       window._initialXRange = rawRange;
       console.log("📌 Saved raw x-range for sync:", window._initialXRange);
     }
 
     if (plotType === "ratio" && targetId === "plot-2" && window._initialXRange) {
-      // Force ratio plot to use the same initial x-range as the raw plot
       plotData.layout = plotData.layout || {};
       plotData.layout.xaxis = plotData.layout.xaxis || {};
       plotData.layout.xaxis.range = window._initialXRange;
       console.log("📌 Applied raw x-range to ratio plot:", window._initialXRange);
     }
-    // --- end NEW section ---
+    // --- end sync section ---
 
     console.log("🧱 shapes →", plotData.layout?.shapes);
 
-    // 9) Debug trace info
-    console.log("🔢 total traces →", plotData.data.length);
-    console.log("🔖 trace names →", plotData.data.map(t => t.name));
-    console.log("🔧 trace types →", plotData.data.map(t => t.type));
-    console.log("📊 final data →", plotData.data);
-    console.log("📊 final layout →", plotData.layout);
-
-    // 10) Validate & find container
+    // 9) Validate payload
     if (!Array.isArray(plotData.data)) {
       console.error("❌ `data` is not an array:", plotData.data);
       return;
     }
 
-    const container = document.getElementById(targetId);
-    if (!container) {
-      console.error(`❌ Container "#${targetId}" not found`);
-      return;
-    }
     console.log(`📦 Rendering into → #${targetId}`, container);
 
-    // 11) Render with Plotly, then attach zoom handlers if applicable
-    await new Promise(r => requestAnimationFrame(r));
+    // ✅ Clear any placeholder HTML (like "Loading plot…") in the plot div
+    container.innerHTML = "";
+
+    // 10) Render with Plotly
+    await new Promise((r) => requestAnimationFrame(r));
     Plotly.purge(container);
 
     const parentWidth = container.clientWidth;
+
     const layout = {
       ...plotData.layout,
       autosize: false,
-      width:    parentWidth,
-      height:   500,
+      width: parentWidth,
+      height: 500,
       margin: {
         l: plotData.layout?.margin?.l ?? 60,
         r: 20,
@@ -204,14 +218,14 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     const plotConfig = {
       displayModeBar: false,
-      displaylogo:    false,
-      responsive:     false,
+      displaylogo: false,
+      responsive: false, // you already have your own resize handler
     };
 
     const gd = await Plotly.newPlot(container, plotData.data, layout, plotConfig);
     Plotly.Plots.resize(container);
 
-    // Track which plot we just rendered and try attaching sync handlers
+    // Track rendered plot
     if (targetId === "plot-1") {
       rawPlotDiv = gd;
       console.log("📌 rawPlotDiv ready");
@@ -224,10 +238,16 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
   } catch (err) {
     console.error(`❌ fetchAndRenderPlot(${plotType}) uncaught:`, err);
   } finally {
+    // ✅ ALWAYS hide overlay
+    hideLoadingOverlay(overlayHost);
+
+    // Optional: hide the status line once BOTH are done (renderMainPlots will manage it too)
+    // We'll let renderMainPlots decide, but this is safe:
+    // if (statusEl) statusEl.style.display = "none";
+
     console.groupEnd();
   }
-}
-/* ------------------------------------------------------------------ */
+}/* ------------------------------------------------------------------ */
 /* Public helper to render both main plots                             */
 /* ------------------------------------------------------------------ */
 
@@ -236,7 +256,14 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
  */
 export async function renderMainPlots() {
   console.group("▶️ Rendering Interactive Plots…");
+
+  const statusEl = document.getElementById("plots-status");
   try {
+    if (statusEl) {
+      statusEl.textContent = "Loading plots…";
+      statusEl.style.display = "";
+    }
+
     // reset in case we re-render everything
     zoomHandlersAttached = false;
     rawPlotDiv = null;
@@ -244,10 +271,10 @@ export async function renderMainPlots() {
 
     await fetchAndRenderPlot("raw", "plot-1");
     await fetchAndRenderPlot("ratio", "plot-2");
-    // handlers will be attached automatically once both plots exist
   } catch (err) {
     console.error("❌ renderMainPlots uncaught:", err);
   } finally {
+    if (statusEl) statusEl.style.display = "none";
     console.groupEnd();
   }
 }
