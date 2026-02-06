@@ -860,6 +860,9 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 @api_router.get("/get_soilbio_table")
 async def api_get_soilbio_table():
     payload = build_soilbio_table(WARD_MASTER_SOILBIO_CSV, min_year=2023)
+    sets = [
+
+    ]
     return JSONResponse(payload)
 
 
