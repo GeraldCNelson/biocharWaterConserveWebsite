@@ -29,8 +29,6 @@ function getMarkdownRenderer() {
  */
 // markdown.js
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
-import { debugLog } from "./plots.js"; // or wherever debugLog lives
-import { getMarkdownRenderer } from "./markdown_renderer.js"; // adjust if your import differs
 
 export async function loadMarkdownContent(containerId, markdownPath) {
   const container = document.getElementById(containerId);
