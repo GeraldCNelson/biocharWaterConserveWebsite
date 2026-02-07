@@ -6,7 +6,7 @@
 import { makeSetSectionTitle } from "./tab_ui.js";
 import { normalizePayload, renderOneSetFromPayload, safeStr } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
-import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
+import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 async function renderSoilTab({
   containerId,

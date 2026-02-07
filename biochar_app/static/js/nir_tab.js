@@ -11,6 +11,7 @@
 import { makeSetSectionTitle } from "./tab_ui.js";
 import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
+import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 export async function renderNirTables() {
   const container = document.getElementById("nir-content");

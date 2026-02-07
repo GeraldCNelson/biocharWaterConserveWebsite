@@ -5,7 +5,7 @@ import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./nir_tab.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js";
+import { initSummaryTab, updateSummaryStatistics } from "./tab_summary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -36,7 +36,7 @@ import {
   updateDepthLabels,
   // keep this import only if something else still uses it
   updateStartAndEndDatesFromYear,
-  // ✅ add these:
+  // ✅ date-range helpers:
   applyDateRangeFromDefaults,
   wireMainDateRangeListeners,
 } from "./ui_controls.js";
@@ -44,11 +44,11 @@ import {
 // 6) Main plotting routines
 import { renderMainPlots, waitForAllDropdowns } from "./plot_utils.js";
 
-// 7) Summary-table updater
-import { updateSummaryStatistics } from "./tab_summary.js";
-
-// 8) Custom-season setup
+// 7) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";
+
+// 8) Boot loader helper
+import { hideBootLoading } from "./ui_loading.js";
 
 // ----------------------------------------------------
 // Expose download helpers for inline onclick handlers
@@ -56,12 +56,6 @@ import { initCustomGseason } from "./custom_gseason.js";
 window.downloadTraceData = downloadTraceData;
 window.downloadPlot = downloadPlot;
 window.downloadSummaryData = downloadSummaryData;
-
-// ----------------------------------------------------
-// Main app bootstrap
-// ----------------------------------------------------
-document.addEventListener("DOMContentLoaded", async () => {
-  debugLog("🌐 Initializing application...");
 
 // ----------------------------------------------------
 // Tab wiring helper
@@ -78,7 +72,9 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
   }
 
   if (typeof renderFn !== "function") {
-    console.error(`[wireTabRender] renderFn is not a function`, { href, tabId, paneId, label, renderFnType: typeof renderFn });
+    console.error(`[wireTabRender] renderFn is not a function`, {
+      href, tabId, paneId, label, renderFnType: typeof renderFn,
+    });
     return;
   }
 
@@ -94,185 +90,189 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
   }
 }
 
-  // Fetch defaults & options from the server
-  const options = await fetchDefaultsAndOptions();
-  if (!options) return;
+// ----------------------------------------------------
+// Main app bootstrap
+// ----------------------------------------------------
+document.addEventListener("DOMContentLoaded", async () => {
+  debugLog("🌐 Initializing application...");
 
-  // Make options globally available if needed elsewhere
-  window.dropdownOptions = options;
+  try {
+    // Fetch defaults & options from the server
+    const options = await fetchDefaultsAndOptions();
+    if (!options) {
+      console.error("❌ fetchDefaultsAndOptions returned null/undefined.");
+      return;
+    }
 
-  const defaults = options.defaults || {};
+    // Make options globally available if needed elsewhere
+    window.dropdownOptions = options;
 
-  // Decide initial unit system (backend → fallback to config)
-  window.unitSystem = defaults.unitSystem || FALLBACK_UNIT_SYSTEM;
+    const defaults = options.defaults || {};
 
-  // Populate dropdowns and wire up control-panel buttons
-  populateAllDropdowns(options);
-  setupUnitToggleHandlers(options);
-  initializeUpdateButtons();
+    // Decide initial unit system (backend → fallback to config)
+    window.unitSystem = defaults.unitSystem || FALLBACK_UNIT_SYSTEM;
 
-  // Wait until all dropdowns exist & are initialized
-  await waitForAllDropdowns(getAllDropdownIds());
-  await new Promise(requestAnimationFrame);
+    // Populate dropdowns and wire up control-panel buttons
+    populateAllDropdowns(options);
+    setupUnitToggleHandlers(options);
+    initializeUpdateButtons();
 
-  // ----------------------------------------------------
-  // Seed defaults into inputs
-  // IMPORTANT: do NOT overwrite startDate/endDate here
-  // because those must come from DATE_RANGES.
-  // ----------------------------------------------------
-  const DO_NOT_SEED = new Set(["startDate", "endDate", "dateRanges"]);
+    // Wait until all dropdowns exist & are initialized
+    await waitForAllDropdowns(getAllDropdownIds());
+    await new Promise(requestAnimationFrame);
 
-  for (const [key, value] of Object.entries(defaults)) {
-    if (DO_NOT_SEED.has(key)) continue;
+    // ----------------------------------------------------
+    // Seed defaults into inputs
+    // IMPORTANT: do NOT overwrite startDate/endDate here
+    // because those must come from DATE_RANGES.
+    // ----------------------------------------------------
+    const DO_NOT_SEED = new Set(["startDate", "endDate", "dateRanges"]);
+    for (const [key, value] of Object.entries(defaults)) {
+      if (DO_NOT_SEED.has(key)) continue;
 
-    const mainEl = document.getElementById(`main-${key}`);
-    const summaryEl = document.getElementById(`summary-${key}`);
-    if (mainEl) mainEl.value = value;
-    if (summaryEl) summaryEl.value = value;
-  }
+      const mainEl = document.getElementById(`main-${key}`);
+      const summaryEl = document.getElementById(`summary-${key}`);
+      if (mainEl) mainEl.value = value;
+      if (summaryEl) summaryEl.value = value;
+    }
 
-  // ----------------------------------------------------
-  // Initialize the date inputs, then apply DATE_RANGES
-  // ----------------------------------------------------
-  initializeMainDatepickers();
+    // ----------------------------------------------------
+    // Initialize the date inputs, then apply DATE_RANGES
+    // ----------------------------------------------------
+    initializeMainDatepickers();
 
-  // Apply correct range immediately based on current selections
-  const yearEl = document.getElementById("main-year");
-  const granEl = document.getElementById("main-granularity");
+    const yearEl = document.getElementById("main-year");
+    const granEl = document.getElementById("main-granularity");
 
-  const selectedYear = yearEl ? yearEl.value : String(defaults.year);
-  const selectedGran = granEl ? granEl.value : defaults.granularity;
+    const selectedYear = yearEl ? yearEl.value : String(defaults.year);
+    const selectedGran = granEl ? granEl.value : defaults.granularity;
 
-  // Use global dateRanges (set by fetchDefaultsAndOptions / ui_controls.js)
-  applyDateRangeFromDefaults(selectedYear, selectedGran, window.dateRanges || {});
+    applyDateRangeFromDefaults(selectedYear, selectedGran, window.dateRanges || {});
+    wireMainDateRangeListeners();
 
-  // Wire listeners so year/granularity changes update start/end automatically
-  wireMainDateRangeListeners();
+    // Make sure the depth labels match the current unit system
+    updateDepthLabels(window.unitSystem);
 
-  // Make sure the depth labels match the current unit system
-  updateDepthLabels(window.unitSystem);
+    // Debug summary of defaults & depth mapping
+    debugGroup("🎛️ Dropdown defaults & mappings", () => {
+      console.table(defaults);
+      if (window.depthMapping) {
+        console.table(
+          Object.entries(window.depthMapping).map(([depth, map]) => ({
+            Depth: depth,
+            US: map.us,
+            Metric: map.metric,
+          }))
+        );
+      }
+      if (window.dateRanges) {
+        console.log("🗓️ window.dateRanges keys:", Object.keys(window.dateRanges));
+      }
+    });
 
-  // Debug summary of defaults & depth mapping
-  debugGroup("🎛️ Dropdown defaults & mappings", () => {
-    console.table(defaults);
-    if (window.depthMapping) {
-      console.table(
-        Object.entries(window.depthMapping).map(([depth, map]) => ({
-          Depth: depth,
-          US: map.us,
-          Metric: map.metric,
-        }))
+    // ----------------------------------------------------
+    // Tab wiring
+    // ----------------------------------------------------
+    wireTabRender({
+      href: "#main",
+      paneId: "main",
+      renderFn: renderMainPlots,
+      label: "Interactive Plots",
+    });
+
+    wireTabRender({
+      href: "#nir",
+      paneId: "nir",
+      renderFn: renderNirTables,
+      label: "Pasture Quality Metrics (NIR)",
+    });
+
+    wireTabRender({
+      href: "#soilchem",
+      paneId: "soilchem",
+      renderFn: renderSoilChemTable,
+      label: "Soil Chemistry",
+    });
+
+    wireTabRender({
+      href: "#soilbio",
+      paneId: "soilbio",
+      renderFn: renderSoilBioTable,
+      label: "Soil Biological Health",
+    });
+
+    wireTabRender({
+      href: "#biomass-field",
+      paneId: "biomass-field",
+      renderFn: renderBiomassFieldTables,
+      label: "Biomass (Field Samples)",
+    });
+
+    // Kick off the summary statistics table (async)
+    await updateSummaryStatistics();
+
+    // ----------------------------------------------------
+    // Load markdown snippets (from backend mapping)
+    // ----------------------------------------------------
+    debugLog("📖 Loading markdown mapping from backend…");
+    let markdownFiles = {};
+    try {
+      markdownFiles = await fetchMarkdownFiles();
+      debugLog("📄 Markdown mapping:", markdownFiles);
+    } catch (err) {
+      console.error("❌ Failed to fetch markdown mapping:", err);
+    }
+
+    if (markdownFiles && Object.keys(markdownFiles).length > 0) {
+      debugLog("📖 Loading markdown snippets…");
+      await Promise.all(
+        Object.entries(markdownFiles).map(([id, path]) =>
+          loadMarkdownContent(id, path)
+        )
       );
+    } else {
+      console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
     }
-    if (window.dateRanges) {
-      console.log("🗓️ window.dateRanges keys:", Object.keys(window.dateRanges));
+
+    // ----------------------------------------------------
+    // Initialize the Custom Season editor (if present)
+    // ----------------------------------------------------
+    const gseasonContent = document.getElementById("gseason-content");
+    if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
+      initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
     }
-  });
 
-  // ----------------------------------------------------
-  // Tab wiring
-  // ----------------------------------------------------
+    initSummaryTab();
 
-  // Main plots
-  wireTabRender({
-    href: "#main",
-    paneId: "main",
-    renderFn: renderMainPlots,
-    label: "Interactive Plots",
-  });
+    // Bulk downloads tab
+    try {
+      await initBulkDownloadTab();
+    } catch (err) {
+      console.error("Failed to initialize Bulk Downloads tab:", err);
+    }
 
-  // NIR
-  wireTabRender({
-    href: "#nir",
-    paneId: "nir",
-    renderFn: renderNirTables,
-    label: "Pasture Quality Metrics (NIR)",
-  });
+    // Summary Statistics dropdown (Raw / Ratio / All)
+    try {
+      initSummaryDownloadMenu();
+    } catch (err) {
+      console.error("Failed to initialize Summary Summary dropdown:", err);
+    }
 
-  // Soil Chemistry
-  wireTabRender({
-    href: "#soilchem",
-    paneId: "soilchem",
-    renderFn: renderSoilChemTable,
-    label: "Soil Chemistry",
-  });
+    // Extra: quick visibility check so you *know* the Biomass elements exist
+    const bioTab = document.getElementById("biomass-field-tab");
+    const bioPane = document.getElementById("biomass-field");
+    console.log("🔎 Biomass wiring sanity:", {
+      biomassTabFound: !!bioTab,
+      biomassPaneFound: !!bioPane,
+      biomassTabIsActive: !!bioTab && bioTab.classList.contains("active"),
+      biomassRendererType: typeof renderBiomassFieldTables,
+    });
 
-  // Soil Biology
-  wireTabRender({
-    href: "#soilbio",
-    paneId: "soilbio",
-    renderFn: renderSoilBioTable,
-    label: "Soil Biological Health",
-  });
-
-  // ✅ Biomass (Field Samples)
-  wireTabRender({
-    href: "#biomass-field",     // fallback if tabId ever changes
-    paneId: "biomass-field",
-    renderFn: renderBiomassFieldTables,
-    label: "Biomass (Field Samples)",
-  });
-
-  // Kick off the summary statistics table (async)
-  await updateSummaryStatistics();
-
-  // ----------------------------------------------------
-  // Load markdown snippets (from backend mapping)
-  // ----------------------------------------------------
-  debugLog("📖 Loading markdown mapping from backend…");
-  let markdownFiles = {};
-  try {
-    markdownFiles = await fetchMarkdownFiles();
-    debugLog("📄 Markdown mapping:", markdownFiles);
+    debugLog("✅ Application initialized.");
   } catch (err) {
-    console.error("❌ Failed to fetch markdown mapping:", err);
+    console.error("❌ Fatal error during app initialization:", err);
+  } finally {
+    // ✅ CRITICAL: remove the full-screen boot overlay so it can’t hide the UI
+    hideBootLoading();
   }
-
-  if (markdownFiles && Object.keys(markdownFiles).length > 0) {
-    debugLog("📖 Loading markdown snippets…");
-    await Promise.all(
-      Object.entries(markdownFiles).map(([id, path]) =>
-        loadMarkdownContent(id, path)
-      )
-    );
-  } else {
-    console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
-  }
-
-  debugLog("✅ Application initialized.");
-
-  // ----------------------------------------------------
-  // Initialize the Custom Season editor (if present)
-  // ----------------------------------------------------
-  const gseasonContent = document.getElementById("gseason-content");
-  if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
-    initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
-  }
-
-  initSummaryTab();
-
-  // Bulk downloads tab
-  try {
-    await initBulkDownloadTab();
-  } catch (err) {
-    console.error("Failed to initialize Bulk Downloads tab:", err);
-  }
-
-  // Summary Statistics dropdown (Raw / Ratio / All)
-  try {
-    initSummaryDownloadMenu();
-  } catch (err) {
-    console.error("Failed to initialize Summary Summary dropdown:", err);
-  }
-
-  // Extra: quick visibility check so you *know* the Biomass elements exist
-  // (This is the #1 reason Network shows "nothing": event never fired.)
-  const bioTab = document.getElementById("biomass-field-tab");
-  const bioPane = document.getElementById("biomass-field");
-  console.log("🔎 Biomass wiring sanity:", {
-    biomassTabFound: !!bioTab,
-    biomassPaneFound: !!bioPane,
-    biomassTabIsActive: !!bioTab && bioTab.classList.contains("active"),
-    biomassRendererType: typeof renderBiomassFieldTables,
-  });
 });

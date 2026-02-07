@@ -1,9 +1,11 @@
-/* General Reset */
+/* =============================================================================
+   General Reset / Global Defaults
+   ============================================================================= */
+
 html, body {
     margin: 0;
     padding: 0;
-    height: 100%; /* Ensure full height is applied to root elements */
-    /* Global default: serif, to match long-form content */
+    height: 100%;
     font-family: "Source Serif Pro", serif;
 }
 
@@ -12,6 +14,10 @@ html, body {
     box-sizing: border-box;
 }
 
+/* =============================================================================
+   Summary Tables / Accordion (Summary Statistics tab)
+   ============================================================================= */
+
 /* ✅ Improve table appearance */
 #summary-table-container {
     margin-top: 15px;
@@ -19,7 +25,7 @@ html, body {
 }
 
 #summary-table-container h5 {
-    font-size: 1rem; /* Slightly smaller table headings if needed */
+    font-size: 1rem;
 }
 
 #summary-table-container tbody {
@@ -32,81 +38,32 @@ html, body {
 
 /* Tighter spacing inside growing-season accordion */
 #summary-table-container .accordion-item + .accordion-item {
-    margin-top: 0.35rem;              /* was 0.5rem */
+    margin-top: 0.35rem;
 }
 
 #summary-table-container .accordion-body {
-    padding: 0.5rem 0.75rem;          /* slightly smaller padding */
+    padding: 0.5rem 0.75rem;
 }
 
 #summary-table-container .accordion-body > h6 {
     margin-top: 0.35rem;
-    margin-bottom: 0.15rem;           /* tighter heading spacing */
+    margin-bottom: 0.15rem;
 }
 
-/* Less space between the stacked tables inside each season */
 #summary-table-container .accordion-body > .table {
     margin-bottom: 0.25rem;
 }
 
-/* Also shrink row padding a bit more */
 #summary-table-container .table th,
 #summary-table-container .table td {
     padding-top: 4px;
     padding-bottom: 4px;
 }
 
-/* Remove huge top margin from accordion headings in Summary Statistics */
 #summary-table-container h2.accordion-header {
     margin-top: 0;
-    margin-bottom: 0;   /* let the button's padding control spacing */
+    margin-bottom: 0;
 }
-
-.table {
-    border-collapse: collapse;
-    width: 100%;
-}
-
-#main .table th,
-#main .table td {
-    text-align: center;  /* ✅ Center-align values */
-    padding: 10px;
-    border: 1px solid #ddd;
-}
-
-.thead-dark th {
-    background-color: #343a40 !important;
-    color: white;
-}
-
-.loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.75);
-  z-index: 10;
-  font-weight: 600;
-}
-
-.loading-overlay .dots::after {
-  content: "";
-  display: inline-block;
-  width: 1.5em;
-  text-align: left;
-  animation: dots 1.2s steps(4, end) infinite;
-}
-
-@keyframes dots {
-  0%   { content: ""; }
-  25%  { content: "."; }
-  50%  { content: ".."; }
-  75%  { content: "..."; }
-  100% { content: ""; }
-}
-
-/* --- Growing-season summary accordion & compact tables --- */
 
 /* Make accordion headers clearly clickable */
 #summary-table-container .accordion-button {
@@ -130,30 +87,8 @@ html, body {
     transform: rotate(-90deg);
 }
 
-/* Hover effect to reinforce interactivity */
 #summary-table-container .accordion-button:hover {
     background-color: #c4daff;
-}
-
-/* Slight spacing between accordion sections */
-#summary-table-container .accordion-item + .accordion-item {
-    margin-top: 0.5rem;
-}
-
-/* Tighter padding inside accordion bodies */
-#summary-table-container .accordion-body {
-    padding: 0.75rem 1rem;
-}
-
-/* Compact headings inside the accordion */
-#summary-table-container h6 {
-    margin-top: 0.5rem;
-    margin-bottom: 0.25rem;
-}
-
-/* Make summary tables more compact */
-#summary-table-container table {
-    margin-bottom: 0.5rem; /* less vertical space between tables */
 }
 
 /* Prefer compact Bootstrap tables in this container */
@@ -163,143 +98,240 @@ html, body {
     padding-bottom: 0.25rem;
 }
 
-/* Also slightly reduce padding for any tables in the summary area */
-#summary-table-container .table th,
-#summary-table-container .table td {
-    padding-top: 6px;
-    padding-bottom: 6px;
+/* =============================================================================
+   Global table defaults (keep these lightweight)
+   ============================================================================= */
+
+.table {
+    border-collapse: collapse;
+    width: 100%;
 }
 
-/* Container */
+/* Main data display tables (scoped) */
+#main .table th,
+#main .table td {
+    text-align: center;
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+.thead-dark th {
+    background-color: #343a40 !important;
+    color: white;
+}
+
+/* =============================================================================
+   Loading overlays (shared dots animation + in-container overlays + boot loader)
+   ============================================================================= */
+
+@keyframes dots {
+  0%   { content: ""; }
+  25%  { content: "."; }
+  50%  { content: ".."; }
+  75%  { content: "..."; }
+  100% { content: ""; }
+}
+
+/* In-container overlay (plots, tables, markdown) */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.75);
+  z-index: 10;
+  font-weight: 600;
+}
+
+.loading-overlay .dots::after {
+  content: "";
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+/* Boot-level page loader (shown immediately on page load) */
+.boot-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  z-index: 9999;
+  font-weight: 600;
+}
+
+.boot-loading-inner {
+  font-size: 1.1rem;
+}
+
+.boot-loading-inner .dots::after {
+  content: "";
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+/* =============================================================================
+   Layout Containers
+   ============================================================================= */
+
 .container {
     display: flex;
-    flex-wrap: wrap;          /* ✅ allow wrapping on narrow screens */
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 20px;
-    width: 100%;              /* ✅ use full screen width */
-    max-width: 100%;          /* ✅ remove 90% constraint */
-    margin-left: auto;
-    margin-right: auto;
-}
-
-/* Default markdown layout for most screens */
-.container.markdown-container {
-    max-width: 100%;
-    margin: 0;
-    padding: 0 20px;
-}
-
-/* Compact and clean markdown styling */
-.markdown-content {
-    font-family: Source Serif Pro, serif !important;
-    font-size: 14px;
-    line-height: 1.4;
-    /* If you want the shaded box back, uncomment:
-    background-color: #f9f9f9;
-    border-radius: 5px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 16px;
-    */
-}
-
-/* Ensure block elements behave nicely */
-.markdown-content figure,
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content p {
-    display: block;
     width: 100%;
-    clear: both;
-}
-
-/* Images & figures
-   - Centered
-   - Slightly narrower than full-width so Figure 1 isn’t “wall-to-wall”
-*/
-.markdown-content img {
-    display: block;
-    margin: 0 auto;
-    max-width: 75%;   /* 👈 tweak this (e.g., 70–80%) to taste */
-    height: auto;
-}
-
-.markdown-content figcaption {
-    text-align: center;
-    font-style: italic;
-    margin-top: 0.5em;
-}
-
-/* Pandoc-generated comparison table for side-by-side figures */
-.markdown-content table {
-    display: table;
-    margin-left: auto;
-    margin-right: auto;
-    width: auto; /* ✅ Overrides Bootstrap's 100% width */
-}
-
-/* Global table fallback */
-table {
-    display: table;
+    max-width: 100%;
     margin-left: auto;
     margin-right: auto;
 }
 
 /* Match tab font to content */
 .nav-tabs .nav-link {
-    font-family: Source Serif Pro, serif;
+    font-family: "Source Serif Pro", serif;
 }
 
-/* Headers – left-aligned with moderate spacing */
+/* =============================================================================
+   MARKDOWN (ALL markdown styling consolidated here)
+   ============================================================================= */
+
+/* The outer container used for markdown tabs/sections */
+.container.markdown-container {
+    max-width: 100%;
+    margin: 0;
+    padding: 0 20px;
+}
+
+/* The markdown container itself (where you inject converted HTML/MD) */
+.markdown-container {
+    padding: 10px 15px;
+    position: relative; /* allows loading overlay to anchor */
+}
+
+/* The actual content wrapper generated by your markdown render */
+.markdown-content {
+    font-family: "Source Serif Pro", serif !important;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* Headings – left-aligned with moderate spacing */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
     color: #333;
-    margin-top: 0.75rem;
-    margin-bottom: 0.35rem;
+    margin: 0.75rem 0 0.35rem 0;
     text-align: left !important;
 }
 
 /* Paragraphs – tighter vertical spacing than browser default */
 .markdown-content p {
-    margin-top: 0;
-    margin-bottom: 0.45rem;
+    margin: 0 0 0.45rem 0;
 }
 
 /* Lists – similar spacing to paragraphs */
 .markdown-content ul,
 .markdown-content ol {
-    margin-top: 0;
-    margin-bottom: 0.45rem;
+    margin: 0 0 0.45rem 0;
     padding-left: 1.2rem;
 }
 
-/* Don’t completely nuke all margins inside markdown;
-   let the rules above control spacing. */
-.markdown-content * {
-    /* Remove big default top margins on headings etc., but don’t force 0 bottom */
-    margin-top: 0;
+/* Ensure block elements behave nicely */
+.markdown-content figure,
+.markdown-content p,
+.markdown-content table {
+    display: block;
+    width: 100%;
+    clear: both;
 }
 
-/* Tabs */
+/* Figures: centered and narrower than full width */
+.markdown-content figure {
+    max-width: 65%;      /* tweak 60–70% */
+    margin: 1.5em auto;
+}
+
+/* Images in figures fill the figure box */
+.markdown-content figure img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+/* Generic markdown images not in figures */
+.markdown-content img {
+    display: block;
+    margin: 0.75em auto;
+    max-width: 70%;      /* tweak 65–80% */
+    height: auto;
+}
+
+/* Figcaptions */
+.markdown-content figcaption {
+    text-align: center;
+    font-style: italic;
+    margin-top: 0.5em;
+}
+
+/* Markdown tables:
+   - Keep Pandoc tables centered
+   - Don't let Bootstrap force 100% width unless you want it
+*/
+.markdown-content table {
+    display: table;
+    margin: 1.0em auto;
+    width: auto;
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+/* Special: side-by-side figure tables (Figures 2 & 3) */
+.markdown-content table.side-by-side-figures {
+    margin: 1.5em auto;
+    width: auto;
+    border-collapse: collapse;
+}
+
+.markdown-content table.side-by-side-figures th {
+    border: none;
+    padding: 0 1.5em;
+    text-align: center;
+}
+
+.markdown-content table.side-by-side-figures img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* =============================================================================
+   Tabs / Legacy tab controls
+   ============================================================================= */
+
 .tabs {
     display: flex;
-    background-color: #f8f9fa; /* Light Bootstrap gray */
+    background-color: #f8f9fa;
     padding: 10px;
-    border-bottom: 1px solid #dee2e6; /* Bootstrap border color */
+    border-bottom: 1px solid #dee2e6;
 }
 
 .tabs button {
-    background-color: #e9ecef; /* Bootstrap light gray */
+    background-color: #e9ecef;
     border: none;
     padding: 10px 20px;
     cursor: pointer;
     font-size: 16px;
     margin-right: 5px;
-    border-radius: 0.25rem; /* Bootstrap-style rounded corners */
+    border-radius: 0.25rem;
 }
 
 .tabs button.active {
-    background-color: #0d6efd; /* Bootstrap primary color */
+    background-color: #0d6efd;
     color: white;
 }
 
@@ -316,13 +348,16 @@ table {
     display: block;
 }
 
-/* ✅ General Control Panel Styling */
+/* =============================================================================
+   Control Panels / Plots
+   ============================================================================= */
+
 .control-panel {
-    flex: 0 0 220px;  /* Consistent width for both panels */
+    flex: 0 0 220px;
     max-width: 220px;
     height: auto;
     padding: 12px;
-    background-color: #f8f9fa; /* Light background for readability */
+    background-color: #f8f9fa;
     border-radius: 5px;
     display: flex;
     flex-direction: column;
@@ -331,33 +366,29 @@ table {
     font-family: inherit;
 }
 
-/* ✅ Ensure uniform styling across inputs, dropdowns, and buttons */
 .control-panel select,
 .control-panel button,
 .control-panel input {
     font-size: 14px;
     padding: 4px 6px;
-    width: 100%;  /* Ensure elements take full width */
+    width: 100%;
 }
 
-/* ✅ Keep spacing compact */
 .control-panel .form-control {
     margin-bottom: 6px;
 }
 
-/* ✅ Heading Styles */
 .control-panel h3 {
     font-size: 16px;
     font-weight: bold;
     margin-bottom: 8px;
 }
 
-/* 🔹 Slight Variation for Summary Control Panel (if needed) */
+/* Optional variation */
 .summary-panel {
-    background-color: #eef2f6; /* Subtle background color difference */
+    background-color: #eef2f6;
 }
 
-/* Plot Panel Styling */
 .plot-panel {
     flex-grow: 1;
     flex-basis: 0;
@@ -381,7 +412,7 @@ table {
 .info-icon {
     font-size: 14px;
     font-weight: bold;
-    color: #007bff; /* Bootstrap primary blue */
+    color: #007bff;
     cursor: pointer;
     margin-left: 5px;
 }
@@ -396,17 +427,46 @@ table {
     height: 500px;
 }
 
-/* Responsive Design */
+/* Buttons */
+input[type="submit"],
+button {
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #0d6efd;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+input[type="submit"]:hover,
+button:hover {
+    background-color: #0056b3;
+}
+
+/* Ensure the row is a flex container */
+.row.custom-flex-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+/* =============================================================================
+   Responsive Design
+   ============================================================================= */
+
 @media screen and (max-width: 768px) {
     .container {
-        flex-direction: column; /* Stack control and plot panels vertically */
-        align-items: center;    /* Ensure everything centers properly */
+        flex-direction: column;
+        align-items: center;
     }
 
     .control-panel {
-        width: 100%; /* Full width */
+        width: 100%;
         max-width: 100%;
-        margin-bottom: 15px; /* Reduce margin */
+        margin-bottom: 15px;
         padding: 10px;
     }
 
@@ -422,122 +482,26 @@ table {
     }
 }
 
-/* Larger screen override for readability */
+/* Larger screen override for readability (markdown) */
 @media screen and (min-width: 992px) {
     .container.markdown-container {
         max-width: 1000px;
     }
 }
 
-/* Fine-tune markdown container padding */
-.markdown-container {
-    padding: 10px 15px;
-    position: relative;   /* allows loading overlay to anchor */
-}
-
-/* Buttons */
-input[type="submit"],
-button {
-    padding: 10px 15px;
-    font-size: 14px;
-    font-weight: bold;
-    color: #fff;
-    background-color: #0d6efd; /* Bootstrap primary */
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-input[type="submit"]:hover,
-button:hover {
-    background-color: #0056b3; /* Bootstrap primary dark */
-}
-
-/* Ensure the row is a flex container */
-.row.custom-flex-row {
-    display: flex; /* ✅ Ensures side-by-side layout */
-    flex-wrap: nowrap; /* ✅ Prevents wrapping to the next line */
-    align-items: flex-start; /* ✅ Aligns both panels at the top */
-    gap: 20px; /* ✅ Adds spacing */
-}
-
-figure {
-    display: block;
-    clear: both;
-    margin-top: 1em;
-    margin-bottom: 1em;
-}
-
-figure img {
-    display: block;
-    margin: 0 auto;
-}
-
-figcaption {
-    text-align: center;
-    font-style: italic;
-}
-
-h2 {
-    display: block;
-    margin-top: 2em;
-}
-
-/* Narrower figures in markdown (e.g., Figure 1) */
-.markdown-content figure {
-  max-width: 65%;      /* tweak 60–70% to taste */
-  margin: 1.5em auto;  /* center, with some breathing room */
-}
-
-/* Images inside those figures fill the figure, not the full page */
-.markdown-content figure img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
-/* Generic markdown images that are *not* in a figure */
-.markdown-content img {
-  display: block;
-  margin: 0.75em auto;
-  max-width: 70%;
-  height: auto;
-}
-
-/* Two-column figure layout for Figures 2 & 3 */
-.markdown-content table.side-by-side-figures {
-  margin: 1.5em auto;
-  width: auto;              /* don't stretch to 100% */
-  border-collapse: collapse;
-}
-
-.markdown-content table.side-by-side-figures th {
-  border: none;
-  padding: 0 1.5em;
-  text-align: center;
-}
-
-.markdown-content table.side-by-side-figures img {
-  max-width: 100%;
-  height: auto;
-}
-
-/* ----------------------------------------------------
-   Metric tables (Pasture NIR + Soil Bio + Soil Chem)
-   Compact layout (wins over Bootstrap)
-   Uses existing structure:
+/* =============================================================================
+   Metric tables (Pasture NIR + Soil Bio + Soil Chem + Biomass)
+   Compact layout (wins over Bootstrap) using existing structure:
      - .nir-scroll
      - .nir-content
----------------------------------------------------- */
+   ============================================================================= */
 
-/* Apply shared rules to the three metric tabs */
 #nir,
 #soilbio,
 #soilchem {
   text-align: left;
 }
 
-/* Keep the scroll wrapper flush-left and full width */
 #nir .nir-scroll,
 #soilbio .nir-scroll,
 #soilchem .nir-scroll {
@@ -550,7 +514,6 @@ h2 {
   padding-right: 0;
 }
 
-/* Content inside the scroll area */
 #nir .nir-content,
 #soilbio .nir-content,
 #soilchem .nir-content {
@@ -558,7 +521,6 @@ h2 {
   text-align: left;
 }
 
-/* Section titles inside rendered blocks (your code uses <h5 class="mb-2">...) */
 #nir .nir-content h5,
 #soilbio .nir-content h5,
 #soilchem .nir-content h5 {
@@ -568,32 +530,19 @@ h2 {
   text-align: left;
 }
 
-/* IMPORTANT:
-   Your global rule `table th, table td { text-align:center; padding:10px; ... }`
-   is what's forcing the soil tables to look wrong.
-   These scoped overrides beat that rule for these three tabs only. */
 #nir .nir-content table,
 #soilbio .nir-content table,
 #soilchem .nir-content table {
   font-size: 0.82rem;
   line-height: 1.05;
-
-  /* Don't force full-width like Bootstrap does */
   width: auto !important;
   max-width: 100%;
-
-  /* Keep table anchored left */
   margin-left: 0 !important;
   margin-right: 0 !important;
-
-  /* Helps consistent column widths for dates */
   table-layout: fixed;
-
-  /* Some browsers will center inline tables without this */
   display: table;
 }
 
-/* If wrapped in Bootstrap .table-responsive, keep wrapper flush-left */
 #nir .nir-content .table-responsive,
 #soilbio .nir-content .table-responsive,
 #soilchem .nir-content .table-responsive {
@@ -606,20 +555,18 @@ h2 {
   text-align: left;
 }
 
-/* Cell styling (override global table td/th rule) */
 #nir .nir-content table th,
 #nir .nir-content table td,
 #soilbio .nir-content table th,
 #soilbio .nir-content table td,
 #soilchem .nir-content table th,
 #soilchem .nir-content table td {
-  padding: 0.20rem 0.35rem !important; /* compact */
+  padding: 0.20rem 0.35rem !important;
   white-space: nowrap;
-  text-align: right !important;        /* override the global center */
+  text-align: right !important;
   vertical-align: middle;
 }
 
-/* Row label column: left aligned and narrower */
 #nir .nir-content table th:first-child,
 #nir .nir-content table td:first-child,
 #soilbio .nir-content table th:first-child,
@@ -630,7 +577,6 @@ h2 {
   width: 5.5rem !important;
 }
 
-/* Date/value columns: keep them narrow like the pasture tables */
 #nir .nir-content table th:not(:first-child),
 #nir .nir-content table td:not(:first-child),
 #soilbio .nir-content table th:not(:first-child),
@@ -640,7 +586,6 @@ h2 {
   width: 5.0rem !important;
 }
 
-/* Slightly smaller header text */
 #nir .nir-content table thead th,
 #soilbio .nir-content table thead th,
 #soilchem .nir-content table thead th {
@@ -648,7 +593,6 @@ h2 {
   font-size: 0.80rem;
 }
 
-/* Optional: tighten spacing between blocks (your generator wraps each in .mb-4) */
 #nir .nir-content .mb-4,
 #soilbio .nir-content .mb-4,
 #soilchem .nir-content .mb-4 {

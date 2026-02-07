@@ -7,7 +7,7 @@
 
 import { fetchJson, generateSummaryTable, formatGseasonLabel } from "./api_requests.js";
 import { getDropdownValue } from "./ui_utils.js";
-import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
+import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 function capitalizeFirst(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
@@ -271,38 +271,6 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
 
   html += "</div>";
   return html;
-}
-
-function startLoadingDots(elId, baseText = "Loading") {
-  const el = document.getElementById(elId);
-  if (!el) return null;
-
-  stopLoadingDots(elId);
-
-  let dots = 0;
-  el.textContent = baseText;
-
-  const timer = window.setInterval(() => {
-    dots = (dots + 1) % 4;
-    el.textContent = baseText + ".".repeat(dots);
-  }, 350);
-
-  el.dataset.loadingTimer = String(timer);
-  el.style.display = "";
-  return timer;
-}
-
-function stopLoadingDots(elId, finalText = "") {
-  const el = document.getElementById(elId);
-  if (!el) return;
-
-  const raw = el.dataset.loadingTimer;
-  if (raw) {
-    window.clearInterval(parseInt(raw, 10));
-    delete el.dataset.loadingTimer;
-  }
-
-  if (finalText) el.textContent = finalText;
 }
 
 export async function updateSummaryStatistics() {
