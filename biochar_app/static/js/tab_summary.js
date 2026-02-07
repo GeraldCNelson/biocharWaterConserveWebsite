@@ -7,30 +7,60 @@
 
 import { fetchJson, generateSummaryTable, formatGseasonLabel } from "./api_requests.js";
 import { getDropdownValue } from "./ui_utils.js";
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 function capitalizeFirst(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
 }
 
 /**
- * Resolve a unit-aware label mapping entry.
- * Supports:
- *   - string
- *   - object like { us: "...", metric: "..." }
+ * Strict unit-aware label resolver.
+ *
+ * Accepts:
+ *  - string
+ *  - object like { us: "...", metric: "..." }
+ *
+ * Rules:
+ *  - if object form is used, BOTH keys must exist
+ *  - NO fallback to the other unit system (prevents silent wrong labels)
+ *  - throws on invalid shape so we catch bugs early
  */
-function resolveUnitLabel(labelEntry, unitSystem, fallback) {
-  if (!labelEntry) return fallback;
+function resolveUnitLabelStrict(labelEntry, unitSystem, fallback) {
+  if (!labelEntry) {
+    throw new Error(
+      `Missing label entry for unitSystem=${unitSystem}. fallback=${String(fallback)}`
+    );
+  }
+
   if (typeof labelEntry === "string") return labelEntry;
 
   if (typeof labelEntry === "object") {
-    return (
-      labelEntry[unitSystem] ||
-      labelEntry.us ||
-      labelEntry.metric ||
-      fallback
-    );
+    const hasUS = Object.prototype.hasOwnProperty.call(labelEntry, "us");
+    const hasMetric = Object.prototype.hasOwnProperty.call(labelEntry, "metric");
+
+    if (!hasUS || !hasMetric) {
+      throw new Error(
+        `Invalid label entry: expected keys {us, metric}. Got keys: ${Object.keys(labelEntry).join(", ")}`
+      );
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(labelEntry, unitSystem)) {
+      throw new Error(
+        `Label entry missing unitSystem=${unitSystem}. Keys: ${Object.keys(labelEntry).join(", ")}`
+      );
+    }
+
+    const value = labelEntry[unitSystem];
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(
+        `Label for unitSystem=${unitSystem} must be a non-empty string. Got: ${String(value)}`
+      );
+    }
+
+    return value;
   }
-  return fallback;
+
+  throw new Error(`Invalid label entry type: ${typeof labelEntry}`);
 }
 
 function getUnitSystemForSummary() {
@@ -56,21 +86,17 @@ function getDepthDisplayLabel(unitSystem) {
 
   const inches = parseFloat(rawVal);
   if (!Number.isFinite(inches)) {
-    // Can't parse -> just return whatever UI currently shows
     return fallbackText;
   }
 
   if (unitSystem === "metric") {
     const cm = inches * 2.54;
-    // Match your style: integer cm when close, else 1 decimal
     const cmText = Math.abs(cm - Math.round(cm)) < 1e-9
       ? String(Math.round(cm))
       : cm.toFixed(1);
     return `${cmText} cm`;
   }
 
-  // US
-  // Keep it nice: "6 inches" not "6 in" unless you prefer "in"
   return `${inches} inches`;
 }
 
@@ -80,12 +106,17 @@ function getDepthDisplayLabel(unitSystem) {
  */
 function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
   const labelMap = window.labelNameMapping || {};
-  const prettyVar = resolveUnitLabel(labelMap[variable], unitSystem, variable);
+  let prettyVar = variable;
+
+  try {
+    prettyVar = resolveUnitLabelStrict(labelMap[variable], unitSystem, variable);
+  } catch (e) {
+    console.error("❌ buildSummaryTitle label resolution failed:", e);
+    // Fail loudly to catch mapping bugs early:
+    throw e;
+  }
 
   const depthLabel = getDepthDisplayLabel(unitSystem);
-
-  // Strip formatting
-  // Your dropdown seems to provide "1" for Strip 1 in the screenshot
   const stripPart = strip ? `, Strip ${strip}` : "";
 
   const granLabel = capitalizeFirst(granularity);
@@ -106,7 +137,14 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
   if (!isPlainObject(firstVal)) return stats;
 
   const labelMap = window.labelNameMapping || {};
-  const prettyVar = resolveUnitLabel(labelMap[variable], unitSystem, variable);
+  let prettyVar = variable;
+
+  try {
+    prettyVar = resolveUnitLabelStrict(labelMap[variable], unitSystem, variable);
+  } catch (e) {
+    console.error("❌ prettifyStatsKeys label resolution failed:", e);
+    throw e;
+  }
 
   const loggerMap = { T: "Top", M: "Mid", B: "Bottom" };
 
@@ -270,7 +308,6 @@ function stopLoadingDots(elId, finalText = "") {
 export async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: Updating summary statistics...");
 
-  // Status line (animated)
   startLoadingDots("summary-status", "Loading summary tables");
 
   const container = document.getElementById("summary-table-container");
@@ -280,11 +317,8 @@ export async function updateSummaryStatistics() {
     return;
   }
 
+  showLoadingOverlay(container, "Loading summary tables");
   container.innerHTML = "";
-  const loading = document.createElement("div");
-  loading.className = "text-muted";
-  loading.textContent = "Loading…";
-  container.appendChild(loading);
 
   try {
     const year = parseInt(getDropdownValue("summary-year"), 10);
@@ -296,13 +330,20 @@ export async function updateSummaryStatistics() {
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
 
-    console.log("🔍 Selected Summary Filters:", { year, variable, strip, granularity, depth, unitSystem });
+    console.log("🔍 Selected Summary Filters:", {
+      year,
+      variable,
+      strip,
+      granularity,
+      depth,
+      unitSystem,
+    });
 
     if (!Number.isFinite(year) || !variable || !granularity || !depth) {
-      loading.remove();
       const warn = document.createElement("div");
       warn.className = "alert alert-warning";
-      warn.textContent = "Please select Year, Variable, Time averages, and Depth before updating the summary.";
+      warn.textContent =
+        "Please select Year, Variable, Time averages, and Depth before updating the summary.";
       container.appendChild(warn);
 
       stopLoadingDots("summary-status", "Missing required selections.");
@@ -316,7 +357,6 @@ export async function updateSummaryStatistics() {
 
     console.log("✅ Received summary stats response:", data);
 
-    // Cache for downloads, debugging
     window.latestSummaryStats = {
       raw: data?.raw_statistics ?? null,
       ratio: data?.ratio_statistics ?? null,
@@ -324,10 +364,8 @@ export async function updateSummaryStatistics() {
       meta: { year, variable, strip, granularity, depth, unitSystem },
     };
 
-    // Compatibility with downloads.js (some versions read __lastSummaryData)
     window.__lastSummaryData = data;
 
-    // Title
     const titleEl = document.getElementById("summary-title");
     if (titleEl) {
       titleEl.textContent = buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
@@ -335,15 +373,17 @@ export async function updateSummaryStatistics() {
 
     container.innerHTML = "";
 
-    // 🌱 gseason: render accordion
     if (granularity === "gseason") {
-      container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
+      container.innerHTML = buildGseasonAccordionHTML(
+        data?.gseason_stats || {},
+        variable,
+        unitSystem
+      );
       console.log("✅ Seasonal accordion rendered.");
       stopLoadingDots("summary-status", "Summary updated.");
       return;
     }
 
-    // Non-gseason: raw + ratio
     const rawHeader = document.createElement("h5");
     rawHeader.textContent = "Raw Data";
     container.appendChild(rawHeader);
@@ -379,13 +419,15 @@ export async function updateSummaryStatistics() {
     container.innerHTML = "";
     const div = document.createElement("div");
     div.className = "alert alert-danger";
-    div.textContent = "Failed to load summary statistics. Check server logs and browser console.";
+    div.textContent =
+      "Failed to load summary statistics. Check server logs and browser console.";
     container.appendChild(div);
 
     stopLoadingDots("summary-status", "Failed to load summary.");
+  } finally {
+    hideLoadingOverlay(container);
   }
 }
-
 
 export function initSummaryTab() {
   const btn = document.getElementById("update-summary");

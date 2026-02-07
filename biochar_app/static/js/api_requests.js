@@ -9,99 +9,59 @@ function capitalizeFirst(str) {
 }
 
 /**
+ * Strict unit-aware label resolver.
+ *
+ * Accepts:
+ *  - string
+ *  - object like { us: "...", metric: "..." }
+ *
+ * Rules:
+ *  - if object form is used, BOTH keys must exist
+ *  - NO fallback to the other unit system
+ *  - throws on invalid shape so we catch bugs early
+ */
+export function resolveUnitLabelStrict(labelEntry, unitSystem, fallback = "") {
+  if (!labelEntry) {
+    throw new Error(
+      `Missing label entry for unitSystem=${unitSystem}. fallback=${String(fallback)}`
+    );
+  }
+
+  if (typeof labelEntry === "string") return labelEntry;
+
+  if (typeof labelEntry === "object") {
+    const hasUS = Object.prototype.hasOwnProperty.call(labelEntry, "us");
+    const hasMetric = Object.prototype.hasOwnProperty.call(labelEntry, "metric");
+
+    if (!hasUS || !hasMetric) {
+      throw new Error(
+        `Invalid label entry: expected keys {us, metric}. Got keys: ${Object.keys(labelEntry).join(", ")}`
+      );
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(labelEntry, unitSystem)) {
+      throw new Error(
+        `Label entry missing unitSystem=${unitSystem}. Keys: ${Object.keys(labelEntry).join(", ")}`
+      );
+    }
+
+    const value = labelEntry[unitSystem];
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(
+        `Label for unitSystem=${unitSystem} must be a non-empty string. Got: ${String(value)}`
+      );
+    }
+
+    return value;
+  }
+
+  throw new Error(`Invalid label entry type: ${typeof labelEntry}`);
+}
+
+/**
  * Update the Summary tab table + title for non-gseason and gseason cases.
  * (Used when you want to drive things explicitly from data already fetched.)
  */
-export function updateMainDataDisplay(data, options) {
-  console.log("📊 Updating Main Data Display...");
-
-  const year        = getDropdownValue("summary-year", true);
-  const variable    = getDropdownValue("summary-variable");
-  const strip       = getDropdownValue("summary-strip");
-  const granularity = getDropdownValue("summary-granularity");
-
-  const depthLabel =
-    document.getElementById("summary-depth")?.selectedOptions[0]?.textContent || "";
-
-  const unit = window.unitSystem || "us";
-
-  // Resolve variable label safely (supports string OR {us,metric} mapping)
-  const rawLabelEntry = options?.labelNameMapping?.[variable];
-  let variableLabel = variable;
-
-  if (rawLabelEntry && typeof rawLabelEntry === "object") {
-    variableLabel = rawLabelEntry[unit] || rawLabelEntry.us || rawLabelEntry.metric || variable;
-  } else if (typeof rawLabelEntry === "string") {
-    variableLabel = rawLabelEntry;
-  }
-
-  // Title
-  const stripPart = strip ? `, Strip ${strip}` : "";
-  const mainTitle =
-    data?.title ||
-    `${capitalizeFirst(granularity)} Summary for ${variableLabel}${stripPart}, ${depthLabel}, ${year}`;
-
-  console.log("✅ variable label:", variableLabel);
-  console.log("✅ main title:", mainTitle);
-
-  const titleEl = document.getElementById("summary-title");
-  if (titleEl) titleEl.textContent = mainTitle;
-
-  const isTempVariable = ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"].includes(variable);
-
-  // 🌱 Growing-season layout uses the accordion renderer
-  if (granularity === "gseason") {
-    console.log("🌱 Detected growing season granularity. Building accordion layout…");
-
-    const seasonStats = data?.gseason_stats || {};
-    const accordionHTML = generateSeasonalSummaryAccordion(seasonStats, variable);
-
-    const container = document.getElementById("summary-table-container");
-    if (container) container.innerHTML = accordionHTML;
-    return;
-  }
-
-  // 📅 Default (non-gseason) layout
-  const container = document.getElementById("summary-table-container");
-  if (!container) return;
-
-  // IMPORTANT: If you're using innerHTML, all tables must be HTML strings
-  const rawTableHTML = generateSummaryTable(data?.raw_statistics, variable, { returnType: "html" });
-
-  const s1s2 = {};
-  const s3s4 = {};
-  for (const [key, value] of Object.entries(data?.ratio_statistics || {})) {
-    if (key.includes("S1_S2")) s1s2[key] = value;
-    else if (key.includes("S3_S4")) s3s4[key] = value;
-  }
-
-  const s1s2HTML =
-    Object.keys(s1s2).length > 0
-      ? generateSummaryTable(s1s2, variable, { returnType: "html" })
-      : isTempVariable
-        ? `<p class="text-muted">Soil temperature ratios are not shown because they are not meaningful.</p>`
-        : `<p class="text-danger">No summary statistics available.</p>`;
-
-  const s3s4HTML =
-    Object.keys(s3s4).length > 0
-      ? generateSummaryTable(s3s4, variable, { returnType: "html" })
-      : isTempVariable
-        ? `<p class="text-muted">Soil temperature ratios are not shown because they are not meaningful.</p>`
-        : `<p class="text-danger">No summary statistics available.</p>`;
-
-  const ratioHTML = `
-    <h5 class="mt-4">S1/S2 Ratio (Top/Mid/Bottom Logger)</h5>
-    ${s1s2HTML}
-    <h5 class="mt-4">S3/S4 Ratio (Top/Mid/Bottom Logger)</h5>
-    ${s3s4HTML}
-  `;
-
-  container.innerHTML = `
-    <h5>Raw Values (Top/Mid/Bottom Logger)</h5>
-    ${rawTableHTML}
-    ${ratioHTML}
-  `;
-}
 
 /**
  * Helper: format the accordion header title
@@ -135,34 +95,25 @@ export function formatGseasonLabel(code, spec, prettyVarWithContext) {
 
 /**
  * Build the seasonal (gseason) accordion HTML from pre-grouped stats.
- *
- * @param {Object} stats
- *   Object keyed by season code (Q1_Winter, …) → {
- *       raw_statistics: { … },
- *       ratio_statistics: { … }
- *   }
- * @param {string} variable
- *   Variable name (VWC, EC, T, SWC, …)
  */
 export function generateSeasonalSummaryAccordion(stats, variable) {
   const periods  = window.gseasonPeriods   || {};
   const labelMap = window.labelNameMapping || {};
   const unit     = window.unitSystem || "us";
 
-  // Detect Bootstrap major version by presence of window.bootstrap (v5) vs jQuery collapse (v4)
   const isBs5 = typeof window.bootstrap !== "undefined" && typeof window.bootstrap.Collapse !== "undefined";
   const isBs4 = !isBs5 && typeof window.$ !== "undefined" && typeof window.$.fn !== "undefined" && typeof window.$.fn.collapse !== "undefined";
 
-  // Resolve variable label (unit-aware)
+  // Resolve variable label strictly
   const rawEntry = labelMap[variable];
   let prettyVar = variable;
-  if (rawEntry && typeof rawEntry === "object") {
-    prettyVar = rawEntry[unit] || rawEntry.us || rawEntry.metric || variable;
-  } else if (typeof rawEntry === "string") {
-    prettyVar = rawEntry;
+  try {
+    prettyVar = resolveUnitLabelStrict(rawEntry, unit, variable);
+  } catch (e) {
+    console.error("❌ generateSeasonalSummaryAccordion label resolution failed:", e);
+    throw e;
   }
 
-  // Add depth + year context for the seasonal headers
   const yearEl  = document.getElementById("summary-year");
   const depthEl = document.getElementById("summary-depth");
 
@@ -197,7 +148,6 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
       ? generateSummaryTable(raw, prettyVar, { returnType: "html" })
       : `<p class="text-muted mb-0">No raw data available for this period.</p>`;
 
-    // Split ratio stats into S1/S2 vs S3/S4
     const s1s2 = {};
     const s3s4 = {};
     for (const [trace, val] of Object.entries(ratio)) {
@@ -217,7 +167,6 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
 
     const isFirst = idx === 0;
 
-    // Bootstrap attribute compatibility
     const toggleAttr = isBs5 ? "data-bs-toggle" : "data-toggle";
     const targetAttr = isBs5 ? "data-bs-target" : "data-target";
 
@@ -259,7 +208,6 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
 
   html += "</div>";
 
-  // If neither BS4 nor BS5 is detected, warn visibly
   if (!isBs5 && !isBs4) {
     html =
       `<div class="alert alert-warning">
@@ -269,13 +217,12 @@ export function generateSeasonalSummaryAccordion(stats, variable) {
 
   return html;
 }
+
 // api_requests.js
 export async function fetchJson(url, init = {}) {
-  // Normalize/merge headers (case-insensitive safe)
   const headers = new Headers(init.headers || {});
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-  // If we're sending a body and caller didn't specify content-type, default to JSON
   const hasBody =
     init.body !== undefined && init.body !== null && String(init.body).length > 0;
 
@@ -285,13 +232,11 @@ export async function fetchJson(url, init = {}) {
 
   const res = await fetch(url, { ...init, headers });
 
-  // Handle non-OK with readable error
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`${url} failed: ${res.status} ${res.statusText} — ${txt}`);
   }
 
-  // Some endpoints might return empty body (204) — avoid JSON parse blowups
   const contentType = res.headers.get("Content-Type") || "";
   if (!contentType.includes("application/json")) {
     const txt = await res.text();
@@ -303,13 +248,12 @@ export async function fetchJson(url, init = {}) {
 
 export function generateSummaryTable(stats, variable, opts = {}) {
   const {
-    decimals = null,                // number | null
+    decimals = null,
     rowHeader = "Row",
     emptyMessage = "No summary statistics available.",
-    returnType = "node",             // "node" | "html"
+    returnType = "node",
   } = opts;
 
-  // Always build into a wrapper so return is predictable
   const wrapper = document.createElement("div");
 
   const finish = () => {
@@ -319,9 +263,6 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     return wrapper;
   };
 
-  // ------------------------------------------------------------------
-  // Guards
-  // ------------------------------------------------------------------
   if (!stats || typeof stats !== "object") {
     wrapper.className = "alert alert-warning";
     wrapper.textContent = emptyMessage;
@@ -333,7 +274,7 @@ export function generateSummaryTable(stats, variable, opts = {}) {
 
   const displayValue = (v) => {
     if (v === null || v === undefined) return "";
-    if (typeof v === "string") return v;        // ← preserves "ALL PREY"
+    if (typeof v === "string") return v;
     if (typeof v === "number") {
       if (!Number.isFinite(v)) return "";
       if (typeof decimals === "number") return v.toFixed(decimals);
@@ -342,9 +283,6 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     return String(v);
   };
 
-  // ------------------------------------------------------------------
-  // CASE 1: Array of objects
-  // ------------------------------------------------------------------
   if (Array.isArray(stats)) {
     if (stats.length === 0) {
       wrapper.className = "alert alert-warning";
@@ -390,10 +328,6 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     return finish();
   }
 
-  // ------------------------------------------------------------------
-  // CASE 2: Standard table payload
-  // { periods, rows, rowLabels?, data }
-  // ------------------------------------------------------------------
   if (
     Array.isArray(stats.periods) &&
     Array.isArray(stats.rows) &&
@@ -460,10 +394,6 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     return finish();
   }
 
-  // ------------------------------------------------------------------
-  // CASE 3: Summary dict
-  // { "STRIP 1": {min, mean, max, std, n}, ... }
-  // ------------------------------------------------------------------
   const rowKeys = Object.keys(stats);
   if (rowKeys.length === 0) {
     wrapper.className = "alert alert-warning";

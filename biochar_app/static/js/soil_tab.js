@@ -6,6 +6,7 @@
 import { makeSetSectionTitle } from "./tab_ui.js";
 import { normalizePayload, renderOneSetFromPayload, safeStr } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 async function renderSoilTab({
   containerId,
@@ -22,17 +23,14 @@ async function renderSoilTab({
   // Prevent double-render if the user clicks tabs repeatedly
   if (container.dataset.rendered === "true") return;
 
-  container.innerHTML = "";
-
-  // Loading indicator
-  const loading = document.createElement("div");
-  loading.className = "text-muted";
-  loading.textContent = "Loading…";
-  container.appendChild(loading);
+  // ✅ Use the shared animated overlay (prevents static “Loading…” text)
+  // NOTE: keep this import at the top of soil_tab.js:
+  // import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
+  showLoadingOverlay(container, "Loading");
+  container.innerHTML = ""; // safe: overlay is appended after we call showLoadingOverlay()
 
   try {
     const rawPayload = await fetchJson(endpoint);
-    loading.remove();
 
     const payload = normalizePayload(rawPayload);
 
@@ -73,12 +71,14 @@ async function renderSoilTab({
     container.dataset.rendered = "true";
   } catch (err) {
     console.error(`Failed to render ${containerId}:`, err);
-    loading.remove();
 
     const div = document.createElement("div");
     div.className = "alert alert-danger";
     div.textContent = "Failed to load tables. Check server logs.";
     container.appendChild(div);
+  } finally {
+    // ✅ Always clear overlay
+    hideLoadingOverlay(container);
   }
 }
 

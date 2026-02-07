@@ -2,7 +2,7 @@
 import { fetchJson } from "./api_requests.js";
 import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { makeSetSectionTitle } from "./tab_ui.js";
-
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 /**
  * Biomass (Field Samples) tab renderer.
  *
