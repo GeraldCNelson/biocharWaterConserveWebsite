@@ -432,6 +432,7 @@ table {
 /* Fine-tune markdown container padding */
 .markdown-container {
     padding: 10px 15px;
+    position: relative;   /* allows loading overlay to anchor */
 }
 
 /* Buttons */
