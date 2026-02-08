@@ -112,6 +112,7 @@ WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 # User confirmed: biochar-data-master.xlsx is in data-raw
 BIOCHAR_MASTER_XLSX = "biochar_app/data-raw/biochar-data-master.xlsx"
+_LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -776,11 +777,20 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         return obj
 
     # ------------------------------------------------------------------
-    # If you want non-gseason stats computed from 15min (recommended),
-    # compute from 15min slice (your prior Flask code did this).
+    # SPEEDUP: cache the loaded logger dataframe per (year, granularity)
+    # NOTE: _LOADED_LOGGER_CACHE must be defined at module scope in routes.py:
+    #   _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
     # ------------------------------------------------------------------
-    df_15min = load_logger_year(year, "15min")
-    if df_15min is None or df_15min.empty:
+    cache_key = (year, "15min")
+
+    df_15min = _LOADED_LOGGER_CACHE.get(cache_key)
+    if df_15min is None:
+        df_15min = load_logger_year(year, "15min")
+        # Only cache successful loads (avoid caching None)
+        if df_15min is not None:
+            _LOADED_LOGGER_CACHE[cache_key] = df_15min
+
+    if df_15min is None or getattr(df_15min, "empty", True):
         return JSONResponse(
             {
                 "year": year,
@@ -795,9 +805,16 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             }
         )
 
+    # ------------------------------------------------------------------
+    # IMPORTANT: never mutate the cached dataframe in-place.
+    # If we need a filtered version for this request, create a copy/slice.
+    # ------------------------------------------------------------------
+    df_req = df_15min
+
     # Filter by date range if provided
-    if "timestamp" in df_15min.columns and start and end:
-        df_15min = df_15min[(df_15min["timestamp"] >= start) & (df_15min["timestamp"] <= end)]
+    if "timestamp" in df_req.columns and start and end:
+        # (Optional) ensure comparable types; keep your current string-based filtering
+        df_req = df_req[(df_req["timestamp"] >= start) & (df_req["timestamp"] <= end)]
 
     # ---- gseason special case ----
     if granularity == "gseason":
@@ -814,11 +831,15 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             use_ratios=False,
         )
 
-        # If your frontend expects the nested gseason structure, return it.
-        # If you want: compute from 15min into seasonal windows, do it here.
         flat = get_flat_gseason_summary(df_gs, variable=variable, strip=strip, depth=depth)
 
-        title = f"{granularity_name_mapping.get('gseason','Seasonal')} Summary for {label_name_mapping.get(variable, variable)}, {strip_name_mapping.get(strip, strip)}, {sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, {year}"
+        title = (
+            f"{granularity_name_mapping.get('gseason','Seasonal')} Summary for "
+            f"{label_name_mapping.get(variable, variable)}, "
+            f"{strip_name_mapping.get(strip, strip)}, "
+            f"{sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, "
+            f"{year}"
+        )
 
         return JSONResponse(
             {
@@ -832,14 +853,20 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             }
         )
 
-    # ---- non-gseason: compute stats from 15min ----
-    stats_raw, stats_ratio = compute_summary_statistics(df_15min, variable, strip, str(depth))
+    # ---- non-gseason: compute stats from (filtered) 15min ----
+    stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, str(depth))
 
     # match your old behavior: no ratios for temperature-ish variables
     if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
         stats_ratio = {}
 
-    title = f"{granularity_name_mapping.get(granularity, granularity)} Summary for {label_name_mapping.get(variable, variable)}, {strip_name_mapping.get(strip, strip)}, {sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, {year}"
+    title = (
+        f"{granularity_name_mapping.get(granularity, granularity)} Summary for "
+        f"{label_name_mapping.get(variable, variable)}, "
+        f"{strip_name_mapping.get(strip, strip)}, "
+        f"{sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, "
+        f"{year}"
+    )
 
     return JSONResponse(
         {
