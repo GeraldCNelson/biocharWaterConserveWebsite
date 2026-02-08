@@ -399,7 +399,6 @@ export async function updateSummaryStatistics() {
 
 export function initSummaryTab() {
   const btn = document.getElementById("update-summary");
-
   if (!btn) {
     console.warn("⚠️ #update-summary button not found; summary tab not wired.");
     return;
@@ -409,6 +408,17 @@ export function initSummaryTab() {
     e.preventDefault();
     updateSummaryStatistics();
   });
+
+  // Auto-load when the Summary tab is opened the first time (non-blocking)
+  const summaryTab = document.getElementById("summary-tab"); // adjust if your id differs
+  const container = document.getElementById("summary-table-container");
+  if (summaryTab && container && container.dataset.autoloaded !== "true") {
+    summaryTab.addEventListener("shown.bs.tab", () => {
+      if (container.dataset.autoloaded === "true") return;
+      container.dataset.autoloaded = "true";
+      updateSummaryStatistics(); // no await
+    });
+  }
 
   console.debug("✅ Summary tab wired (update button)");
 }
