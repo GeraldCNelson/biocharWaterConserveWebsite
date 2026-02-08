@@ -402,16 +402,24 @@ function normalizeResolution(raw) {
     "15 min": "15min",
     "15m": "15min",
     "15 minutes": "15min",
+
     "hour": "hourly",
     "hours": "hourly",
+    "hourly": "hourly",
+
     "day": "daily",
     "days": "daily",
+    "daily": "daily",
+
     "month": "monthly",
     "months": "monthly",
+    "monthly": "monthly",
+
     "g-season": "gseason",
     "g season": "gseason",
     "g_season": "gseason",
-  };
+    "gseason": "gseason",
+};
   if (map[g]) g = map[g];
 
   return g;

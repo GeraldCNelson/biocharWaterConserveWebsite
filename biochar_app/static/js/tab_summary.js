@@ -336,7 +336,7 @@ export async function updateSummaryStatistics() {
 
     const titleEl = document.getElementById("summary-title");
     if (titleEl) {
-      titleEl.textContent = buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
+      titleEl.textContent = data?.title || buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
     }
 
     container.innerHTML = "";

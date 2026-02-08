@@ -751,11 +751,10 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     Expected keys:
       year, variable, strip, granularity, depth
-      startDate, endDate (optional but normally provided)
+      startDate, endDate (optional)
       unitSystem (optional)
       periods (optional when granularity == 'gseason')
     """
-    # --- Validate required keys ---
     required = ["year", "variable", "strip", "granularity", "depth"]
     missing = [k for k in required if payload.get(k) is None]
     if missing:
@@ -765,8 +764,13 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     variable = str(payload["variable"])
     strip = str(payload["strip"])
     granularity = str(payload["granularity"]).lower()
-    depth = int(payload["depth"])
-    unit_system = str(payload.get("unitSystem", "us"))
+
+    # Depth is a CODE: "1"|"2"|"3"
+    depth_code = str(payload["depth"]).strip()
+
+    unit_system = str(payload.get("unitSystem", "us")).strip().lower()
+    if unit_system not in ("us", "metric"):
+        unit_system = "us"
 
     start = payload.get("startDate")
     end = payload.get("endDate")
@@ -781,27 +785,44 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         return obj
 
     # ------------------------------------------------------------------
-    # SPEEDUP STRATEGY
-    # - For non-gseason summary statistics, use HOURLY instead of 15min.
-    # - Keep gseason path unchanged (still uses 15min inside load_gseason_df).
-    #
-    # You can later decide to move gseason to hourly too, but do it separately.
+    # Title: ALWAYS compute from mappings (don’t depend on cache path)
     # ------------------------------------------------------------------
-    source_granularity = "15min" if granularity == "gseason" else "hourly"
+    depth_label = (
+        sensor_depth_mapping.get(depth_code, {}).get(unit_system)
+        or sensor_depth_mapping.get(depth_code, {}).get("us")
+        or sensor_depth_mapping.get(depth_code, {}).get("metric")
+        or f"Depth {depth_code}"
+    )
+
+    label_entry = label_name_mapping.get(variable, variable)
+
+    # Resolve unit-aware labels (string or {us, metric})
+    if isinstance(label_entry, dict):
+        pretty_var = label_entry.get(unit_system) or variable
+    else:
+        pretty_var = str(label_entry)
+
+    title = (
+        f"{granularity_name_mapping.get(granularity, granularity)} Summary for "
+        f"{pretty_var}, "
+        f"{strip_name_mapping.get(strip, strip)}, "
+        f"{depth_label}, "
+        f"{year}"
+    )
 
     # ------------------------------------------------------------------
-    # Cache the loaded logger dataframe per (year, source_granularity)
-    # NOTE: _LOADED_LOGGER_CACHE must be defined at module scope:
-    #   _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
+    # SPEEDUP:
+    # - non-gseason: use hourly
+    # - gseason: keep 15min (your current load_gseason_df uses 15min)
     # ------------------------------------------------------------------
+    source_granularity = "15min" if granularity == "gseason" else "hourly"
     cache_key = (year, source_granularity)
 
     df_base = _LOADED_LOGGER_CACHE.get(cache_key)
     if df_base is None:
         df_base = load_logger_year(year, source_granularity)
-        # Only cache successful loads
-        if df_base is not None:
-            # Make sure timestamp is datetime once, up front (safe to mutate BEFORE caching)
+        if df_base is not None and not getattr(df_base, "empty", True):
+            # normalize timestamp once before caching
             if "timestamp" in df_base.columns:
                 df_base = df_base.copy()
                 df_base["timestamp"] = pd.to_datetime(df_base["timestamp"], errors="coerce")
@@ -814,30 +835,25 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
                 "variable": variable,
                 "strip": strip,
                 "granularity": granularity,
-                "depth": str(depth),
-                "title": "",
+                "depth": depth_code,
+                "title": title,
                 "raw_statistics": {},
                 "ratio_statistics": {},
                 "gseason_stats": {},
             }
         )
 
-    # ------------------------------------------------------------------
-    # IMPORTANT: never mutate the cached dataframe in-place.
-    # Work on a request-specific slice.
-    # ------------------------------------------------------------------
+    # do not mutate cached df
     df_req = df_base
 
     # Filter by date range if provided
     if "timestamp" in df_req.columns and start and end:
         start_dt = pd.to_datetime(start, errors="coerce")
         end_dt = pd.to_datetime(end, errors="coerce")
-
-        # Only filter if both parsed cleanly
         if pd.notna(start_dt) and pd.notna(end_dt):
             df_req = df_req[(df_req["timestamp"] >= start_dt) & (df_req["timestamp"] <= end_dt)]
 
-    # ---- gseason special case ----
+    # ---- gseason ----
     if granularity == "gseason":
         periods_raw = payload.get("periods") or []
         periods_list = periods_to_list_of_dicts(periods_raw)
@@ -849,15 +865,8 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             use_ratios=False,
         )
 
-        flat = get_flat_gseason_summary(df_gs, variable=variable, strip=strip, depth=depth)
-
-        title = (
-            f"{granularity_name_mapping.get('gseason','Seasonal')} Summary for "
-            f"{label_name_mapping.get(variable, variable)}, "
-            f"{strip_name_mapping.get(strip, strip)}, "
-            f"{sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, "
-            f"{year}"
-        )
+        # IMPORTANT: keep using depth_code ("1"/"2"/"3") to match your column naming
+        flat = get_flat_gseason_summary(df_gs, variable=variable, strip=strip, depth=depth_code)
 
         return JSONResponse(
             {
@@ -865,26 +874,17 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
                 "variable": variable,
                 "strip": strip,
                 "granularity": granularity,
-                "depth": str(depth),
+                "depth": depth_code,
                 "title": title,
                 "gseason_stats": _clean(flat),
             }
         )
 
-    # ---- non-gseason: compute stats from HOURLY (filtered) ----
-    stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, str(depth))
+    # ---- non-gseason ----
+    stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, depth_code)
 
-    # match your old behavior: no ratios for temperature-ish variables
     if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
         stats_ratio = {}
-
-    title = (
-        f"{granularity_name_mapping.get(granularity, granularity)} Summary for "
-        f"{label_name_mapping.get(variable, variable)}, "
-        f"{strip_name_mapping.get(strip, strip)}, "
-        f"{sensor_depth_mapping.get(str(depth), {}).get('us', f'{depth} in')}, "
-        f"{year}"
-    )
 
     return JSONResponse(
         {
@@ -892,7 +892,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             "variable": variable,
             "strip": strip,
             "granularity": granularity,
-            "depth": str(depth),
+            "depth": depth_code,
             "title": title,
             "raw_statistics": _clean(stats_raw),
             "ratio_statistics": _clean(stats_ratio),
