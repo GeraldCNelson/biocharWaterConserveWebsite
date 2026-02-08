@@ -5,7 +5,7 @@ import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./nir_tab.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab, updateSummaryStatistics } from "./tab_summary.js";
+import { initSummaryTab } from "./tab_summary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -34,8 +34,6 @@ import {
   populateAllDropdowns,
   initializeMainDatepickers,
   updateDepthLabels,
-  // keep this import only if something else still uses it
-  updateStartAndEndDatesFromYear,
   // ✅ date-range helpers:
   applyDateRangeFromDefaults,
   wireMainDateRangeListeners,
@@ -207,9 +205,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderFn: renderBiomassFieldTables,
       label: "Biomass (Field Samples)",
     });
-
-    // Kick off the summary statistics table (async)
-    await updateSummaryStatistics();
 
     // ----------------------------------------------------
     // Load markdown snippets (from backend mapping)
