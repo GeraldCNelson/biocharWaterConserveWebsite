@@ -16,6 +16,7 @@ from io import BytesIO
 import zipfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
+from time import perf_counter
 
 import pandas as pd
 from fastapi import APIRouter, Request, HTTPException, Query, Body
@@ -628,7 +629,10 @@ async def api_plot_raw(req: PlotRequest):
         )
         return JSONResponse(fig)
 
+    t0 = perf_counter()
     df = load_logger_year(year, gran)
+    logger.info("⏱ load_logger_year(15min) %.3fs", perf_counter() - t0)
+
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
@@ -777,20 +781,33 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         return obj
 
     # ------------------------------------------------------------------
-    # SPEEDUP: cache the loaded logger dataframe per (year, granularity)
-    # NOTE: _LOADED_LOGGER_CACHE must be defined at module scope in routes.py:
+    # SPEEDUP STRATEGY
+    # - For non-gseason summary statistics, use HOURLY instead of 15min.
+    # - Keep gseason path unchanged (still uses 15min inside load_gseason_df).
+    #
+    # You can later decide to move gseason to hourly too, but do it separately.
+    # ------------------------------------------------------------------
+    source_granularity = "15min" if granularity == "gseason" else "hourly"
+
+    # ------------------------------------------------------------------
+    # Cache the loaded logger dataframe per (year, source_granularity)
+    # NOTE: _LOADED_LOGGER_CACHE must be defined at module scope:
     #   _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
     # ------------------------------------------------------------------
-    cache_key = (year, "15min")
+    cache_key = (year, source_granularity)
 
-    df_15min = _LOADED_LOGGER_CACHE.get(cache_key)
-    if df_15min is None:
-        df_15min = load_logger_year(year, "15min")
-        # Only cache successful loads (avoid caching None)
-        if df_15min is not None:
-            _LOADED_LOGGER_CACHE[cache_key] = df_15min
+    df_base = _LOADED_LOGGER_CACHE.get(cache_key)
+    if df_base is None:
+        df_base = load_logger_year(year, source_granularity)
+        # Only cache successful loads
+        if df_base is not None:
+            # Make sure timestamp is datetime once, up front (safe to mutate BEFORE caching)
+            if "timestamp" in df_base.columns:
+                df_base = df_base.copy()
+                df_base["timestamp"] = pd.to_datetime(df_base["timestamp"], errors="coerce")
+            _LOADED_LOGGER_CACHE[cache_key] = df_base
 
-    if df_15min is None or getattr(df_15min, "empty", True):
+    if df_base is None or getattr(df_base, "empty", True):
         return JSONResponse(
             {
                 "year": year,
@@ -807,20 +824,21 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     # ------------------------------------------------------------------
     # IMPORTANT: never mutate the cached dataframe in-place.
-    # If we need a filtered version for this request, create a copy/slice.
+    # Work on a request-specific slice.
     # ------------------------------------------------------------------
-    df_req = df_15min
+    df_req = df_base
 
     # Filter by date range if provided
     if "timestamp" in df_req.columns and start and end:
-        # (Optional) ensure comparable types; keep your current string-based filtering
-        df_req = df_req[(df_req["timestamp"] >= start) & (df_req["timestamp"] <= end)]
+        start_dt = pd.to_datetime(start, errors="coerce")
+        end_dt = pd.to_datetime(end, errors="coerce")
+
+        # Only filter if both parsed cleanly
+        if pd.notna(start_dt) and pd.notna(end_dt):
+            df_req = df_req[(df_req["timestamp"] >= start_dt) & (df_req["timestamp"] <= end_dt)]
 
     # ---- gseason special case ----
     if granularity == "gseason":
-        # Your current codebase already has gseason helpers imported:
-        # - load_gseason_df
-        # - periods_to_list_of_dicts
         periods_raw = payload.get("periods") or []
         periods_list = periods_to_list_of_dicts(periods_raw)
 
@@ -853,7 +871,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             }
         )
 
-    # ---- non-gseason: compute stats from (filtered) 15min ----
+    # ---- non-gseason: compute stats from HOURLY (filtered) ----
     stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, str(depth))
 
     # match your old behavior: no ratios for temperature-ish variables
