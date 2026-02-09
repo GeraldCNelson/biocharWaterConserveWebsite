@@ -25,14 +25,30 @@ export function safeStr(v, fallback = "") {
 // Normalization
 // ------------------------------------------------------------
 
-function normalizeOneSet(s, idx = 0) {
+function normalizeOneSet(s, idx = 0, totalSets = null) {
   const set = isObject(s) ? s : {};
 
-  // Accept either "label" or "title" as the display label
-  const label =
+  // Pull raw label from backend (do NOT mutate it yet)
+  const rawLabel =
     safeStr(set.label, "") ||
     safeStr(set.title, "") ||
-    `Set ${idx + 1}`;
+    "";
+
+  const isAlreadyNumbered = /^\s*set\s*\d+\s*:/i.test(rawLabel);
+
+  // Decide whether to auto-number:
+  // - If backend already numbered → keep it
+  // - If multiple sets exist → add "Set X:"
+  // - If only one set → leave unnumbered
+  const shouldNumber =
+    !isAlreadyNumbered &&
+    (totalSets === null || totalSets > 1);
+
+  const label = rawLabel
+    ? (isAlreadyNumbered
+        ? rawLabel
+        : (shouldNumber ? `Set ${idx + 1}: ${rawLabel}` : rawLabel))
+    : `Set ${idx + 1}`;
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
 
@@ -48,12 +64,19 @@ function normalizeOneSet(s, idx = 0) {
     }
 
     if (isObject(x)) {
-      const k = safeStr(x.key, "") || safeStr(x.id, "") || safeStr(x.name, "");
-      const lbl = safeStr(x.label, "") || safeStr(x.title, "") || k;
+      const k =
+        safeStr(x.key, "") ||
+        safeStr(x.id, "") ||
+        safeStr(x.name, "");
+
+      const lbl =
+        safeStr(x.label, "") ||
+        safeStr(x.title, "") ||
+        k;
 
       if (!k && !lbl) return null;
 
-      // Preserve any extra fields (e.g., note, unit, etc.)
+      // Preserve any extra fields (note, unit, etc.)
       return { ...x, key: k || lbl, label: lbl || k };
     }
 

@@ -183,14 +183,14 @@ SOILBIO_VARIABLE_GROUPS = [
                 key="predator_prey",
                 label="Predator : Prey",
                 candidates=("predator_prey", "predator_pre", "predator_prey_ratio"),
-                note="Predator-to-prey ratio. May be numeric for some events; may be categorical text (e.g., 'ALL PREY') for others.",
+                note="Predator-to-prey ratio. This ratio is also expressed as protozoa to bacteria. Protozoa feed on bacteria which helps release nutrients, especially nitrogen. A higher ratio indicates an active community where base level nutrients are sufficient to support higher trophic levels or predators. However, this ratio will always be a relatively low number because the prey will greatly outnumber the predators.",
             ),
             VariableSpec(
                 key="gram_pos_gram",
                 label="Gram+ : Gram−",
                 # ✅ your CSV has gram_pos_gram
                 candidates=("gram_pos_gram", "gram_pos_neg", "gram_pos_gram_neg", "gram_pos_to_neg"),
-                note="Ratio of Gram+ to Gram− bacterial biomass (unitless).",
+                note="Ratio of Gram+ to Gram− bacterial biomass (unitless). Gram (+) bacteria typically dominate early in the growing season and/or following a fallow period. They also survive better under certain environmental conditions or stressors such as drought or extreme temperatures due to their ability to form spores. Therefore, it is common to see higher values when the community is coming out of dormancy or is stressed. These values will typically begin to approach those of a more balanced bacterial community as the soil conditions become more favorable throughout the growing season. A gram (-) dominated soil may be due to anaerobic conditions or other stressors such as pesticide application or heavy metal contamination.",
             ),
         ],
     },

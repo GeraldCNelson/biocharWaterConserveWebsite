@@ -203,17 +203,19 @@ SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
 def build_soilchem_table(clean_csv: Path, min_year: int = 2023) -> Dict[str, Any]:
     sets: List[Dict[str, Any]] = []
 
-    for grp in SOILCHEM_VARIABLE_GROUPS:
+    for i, grp in enumerate(SOILCHEM_VARIABLE_GROUPS, start=1):
         payload = build_soil_table_payload(
             clean_csv=clean_csv,
             variables=grp["variables"],
             min_year=min_year,
             include_ratio_rows=True,
         )
+        label = grp["group_label"]
         sets.append(
             {
                 "key": grp["group_key"],
-                "label": grp["group_label"],
+                "label": label,  # keep raw label
+                "display_label": f"Set {i}: {label}",  # NEW: UI-friendly
                 "notes": grp.get("notes", ""),
                 **payload,
             }
