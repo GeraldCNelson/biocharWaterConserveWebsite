@@ -62,7 +62,7 @@ biochar_app/data-raw/
 biochar_app/data_temp/
 
 # Ignore processed data by default…
-biochar_app/data-processed/*
+biochar_app/data-processed/**
 
 # Parquet & downloads
 ############################
@@ -87,12 +87,13 @@ package-lock.json
 *.docx
 *.pdf
 
-# …but explicitly track authoritative lab tests
+# …allow authoritative lab tests
 # --- Authoritative lab tests ---
+!biochar_app/data-processed/
 !biochar_app/data-processed/lab-tests/
 !biochar_app/data-processed/lab-tests/**
 
 # --- Authoritative biomass field CSV ---
-!biochar_app/data-processed/biomass-field/
-!biochar_app/data-processed/biomass-field/csv-files/
-!biochar_app/data-processed/biomass-field/csv-files/field_biomass_dry_g_wide_clean.csv
+!biochar_app/data-processed/lab-tests/biomass-field/
+!biochar_app/data-processed/lab-tests/biomass-field/csv-files/
+!biochar_app/data-processed/lab-tests/biomass-field/csv-files/field_biomass_dry_g_wide_clean.csv
