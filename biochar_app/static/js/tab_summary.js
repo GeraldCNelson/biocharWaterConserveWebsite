@@ -348,7 +348,7 @@ export async function updateSummaryStatistics() {
         unitSystem
       );
       console.log("✅ Seasonal accordion rendered.");
-      stopLoadingDots("summary-status", "Summary updated.");
+      stopLoadingDots("summary-status", "");
       return;
     }
 
@@ -380,7 +380,7 @@ export async function updateSummaryStatistics() {
     }
 
     console.log("✅ Summary statistics tables updated.");
-    stopLoadingDots("summary-status", "Summary updated.");
+    stopLoadingDots("summary-status", "");
   } catch (error) {
     console.error("❌ Unexpected error in updateSummaryStatistics:", error);
 

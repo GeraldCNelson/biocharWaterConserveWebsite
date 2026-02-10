@@ -71,7 +71,7 @@ export function startLoadingDots(elId, baseText = "Loading") {
   const el = document.getElementById(elId);
   if (!el) return null;
 
-  stopLoadingDots(elId);
+  stopLoadingDots("");
 
   let dots = 0;
   el.textContent = baseText;
@@ -96,7 +96,8 @@ export function stopLoadingDots(elId, finalText = "") {
     delete el.dataset.loadingTimer;
   }
 
-  if (finalText) el.textContent = finalText;
+  // Always clear or set text
+  el.textContent = finalText;
 }
 
 /* =========================================================

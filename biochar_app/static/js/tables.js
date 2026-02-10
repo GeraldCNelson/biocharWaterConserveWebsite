@@ -46,8 +46,8 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
   const label = rawLabel
     ? (isAlreadyNumbered
-        ? rawLabel
-        : (shouldNumber ? `Set ${idx + 1}: ${rawLabel}` : rawLabel))
+      ? rawLabel
+      : (shouldNumber ? `Set ${idx + 1}: ${rawLabel}` : rawLabel))
     : `Set ${idx + 1}`;
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
@@ -76,7 +76,7 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
       if (!k && !lbl) return null;
 
-      // Preserve any extra fields (note, unit, etc.)
+      // Preserve any extra fields (e.g., note, unit, etc.)
       return { ...x, key: k || lbl, label: lbl || k };
     }
 
@@ -98,7 +98,7 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
   const data = isObject(set.data) ? set.data : {};
 
   // IMPORTANT: support both "note" and "notes" from backend
-  const note = safeStr(set.note, "") || safeStr(set.notes, "");
+  const note = safeStr(set.note, "") || safeStr(set.note, "");
 
   return {
     key,
@@ -116,16 +116,33 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
  * normalizePayload supports BOTH:
  *  A) Standard multi-set: { title, sets: [ {key,label,periods,variables,rows,rowLabels,data,note/notes?}, ... ] }
  *  B) Legacy single-set:  { title, periods, variables, rows, rowLabels, data, note/notes? }
+ *  C) Legacy wrapper:     { title, set: { ...single set... } }
  */
 export function normalizePayload(raw) {
   if (!isObject(raw)) return { title: "", sets: [] };
 
+  const title = safeStr(raw.title, "") || safeStr(raw.label, "");
+
   // Multi-set (preferred)
   if (Array.isArray(raw.sets)) {
     return {
-      title: safeStr(raw.title, ""),
-      sets: raw.sets.map((s, i) => normalizeOneSet(s, i)),
+      title,
+      sets: raw.sets.map((s, i) => normalizeOneSet(s, i, raw.sets.length)),
     };
+  }
+
+  // Legacy wrapper: { set: { ... } }
+  if (isObject(raw.set)) {
+    const set = normalizeOneSet(
+      {
+        ...raw.set,
+        // If a legacy wrapper doesn't provide a set label, fall back to the payload title
+        label: safeStr(raw.set.label, "") || safeStr(raw.set.title, "") || title || "Set 1",
+      },
+      0,
+      1
+    );
+    return { title, sets: [set] };
   }
 
   // Legacy single-set payload
@@ -139,22 +156,23 @@ export function normalizePayload(raw) {
     const set = normalizeOneSet(
       {
         key: "set_1",
-        label: safeStr(raw.title, "Set 1"),
+        label: title || "Set 1",
         periods: raw.periods,
         variables: raw.variables,
         rows: raw.rows,
         rowLabels: raw.rowLabels,
         data: raw.data,
-        note: safeStr(raw.note, "") || safeStr(raw.notes, ""),
+        note: safeStr(raw.note, "") || safeStr(raw.note, ""),
       },
-      0
+      0,
+      1
     );
 
-    return { title: safeStr(raw.title, ""), sets: [set] };
+    return { title, sets: [set] };
   }
 
   // Unknown shape
-  return { title: safeStr(raw.title, ""), sets: [] };
+  return { title, sets: [] };
 }
 
 // ------------------------------------------------------------
