@@ -1,6 +1,6 @@
 # Welcome to the Fruita Biochar Project
 
-The Fruita Biochar Project is finishing its third year. This is the second version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <nelson.gerald.c@gmail.com>.
+The Fruita Biochar Project is beginning its fourth year. This is the second version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <nelson.gerald.c@gmail.com>.
 
 This is an introduction to the project and the website. Here’s what you can expect:
 
@@ -10,9 +10,11 @@ This is an introduction to the project and the website. Here’s what you can ex
 
 - Digital data collection results in graphical (Interactive Plots tab) and tabular form (Summary Statistics tab).
 
+- Tabs that present data on forage quality and quantity, soil chemistry and soil biological health.
+
 - Technical details on the data collection process.
 
-- Coming soon, biochar source and characteristics, fertilizer application, soil results and yield quantity and quality.
+- Bulk download of all data available – Campbell Scientific sensor data, local weather variables, fertilizer application and irrigation water applied, soil results and yield quantity and quality.
 
 ## What is biochar?
 
@@ -26,7 +28,7 @@ Biochar is the solid material obtained from the thermochemical conversion of bio
 
 ## Plant biology and biochar structure
 
-For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provides the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.
+For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.
 
 
 <table>

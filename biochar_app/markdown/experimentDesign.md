@@ -2,18 +2,19 @@
 
 ## Hypotheses to be tested
 
-As discussed in the Introduction tab, the process of making biochar leaves massive amounts of space available in the biochar pores where water, nutrients, and soil biota can be stored. In a desert environment like that around Fruita, water shortages can be a big problem. The primary research question for this experiment is how much more water can be stored in a field with biochar than in a field without and for how long. A second research question is what does biochar contribute to quantity and quality of pasture production. A third topic is do the benefits of having biochar in the soil last for multiple years.
+As discussed in the Introduction tab, the process of making biochar leaves massive amounts of space available in the biochar pores where water, nutrients, and soil biota can be stored. In a desert environment like that around Fruita, Colorado, water shortages can be a big problem. The primary research question for this experiment is how much more water can be stored in a field with biochar than in a field without and for how long. A second research question is what does biochar contribute to quantity and quality of pasture production. A third topic is do the benefits of having biochar in the soil last for multiple years.
 
 The experiment began in Spring 2023 at the Fruita Research Station of Colorado State University. This writeup covers the period from 2023 to the end of 2025.
 
 ## Experiment design
 
-The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 43 ft (13 m) wide and 342 ft (104 m) long, roughly 1.35 acres.
+The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 46 ft wide and 280 ft long.
 
 <figure>
   <img src="/static/images/biocharExperimentalDesign.jpg" alt="Layout of biochar plots" title="Layout of biochar plots" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
   <figcaption style="text-align: center;"><p><em>Figure 1: Field experimental layout</em></p></figcaption>
 </figure>
+
 
 In spring 2023, biochar was injected into strips 1 and 3 every 6 inches to an approximate depth of 6 inches. Strips 2 and 4 had no biochar amendment.
 
@@ -42,14 +43,20 @@ Soil samples for each strip have been collected in early spring and late fall an
 | 2023 | April 4, October 11  |
 |------|----------------------|
 | 2024 | March 22, November 7 |
-| 2025 | April 2              |
+| 2025 | April 2, November 3  |
 
 . Soil sampling dates
 
-##  Fertilizer application
+\
+Fertilizer application
+----------------------
 
-The Ward Labs fertilizer recommendations based on the soil samples for each strip were followed.
+The Ward Labs fertilizer recommendations based on the soil samples for each strip were followed. Data on timing and quantity are available on the Bulk Downloads tab.
 
 ## Yield quality and quantity measurements
 
-Coming soon.
+Grasses were harvested three times a season in each of the four strips with measurements on dried biomass content and analyzed for nutrient composition by strip (Pasture Quality Metrics and Biomass (Field Samples) tabs.\
+\
+Soil Chemistry and Biological Activity
+
+Soil samples were collected in each strip twice a year, in the spring and fall. The data were sent to Ward Labs for testing for both chemical composition and biological activity (Soil Biological Health and Soil Chemistry tabs. As with all the data presented here, these data can be downloaded using the Bulk Downloads tab.
