@@ -2,7 +2,7 @@
 
 Data on soil volumetric water content (VWC), bulk electrical conductivity (EC), and temperature (°C) are collected from 12 Campbell Scientific CR206X data loggers, arranged 3 each in each of the 4 strips. Each data logger collects data from 3 Campbell Scientific CS650 Water Content Reflectometers, located at 6, 12, and 18 inches below the surface of the field.
 
-The data flow from sensor to software has three steps – hard wired soil sensor to data logger, RF signal to a base datalogger, and finally from the datalogger to the final download site through a Starlink system, using an IPv6 56 bit prefix assigned by Starlink to the base datalogger, an ASUSRT-AX88U Pro wifi router. The router then assigns a 64 bit IPv6 address to the base data station, a CR680 data logger configured as a rouer.
+The data flow from sensor to software has three steps – hard wired soil sensor to data logger, RF signal to a base datalogger, and finally from the datalogger to the final download site through a Starlink system, using an IPv6 56 bit prefix assigned by Starlink to the base datalogger, an ASUSRT-AX88U Pro wifi router. The router then assigns a 64 bit IPv6 address to the base data station, a CR680 data logger configured as a router.
 
 ## Collecting the data
 
@@ -27,6 +27,10 @@ The base station for this experiment combines a CR800 data logger configured for
 The experiment site is at a location with no internet access. To address this, the project uses a Starlink terminal connected to the base station through an ASUS WiFi router. The Starlink terminal assigns both an IPv4 and IPv6 address to the ASUS WiFi router. The Starlink IPv4 address can't use port forwarding so it is necessary to configure the ASUS router to accept and assign IPv6 addresses. The network device in the base station receives this address and provides access to the field dataloggers via the RF data transfer process.
 
 The final stop for the data is at a remote location with a PC running the PC400 software from Campbell Scientific. The download process begins by establishing a connection from the PC to a datalogger and then choosing the data download tab after the connection is established. The new data (determined by a time stamp in each record of data) is appended to previously created .dat file (which is basically a .csv file with introductory metadata rows).
+
+## Code availability
+
+All the code elements are available on a github website. The current version is at this [link](https://github.com/GeraldCNelson/biocharWaterConserveWebsite/tree/etl-refactor).
 
 ## Interpreting Ratios: Why Temperature Ratios Are Not Reported
 
