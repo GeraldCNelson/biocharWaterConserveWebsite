@@ -180,7 +180,8 @@ html, body {
    Layout Containers
    ============================================================================= */
 
-.container {
+/* Project layout container (do NOT override Bootstrap's .container) */
+.biochar-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -627,4 +628,38 @@ button:hover {
 #biomass-field .nir-content table th:not(:first-child),
 #biomass-field .nir-content table td:not(:first-child) {
   width: 5.0rem !important;
+}
+
+/* Tighten vertical rhythm inside rendered markdown */
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol,
+.markdown-content table,
+.markdown-content blockquote,
+.markdown-content pre,
+.markdown-content figure {
+  margin-top: 0;
+  margin-bottom: 0.6rem; /* reduce from Bootstrap-ish ~1rem */
+}
+
+/* Headings: less space above/below */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin-top: 1.0rem;    /* was often ~1.5–2rem */
+  margin-bottom: 0.4rem;
+  line-height: 1.2;
+}
+
+/* Lists: reduce the extra “air” */
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.25rem;
+}
+
+.markdown-content li {
+  margin-bottom: 0.25rem;
 }
