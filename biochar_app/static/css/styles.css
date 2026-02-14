@@ -9,6 +9,10 @@ html, body {
     font-family: "Source Serif Pro", serif;
 }
 
+html {
+    font-size: 14px;
+}
+
 /* Global Box Sizing */
 *, *::before, *::after {
     box-sizing: border-box;

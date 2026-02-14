@@ -257,6 +257,8 @@ def common_xaxis_config(granularity: str, start: str, end: str) -> Dict[str, Any
         "linecolor": "black",
         "linewidth": 1,
         "rangeslider": {"visible": False},
+        "tickfont": {"size": 11},
+        "titlefont": {"size": 12},
     }
 
     try:
@@ -361,13 +363,14 @@ def common_yaxis_config(
         title_text = f"{title_base}{f' ({unit})' if unit else ''}"
 
     axis_cfg: Dict[str, Any] = {
-        "title": {"text": title_text},
+        "title": {"text": title_text, "font": {"size": 12}},
         "tickformat": None,
         "showgrid": True,
         "showline": True,
         "linecolor": "black",
         "linewidth": 1,
         "zeroline": (kind == "ratio"),
+        "tickfont": {"size": 11},
     }
 
     # 7) Only include a fixed range if both ends are still finite
@@ -382,14 +385,23 @@ def common_yaxis2_config(unit_system: str = "us") -> Dict[str, Any]:
     Secondary y-axis config for precipitation overlays.
     """
     unit_label = "mm" if unit_system == "metric" else "inches"
+
     return {
-        "title": {"text": f"Precipitation ({unit_label})"},
+        # Title (with explicit font size)
+        "title": {"text": f"Precipitation ({unit_label})", "font": {"size": 12}},
+
+        # Axis placement
         "overlaying": "y",
         "side": "right",
+
+        # Styling
         "showgrid": False,
         "showline": True,
         "linecolor": "black",
         "linewidth": 1,
+
+        # Tick label font size
+        "tickfont": {"size": 11},
 
         # Keep precip non-negative and grounded at zero
         "rangemode": "tozero",

@@ -2,8 +2,8 @@
 
 // 1) Config / constants
 import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
-import { renderNirTables } from "./nir_tab.js";
-import { renderSoilChemTable, renderSoilBioTable } from "./soil_tab.js";
+import { renderNirTables } from "./tab_nir.js";
+import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
 import { initSummaryTab } from "./tab_summary.js";
 

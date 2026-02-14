@@ -1,4 +1,4 @@
-// static/js/nir_tab.js
+// static/js/tab_nir.js
 //
 // Renderer for the Pasture Quality Metrics tab.
 // Expects endpoint:

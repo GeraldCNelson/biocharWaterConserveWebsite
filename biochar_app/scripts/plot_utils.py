@@ -544,6 +544,8 @@ def make_raw_figure(
 
     fig.update_layout(**layout_kwargs)
 
+    fig.update_layout(font={"size": 12})
+
     configure_primary_yaxis(
         fig=fig,
         df=df_plot,

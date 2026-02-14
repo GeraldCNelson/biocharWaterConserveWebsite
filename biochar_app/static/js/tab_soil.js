@@ -1,4 +1,4 @@
-// static/js/soil_tab.js
+// static/js/tab_soil.js
 //
 // Simple renderer for Soil Chemistry + Soil Biological Health tabs.
 // Uses shared helpers in tables.js so Soil/NIR/Biomass all behave consistently.
@@ -24,7 +24,7 @@ async function renderSoilTab({
   if (container.dataset.rendered === "true") return;
 
   // ✅ Use the shared animated overlay (prevents static “Loading…” text)
-  // NOTE: keep this import at the top of soil_tab.js:
+  // NOTE: keep this import at the top of tab_soil.js:
   // import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
   showLoadingOverlay(container, "Loading");
   container.innerHTML = ""; // safe: overlay is appended after we call showLoadingOverlay()

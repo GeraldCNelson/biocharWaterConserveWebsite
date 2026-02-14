@@ -18,9 +18,8 @@ import os
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
-from zipfile import ZipFile
-from io import StringIO
-
+import argparse
+from datetime import datetime
 import numpy as np
 import pandas as pd
 
@@ -31,7 +30,6 @@ from biochar_app.scripts.config import (
     YEARS,
     STRIPS,
     LOGGER_LOCATIONS,
-    VALUE_COLS_STANDARD,
     VALUE_COLS_2024_PLUS,
     GRANULARITIES,
     UNIT_CONVERSIONS,
@@ -159,8 +157,12 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
     if n_nat > 0:
         logger.warning(f"⚠️ {n_nat} NaT timestamps in {name}")
 
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df.dropna(subset=["timestamp"])
     start = pd.Timestamp(f"{year}-01-01")
     end = pd.Timestamp(f"{year + 1}-01-01")
+    mask = df["timestamp"].ge(start) & df["timestamp"].lt(end)
+    df = df.loc[mask]
     df = df.loc[(df["timestamp"] >= start) & (df["timestamp"] < end)]
     if df.empty:
         return None
@@ -944,6 +946,20 @@ def generate_summaries(years: List[int]) -> None:
 
     logger.info("🎉 ETL complete.")
 
+def resolve_target_year(cli_year: Optional[int] = None) -> int:
+    """
+    Pick which year to run.
+    Priority:
+      1) explicit CLI --year
+      2) max(YEARS) from config (most recent configured year)
+      3) current calendar year as fallback
+    """
+    if cli_year is not None:
+        return int(cli_year)
+    try:
+        return int(max(YEARS))
+    except Exception:
+        return int(datetime.now().year)
 
 if __name__ == "__main__":
     os.makedirs(PARQUET_DIR, exist_ok=True)

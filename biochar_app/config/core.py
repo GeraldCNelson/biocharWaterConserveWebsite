@@ -26,7 +26,12 @@ DEPTHS = ["1", "2", "3"]
 YEARS = [2023, 2024, 2025, 2026]
 LOGGER_LOCATIONS = ["T", "M", "B"]
 DATALOGGER_NAMES = ["S1T", "S1M", "S1B", "S2T", "S2M", "S2B", "S3T", "S3B", "S3M", "S4T", "S4M", "S4B"]
-
+VALUE_COLS_2024_PLUS = [
+    "BattV_Min",
+    "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
+    "VWC_2_Avg", "EC_2_Avg", "T_2_Avg",
+    "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
+]
 
 # Granularities:
 # - first element: UI value

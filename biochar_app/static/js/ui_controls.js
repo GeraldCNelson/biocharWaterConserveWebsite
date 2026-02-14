@@ -54,25 +54,47 @@ export function applyDateRangeFromDefaults(year, granularity, dateRanges) {
 export function wireMainDateRangeListeners() {
   const yearEl = document.getElementById("main-year");
   const granEl = document.getElementById("main-granularity");
+  const startEl = document.getElementById("main-startDate");
+  const endEl   = document.getElementById("main-endDate");
 
-  if (!yearEl || !granEl) {
-    console.warn("wireMainDateRangeListeners: missing main-year or main-granularity");
+  if (!yearEl || !granEl || !startEl || !endEl) {
+    console.warn("wireMainDateRangeListeners: missing main-year, main-granularity, or date inputs");
     return;
   }
 
-  const handler = () => {
-    const year = yearEl.value;            // keep as string key
-    const granularity = granEl.value;
+  // Track whether the user has manually edited dates
+  const markUserEdited = () => {
+    startEl.dataset.userEdited = "1";
+    endEl.dataset.userEdited = "1";
+  };
+  startEl.addEventListener("change", markUserEdited);
+  endEl.addEventListener("change", markUserEdited);
 
+  const applyDefaults = () => {
+    const year = yearEl.value;        // keep as string key
+    const granularity = granEl.value;
     applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
   };
 
-  // Update immediately once (useful after dropdowns populate)
-  handler();
+  // Initial set from DATE_RANGES is fine on first load
+  applyDefaults();
 
-  // Update on change
-  yearEl.addEventListener("change", handler);
-  granEl.addEventListener("change", handler);
+  // YEAR change: reset to defaults for the new year and clear "user edited"
+  yearEl.addEventListener("change", () => {
+    delete startEl.dataset.userEdited;
+    delete endEl.dataset.userEdited;
+    applyDefaults();
+  });
+
+  // GRANULARITY change: only apply defaults if user hasn't edited dates
+  granEl.addEventListener("change", () => {
+    const userEdited = startEl.dataset.userEdited === "1" || endEl.dataset.userEdited === "1";
+    if (!userEdited) {
+      applyDefaults();
+    } else {
+      console.log("🗓️ Keeping user-selected date range (not overwriting on granularity change).");
+    }
+  });
 }
 
 /**
@@ -319,16 +341,6 @@ export function initializeMainDatepickers() {
   if (!endEl.value)   endEl.value   = defaults.endDate;
 
   window.mainDatepickers = { start: startEl, end: endEl };
-}
-
-/**
- * Reset the start/end inputs using DATE_RANGES.
- * (Kept for backwards compatibility if other modules call it.)
- */
-export function updateStartAndEndDatesFromYear(year) {
-  const granEl = document.getElementById("main-granularity");
-  const granularity = granEl ? granEl.value : (window.dropdownOptions?.defaults?.granularity || "daily");
-  applyDateRangeFromDefaults(String(year), granularity, window.dateRanges || {});
 }
 
 /**
