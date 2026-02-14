@@ -107,12 +107,12 @@ def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
 
 
 def add_raw_traces(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    variable: str,
-    strip: str,
-    logger_location: str,
-    unit_system: str,
+        fig: go.Figure,
+        df: pd.DataFrame,
+        variable: str,
+        strip: str,
+        logger_location: str,
+        unit_system: str,
 ) -> List[str]:
     y_cols = [
         c for c in df.columns
@@ -154,17 +154,17 @@ def add_raw_traces(
 
 
 def add_ratio_traces(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    variable: str,
-    strip: str,
-    logger_location: str,
+        fig: go.Figure,
+        df: pd.DataFrame,
+        variable: str,
+        strip: str,
+        logger_location: str,
 ) -> List[str]:
     y_cols = [
         c for c in df.columns
         if c.startswith(f"{variable}_")
-        and "_ratio_" in c
-        and c.endswith(f"_{logger_location}")
+           and "_ratio_" in c
+           and c.endswith(f"_{logger_location}")
     ]
     if not y_cols:
         bad_request( f"No ratio columns for {variable}, {strip}, {logger_location}")
@@ -193,10 +193,10 @@ def add_ratio_traces(
 
 
 def add_precipitation_bars(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    unit_system: str,
-    granularity: str,
+        fig: go.Figure,
+        df: pd.DataFrame,
+        unit_system: str,
+        granularity: str,
 ) -> None:
     bw = bar_width_map.get(granularity, bar_width_map["daily"])
     if granularity == "daily":
@@ -233,13 +233,13 @@ def add_precipitation_bars(
 
 
 def add_irrigation_shapes(
-    fig: go.Figure,
-    strip: str,
-    year: int,
-    unit_system: str,
-    sum_only: bool = False,
-    periods: Optional[List[Any]] = None,
-    category_labels: Optional[List[str]] = None,
+        fig: go.Figure,
+        strip: str,
+        year: int,
+        unit_system: str,
+        sum_only: bool = False,
+        periods: Optional[List[Any]] = None,
+        category_labels: Optional[List[str]] = None,
 ) -> None:
     """
     Draw irrigation:
@@ -364,12 +364,12 @@ def add_irrigation_shapes(
 
 
 def configure_primary_yaxis(
-    fig: go.Figure,
-    df: pd.DataFrame,
-    y_cols: List[str],
-    variable: str,
-    unit_system: str,
-    kind: str,
+        fig: go.Figure,
+        df: pd.DataFrame,
+        y_cols: List[str],
+        variable: str,
+        unit_system: str,
+        kind: str,
 ) -> None:
     if not y_cols:
         return
@@ -391,18 +391,18 @@ def configure_primary_yaxis(
 
 
 def make_raw_figure(
-    *,
-    df: pd.DataFrame,
-    variable: str,
-    strip: str,
-    logger_location: str,
-    depth: str,
-    unit_system: str,
-    year: int,
-    granularity: str,
-    start: str,
-    end: str,
-    trace_option: str,
+        *,
+        df: pd.DataFrame,
+        variable: str,
+        strip: str,
+        logger_location: str,
+        depth: str,
+        unit_system: str,
+        year: int,
+        granularity: str,
+        start: str,
+        end: str,
+        trace_option: str,
 ) -> Dict[str, Any]:
     if trace_option not in TRACE_CHOICES:
         bad_request( f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
@@ -540,8 +540,23 @@ def make_raw_figure(
         height=400,
         autosize=True,
     )
+
     if use_secondary_y:
+        # keep the y2 definition created earlier (secondary_y=True traces)
         layout_kwargs["yaxis2"] = fig.layout.yaxis2
+
+        # give enough room for y2 ticks/title + legend so Plotly doesn't shrink plot width
+        layout_kwargs["margin"]["r"] = 240
+
+        # place legend outside the plotting area (in the right margin)
+        base_legend = common_legend_config("Legend") or {}
+        layout_kwargs["legend"] = {
+            **base_legend,
+            "x": 1.02,
+            "xanchor": "left",
+            "y": 1.0,
+            "yanchor": "top",
+        }
 
     fig.update_layout(**layout_kwargs)
 
@@ -555,21 +570,20 @@ def make_raw_figure(
         unit_system=unit_system,
         kind="raw",
     )
-
     return prepare_plot_for_json(fig)
 
 
 def make_ratio_figure(
-    df: pd.DataFrame,
-    variable: str,
-    strip: str,
-    logger_location: str,
-    unit_system: str,
-    granularity: str,
-    year: int,
-    start: str,
-    end: str,
-    depth: str,
+        df: pd.DataFrame,
+        variable: str,
+        strip: str,
+        logger_location: str,
+        unit_system: str,
+        granularity: str,
+        year: int,
+        start: str,
+        end: str,
+        depth: str,
 ) -> Dict[str, Any]:
     is_gs = granularity.lower() == "gseason"
     fig = go.Figure()
@@ -579,7 +593,7 @@ def make_ratio_figure(
     y_cols = [
         c for c in df.columns
         if c.startswith(f"{ratio_prefix}_{depth}_ratio_")
-        and c.endswith(f"_{logger_location}")
+           and c.endswith(f"_{logger_location}")
     ]
     if not y_cols:
         bad_request( "No ratio data available for the selected filters.")
@@ -650,14 +664,14 @@ def make_ratio_figure(
 
 
 def make_temperature_delta_figure(
-    df: pd.DataFrame,
-    depth: int,
-    logger_location: str,
-    unit_system: str,
-    granularity: str,
-    year: int,
-    start: str,
-    end: str,
+        df: pd.DataFrame,
+        depth: int,
+        logger_location: str,
+        unit_system: str,
+        granularity: str,
+        year: int,
+        start: str,
+        end: str,
 ) -> Dict[str, Any]:
     loc = logger_location
 
@@ -761,16 +775,16 @@ def make_temperature_delta_figure(
 
 
 def make_raw_gseason_figure(
-    *,
-    df: pd.DataFrame,
-    periods: List[Any],
-    variable: str,
-    strip: str,
-    logger_location: str,
-    depth: int,
-    unit_system: str,
-    year: int,
-    trace_option: str,
+        *,
+        df: pd.DataFrame,
+        periods: List[Any],
+        variable: str,
+        strip: str,
+        logger_location: str,
+        depth: int,
+        unit_system: str,
+        year: int,
+        trace_option: str,
 ) -> Dict[str, Any]:
     """
     Growing-season RAW figure.
@@ -798,8 +812,8 @@ def make_raw_gseason_figure(
     precip_col_us = "precip_in"
     precip_col_mm = "precip_mm"
     have_precip = (
-        variable == "VWC"
-        and (precip_col_us in df.columns or precip_col_mm in df.columns)
+            variable == "VWC"
+            and (precip_col_us in df.columns or precip_col_mm in df.columns)
     )
 
     precip_vals = None
@@ -873,7 +887,7 @@ def make_raw_gseason_figure(
         else:
             # One bar per logger location at the chosen depth.
             for idx, (loc_key, loc_label) in enumerate(
-                logger_location_mapping.items(), start=1
+                    logger_location_mapping.items(), start=1
             ):
                 col = f"{base}_{strip}_{loc_key}_{depth}"
                 if col not in df.columns:
@@ -915,7 +929,7 @@ def make_raw_gseason_figure(
                 fig.add_trace(go.Bar(**bar_kwargs))
         else:
             for idx, (loc_key, loc_label) in enumerate(
-                logger_location_mapping.items(), start=1
+                    logger_location_mapping.items(), start=1
             ):
                 col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
                 if col not in df.columns:
@@ -930,7 +944,7 @@ def make_raw_gseason_figure(
                         name=legend_fmt.format(loc_label),
                         offsetgroup=str(idx),
                         opacity=0.85,
-                    )
+                        )
                 )
 
     # Irrigation overlays (still VWC-only for now)
@@ -992,15 +1006,15 @@ def make_raw_gseason_figure(
 
 
 def make_ratio_gseason_figure(
-    *,
-    df: pd.DataFrame,
-    periods: List[Any],
-    variable: str,
-    strip: str,
-    logger_location: str,
-    depth: int,
-    unit_system: str,
-    year: int,
+        *,
+        df: pd.DataFrame,
+        periods: List[Any],
+        variable: str,
+        strip: str,
+        logger_location: str,
+        depth: int,
+        unit_system: str,
+        year: int,
 ) -> Dict[str, Any]:
     """
     Growing-season RATIO figure.
@@ -1169,7 +1183,7 @@ def make_ratio_gseason_figure(
         c
         for c in df.columns
         if c.startswith(f"{variable}_{depth}_ratio_")
-        and c.endswith(f"_{logger_location}")
+           and c.endswith(f"_{logger_location}")
     ]
 
     if not y_cols:

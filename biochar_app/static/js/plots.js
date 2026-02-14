@@ -49,20 +49,68 @@ const API_BASE = "/api";
 /**
  * Ensure plots resize when the window size changes
  */
+/**
+ * Ensure plots resize when the window size changes
+ * - Recomputes right gutter + legend placement
+ * - Forces plot-1 and plot-2 to share the same right gutter so x-axes align
+ */
 let resizeHookInstalled = false;
+
+
 function installResizeHandler() {
   if (resizeHookInstalled) return;
   resizeHookInstalled = true;
 
   let timer = null;
+
+  function relayoutOne(el, plotType, forcedMargins = null) {
+    if (!el || !el.layout) return null;
+
+    const w = el.clientWidth || el.parentElement?.clientWidth || 1200;
+
+    // Decide gutter from the *rendered* graph div (fullLayout/fullData)
+    let rightGutter = computeRightGutterPx(el, plotType);
+    let leftMargin = (el.layout?.margin?.l ?? 60);
+
+    // Force margins if requested (to align domains)
+    if (forcedMargins) {
+      if (typeof forcedMargins.r === "number") rightGutter = forcedMargins.r;
+      if (typeof forcedMargins.l === "number") leftMargin = forcedMargins.l;
+    }
+
+    // Build relayout payload
+    const update = {
+      width: w,
+      "margin.l": leftMargin,
+      "margin.r": rightGutter,
+      "yaxis.automargin": false,
+    };
+    if (el.layout?.yaxis2) update["yaxis2.automargin"] = false;
+
+    // Legend placement must match gutter choice
+    const tmp = { legend: el.layout.legend || {} };
+    applyResponsiveLegend(tmp, rightGutter);
+    update.legend = tmp.legend;
+
+    Plotly.relayout(el, update);
+    Plotly.Plots.resize(el);
+
+    return { l: leftMargin, r: rightGutter };
+  }
+
   window.addEventListener("resize", () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const p1 = document.getElementById("plot-1");
       const p2 = document.getElementById("plot-2");
-      if (p1) Plotly.Plots.resize(p1);
-      if (p2) Plotly.Plots.resize(p2);
-    }, 100);
+
+      // 1) Relayout raw first, capture its margins
+      const margins = relayoutOne(p1, "raw");
+
+      // 2) Force ratio to use the exact same margins (align x-axis domains)
+      if (margins) relayoutOne(p2, "ratio", margins);
+      else relayoutOne(p2, "ratio");
+    }, 120);
   });
 }
 
