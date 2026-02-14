@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Tuple, Optional, TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from flask import abort
 from plotly.utils import PlotlyJSONEncoder
 from fastapi import HTTPException
 
@@ -29,6 +28,8 @@ from biochar_app.scripts.config import (  # noqa: E402
     PLOT_COLORS,
 )
 
+def bad_request(msg: str) -> None:
+    raise HTTPException(status_code=400, detail=msg)
 
 def _depth_color(depth_key: str) -> Optional[str]:
     """
@@ -118,7 +119,7 @@ def add_raw_traces(
         if c.startswith(f"{variable}_") and f"_raw_{strip}_{logger_location}" in c
     ]
     if not y_cols:
-        abort(400, f"No raw columns for {variable}, {strip}, {logger_location}")
+        bad_request( f"No raw columns for {variable}, {strip}, {logger_location}")
 
     x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
@@ -166,7 +167,7 @@ def add_ratio_traces(
         and c.endswith(f"_{logger_location}")
     ]
     if not y_cols:
-        abort(400, f"No ratio columns for {variable}, {strip}, {logger_location}")
+        bad_request( f"No ratio columns for {variable}, {strip}, {logger_location}")
 
     x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
@@ -404,7 +405,7 @@ def make_raw_figure(
     trace_option: str,
 ) -> Dict[str, Any]:
     if trace_option not in TRACE_CHOICES:
-        abort(400, f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
+        bad_request( f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
 
     display_variable = variable
     source_variable = "VWC" if variable == "SWC" else variable
@@ -530,9 +531,9 @@ def make_raw_figure(
     )
 
     layout_kwargs: Dict[str, Any] = dict(
-        title={"text": title_text, "x": 0.5},
+        title={"text": title_text, "x": 0.5, "font": {"size": 18}},
         xaxis=common_xaxis_config(granularity, start, end),
-        yaxis={"title": human_var},
+        yaxis={"title": {"text": human_var, "font": {"size": 14}}},
         legend=common_legend_config("Legend"),
         template="plotly_white",
         margin={"l": 60, "r": 20, "t": 60, "b": 40},
@@ -581,7 +582,7 @@ def make_ratio_figure(
         and c.endswith(f"_{logger_location}")
     ]
     if not y_cols:
-        abort(400, "No ratio data available for the selected filters.")
+        bad_request( "No ratio data available for the selected filters.")
 
     df_plot = convert_units(df, unit_system)
 
@@ -971,7 +972,7 @@ def make_raw_gseason_figure(
         barmode="group",
         bargap=0.2,
         bargroupgap=0.1,
-        title={"text": title_text, "x": 0.5},
+        title={"text": title_text, "x": 0.5, "font": {"size": 18}},
         xaxis={
             "title": "Season",
             "type": "category",

@@ -3,7 +3,7 @@ import logging
 import os
 import zipfile
 import numpy as np
-from biochar_app.get_weather_data import get_weather_data
+#from biochar_app.get_weather_data import get_weather_data
 from biochar_app.config import (
     DATA_RAW_DIR, DATA_PROCESSED_DIR, YEARS, DEPTHS,
     LOGGER_LOCATIONS, STRIPS,

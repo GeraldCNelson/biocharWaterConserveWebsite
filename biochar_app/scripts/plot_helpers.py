@@ -91,7 +91,7 @@ from typing import Any, Optional, Tuple, Dict, Sequence
 
 import numpy as np
 import pandas as pd
-from flask import abort
+
 from fastapi import HTTPException
 
 from biochar_app.scripts.config import (
@@ -140,6 +140,8 @@ COLUMN_CATEGORY_RULES = {
     # SWC is not applied to columns; handled inside SWC calc only
 }
 
+def bad_request(msg: str) -> None:
+    raise HTTPException(status_code=400, detail=msg)
 
 # ---------------------------------------------------------------------------
 # JSON sanitization
@@ -251,19 +253,18 @@ def common_xaxis_config(granularity: str, start: str, end: str) -> Dict[str, Any
     Otherwise, let Plotly pick ticks automatically.
     """
     cfg: Dict[str, Any] = {
-        "title": "Date",
+        "title": {"text": "Date", "font": {"size": 12}},  # ✅ Plotly-safe replacement
         "type": "date",
         "showline": True,
         "linecolor": "black",
         "linewidth": 1,
         "rangeslider": {"visible": False},
         "tickfont": {"size": 11},
-        "titlefont": {"size": 12},
     }
 
     try:
-        start_ts = pd.to_datetime(start)
-        end_ts = pd.to_datetime(end)
+        start_ts = pd.to_datetime(start, errors="raise")
+        end_ts = pd.to_datetime(end, errors="raise")
     except Exception:
         # fall back to simple date axis
         return cfg
@@ -282,12 +283,13 @@ def common_xaxis_config(granularity: str, start: str, end: str) -> Dict[str, Any
     # Month starts: Jan 1, Feb 1, ..., Dec 1
     month_starts = pd.date_range(f"{year}-01-01", f"{year}-12-01", freq="MS")
 
-    tickvals = month_starts
+    # ✅ Convert to plain python datetimes for safety when JSON-encoding later
+    tickvals = [dt.to_pydatetime() for dt in month_starts]
+
     ticktext = []
     for dt in month_starts:
         if dt.month in (1, 12):
-            # Jan\n2025 , Dec\n2025
-            ticktext.append(dt.strftime("%b\n%Y"))
+            ticktext.append(dt.strftime("%b\n%Y"))  # Jan\n2025 , Dec\n2025
         else:
             ticktext.append(dt.strftime("%b"))
 

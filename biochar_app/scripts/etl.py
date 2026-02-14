@@ -140,30 +140,32 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
         logger.warning(f"⚠️ Not found: {datfile}")
         return None
 
-    df = (
-        pd.read_csv(
-            datfile,
-            header=None,
-            skiprows=4,
-            names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
-            na_values=["", "NA", "NAN"],
-            parse_dates=["timestamp"],
-        )
-        .drop(columns=["RECORD"], errors="ignore")
-    )
+    df = pd.read_csv(
+        datfile,
+        header=None,
+        skiprows=4,
+        names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
+        na_values=["", "NA", "NAN"],
+        # NOTE: parse_dates is optional here; we’ll coerce explicitly below anyway
+    ).drop(columns=["RECORD"], errors="ignore")
 
+    # Normalize timestamps (tz -> America/Denver, then drop tzinfo)
     df["timestamp"] = normalize_timestamp_series(df["timestamp"])
-    n_nat = int(df["timestamp"].isna().sum())
-    if n_nat > 0:
-        logger.warning(f"⚠️ {n_nat} NaT timestamps in {name}")
 
+    # Force a clean datetime64 dtype and remove NaT
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df = df.dropna(subset=["timestamp"])
-    start = pd.Timestamp(f"{year}-01-01")
-    end = pd.Timestamp(f"{year + 1}-01-01")
-    mask = df["timestamp"].ge(start) & df["timestamp"].lt(end)
-    df = df.loc[mask]
-    df = df.loc[(df["timestamp"] >= start) & (df["timestamp"] < end)]
+    n_nat = int(df["timestamp"].isna().sum())
+    if n_nat:
+        logger.warning(f"⚠️ {n_nat} NaT timestamps in {name}")
+        df = df.dropna(subset=["timestamp"])
+
+    # Filter to the requested year (half-open interval)
+    start = pd.Timestamp(year=year, month=1, day=1)
+    end = pd.Timestamp(year=year + 1, month=1, day=1)
+
+    ts = df["timestamp"]  # helps type inference in some IDEs
+    df = df.loc[ts.ge(start) & ts.lt(end)]
+
     if df.empty:
         return None
 

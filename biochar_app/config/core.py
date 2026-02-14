@@ -33,6 +33,12 @@ VALUE_COLS_2024_PLUS = [
     "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
 ]
 
+VALUE_COLS_STANDARD = [
+    "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
+    "VWC_2_Avg", "EC_2_Avg", "T_2_Avg",
+    "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
+]
+
 # Granularities:
 # - first element: UI value
 # - second element: pandas offset alias used in resampling (or None)
