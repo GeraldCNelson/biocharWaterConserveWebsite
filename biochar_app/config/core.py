@@ -177,6 +177,8 @@ OKABE_ITO = {
     "reddish_purple": "#CC79A7",
 }
 
+TITLE_FONT_SIZE = 18
+
 PLOT_COLORS = {
     # Raw data traces
     "strip_S1": OKABE_ITO["blue"],
@@ -187,6 +189,7 @@ PLOT_COLORS = {
     # Ratios
     "ratio_S1_S2": OKABE_ITO["blue"],
     "ratio_S3_S4": OKABE_ITO["vermillion"],
+    "zero_line": "rgba(140,140,140,0.5)",
 
     # Temperature deltas
     "delta_T_S1_S2": OKABE_ITO["blue"],

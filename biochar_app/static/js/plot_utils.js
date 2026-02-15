@@ -170,7 +170,8 @@ function applyResponsiveLegend(layout, rightGutterPx) {
 
 export async function fetchAndRenderPlot(plotType, plotDivId) {
   const targetId = plotDivId || `plot-${plotType}`;
-  console.group(`🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`);
+  const label = `🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`;
+  console.group(label);
 
   const container = document.getElementById(targetId);
   if (!container) {
@@ -182,88 +183,36 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
   const overlayHost = container.parentElement || container;
   const statusEl = document.getElementById("plots-status");
 
-  // --- helpers ---------------------------------------------------------
-
-  // Use the SAME pixel width for both plots (prevents drift)
-  function getSharedPlotWidth() {
+  // ------------------------------------------------------------
+  // ✅ Domain sync helper (this is the missing piece)
+  // Plotly can keep margins equal yet still compute slightly
+  // different xaxis.domain values due to tick/title/layout nuances.
+  // We force plot-2 to use plot-1's xaxis.domain once both exist.
+  // ------------------------------------------------------------
+  const syncXAxisDomains = () => {
     const p1 = document.getElementById("plot-1");
     const p2 = document.getElementById("plot-2");
+    if (!p1?._fullLayout?.xaxis || !p2?._fullLayout?.xaxis) return;
 
-    // Prefer wrapper widths (more stable than plot div widths)
-    const w1 = p1?.parentElement?.clientWidth || p1?.clientWidth || 0;
-    const w2 = p2?.parentElement?.clientWidth || p2?.clientWidth || 0;
+    const d = p1._fullLayout.xaxis.domain;
+    if (!Array.isArray(d) || d.length !== 2) return;
 
-    if (w1 && w2) return Math.max(320, Math.min(w1, w2));
-    const w = overlayHost?.clientWidth || container.clientWidth || 1200;
-    return Math.max(320, w);
-  }
+    // Only relayout if different (avoid relayout loops)
+    const d2 = p2._fullLayout.xaxis.domain;
+    const same =
+      Array.isArray(d2) &&
+      d2.length === 2 &&
+      Math.abs(d2[0] - d[0]) < 1e-6 &&
+      Math.abs(d2[1] - d[1]) < 1e-6;
 
-  function enforceNoAutoMargins(layout) {
-    layout.yaxis = layout.yaxis || {};
-    layout.yaxis.automargin = false;
-    if (layout.yaxis2) {
-      layout.yaxis2.automargin = false;
+    if (!same) {
+      Plotly.relayout(p2, { "xaxis.domain": d });
     }
-  }
-
-  // After BOTH plots exist: force same width/margins + force ratio x-domain to match raw
-  async function syncPlotGeometry() {
-    const p1 = document.getElementById("plot-1");
-    const p2 = document.getElementById("plot-2");
-    if (!p1?.layout || !p2?.layout) return;
-
-    const sharedW = getSharedPlotWidth();
-
-    // Compute gutters using “after-render truth” when available
-    const g1 = computeRightGutterPx(p1, "raw", p1.layout, p1.data);
-    const g2 = computeRightGutterPx(p2, "ratio", p2.layout, p2.data);
-    const sharedRight = Math.max(g1, g2);
-
-    const left = window._plotLeftMargin ?? 60;
-    window._plotLeftMargin = left;
-
-    // Legend placement depends on gutter (keep whatever behavior you already want)
-    const legend1 = { ...(p1.layout.legend || {}) };
-    const tmp1 = { legend: legend1 };
-    applyResponsiveLegend(tmp1, sharedRight);
-
-    const legend2 = { ...(p2.layout.legend || {}) };
-    const tmp2 = { legend: legend2 };
-    applyResponsiveLegend(tmp2, sharedRight);
-
-    // Apply same width + margins to BOTH
-    await Plotly.relayout(p1, {
-      width: sharedW,
-      "margin.l": left,
-      "margin.r": sharedRight,
-      "yaxis.automargin": false,
-      ...(p1.layout.yaxis2 ? { "yaxis2.automargin": false } : {}),
-      legend: tmp1.legend,
-    });
-
-    await Plotly.relayout(p2, {
-      width: sharedW,
-      "margin.l": left,
-      "margin.r": sharedRight,
-      "yaxis.automargin": false,
-      ...(p2.layout.yaxis2 ? { "yaxis2.automargin": false } : {}),
-      legend: tmp2.legend,
-    });
-
-    // Now force the *plot-area* to match: xaxis.domain
-    const dom = p1?._fullLayout?.xaxis?.domain || p1.layout?.xaxis?.domain || null;
-    if (Array.isArray(dom) && dom.length === 2) {
-      await Plotly.relayout(p2, { "xaxis.domain": dom });
-    }
-
-    Plotly.Plots.resize(p1);
-    Plotly.Plots.resize(p2);
-  }
-
-  // --- main ------------------------------------------------------------
+  };
 
   try {
-    showLoadingOverlay(overlayHost, plotType === "raw" ? "Loading plots" : "Loading plot");
+    const msg = plotType === "raw" ? "Loading plots" : "Loading plot";
+    showLoadingOverlay(overlayHost, msg);
 
     if (statusEl) {
       statusEl.textContent = "Loading plots…";
@@ -274,7 +223,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     filters.unitSystem = window.unitSystem || "us";
     filters.kind = plotType;
 
-    const resp = await fetch(`/api/plot_${plotType}`, {
+    const url = `/api/plot_${plotType}`;
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -289,7 +239,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     const plotData = JSON.parse(text);
 
-    // --- Sync initial x-range between raw & ratio (your existing logic) ---
+    // --- Sync initial x-range between raw & ratio ---
     if (plotType === "raw" && targetId === "plot-1") {
       window._initialXRange = plotData?.layout?.xaxis?.range || null;
     }
@@ -309,17 +259,27 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     await new Promise((r) => requestAnimationFrame(r));
     Plotly.purge(container);
 
-    // Use a shared width even on first draw
-    const sharedW = getSharedPlotWidth();
-    const leftMargin = window._plotLeftMargin ?? 60;
+    const parentWidth = container.clientWidth || 1200;
+
+    // ------------------------------------
+    // ✅ Consistent margins (key to x-axis alignment)
+    // ------------------------------------
+    const leftMargin = 60;
     window._plotLeftMargin = leftMargin;
 
+    // Initial gutter guess
     let rightGutter = computeRightGutterPx(container, plotType, plotData.layout, plotData.data);
+
+    // If ratio plot, force raw's gutter if known
+    if (targetId === "plot-1") window._plotRightGutter = rightGutter;
+    if (targetId === "plot-2" && typeof window._plotRightGutter === "number") {
+      rightGutter = window._plotRightGutter;
+    }
 
     const layout = {
       ...plotData.layout,
       autosize: false,
-      width: sharedW,
+      width: parentWidth,
       height: 500,
       margin: {
         l: leftMargin,
@@ -329,31 +289,125 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       },
     };
 
-    enforceNoAutoMargins(layout);
+    // Prevent Plotly from silently changing margins per plot
+    layout.yaxis = layout.yaxis || {};
+    layout.yaxis.automargin = false;
+    if (layout.yaxis2) {
+      layout.yaxis2.automargin = false;
+    }
+
+    // Legend placement depends on gutter
     applyResponsiveLegend(layout, rightGutter);
 
-    const gd = await Plotly.newPlot(container, plotData.data, layout, {
+    const plotConfig = {
       displayModeBar: false,
       displaylogo: false,
-      responsive: false,
-    });
+      responsive: false, // we do our own resize handler
+    };
 
+    const gd = await Plotly.newPlot(container, plotData.data, layout, plotConfig);
+
+    // Track rendered plot divs
     if (targetId === "plot-1") rawPlotDiv = gd;
     if (targetId === "plot-2") ratioPlotDiv = gd;
 
-    // ✅ After each render attempt, try to sync both plots (no-ops until both exist)
-    await syncPlotGeometry();
+    // ------------------------------------
+    // ✅ Refine gutter *after render* using _fullLayout/_fullData
+    // ------------------------------------
+    const refineGutter = () => {
+      if (!gd) return null;
 
-    // ✅ Install ONE resize handler that re-syncs geometry (not just Plotly.resize)
+      let g = computeRightGutterPx(gd, plotType, null, null);
+
+      // Save raw gutter; force ratio to match
+      if (targetId === "plot-1") window._plotRightGutter = g;
+      if (targetId === "plot-2" && typeof window._plotRightGutter === "number") {
+        g = window._plotRightGutter;
+      }
+
+      const update = {
+        "margin.l": window._plotLeftMargin ?? 60,
+        "margin.r": g,
+        "yaxis.automargin": false,
+      };
+      if (gd.layout?.yaxis2) update["yaxis2.automargin"] = false;
+
+      // Legend update (replace legend object)
+      const tmp = { legend: gd.layout?.legend || {} };
+      applyResponsiveLegend(tmp, g);
+      update.legend = tmp.legend;
+
+      Plotly.relayout(gd, update);
+      Plotly.Plots.resize(gd);
+
+      return g;
+    };
+
+    // One refinement pass right after first draw
+    refineGutter();
+
+    // After rendering plot-2, force domain alignment to plot-1
+    if (targetId === "plot-2") {
+      // Wait a frame so _fullLayout is fully settled
+      await new Promise((r) => requestAnimationFrame(r));
+      syncXAxisDomains();
+    }
+
+    // ------------------------------------
+    // ✅ Install ONE resize handler (relayout + resize + domain sync)
+    // ------------------------------------
     if (!window._biocharResizePlotsInstalled) {
       window._biocharResizePlotsInstalled = true;
 
       let t = null;
+
+      const relayoutOne = (el, kind, forceGutter = null) => {
+        if (!el || !el.layout) return null;
+
+        const w = el.clientWidth || el.parentElement?.clientWidth || 1200;
+
+        let gutter =
+          typeof forceGutter === "number"
+            ? forceGutter
+            : computeRightGutterPx(el, kind, el.layout, el.data);
+
+        if (el.id === "plot-1") window._plotRightGutter = gutter;
+        if (el.id === "plot-2" && typeof window._plotRightGutter === "number") {
+          gutter = window._plotRightGutter;
+        }
+
+        const update = {
+          width: w,
+          "margin.l": window._plotLeftMargin ?? 60,
+          "margin.r": gutter,
+          "yaxis.automargin": false,
+        };
+        if (el.layout?.yaxis2) update["yaxis2.automargin"] = false;
+
+        // Legend update
+        const tmp = { legend: el.layout?.legend || {} };
+        applyResponsiveLegend(tmp, gutter);
+        update.legend = tmp.legend;
+
+        Plotly.relayout(el, update);
+        Plotly.Plots.resize(el);
+
+        return gutter;
+      };
+
       window.addEventListener("resize", () => {
         if (t) window.clearTimeout(t);
         t = window.setTimeout(() => {
-          syncPlotGeometry().catch((e) => console.warn("syncPlotGeometry failed:", e));
-        }, 150);
+          const p1 = document.getElementById("plot-1");
+          const p2 = document.getElementById("plot-2");
+
+          // Compute from raw first, then force ratio to match
+          const gutter = relayoutOne(p1, "raw");
+          relayoutOne(p2, "ratio", gutter);
+
+          // Force exact x-axis domain match after relayout/resize
+          syncXAxisDomains();
+        }, 90);
       });
     }
 

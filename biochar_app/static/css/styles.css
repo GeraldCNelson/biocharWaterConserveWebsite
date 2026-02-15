@@ -186,7 +186,6 @@ html {
 .biochar-container {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
     gap: 20px;
     width: 100%;
     max-width: 100%;
@@ -414,8 +413,10 @@ html {
    ============================================================================= */
 
 .control-panel {
-    flex: 0 0 220px;
-    max-width: 220px;
+    flex: 0 1 220px;      /* ✅ allow shrink */
+    width: 220px;         /* keeps your “normal” look */
+    max-width: 260px;     /* optional: allow a little growth */
+    min-width: 200px;     /* ✅ prevent it becoming absurdly narrow */
     height: auto;
     padding: 12px;
     background-color: #f8f9fa;
@@ -450,9 +451,8 @@ html {
 }
 
 .plot-panel {
-    flex-grow: 1;
-    flex-basis: 0;
-    min-width: 0;
+    flex: 1 1 0;      /* ✅ */
+    min-width: 0;     /* ✅ critical for Plotly/flex */
     box-sizing: border-box;
     padding: 10px;
 }
@@ -520,15 +520,15 @@ button:hover {
    ============================================================================= */
 
 @media screen and (max-width: 768px) {
-    /* IMPORTANT: do NOT target Bootstrap's .container */
     .biochar-container {
         flex-direction: column;
-        align-items: center;
+        align-items: stretch; /* ✅ was center */
     }
 
     .control-panel {
         width: 100%;
         max-width: 100%;
+        min-width: 0;         /* ✅ add */
         margin-bottom: 15px;
         padding: 10px;
     }
@@ -542,6 +542,24 @@ button:hover {
     .graph-container {
         width: 100%;
         min-width: 0;
+    }
+}
+
+@media screen and (max-width: 980px) {
+    .biochar-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-panel {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .plot-panel {
+        width: 100%;
+        padding: 0 5px;
     }
 }
 

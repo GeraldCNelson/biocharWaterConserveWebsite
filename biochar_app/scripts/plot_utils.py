@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.utils import PlotlyJSONEncoder
 from fastapi import HTTPException
-
+from flask import abort
 from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
 
 if TYPE_CHECKING:
@@ -26,6 +26,7 @@ from biochar_app.scripts.config import (  # noqa: E402
     UNIT_CONVERSIONS,
     # IRR_COLOR,  # kept in config if other modules use it, but we use PLOT_COLORS here
     PLOT_COLORS,
+    TITLE_FONT_SIZE,
 )
 
 def bad_request(msg: str) -> None:
@@ -481,8 +482,7 @@ def make_raw_figure(
             )
 
     if not y_cols:
-        abort(
-            400,
+        abort(400,
             (
                 f"No valid data to plot for '{display_variable}' "
                 f"@ strip='{strip}', loc='{logger_location}', depth='{depth}' "
@@ -531,7 +531,7 @@ def make_raw_figure(
     )
 
     layout_kwargs: Dict[str, Any] = dict(
-        title={"text": title_text, "x": 0.5, "font": {"size": 18}},
+        title={"text": title_text, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis=common_xaxis_config(granularity, start, end),
         yaxis={"title": {"text": human_var, "font": {"size": 14}}},
         legend=common_legend_config("Legend"),
@@ -651,7 +651,7 @@ def make_ratio_figure(
         barmode="group",
         bargap=0.2,
         bargroupgap=0.1,
-        title={"text": title, "x": 0.5},
+        title={"text": title, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis=xcfg,
         legend=common_legend_config("Strip Ratios"),
         template="plotly_white",
