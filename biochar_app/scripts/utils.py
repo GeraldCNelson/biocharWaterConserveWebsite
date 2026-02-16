@@ -2,15 +2,8 @@
 
 import pandas as pd
 import numpy as np
-import logging
-import os
-from pathlib import Path
-import json
 from dataclasses import dataclass
-from biochar_app.scripts.config import DATA_PROCESSED_DIR, DEFAULT_GSEASON_PERIODS, UNIT_CONVERSIONS, LOGGER_LOCATIONS, DEPTHS
-from datetime import datetime
-import plotly.graph_objects as go
-from typing import List
+from biochar_app.scripts.config import LOGGER_LOCATIONS, DEPTHS
 
 @dataclass
 class LoggerFileInfo:

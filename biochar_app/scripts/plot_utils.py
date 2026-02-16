@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Any, Dict, List, Tuple, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -51,7 +51,6 @@ from biochar_app.scripts.plot_helpers import (  # noqa: E402
     common_yaxis_config,
     common_yaxis2_config,
     get_unit_aware_label,
-    parse_sensor_column,
     convert_units,
     load_irrigation_events,
     common_legend_config,

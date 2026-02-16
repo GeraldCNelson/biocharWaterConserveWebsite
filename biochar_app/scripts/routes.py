@@ -5,26 +5,21 @@ routes.py — API Endpoints & Orchestration for Biochar Dashboard
 """
 from __future__ import annotations
 
-import io
 import os
-import re
 import math
-import json
 import logging
-import textwrap
 from io import BytesIO
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Any, Optional, List
 from time import perf_counter
 
 import pandas as pd
-from fastapi import APIRouter, Request, HTTPException, Query, Body
+from fastapi import APIRouter, Request, HTTPException, Body
 from fastapi.responses import (
     FileResponse,
     JSONResponse,
     Response,
-    StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -73,7 +68,6 @@ from biochar_app.scripts.config import (
     variable_name_mapping,
     granularity_name_mapping,
     strip_name_mapping,
-    variable_name_abbrev,
     WARD_MASTER_NIR_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_SOILCHEM_CSV,
