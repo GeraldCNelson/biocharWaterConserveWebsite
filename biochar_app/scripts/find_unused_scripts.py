@@ -17,10 +17,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Set, Tuple
+from typing import Iterator, Optional, Set, Tuple
 
 
 @dataclass(frozen=True)

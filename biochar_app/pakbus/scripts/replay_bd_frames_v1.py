@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-import argparse, socket, time, binascii, sys, pathlib
-from biochar_app.pakbus.utils.crc import crc16_x25
+import argparse, socket, time, sys, pathlib
 
 HELLO = bytes.fromhex("bd 90 01 0f fd 73 d3 c2 d6 bd")
 

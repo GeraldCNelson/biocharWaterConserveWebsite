@@ -10,7 +10,7 @@ This file is intentionally lightweight: only constants / simple metadata.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 @dataclass(frozen=True)
 class TableSetSpec:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse, socket, time, sys
-from biochar_app.pakbus.utils.frame import bd_frame, bd_wrap
-from biochar_app.pakbus.utils.hex import hexdump, parse_hex_bytes
+from biochar_app.pakbus.utils.frame import bd_wrap
+from biochar_app.pakbus.utils.hex import hexdump
 
 def parse_hex_stream(s: str) -> bytes:
     s = s.strip().replace(" ", "").replace("\n","").replace("\t","")

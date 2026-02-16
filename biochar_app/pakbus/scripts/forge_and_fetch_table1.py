@@ -19,7 +19,6 @@ Outputs:
 """
 
 import argparse, json, pathlib, socket, time, struct, datetime, csv
-from typing import List
 
 HELLO = bytes.fromhex("bd90010ffd73d3c2d6bd")
 

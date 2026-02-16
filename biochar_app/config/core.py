@@ -11,10 +11,7 @@ Core experiment configuration:
 from __future__ import annotations
 
 import datetime
-from enum import Enum
 from math import pi
-from typing import Dict, List
-from dataclasses import dataclass
 
 # ---------------------------------------------------------------------
 # Experiment structure

@@ -3,7 +3,6 @@ from typing import (
     Any, Callable, Dict, Iterable, Mapping, Tuple
 )
 import pandas as pd
-from biochar_app.scripts.routes_utils import periods_to_list_of_dicts
 
 PeriodBounds = Tuple[pd.Timestamp, pd.Timestamp]
 # A mapping from period‐code → its (start, end) for a given year

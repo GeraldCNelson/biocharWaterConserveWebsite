@@ -27,9 +27,8 @@ from __future__ import annotations
 import argparse
 import os
 import socket
-import sys
 import time
-from typing import Tuple, Optional, List
+from typing import List
 
 FLAG = 0xBD  # frame delimiter
 

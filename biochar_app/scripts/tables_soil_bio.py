@@ -6,15 +6,10 @@ Soil Biological Health table builders.
 """
 
 from __future__ import annotations
-import pandas as pd
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List
 
 from biochar_app.scripts.tables_soil_common import VariableSpec, build_soil_table_payload
-from biochar_app.scripts.config import ( WARD_MASTER_NIR_CSV,
-    WARD_MASTER_SOILBIO_CSV,
-    WARD_MASTER_SOILCHEM_CSV,
-    BIOMASS_FIELD_CSV,)
 
 # -----------------------------------------------------------------------------
 # Soil Bio variable groups (copied from your existing soil_tables.py)

@@ -4,16 +4,11 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, cast, Any
 from datetime import datetime
-from collections.abc import Mapping
 
 from biochar_app.scripts.config import PARQUET_DIR, DEFAULT_GSEASON_PERIODS, DATA_RAW_DIR
 from biochar_app.scripts.gseason import compute_seasons
 from dataclasses import dataclass
-from typing import List
-from biochar_app.scripts.weather_runtime import load_weather_range
-from biochar_app.scripts.config import UNIT_CONVERSIONS
 from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts, add_gseason_precip_from_daily
-from biochar_app.scripts.tables_nir import _build_nir_table_payload
 @dataclass
 class PeriodSpec:
     code:  str   # e.g. "Q1_Winter"

@@ -3,13 +3,12 @@ import logging
 import os
 import zipfile
 import numpy as np
-import math
 from biochar_app.scripts.config import (
     UNIT_CONVERSIONS,
     cylinder_volume_m3,
 )
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import (
@@ -17,14 +16,12 @@ from biochar_app.scripts.config import (
     DATA_PROCESSED_DIR,
     YEARS,
     DEPTHS,
-    DEFAULT_UNITS,
     LOGGER_LOCATIONS,
     STRIPS,
     VALUE_COLS_STANDARD,
     VALUE_COLS_2024_PLUS,
     DEFAULT_GSEASON_PERIODS
 )
-from biochar_app.scripts.gseason_utils import load_or_generate_gseason_summary
 
 def safe_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd.Series:
     """

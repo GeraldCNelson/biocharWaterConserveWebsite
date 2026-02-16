@@ -89,15 +89,6 @@ def _safe_parse_timestamp(value: Any) -> Optional[pd.Timestamp]:
     return ts
 
 
-def init_time_figure(granularity: str, start: str, end: str) -> go.Figure:
-    fig = go.Figure()
-    fig.update_layout(
-        xaxis=common_xaxis_config(granularity, start, end),
-        template="plotly_white",
-    )
-    return fig
-
-
 def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
     """
     Ensures the returned structure is JSON-serializable (no numpy arrays, no Timestamps).
@@ -105,92 +96,6 @@ def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
     """
     raw = json.dumps(fig, cls=PlotlyJSONEncoder)
     return json.loads(raw)
-
-
-def add_raw_traces(
-        fig: go.Figure,
-        df: pd.DataFrame,
-        variable: str,
-        strip: str,
-        logger_location: str,
-        unit_system: str,
-) -> List[str]:
-    y_cols = [
-        c for c in df.columns
-        if c.startswith(f"{variable}_") and f"_raw_{strip}_{logger_location}" in c
-    ]
-    if not y_cols:
-        bad_request( f"No raw columns for {variable}, {strip}, {logger_location}")
-
-    x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-
-    for col in y_cols:
-        meta = parse_sensor_column(col, unit_system)
-        y_series = df[col].astype(float)
-
-        # Derive depth key from the column name pattern: VAR_<depth>_raw_...
-        # (e.g., T_1_raw_S1_T -> depth_key="1")
-        depth_key = None
-        try:
-            depth_key = col.split("_")[1]
-        except Exception:
-            depth_key = None
-
-        color = _depth_color(depth_key) if depth_key is not None else None
-
-        line_kwargs: Dict[str, Any] = dict(width=2)
-        if color:
-            line_kwargs["color"] = color
-
-        fig.add_trace(
-            go.Scatter(
-                x=x_vals,
-                y=y_series.tolist(),
-                mode="lines",
-                name=meta["depth"],
-                line=line_kwargs,
-            )
-        )
-    return y_cols
-
-
-def add_ratio_traces(
-        fig: go.Figure,
-        df: pd.DataFrame,
-        variable: str,
-        strip: str,
-        logger_location: str,
-) -> List[str]:
-    y_cols = [
-        c for c in df.columns
-        if c.startswith(f"{variable}_")
-           and "_ratio_" in c
-           and c.endswith(f"_{logger_location}")
-    ]
-    if not y_cols:
-        bad_request( f"No ratio columns for {variable}, {strip}, {logger_location}")
-
-    x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-
-    for col in y_cols:
-        pair = col.split("_ratio_")[1].rsplit("_", 1)[0].replace("_", "/")  # S1/S2
-        pair_key = col.split("_ratio_")[1].rsplit("_", 1)[0]  # S1_S2
-        color = PLOT_COLORS.get(f"ratio_{pair_key}", None)
-
-        y_vals = df[col].astype(float).tolist()
-        trace_kwargs: Dict[str, Any] = dict(
-            x=x_vals,
-            y=y_vals,
-            mode="lines",
-            name=pair,
-            line=dict(width=2),
-        )
-        if color:
-            trace_kwargs["line"]["color"] = color
-
-        fig.add_trace(go.Scatter(**trace_kwargs))
-
-    return y_cols
 
 
 def add_precipitation_bars(

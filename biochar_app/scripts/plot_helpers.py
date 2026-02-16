@@ -87,7 +87,7 @@ import re
 import logging
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Optional, Tuple, Dict, Sequence
+from typing import Any, Optional, Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -100,9 +100,7 @@ from biochar_app.scripts.config import (
     sensor_depth_mapping,
     UNIT_CONVERSIONS,
     label_name_mapping,
-    human_label,
     logger_location_mapping,
-    DEFAULT_GSEASON_PERIODS,
 )
 
 logger = logging.getLogger(__name__)
