@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, subprocess, sys, os
+import json, subprocess, sys
 from pathlib import Path
 import pandas as pd
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import argparse, binascii, csv, shutil, subprocess, sys
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Iterable, List, Tuple, Optional
 
@@ -49,7 +49,7 @@ def scapy_iter_frames(pcap_path: str) -> Iterable[Tuple[float, str, bytes]]:
     Requires scapy; if not installed, caller should choose tshark path.
     """
     try:
-        from scapy.all import rdpcap, TCP, Raw
+        from scapy.all import rdpcap, TCP
     except Exception as e:
         raise RuntimeError("Scapy not available") from e
 

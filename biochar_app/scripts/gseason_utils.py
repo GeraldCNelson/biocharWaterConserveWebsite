@@ -24,7 +24,6 @@ from biochar_app.scripts.gseason import assign_gseason_periods  # core mapper
 from biochar_app.scripts.config import (
     DATA_PROCESSED_DIR,
     DEFAULT_GSEASON_PERIODS,
-    PRECIP_COLS,  # e.g., {"us": "in", "metric": "mm"}
     PARQUET_DIR,
     UNIT_CONVERSIONS,
 )
@@ -63,7 +62,6 @@ def generate_gseason_summary(
     }
     """
     import re
-    from collections import defaultdict
 
     # 0) config + input/output paths
     summary_path = Path(DATA_PROCESSED_DIR) / f"gseason_summary_{year}.json"

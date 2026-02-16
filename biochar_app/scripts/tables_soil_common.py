@@ -23,10 +23,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from biochar_app.scripts.config import ( WARD_MASTER_NIR_CSV,
-    WARD_MASTER_SOILBIO_CSV,
-    WARD_MASTER_SOILCHEM_CSV,
-    BIOMASS_FIELD_CSV,)
 
 
 # -----------------------------------------------------------------------------

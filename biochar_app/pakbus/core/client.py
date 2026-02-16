@@ -16,9 +16,8 @@ import logging
 import shutil
 import socket
 import subprocess
-from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import Iterator, Optional
+from typing import Iterator
 from zoneinfo import ZoneInfo
 
 import pandas as pd

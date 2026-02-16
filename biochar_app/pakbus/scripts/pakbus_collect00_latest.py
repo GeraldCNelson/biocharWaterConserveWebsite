@@ -1,5 +1,4 @@
 import socket, struct, time, binascii
-from datetime import datetime, timezone, timedelta
 
 HOST = "2605:59C0:30F3:2500:2D0:2CFF:FE02:1DDD"
 PORT = 6785

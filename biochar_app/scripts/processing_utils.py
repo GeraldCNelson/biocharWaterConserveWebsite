@@ -1,5 +1,4 @@
 # biochar_app/scripts/processing_utils.py
-import math
 import pandas as pd
 
 from biochar_app.scripts.config import (

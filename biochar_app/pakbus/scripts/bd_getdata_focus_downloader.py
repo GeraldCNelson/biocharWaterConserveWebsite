@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, socket, time, os, binascii
+import argparse, socket, time, os
 
 def load_seeds(path):
     seeds = []

@@ -1,7 +1,6 @@
 # weather_runtime.py
 from functools import lru_cache
 import pandas as pd
-from datetime import datetime
 from typing import Iterable
 from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import UNIT_CONVERSIONS

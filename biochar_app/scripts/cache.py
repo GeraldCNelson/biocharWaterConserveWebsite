@@ -1,10 +1,7 @@
 # biochar_app/cache.py
 
-import threading
-from collections import OrderedDict
 import pandas as pd
 import psutil
-from pympler import asizeof
 
 def sizeof_df(df: pd.DataFrame) -> int:
     """

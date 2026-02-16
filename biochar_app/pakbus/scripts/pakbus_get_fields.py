@@ -22,15 +22,12 @@ That matches the short 31-byte request you found:
 """
 
 import argparse
-import binascii
 import socket
 import struct
 import sys
 import time
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from biochar_app.pakbus.utils.frame import (
-    bd_frame,
-    bd_strip,
     bd_wrap,
     bd_unwrap,
     split_bd_frames,
