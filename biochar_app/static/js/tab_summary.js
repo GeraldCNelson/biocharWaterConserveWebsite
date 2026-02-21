@@ -25,6 +25,10 @@ function capitalizeFirst(str) {
  *  - NO fallback to the other unit system (prevents silent wrong labels)
  *  - throws on invalid shape so we catch bugs early
  */
+
+function isTemperatureVariable(variableKey) {
+  return String(variableKey || "").trim().toUpperCase() === "T";
+}
 function resolveUnitLabelStrict(labelEntry, unitSystem, fallback) {
   if (!labelEntry) {
     throw new Error(
@@ -290,7 +294,7 @@ export async function updateSummaryStatistics() {
 
   try {
     const year = parseInt(getDropdownValue("summary-year"), 10);
-    const variable = getDropdownValue("summary-variable");
+    const variable = getDropdownValue("summary-variable"); // backend variable key (e.g., VWC, T, EC, SWC)
     const stripRaw = getDropdownValue("summary-strip");
     const strip = stripRaw ? stripRaw : null;
     const granularity = getDropdownValue("summary-granularity");
@@ -336,22 +340,25 @@ export async function updateSummaryStatistics() {
 
     const titleEl = document.getElementById("summary-title");
     if (titleEl) {
-      titleEl.textContent = data?.title || buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
+      titleEl.textContent =
+        data?.title || buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
     }
 
     container.innerHTML = "";
 
+    // ----------------------------
+    // Growing season special render
+    // ----------------------------
     if (granularity === "gseason") {
-      container.innerHTML = buildGseasonAccordionHTML(
-        data?.gseason_stats || {},
-        variable,
-        unitSystem
-      );
+      container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
       console.log("✅ Seasonal accordion rendered.");
       stopLoadingDots("summary-status", "");
       return;
     }
 
+    // ----------------------------
+    // Raw block
+    // ----------------------------
     const rawHeader = document.createElement("h5");
     rawHeader.textContent = "Raw Data";
     container.appendChild(rawHeader);
@@ -367,16 +374,54 @@ export async function updateSummaryStatistics() {
       container.appendChild(warn);
     }
 
-    const ratioStats = data?.ratio_statistics;
-    if (ratioStats && typeof ratioStats === "object") {
-      const ratioHeader = document.createElement("h5");
-      ratioHeader.className = "mt-4";
-      ratioHeader.textContent = "Ratio Data";
-      container.appendChild(ratioHeader);
+    // ----------------------------
+    // Ratio block (ALWAYS render header)
+    // Then:
+    //  - If temperature: show blue info and DO NOT show yellow warning
+    //  - Else: show table if present, otherwise show yellow warning
+    // ----------------------------
+    const ratioHeader = document.createElement("h5");
+    ratioHeader.className = "mt-4";
+    ratioHeader.textContent = "Ratio Data";
+    container.appendChild(ratioHeader);
 
+    // IMPORTANT: Use the selected variable key (same as 'variable')
+    const variableKey = variable;
+
+    if (typeof isTemperatureVariable === "function" && isTemperatureVariable(variableKey)) {
+      const info = document.createElement("div");
+      info.className = "alert alert-info";
+      info.innerHTML =
+        "Ratios are not shown for <strong>Soil Temperature</strong> because temperature ratios are not meaningful in this dashboard " +
+        "(unlike VWC/EC/SWC). See the <strong>Technical Details</strong> tab for an explanation.";
+      container.appendChild(info);
+
+      console.log("ℹ️ Temperature variable selected; ratio stats intentionally suppressed.");
+      stopLoadingDots("summary-status", "");
+      return; // stop here so we never show the generic yellow warning
+    }
+
+    const ratioStats = data?.ratio_statistics;
+    const hasRatioStats =
+      ratioStats && typeof ratioStats === "object" && Object.keys(ratioStats).length > 0;
+
+    if (hasRatioStats) {
       const ratioPretty = prettifyStatsKeys(ratioStats, variable, unitSystem);
       const ratioTableEl = generateSummaryTable(ratioPretty, variable);
-      if (ratioTableEl instanceof Node) container.appendChild(ratioTableEl);
+
+      if (ratioTableEl instanceof Node) {
+        container.appendChild(ratioTableEl);
+      } else {
+        const warn = document.createElement("div");
+        warn.className = "alert alert-warning";
+        warn.textContent = "Ratio summary table could not be rendered (unexpected return type).";
+        container.appendChild(warn);
+      }
+    } else {
+      const warn = document.createElement("div");
+      warn.className = "alert alert-warning";
+      warn.textContent = "No summary statistics available.";
+      container.appendChild(warn);
     }
 
     console.log("✅ Summary statistics tables updated.");

@@ -22,6 +22,53 @@ export function safeStr(v, fallback = "") {
 }
 
 // ------------------------------------------------------------
+// Note rendering helpers (safe URL -> clickable link)
+// ------------------------------------------------------------
+
+/**
+ * Append a note string to a container, converting plain http(s) URLs into
+ * clickable <a> links WITHOUT using innerHTML (avoids XSS).
+ *
+ * Example: "Source: https://example.com/foo" => Source: [link]
+ */
+function appendTextWithLinks(parentEl, text) {
+  const raw = safeStr(text, "");
+  if (!raw) return;
+
+  // Basic URL matcher: stop at whitespace or common closing punctuation.
+  // (We intentionally keep it conservative.)
+  const urlRe = /(https?:\/\/[^\s<>"'()]+)(?=[\s<>"'()]|$)/g;
+
+  let last = 0;
+  let m;
+
+  while ((m = urlRe.exec(raw)) !== null) {
+    const start = m.index;
+    const url = m[1];
+
+    // preceding text
+    if (start > last) {
+      parentEl.appendChild(document.createTextNode(raw.slice(last, start)));
+    }
+
+    // link
+    const a = document.createElement("a");
+    a.href = url;
+    a.textContent = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    parentEl.appendChild(a);
+
+    last = start + url.length;
+  }
+
+  // trailing text
+  if (last < raw.length) {
+    parentEl.appendChild(document.createTextNode(raw.slice(last)));
+  }
+}
+
+// ------------------------------------------------------------
 // Normalization
 // ------------------------------------------------------------
 
@@ -361,7 +408,8 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
   if (noteText) {
     const p = document.createElement("p");
     p.className = "text-muted mb-2";
-    p.textContent = noteText;
+    // IMPORTANT: do NOT use innerHTML; convert URLs safely into <a> nodes
+    appendTextWithLinks(p, noteText);
     wrapper.appendChild(p);
   }
 
