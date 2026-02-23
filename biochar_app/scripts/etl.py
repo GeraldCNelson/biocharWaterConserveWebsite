@@ -2,8 +2,8 @@
 """
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
-  - Normalize timestamps to naive America/Denver (drop tzinfo; shift DST gaps forward)
-  - Mask extreme placeholders → NaN
+  - Normalize logger timestamps as timezone-naive Mountain local wall time
+  - Mask extreme placeholders → NaN (covers typical logger codes like -9999/6999/9999)
   - Convert VWC fractions → percent (×100) deterministically
   - Mask VWC > 150% → NaN
   - Compute SWC cylinder volumes & logger‐ratios
@@ -17,10 +17,12 @@ Full ETL including growing-season (gseason) summaries:
 import os
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
+
 import numpy as np
 import pandas as pd
+from pandas import Series
 
 from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import (
@@ -34,17 +36,70 @@ from biochar_app.scripts.config import (
     UNIT_CONVERSIONS,
     cylinder_volume_m3,
     DEFAULT_GSEASON_PERIODS,
-    # NEW:
+    # CoAgMet URL bits for readme + reproducibility
     COLLECT_PERIOD,
     COAG_STATION,
     COAGMET_VARIABLE_MAP,
     DEFAULT_TIMEZONE,
     DEFAULT_UNITS,
 )
-from utils import calculate_ratios  # ensure this exists in your project
+
+from process_data import calculate_ratios
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+# Typical Campbell / logger placeholder codes are often in the +/- 9999 range.
+# Using 999_999 was too high and allowed placeholders through, which then got scaled
+# and counted as VWC>150%. This default catches -9999, 6999, 9999, etc.
+DEFAULT_BAD_VALUE_THRESHOLD = 10_000.0
+
+NAN = float("nan")
+# ---------------------------------------------------------------------------
+# Timestamp normalization
+# ---------------------------------------------------------------------------
+
+def ts_to_iso_date(ts: Optional[pd.Timestamp]) -> str:
+    """
+    Convert Timestamp-like -> 'YYYY-MM-DD' safely for type checkers.
+    Returns '' if ts is None/NaT.
+    """
+    if ts is None or pd.isna(ts):
+        return ""
+    # At this point, it's a real Timestamp.
+    return ts.strftime("%Y-%m-%d")
+
+def normalize_logger_timestamp_series(ts: Series) -> Series:
+    """
+    Normalize logger timestamps.
+
+    Project rule: logger timestamps are treated as *timezone-naive Mountain local wall time*.
+    That means we DO NOT tz-localize them (avoids DST ambiguous-hour issues like 01:xx on fall-back).
+    """
+    s = ts.astype("string").str.strip()
+    out = pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S", errors="coerce")
+    return out
+
+
+def normalize_weather_timestamp_series(
+    ts: pd.Series,
+    tz: str = "America/Denver",
+) -> pd.Series:
+    """
+    Normalize CoAgMet timestamps:
+      - parse
+      - localize naive to tz, shifting DST gaps forward
+      - convert any tz-aware to tz
+      - drop tz info (timezone-naive)
+    """
+    s = pd.to_datetime(ts, errors="coerce")
+    tzinfo = s.dt.tz
+    if tzinfo is None:
+        s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
+    else:
+        s = s.dt.tz_convert(tz)
+    return s.dt.tz_localize(None)
+
 
 # ---------------------------------------------------------------------------
 # Strip pairing assumptions for biochar vs. non-biochar comparisons
@@ -85,23 +140,6 @@ def convert_soil_t_to_fahrenheit(df: pd.DataFrame) -> pd.DataFrame:
 
     logger.info(f"🌡 Converted {len(t_cols)} soil-temp columns from °C to °F")
     return df
-
-
-def normalize_timestamp_series(
-    ts: pd.Series,
-    tz: str = "America/Denver",
-) -> pd.Series:
-    """
-    Localize naive timestamps to `tz` (shifting DST gaps forward),
-    convert any tz-aware to `tz`, then drop tz info (naive).
-    """
-    s = pd.to_datetime(ts, errors="coerce")
-    tzinfo = s.dt.tz
-    if tzinfo is None:
-        s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
-    else:
-        s = s.dt.tz_convert(tz)
-    return s.dt.tz_localize(None)
 
 
 def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
@@ -145,25 +183,44 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
         skiprows=4,
         names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
         na_values=["", "NA", "NAN"],
-        # NOTE: parse_dates is optional here; we’ll coerce explicitly below anyway
     ).drop(columns=["RECORD"], errors="ignore")
 
-    # Normalize timestamps (tz -> America/Denver, then drop tzinfo)
-    df["timestamp"] = normalize_timestamp_series(df["timestamp"])
+    if df.empty or "timestamp" not in df.columns:
+        return None
 
-    # Force a clean datetime64 dtype and remove NaT
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    n_nat = int(df["timestamp"].isna().sum())
+    # Preserve raw timestamp text for logging
+    raw_ts = df["timestamp"].copy()
+
+    # Normalize logger timestamps as *naive wall time*
+    norm_ts = normalize_logger_timestamp_series(raw_ts)
+
+    df["timestamp"] = norm_ts
+
+    bad_mask = df["timestamp"].isna()
+    n_nat = int(bad_mask.sum())
+
     if n_nat:
-        logger.warning(f"⚠️ {n_nat} NaT timestamps in {name}")
-        df = df.dropna(subset=["timestamp"])
+        N = 10
+        bad_idx = df.index[bad_mask][:N].tolist()
 
-    # Filter to the requested year (half-open interval)
+        examples: List[str] = []
+        for i in bad_idx:
+            raw_val: Any = raw_ts.iloc[i] if i < len(raw_ts) else None
+            norm_val: Any = norm_ts.iloc[i] if i < len(norm_ts) else None
+            examples.append(f"row={int(i)} raw={raw_val!r} normalized={norm_val!r}")
+
+        logger.warning(
+            f"⚠️ {n_nat} NaT timestamps in {name} ({datfile.name}). "
+            f"Examples: " + "; ".join(examples)
+        )
+        df = df.loc[~bad_mask].copy()
+
+    if df.empty:
+        return None
+
     start = pd.Timestamp(year=year, month=1, day=1)
     end = pd.Timestamp(year=year + 1, month=1, day=1)
-
-    ts = df["timestamp"]  # helps type inference in some IDEs
-    df = df.loc[ts.ge(start) & ts.lt(end)]
+    df = df.loc[(df["timestamp"] >= start) & (df["timestamp"] < end)].copy()
 
     if df.empty:
         return None
@@ -192,12 +249,22 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     return merged.reset_index()
 
 
-def replace_bad_values(df: pd.DataFrame, threshold: float = 999_999.0) -> pd.DataFrame:
-    """Mask any |value| ≥ threshold as NaN in numeric columns."""
-    numeric_cols = df.select_dtypes(include=["float", "int"]).columns
-    for col in numeric_cols:
-        df[col] = df[col].mask(df[col].abs() >= threshold, np.nan)
-    logger.info("🧹 Replaced extreme placeholders with NaN")
+def replace_bad_values(df: pd.DataFrame, threshold: float = DEFAULT_BAD_VALUE_THRESHOLD) -> pd.DataFrame:
+    """
+    Mask placeholder / sentinel values as NaN in numeric columns.
+
+    Important: logger placeholder codes are commonly around +/-9999 (or similar).
+    Using a huge threshold (e.g., 999_999) allows these through; after VWC scaling,
+    they become enormous and get flagged as VWC>150%.
+    """
+    df = df.copy()
+    for col in df.columns:
+        if col == "timestamp":
+            continue
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].mask(df[col].abs() >= threshold, NAN)
+
+    logger.info(f"🧹 Replaced extreme placeholders with NaN (|x| ≥ {threshold:g})")
     return df
 
 
@@ -206,6 +273,7 @@ def scale_vwc_to_percent(df: pd.DataFrame) -> pd.DataFrame:
     Convert ALL raw VWC columns from fractions (0–1) to percent (0–100)
     by multiplying by 100. Use this exactly once in ETL.
     """
+    df = df.copy()
     vwc_cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
     if not vwc_cols:
         return df
@@ -239,16 +307,7 @@ def add_swc_cylinder_volumes(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_temperature_differences(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add ΔT columns for each pair of strips, depth, and logger location.
-
-    For each (treated, control) in STRIP_PAIRS, compute:
-
-        Tdiff_{depth}_{treated}_{control}_{loc}
-            = T_{depth}_raw_{treated}_{loc} − T_{depth}_raw_{control}_{loc}
-
-    Units: °F (since convert_soil_t_to_fahrenheit() has already been applied).
-    """
+    """Add ΔT columns (treated − control) in °F."""
     df_copy = df.copy()
     new_cols = 0
 
@@ -267,31 +326,13 @@ def add_temperature_differences(df: pd.DataFrame) -> pd.DataFrame:
                 )
                 new_cols += 1
 
-    if new_cols:
-        logger.info(f"🌡 Added {new_cols} ΔT columns (biochar − control)")
-    else:
-        logger.info("🌡 No ΔT columns added (required T_*_raw_* columns missing)")
-
+    logger.info(f"🌡 Added {new_cols} ΔT columns (biochar − control)" if new_cols else
+                "🌡 No ΔT columns added (required T_*_raw_* columns missing)")
     return df_copy
 
 
 def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add ΔSWC volume columns (gallons & liters) for each strip pair, depth,
-    and logger location.
-
-    For each (treated, control) in STRIP_PAIRS, compute:
-
-        SWCdiff_gal_{treated}_{control}_{loc}_{depth}
-            = SWC_vol_gal_{treated}_{loc}_{depth}
-              − SWC_vol_gal_{control}_{loc}_{depth}
-
-        SWCdiff_L_{treated}_{control}_{loc}_{depth}
-            = SWC_vol_L_{treated}_{loc}_{depth}
-              − SWC_vol_L_{control}_{loc}_{depth}
-
-    Units: gallons / liters per sensor cylinder.
-    """
+    """Add ΔSWC volume columns (gallons & liters) (treated − control)."""
     df_copy = df.copy()
     new_cols = 0
 
@@ -303,7 +344,6 @@ def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
                 col_treated_L = f"SWC_vol_L_{treated}_{loc}_{depth}"
                 col_control_L = f"SWC_vol_L_{control}_{loc}_{depth}"
 
-                # Gallons
                 if col_treated_gal in df_copy.columns and col_control_gal in df_copy.columns:
                     diff_col_gal = f"SWCdiff_gal_{treated}_{control}_{loc}_{depth}"
                     df_copy[diff_col_gal] = (
@@ -312,7 +352,6 @@ def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
                     )
                     new_cols += 1
 
-                # Liters
                 if col_treated_L in df_copy.columns and col_control_L in df_copy.columns:
                     diff_col_L = f"SWCdiff_L_{treated}_{control}_{loc}_{depth}"
                     df_copy[diff_col_L] = (
@@ -321,11 +360,8 @@ def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
                     )
                     new_cols += 1
 
-    if new_cols:
-        logger.info(f"💧 Added {new_cols} ΔSWC volume columns (biochar − control)")
-    else:
-        logger.info("💧 No ΔSWC columns added (required SWC_vol_* columns missing)")
-
+    logger.info(f"💧 Added {new_cols} ΔSWC volume columns (biochar − control)" if new_cols else
+                "💧 No ΔSWC columns added (required SWC_vol_* columns missing)")
     return df_copy
 
 
@@ -333,133 +369,113 @@ def add_swc_differences(df: pd.DataFrame) -> pd.DataFrame:
 
 def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
     """
-    Build a 3-row growing-season summary from DAILY logger data and
-    write it as:
-
+    Build a 3-row growing-season summary from DAILY logger data and write:
         PARQUET_DIR / "summary" / "gseason" / f"{year}_gseason.parquet"
 
-    Uses DEFAULT_GSEASON_PERIODS from config.py. Each row corresponds
-    to one period and contains:
-      - period_code
-      - period_label (e.g. "Winter", "Early Growing")
-      - period_start, period_end (ISO dates)
-      - aggregated sensor columns
-        * precip_* columns summed over the period
-        * all other columns averaged over the period
+    Supports BOTH config formats:
 
-    Cross-year periods (e.g. "11-01" → "04-30") pull the earlier part
-    from the previous year's daily summary file if it exists.
+    A) dict-of-tuples:
+        {"Q1_Winter": ("11-01","02-28"), ...}
+
+    B) dict-of-dicts:
+        {"Q1_Winter": {"start":"11-01","end":"02-28","label":"Winter"}, ...}
     """
     if "timestamp" not in df_daily.columns:
-        logger.warning(
-            f"⚠️ write_gseason_summary({year}) skipped: no 'timestamp' column in daily frame"
-        )
+        logger.warning(f"⚠️ write_gseason_summary({year}) skipped: no 'timestamp' column")
         return
 
     df_daily = df_daily.copy()
     df_daily["timestamp"] = pd.to_datetime(df_daily["timestamp"], errors="coerce")
     df_daily = df_daily.dropna(subset=["timestamp"])
-
     if df_daily.empty:
         logger.warning(f"⚠️ write_gseason_summary({year}) skipped: empty daily frame")
         return
 
     value_cols = [c for c in df_daily.columns if c != "timestamp"]
-    agg_map = {
-        col: ("sum" if col.startswith("precip") else "mean")
-        for col in value_cols
-    }
+    agg_map = {col: ("sum" if col.startswith("precip") else "mean") for col in value_cols}
 
     daily_dir = Path(PARQUET_DIR) / "summary" / "daily"
     prev_daily: Optional[pd.DataFrame] = None
     prev_loaded_for_year: Optional[int] = None
 
+    def _unpack_period(period_code: str, meta):
+        if isinstance(meta, (tuple, list)) and len(meta) == 2:
+            start_mmdd, end_mmdd = meta[0], meta[1]
+            label = period_code
+            return label, start_mmdd, end_mmdd
+
+        if isinstance(meta, dict):
+            start_mmdd = meta.get("start")
+            end_mmdd = meta.get("end")
+            label = meta.get("label", period_code)
+            if start_mmdd and end_mmdd:
+                return label, start_mmdd, end_mmdd
+
+        raise ValueError(
+            f"DEFAULT_GSEASON_PERIODS[{period_code!r}] must be "
+            f"('MM-DD','MM-DD') or {{'start':'MM-DD','end':'MM-DD','label':...}}; got {meta!r}"
+        )
+
     rows = []
 
     for period_code, meta in DEFAULT_GSEASON_PERIODS.items():
-        label = meta.get("label", period_code)
-        start_mmdd = meta["start"]
-        end_mmdd = meta["end"]
+        label, start_mmdd, end_mmdd = _unpack_period(period_code, meta)
 
         start_month = int(start_mmdd.split("-")[0])
         end_month = int(end_mmdd.split("-")[0])
-        wraps_year = start_month > end_month  # e.g. 11-01 → 04-30
+        wraps_year = start_month > end_month
 
-        if wraps_year:
-            start_year = year - 1
-            end_year = year
-        else:
-            start_year = year
-            end_year = year
+        start_year = year - 1 if wraps_year else year
+        end_year = year
 
         start_ts = pd.Timestamp(f"{start_year}-{start_mmdd}")
-        end_ts = (
-            pd.Timestamp(f"{end_year}-{end_mmdd}")
-            + pd.Timedelta(days=1)
-            - pd.Timedelta(seconds=1)
-        )
+        end_ts = pd.Timestamp(f"{end_year}-{end_mmdd}") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
         window_parts: List[pd.DataFrame] = []
 
-        # Previous-year component (for wrap-around periods)
-        if wraps_year and start_year < year:
+        if wraps_year:
             prev_path = daily_dir / f"{start_year}_daily.parquet"
             if prev_path.exists():
                 if prev_daily is None or prev_loaded_for_year != start_year:
                     prev_daily = pd.read_parquet(prev_path)
-                    prev_daily["timestamp"] = pd.to_datetime(
-                        prev_daily["timestamp"], errors="coerce"
-                    )
+                    prev_daily["timestamp"] = pd.to_datetime(prev_daily["timestamp"], errors="coerce")
                     prev_daily = prev_daily.dropna(subset=["timestamp"])
                     prev_loaded_for_year = start_year
 
-                mask_prev = (prev_daily["timestamp"] >= start_ts) & (
-                    prev_daily["timestamp"] <= end_ts
-                )
+                mask_prev = (prev_daily["timestamp"] >= start_ts) & (prev_daily["timestamp"] <= end_ts)
                 window_parts.append(prev_daily.loc[mask_prev])
             else:
                 logger.warning(
-                    f"⚠️ No previous-year daily summary found at {prev_path} "
-                    f"for gseason period {period_code} in {year}; "
-                    f"using only {year} data."
+                    f"⚠️ Missing prev-year daily parquet {prev_path.name} for {period_code} ({year}); "
+                    f"using only current-year component."
                 )
 
-        # Current-year component
-        mask_cur = (df_daily["timestamp"] >= start_ts) & (
-            df_daily["timestamp"] <= end_ts
-        )
+        mask_cur = (df_daily["timestamp"] >= start_ts) & (df_daily["timestamp"] <= end_ts)
         window_parts.append(df_daily.loc[mask_cur])
 
-        if window_parts:
-            window = pd.concat(window_parts, ignore_index=True)
-        else:
-            window = pd.DataFrame(columns=df_daily.columns)
+        window = pd.concat(window_parts, ignore_index=True) if window_parts else pd.DataFrame(columns=df_daily.columns)
 
         if window.empty:
             logger.warning(
-                f"⚠️ No daily rows for gseason period {period_code} in {year} "
-                f"[{start_ts.date()} → {end_ts.date()}]; filling with NaN."
+                f"⚠️ No daily rows for gseason {period_code} in {year} "
+                f"[{start_ts.date()} → {end_ts.date()}]; filling NaN."
             )
             stats = {col: np.nan for col in value_cols}
         else:
-            # Aggregate and round to 3 decimals so gseason matches other summaries
-            stats_series = window[value_cols].agg(agg_map)
-            stats_series = stats_series.round(3)
+            stats_series = window[value_cols].agg(agg_map).round(3)
             stats = stats_series.to_dict()
 
         rows.append(
             {
                 "period_code": period_code,
                 "period_label": label,
-                "period_start": start_ts.date().isoformat(),
-                "period_end": end_ts.date().isoformat(),
+                "period_start": ts_to_iso_date(start_ts),
+                "period_end": ts_to_iso_date(end_ts),
                 **stats,
             }
         )
 
     out_df = pd.DataFrame(rows)
-
-    # Final safety: ensure all numeric columns are rounded to 3 decimals
     num_cols = out_df.select_dtypes(include=["float", "int"]).columns
     if len(num_cols) > 0:
         out_df[num_cols] = out_df[num_cols].round(3)
@@ -475,40 +491,23 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
 # ============================= Bulk-download helpers ============================= #
 
 def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
-    """
-    Build a per-year ZIP for 15-min logger data:
-
-        Biochar_Loggers_15min_{year}_USunits.zip
-
-    containing one CSV per logger (S1T, S1M, ..., S4B) plus a README.
-    Only includes columns that belong to that logger (no cross-strip
-    ΔT/ΔSWC or ratio columns).
-    """
+    """Build per-year ZIP for 15-min logger data (one CSV per logger) + README."""
     zip_path = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
 
-    # Ensure timestamp is a column
     df = df_15min.copy()
     if "timestamp" not in df.columns:
         df = df.reset_index()
     if "timestamp" not in df.columns:
-        raise ValueError(
-            "write_logger_download_zip: df_15min must have 'timestamp' as index or column"
-        )
+        raise ValueError("write_logger_download_zip: df_15min must have 'timestamp' as index or column")
 
-    # We’ll accumulate file descriptions as we go, then write a README at the end.
     readme_lines: List[str] = [
         "Biochar Fruita CSU Experiment – Logger 15-minute Data",
         f"Year: {year}",
         "",
-        "Project:",
-        "  Field experiment with four strips (S1–S4) and three logger locations",
-        "  per strip: Top (T), Middle (M), Bottom (B).",
-        "",
         "Files in this ZIP",
         "-----------------",
-        "  One CSV per datalogger location (e.g., S1T, S1M, S1B, …, S4B).",
-        "  Each CSV contains a 15-minute time series for all depths (1, 2, 3)",
-        "  in US customary units.",
+        "  One CSV per datalogger location (e.g., S1T, S1M, ..., S4B).",
+        "  Each CSV contains a 15-minute time series for all depths (1, 2, 3).",
         "",
         "CSV files:",
     ]
@@ -519,15 +518,10 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
     with ZipFile(zip_path, mode="w") as zf:
         for strip in STRIPS:
             for loc in LOGGER_LOCATIONS:
-                tag = f"{strip}{loc}"  # e.g., S1T
+                tag = f"{strip}{loc}"
                 suffix = f"_{strip}_{loc}"
 
-                # Columns that belong to this logger: timestamp + any ending with _{strip}_{loc}
-                cols = [
-                    c for c in df.columns
-                    if c == "timestamp" or c.endswith(suffix)
-                ]
-                # Require at least one non-timestamp column
+                cols = [c for c in df.columns if c == "timestamp" or c.endswith(suffix)]
                 if len(cols) <= 1:
                     continue
 
@@ -540,13 +534,12 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
 
                 readme_lines.append(f"  - {csv_name}: 15-min data for logger {tag}")
 
-        # Add general notes and column conventions
         readme_lines.extend(
             [
                 "",
                 "Column naming convention",
                 "------------------------",
-                "  timestamp                         : local time (America/Denver), 15-min step",
+                "  timestamp                         : local time (America/Denver), 15-min step (timezone-naive)",
                 "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
                 "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
                 "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
@@ -555,16 +548,10 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "",
                 "Notes",
                 "-----",
-                "  - All timestamps are timezone-naive and should be interpreted as",
-                "    America/Denver local time.",
-                "  - Units are US customary (VWC as %, temperature in °F, volumes in",
-                "    gallons/L).",
-                "  - Extreme placeholder values from the loggers (e.g., −999) have been",
-                "    converted to NaN.",
+                "  - Placeholder/sentinel values (e.g., -9999/9999) have been converted to NaN.",
                 "  - VWC values above 150% have been masked to NaN.",
                 "  - Cross-strip comparison variables (ΔT, ΔSWC, ratio columns, etc.)",
-                "    are not included in these per-logger CSVs. They are available in",
-                "    the aggregated Parquet summary files used by the web app.",
+                "    are not included in these per-logger CSVs.",
             ]
         )
 
@@ -579,33 +566,21 @@ def write_weather_download_zip(
     download_url: str = "",
     builder_url: str = "",
 ) -> None:
-    """
-    Build per-year ZIP for 15-min weather data:
-
-        Biochar_Weather_15min_{year}_USunits.zip
-
-    containing:
-      - weather_15min_{year}_USunits.csv
-      - README_Weather_15min_{year}.txt with URLs and metadata
-    """
+    """Build per-year ZIP for 15-min weather data + README."""
     zip_path = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
     df = df_15min.copy()
     if "timestamp" not in df.columns:
         df = df.reset_index()
     if "timestamp" not in df.columns:
-        raise ValueError(
-            "write_weather_download_zip: df_15min must have 'timestamp' as index or column"
-        )
+        raise ValueError("write_weather_download_zip: df_15min must have 'timestamp' as index or column")
 
     from io import StringIO
     from zipfile import ZipFile
 
-    # CSV content
     csv_buf = StringIO()
     df.to_csv(csv_buf, index=False)
 
-    # README: keep your existing header but flesh it out
     readme_lines: List[str] = [
         f"Biochar Fruita CSU Experiment - 15-min Weather Data ({year})",
         "",
@@ -615,29 +590,11 @@ def write_weather_download_zip(
         "",
         "Files in this ZIP",
         "-----------------",
-        f"  - weather_15min_{year}_USunits.csv : 15-minute time series for the full year",
-        "    (or up to the ETL run date).",
-        "",
-        "Column naming convention",
-        "------------------------",
-        "  timestamp              : local time (America/Denver), 15-min step",
-        "  temp_air_degF          : air temperature",
-        "  rh_pct                 : relative humidity (%)",
-        "  dewpoint_degF          : dewpoint temperature",
-        "  vp_kPa                 : vapor pressure (kPa)",
-        "  solarRad_Wm2           : solar radiation (W/m²)",
-        "  precip_in              : precipitation increments (inches per 15-min bin)",
-        "  windSpeed_mph          : wind speed (mph)",
-        "  windDir_deg            : wind direction (degrees)",
-        "  soil_temp_2in_degF     : 2-inch soil temperature (°F)",
-        "  soil_temp_6in_degF     : 6-inch soil temperature (°F)",
+        f"  - weather_15min_{year}_USunits.csv : 15-minute time series",
         "",
         "Notes:",
         "  - Timestamps are naive datetimes interpreted as America/Denver local time.",
-        "  - Units are US customary (e.g., precip_in, temp_air_degF); you may also see",
-        "    derived metric columns (precip_mm, temp_air_degC) where present.",
-        "  - Precipitation values have been cleaned so that negatives are clipped to 0",
-        "    and typical CoAgMet missing-value codes (e.g., -999) are treated as NaN.",
+        "  - Precipitation increments are clipped at 0; missing codes (-999) treated as NaN.",
     ]
 
     with ZipFile(zip_path, mode="w") as zf:
@@ -646,95 +603,6 @@ def write_weather_download_zip(
 
     logger.info(f"📦 Wrote weather download ZIP: {zip_path.name}")
 
-def build_logger_zip_readme(year: int) -> str:
-    return f"""Biochar Water Conservation Experiment – Fruita, CO
- Logger data (15-minute time step)
-
- Year: {year}
- Project: CSU Biochar Water Conservation field experiment (four strips, S1–S4)
- Units: US customary
-     • Volumetric water content (VWC): percent (%)
-     • Soil temperature (T): degrees Fahrenheit (°F)
-     • Electrical conductivity (EC): deciSiemens per meter (dS/m)
-     • Soil water content (SWC volumes): liters (L) and gallons (gal)
-     • Timestamps: local time (America/Denver), timezone-naive
-
- Files in this ZIP
- -----------------
-     • One CSV per datalogger location (e.g., S1T, S1M, S1B, …, S4B).
-     • Each CSV contains a 15-minute time series for all depths (1, 2, 3).
-
- Column naming convention
- ------------------------
-     timestamp                      : local time (America/Denver), 15-minute step
-     VWC_<depth>_raw_<strip>_<loc>  : VWC at depth (1,2,3), strip S1–S4, location T/M/B
-     T_<depth>_raw_<strip>_<loc>    : soil temperature at depth (1,2,3)
-     EC_<depth>_raw_<strip>_<loc>   : electrical conductivity at depth (1,2,3)
-     SWC_vol_L_<strip>_<loc>_<depth>: soil water content as cylinder volume (liters)
-     SWC_vol_gal_<strip>_<loc>_<depth>: soil water content as cylinder volume (gallons)
-
-     Additional columns may include biochar–control differences (ΔT, ΔSWC).
-
- Data caveats
- ------------
-     • Data are research-grade and may contain gaps or sensor artifacts.
-     • Extreme placeholder values from the dataloggers (e.g. -999) have been
-       converted to NaN during processing.
-     • VWC values above 150% have been masked to NaN.
-
- For details on processing and aggregation, see the “Technical Details” tab
- in the Biochar dashboard or the project documentation.
- """
-
-def build_weather_zip_readme(year: int) -> str:
-    return f"""Biochar Water Conservation Experiment – Fruita, CO
-Weather data (15-minute time step)
-
-Year: {year}
-Station: CoAgMet {COAG_STATION}
-Source: CoAgMet 5-minute data, aggregated to 15-minute intervals.
-
-Units (US customary)
---------------------
-    • Air temperature: degrees Fahrenheit (°F)
-    • Relative humidity: percent (%)
-    • Dewpoint: degrees Fahrenheit (°F)
-    • Vapor pressure: kilopascals (kPa)
-    • Solar radiation: watts per square meter (W/m²)
-    • Precipitation: inches (in), non-negative
-    • Wind speed: miles per hour (mph)
-    • Wind direction: degrees (°)
-    • 2-inch soil temperature: degrees Fahrenheit (°F)
-    • 6-inch soil temperature: degrees Fahrenheit (°F)
-
-File(s) in this ZIP
--------------------
-    • A single CSV containing a 15-minute time series for the full year
-      (or up to the current processing date).
-
-Column naming convention
-------------------------
-    timestamp              : local time (America/Denver), 15-minute step
-    temp_air_degF          : air temperature
-    rh_pct                 : relative humidity
-    dewpoint_degF          : dewpoint temperature
-    vp_kPa                 : vapor pressure
-    solarRad_Wm2           : solar radiation
-    precip_in              : precipitation (15-minute increments, summed)
-    windSpeed_mph          : wind speed
-    windDir_deg            : wind direction
-    soil_temp_2in_degF     : soil temperature at 2 inches
-    soil_temp_6in_degF     : soil temperature at 6 inches
-
-Data caveats
-------------
-    • Source data and metadata provided by the CoAgMet system.
-    • Rows with invalid timestamps are dropped.
-    • Precipitation values are clipped at zero (no negative rain).
-
-For more information, consult CoAgMet documentation and the
-Biochar dashboard “Technical Details” tab.
-"""
 
 # ============================= Aggregation (loggers) ============================= #
 
@@ -749,20 +617,14 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     year_dir = Path(PARQUET_DIR) / str(year)
     year_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Raw + ratios
     raw_path = year_dir / f"{year}_raw_logger.parquet"
     ratio_path = year_dir / f"{year}_raw_logger_ratios.parquet"
     df.reset_index().to_parquet(raw_path, index=False, compression="snappy")
-    calculate_ratios(df).reset_index().to_parquet(
-        ratio_path, index=False, compression="snappy"
-    )
+    calculate_ratios(df).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
-    # 2) Fixed‐frequency summaries
     sensor_prefixes = ("VWC_", "T_", "EC_", "SWC_", "Tdiff_", "SWCdiff_")
-    sensor_cols = [
-        c for c in df.columns if any(c.startswith(pref) for pref in sensor_prefixes)
-    ]
+    sensor_cols = [c for c in df.columns if any(c.startswith(pref) for pref in sensor_prefixes)]
     summary_base = Path(PARQUET_DIR) / "summary"
 
     for freq, code in GRANULARITIES:
@@ -772,12 +634,8 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         out_dir = summary_base / freq
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        agg_map = {
-            col: "sum" if col.startswith("precip") else "mean"
-            for col in df.columns
-        }
+        agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in df.columns}
 
-        # a) raw summary
         df_s = df.resample(code).agg(agg_map).round(3)
         df_s = df_s.dropna(subset=sensor_cols, how="all").reset_index()
 
@@ -785,21 +643,15 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq}: {fn_raw}")
 
-        # 👉 build DEFAULT gseason summary off the daily frame
         if freq == "daily":
             write_gseason_summary(year, df_s)
 
-        # 👉 build 15-min bulk-download ZIP for loggers
         if freq == "15min":
-            # df_s currently has a 'timestamp' column; set index for helper
             write_logger_download_zip(year, df_s.set_index("timestamp"))
 
-        # b) summary ratios
         df_s_ratio = calculate_ratios(df_s.set_index("timestamp"))
         fn_ratio = f"{year}_{freq}_ratios.parquet"
-        df_s_ratio.reset_index().to_parquet(
-            out_dir / fn_ratio, index=False, compression="snappy"
-        )
+        df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq} ratios: {fn_ratio}")
 
 
@@ -808,13 +660,13 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
 def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare CoAgMet 5 min weather for resampling:
-      - parse timestamp → naive America/Denver
+      - normalize timestamps (DST-aware) → naive America/Denver
       - coerce precip_in, treat -999 as NA, fill NA with 0
       - clip negative increments to 0
       - warn on implausible spikes
     """
     df_copy = dfw.copy()
-    df_copy["timestamp"] = normalize_timestamp_series(df_copy["timestamp"])
+    df_copy["timestamp"] = normalize_weather_timestamp_series(df_copy["timestamp"])
 
     df_copy["precip_in"] = pd.to_numeric(df_copy["precip_in"], errors="coerce")
     df_copy.loc[df_copy["precip_in"] == -999, "precip_in"] = np.nan
@@ -823,6 +675,12 @@ def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
     spike = df_copy["precip_in"].max()
     if pd.notna(spike) and spike > 1.5:
         logger.warning(f"⚠️ CoAgMet 5 min precip spike detected: {spike:.2f} in")
+
+    # Drop rows where timestamp went NaT due to ambiguous/unparseable times
+    bad_ts = df_copy["timestamp"].isna().sum()
+    if bad_ts:
+        logger.warning(f"⚠️ Dropping {int(bad_ts)} weather rows with invalid/ambiguous timestamps")
+        df_copy = df_copy.dropna(subset=["timestamp"])
 
     return df_copy
 
@@ -837,40 +695,33 @@ def generate_summaries(years: List[int]) -> None:
     """
     for year in years:
         logger.info(f"🌱 Starting ETL for {year}")
+
         df = merge_all_loggers(year)
         if df is None or df.empty:
-            logger.error(
-                f"❌ No logger .dat data for {year}, skipping logger summaries."
-            )
+            logger.error(f"❌ No logger .dat data for {year}, skipping logger summaries.")
         else:
-            # normalize and drop invalid timestamps
-            df["timestamp"] = normalize_timestamp_series(df["timestamp"])
+            # timestamps are already datetime from read_logger_data/merge_all_loggers
             df = df.dropna(subset=["timestamp"])
 
-            df = replace_bad_values(df)
+            df = replace_bad_values(df, threshold=DEFAULT_BAD_VALUE_THRESHOLD)
             df = scale_vwc_to_percent(df)
 
             # mask VWC > 150%
             vwc_cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
-            outliers = int(
-                pd.concat(
-                    [pd.to_numeric(df[c], errors="coerce") for c in vwc_cols],
-                    axis=1,
-                )
-                .gt(150.0)
-                .sum()
-                .sum()
-            )
-            if outliers > 0:
-                logger.warning(f"⚠️ {outliers} VWC>150% → NaN")
-            for c in vwc_cols:
-                series = pd.to_numeric(df[c], errors="coerce")
-                df[c] = series.mask(series > 150.0)
+            if vwc_cols:
+                vwc_block = pd.concat([pd.to_numeric(df[c], errors="coerce") for c in vwc_cols], axis=1)
+                outliers = int(vwc_block.gt(150.0).sum().sum())
+                if outliers > 0:
+                    logger.warning(f"⚠️ {outliers} VWC>150% → NaN")
+                for c in vwc_cols:
+                    s = pd.to_numeric(df[c], errors="coerce")
+                    df[c] = s.mask(s > 150.0)
 
             df = convert_soil_t_to_fahrenheit(df)
             df = add_swc_cylinder_volumes(df)
             df = add_temperature_differences(df)
             df = add_swc_differences(df)
+
             df = df.set_index("timestamp").sort_index()
             aggregate_and_write(year, df)
 
@@ -884,18 +735,13 @@ def generate_summaries(years: List[int]) -> None:
         required_cols = {"timestamp", "precip_in", "temp_air_degF"}
         missing = required_cols - set(dfw.columns)
         if missing:
-            logger.error(
-                f"❌ fetch_weather_data({year}) missing columns: {sorted(missing)}"
-            )
+            logger.error(f"❌ fetch_weather_data({year}) missing columns: {sorted(missing)}")
             continue
 
         dfw_clean = clean_weather_frame(dfw).set_index("timestamp").sort_index()
-        dfw_clean["precip_mm"] = dfw_clean["precip_in"].apply(
-            UNIT_CONVERSIONS["us_to_metric"]["precip"]
-        )
-        dfw_clean["temp_air_degC"] = dfw_clean["temp_air_degF"].apply(
-            UNIT_CONVERSIONS["us_to_metric"]["temp"]
-        )
+
+        dfw_clean["precip_mm"] = dfw_clean["precip_in"].apply(UNIT_CONVERSIONS["us_to_metric"]["precip"])
+        dfw_clean["temp_air_degC"] = dfw_clean["temp_air_degF"].apply(UNIT_CONVERSIONS["us_to_metric"]["temp"])
 
         weather_base = Path(PARQUET_DIR) / "summary" / "weather"
         dfw_15min_for_zip: Optional[pd.DataFrame] = None
@@ -905,11 +751,10 @@ def generate_summaries(years: List[int]) -> None:
                 continue
             out_dir = weather_base / freq
             out_dir.mkdir(parents=True, exist_ok=True)
-            agg_map = {
-                col: "sum" if col.startswith("precip") else "mean"
-                for col in dfw_clean.columns
-            }
+
+            agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in dfw_clean.columns}
             dfr = dfw_clean.resample(code).agg(agg_map).round(3).reset_index()
+
             fn = f"{year}_{freq}.parquet"
             dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")
@@ -917,9 +762,7 @@ def generate_summaries(years: List[int]) -> None:
             if freq == "15min":
                 dfw_15min_for_zip = dfr
 
-        # After we have written all weather summaries for this year, build ZIP if 15-min exists
         if dfw_15min_for_zip is not None:
-            # Rebuild the exact CoAgMet URL used (same logic as in fetch_weather_data)
             start_ts = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE)
             year_end = pd.Timestamp(f"{year}-12-31 23:59", tz=DEFAULT_TIMEZONE)
             now_ts = pd.Timestamp.now(tz=DEFAULT_TIMEZONE).floor("min")
@@ -947,6 +790,7 @@ def generate_summaries(years: List[int]) -> None:
 
     logger.info("🎉 ETL complete.")
 
+
 def resolve_target_year(cli_year: Optional[int] = None) -> int:
     """
     Pick which year to run.
@@ -961,6 +805,7 @@ def resolve_target_year(cli_year: Optional[int] = None) -> int:
         return int(max(YEARS))
     except Exception:
         return int(datetime.now().year)
+
 
 if __name__ == "__main__":
     os.makedirs(PARQUET_DIR, exist_ok=True)
