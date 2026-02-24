@@ -47,9 +47,12 @@ from biochar_app.scripts.config import (
     COAGMET_VARIABLE_MAP,
     DEFAULT_TIMEZONE,
     DEFAULT_UNITS,
+    LOGGER_BOUNDS,
+    DEFAULT_BAD_VALUE_THRESHOLD,
 )
 
 from process_data import calculate_ratios
+from biochar_app.scripts.config import LOGGER_BOUNDS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,10 +62,106 @@ WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 # Typical Campbell / logger placeholder codes are often in the +/- 9999 range.
 # Using 999_999 was too high and allowed placeholders through, which then got scaled
 # and counted as VWC>150%. This default catches -9999, 6999, 9999, etc.
-DEFAULT_BAD_VALUE_THRESHOLD = 10_000.0
+
 
 NAN = float("nan")
 
+def apply_value_bounds(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply site-specific sanity bounds (from config.thresholds)
+    AFTER units are standardized.
+
+    Logs how many values were outside bounds before masking.
+    """
+
+    df = df.copy()
+
+    def mask_with_report(series: pd.Series, min_val, max_val, col_name: str):
+        original = series.copy()
+
+        mask_low = pd.Series(False, index=series.index)
+        mask_high = pd.Series(False, index=series.index)
+
+        if min_val is not None:
+            mask_low = series < min_val
+        if max_val is not None:
+            mask_high = series > max_val
+
+        mask = mask_low | mask_high
+        count = int(mask.sum())
+
+        if count > 0:
+            logger.warning(
+                f"⚠️ {count} values outside bounds in {col_name} "
+                f"[{min_val}, {max_val}] — masking to NaN"
+            )
+
+            # Print first few examples for debugging
+            sample = original[mask].head(5)
+            logger.warning(
+                f"   Examples from {col_name}: {sample.to_dict()}"
+            )
+
+        series = series.mask(mask)
+        return series
+
+    # --------------------
+    # VWC (%)
+    # --------------------
+    vwc = LOGGER_BOUNDS.get("VWC_percent")
+    if vwc:
+        cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
+        for c in cols:
+            df[c] = mask_with_report(
+                pd.to_numeric(df[c], errors="coerce"),
+                vwc.min,
+                vwc.max,
+                c,
+            )
+
+    # --------------------
+    # Soil Temperature (°F)
+    # --------------------
+    t = LOGGER_BOUNDS.get("T_F")
+    if t:
+        cols = [c for c in df.columns if c.startswith("T_") and "_raw_" in c]
+        for c in cols:
+            df[c] = mask_with_report(
+                pd.to_numeric(df[c], errors="coerce"),
+                t.min,
+                t.max,
+                c,
+            )
+
+    # --------------------
+    # EC (dS/m)
+    # --------------------
+    ec = LOGGER_BOUNDS.get("EC_dSm")
+    if ec:
+        cols = [c for c in df.columns if c.startswith("EC_") and "_raw_" in c]
+        for c in cols:
+            df[c] = mask_with_report(
+                pd.to_numeric(df[c], errors="coerce"),
+                ec.min,
+                ec.max,
+                c,
+            )
+
+    # --------------------
+    # SWC Volumes
+    # --------------------
+    swc = LOGGER_BOUNDS.get("SWC_vol")
+    if swc:
+        cols = [c for c in df.columns if c.startswith("SWC_vol_")]
+        for c in cols:
+            df[c] = mask_with_report(
+                pd.to_numeric(df[c], errors="coerce"),
+                swc.min,
+                swc.max,
+                c,
+            )
+
+    return df
 # ---------------------------------------------------------------------------
 # Timestamp normalization
 # ---------------------------------------------------------------------------
