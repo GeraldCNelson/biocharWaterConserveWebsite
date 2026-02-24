@@ -29,6 +29,7 @@ function capitalizeFirst(str) {
 function isTemperatureVariable(variableKey) {
   return String(variableKey || "").trim().toUpperCase() === "T";
 }
+
 function resolveUnitLabelStrict(labelEntry, unitSystem, fallback) {
   if (!labelEntry) {
     throw new Error(
@@ -116,7 +117,6 @@ function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
     prettyVar = resolveUnitLabelStrict(labelMap[variable], unitSystem, variable);
   } catch (e) {
     console.error("❌ buildSummaryTitle label resolution failed:", e);
-    // Fail loudly to catch mapping bugs early:
     throw e;
   }
 
@@ -277,19 +277,37 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
   return html;
 }
 
+// NEW: small helpers so we always show/hide the summary status consistently
+function showSummaryStatus(text = "") {
+  const el = document.getElementById("summary-status");
+  if (!el) return;
+  el.style.display = "block";
+  if (typeof text === "string") el.textContent = text;
+}
+
+function hideSummaryStatus() {
+  const el = document.getElementById("summary-status");
+  if (!el) return;
+  el.textContent = "";
+  el.style.display = "none";
+}
+
 export async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: Updating summary statistics...");
 
-  startLoadingDots("summary-status", "Loading summary tables");
+  // NEW: ensure the status line is visible while loading
+  showSummaryStatus("");
+  startLoadingDots("summary-status", "Loading summary tables..");
 
   const container = document.getElementById("summary-table-container");
   if (!container) {
     console.warn("❌ #summary-table-container not found.");
     stopLoadingDots("summary-status", "Summary container missing.");
+    showSummaryStatus("Summary container missing.");
     return;
   }
 
-  showLoadingOverlay(container, "Loading summary tables");
+  showLoadingOverlay(container, "Loading summary tables..");
   container.innerHTML = "";
 
   try {
@@ -319,6 +337,7 @@ export async function updateSummaryStatistics() {
       container.appendChild(warn);
 
       stopLoadingDots("summary-status", "Missing required selections.");
+      showSummaryStatus("Missing required selections.");
       return;
     }
 
@@ -352,7 +371,10 @@ export async function updateSummaryStatistics() {
     if (granularity === "gseason") {
       container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
       console.log("✅ Seasonal accordion rendered.");
+
+      // NEW: stop + hide status on success
       stopLoadingDots("summary-status", "");
+      hideSummaryStatus();
       return;
     }
 
@@ -375,17 +397,13 @@ export async function updateSummaryStatistics() {
     }
 
     // ----------------------------
-    // Ratio block (ALWAYS render header)
-    // Then:
-    //  - If temperature: show blue info and DO NOT show yellow warning
-    //  - Else: show table if present, otherwise show yellow warning
+    // Ratio block
     // ----------------------------
     const ratioHeader = document.createElement("h5");
     ratioHeader.className = "mt-4";
     ratioHeader.textContent = "Ratio Data";
     container.appendChild(ratioHeader);
 
-    // IMPORTANT: Use the selected variable key (same as 'variable')
     const variableKey = variable;
 
     if (typeof isTemperatureVariable === "function" && isTemperatureVariable(variableKey)) {
@@ -397,8 +415,11 @@ export async function updateSummaryStatistics() {
       container.appendChild(info);
 
       console.log("ℹ️ Temperature variable selected; ratio stats intentionally suppressed.");
+
+      // NEW: stop + hide status on success
       stopLoadingDots("summary-status", "");
-      return; // stop here so we never show the generic yellow warning
+      hideSummaryStatus();
+      return;
     }
 
     const ratioStats = data?.ratio_statistics;
@@ -425,7 +446,10 @@ export async function updateSummaryStatistics() {
     }
 
     console.log("✅ Summary statistics tables updated.");
+
+    // NEW: stop + hide status on success
     stopLoadingDots("summary-status", "");
+    hideSummaryStatus();
   } catch (error) {
     console.error("❌ Unexpected error in updateSummaryStatistics:", error);
 
@@ -436,7 +460,9 @@ export async function updateSummaryStatistics() {
       "Failed to load summary statistics. Check server logs and browser console.";
     container.appendChild(div);
 
+    // NEW: show status on error
     stopLoadingDots("summary-status", "Failed to load summary.");
+    showSummaryStatus("Failed to load summary.");
   } finally {
     hideLoadingOverlay(container);
   }

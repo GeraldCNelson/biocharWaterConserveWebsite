@@ -15,6 +15,7 @@ Full ETL including growing-season (gseason) summaries:
 """
 
 import os
+import csv
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -27,16 +28,20 @@ from pandas import Series
 from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import (
     DATA_RAW_DIR,
+    DATA_PROCESSED_DIR,
     PARQUET_DIR,
+    PARQUET_SUMMARY_DIR,
+    PARQUET_SUMMARY_WEATHER_DIR,
+    LOGGER_DOWNLOADS_DIR,
+    WEATHER_DOWNLOADS_DIR,
     YEARS,
     STRIPS,
     LOGGER_LOCATIONS,
-    VALUE_COLS_2024_PLUS,
+    VALUE_COLS_2024_PLUS,  # kept for backward compatibility, not used for logger parsing anymore
     GRANULARITIES,
     UNIT_CONVERSIONS,
     cylinder_volume_m3,
     DEFAULT_GSEASON_PERIODS,
-    # CoAgMet URL bits for readme + reproducibility
     COLLECT_PERIOD,
     COAG_STATION,
     COAGMET_VARIABLE_MAP,
@@ -48,13 +53,16 @@ from process_data import calculate_ratios
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
+# Ensure bulk-download output directories exist (defined centrally in config.paths)
+LOGGER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 # Typical Campbell / logger placeholder codes are often in the +/- 9999 range.
 # Using 999_999 was too high and allowed placeholders through, which then got scaled
 # and counted as VWC>150%. This default catches -9999, 6999, 9999, etc.
 DEFAULT_BAD_VALUE_THRESHOLD = 10_000.0
 
 NAN = float("nan")
+
 # ---------------------------------------------------------------------------
 # Timestamp normalization
 # ---------------------------------------------------------------------------
@@ -66,8 +74,8 @@ def ts_to_iso_date(ts: Optional[pd.Timestamp]) -> str:
     """
     if ts is None or pd.isna(ts):
         return ""
-    # At this point, it's a real Timestamp.
     return ts.strftime("%Y-%m-%d")
+
 
 def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
@@ -113,16 +121,8 @@ STRIP_PAIRS = [
 
 # ---------------------------------------------------------------------------
 # Download directories for bulk 15-min ZIPs (loggers + weather)
-#   These live alongside PARQUET_DIR in a sibling "downloads" folder.
+# Prefer config/paths.py if present; fall back to the old behavior.
 # ---------------------------------------------------------------------------
-DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
-LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
-WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
-LOGGER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
-WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# ============================= Common helpers ============================= #
 
 def convert_soil_t_to_fahrenheit(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -170,6 +170,44 @@ def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
     return df.rename(columns=mapping)
 
 
+# ---------------------------------------------------------------------------
+# NEW: Robust TOA5/CR200X reader that uses the actual header row from the file.
+# This prevents 2023-vs-2024 column shift bugs (BattV_Min present vs absent).
+# ---------------------------------------------------------------------------
+
+def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
+    """
+    Read a Campbell Scientific TOA5 Table1 .dat file with the standard 4 header rows:
+      0: TOA5 metadata
+      1: column names (TIMESTAMP, RECORD, ...)
+      2: units
+      3: aggregation labels (Avg/Min/...)
+
+    Returns a DataFrame with those column names, and all data rows.
+    """
+    with datfile.open("r", newline="") as f:
+        r = csv.reader(f)
+        _meta = next(r, None)       # "TOA5", ...
+        colnames = next(r, None)    # "TIMESTAMP","RECORD",...
+        _units = next(r, None)
+        _aggs = next(r, None)
+
+    if not colnames:
+        raise ValueError(f"{datfile.name}: missing TOA5 column-name row.")
+    if "TIMESTAMP" not in colnames and "timestamp" not in colnames:
+        raise ValueError(f"{datfile.name}: TOA5 column-name row does not include TIMESTAMP.")
+
+    df = pd.read_csv(
+        datfile,
+        skiprows=4,
+        header=None,
+        names=colnames,
+        na_values=["", "NA", "NAN"],
+        engine="python",
+    )
+    return df
+
+
 def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
     """Read one strip+loc .dat, normalize & filter to year, rename."""
     datfile = Path(DATA_RAW_DIR) / f"datfiles_{year}" / f"{name}_Table1.dat"
@@ -177,13 +215,19 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
         logger.warning(f"⚠️ Not found: {datfile}")
         return None
 
-    df = pd.read_csv(
-        datfile,
-        header=None,
-        skiprows=4,
-        names=["timestamp", "RECORD"] + VALUE_COLS_2024_PLUS,
-        na_values=["", "NA", "NAN"],
-    ).drop(columns=["RECORD"], errors="ignore")
+    # NEW: read TOA5 using real header columns from the file
+    try:
+        df = _read_toa5_table1_dat(datfile)
+    except Exception as e:
+        logger.error(f"❌ Failed reading TOA5 file {datfile.name}: {e}")
+        return None
+
+    # Normalize expected timestamp column name
+    if "TIMESTAMP" in df.columns and "timestamp" not in df.columns:
+        df = df.rename(columns={"TIMESTAMP": "timestamp"})
+
+    # Drop RECORD if present
+    df = df.drop(columns=["RECORD"], errors="ignore")
 
     if df.empty or "timestamp" not in df.columns:
         return None
@@ -193,7 +237,6 @@ def read_logger_data(name: str, year: int) -> Optional[pd.DataFrame]:
 
     # Normalize logger timestamps as *naive wall time*
     norm_ts = normalize_logger_timestamp_series(raw_ts)
-
     df["timestamp"] = norm_ts
 
     bad_mask = df["timestamp"].isna()

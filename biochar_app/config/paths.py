@@ -51,3 +51,7 @@ WARD_MASTER_SOILCHEM_CSV = (
     SOIL_CHEM_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
 )
 BIOMASS_FIELD_CSV = BIOMASS_DIR / "field_biomass_dry_g_wide_clean.csv"
+
+DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
+LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
+WEATHER_DOWNLOADS_DIR = DOWNLOADS_DIR / "weather"
