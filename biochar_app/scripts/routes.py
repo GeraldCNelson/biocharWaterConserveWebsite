@@ -11,7 +11,7 @@ import logging
 from io import BytesIO
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple, cast
 from time import perf_counter
 
 import pandas as pd
@@ -47,6 +47,10 @@ from biochar_app.scripts.plot_utils import (
     make_ratio_gseason_figure,
     make_temperature_delta_figure,
 )
+
+# ✅ Canonical UnitSystem type (Literal["us","metric"])
+from biochar_app.scripts.type_utils import UnitSystem
+
 from biochar_app.scripts import state
 from biochar_app.scripts.config import (
     DEFAULT_YEAR,
@@ -107,7 +111,8 @@ WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 # User confirmed: biochar-data-master.xlsx is in data-raw
 BIOCHAR_MASTER_XLSX = "biochar_app/data-raw/biochar-data-master.xlsx"
-_LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
+_LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
+
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -116,7 +121,7 @@ def _normalize_sheet_name(s: str) -> str:
     return (s or "").strip()
 
 
-def _clean_for_json(obj):
+def _clean_for_json(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {k: _clean_for_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -131,6 +136,15 @@ def _clean_for_json(obj):
 def _ensure_year_allowed(year: int) -> None:
     if year not in YEARS:
         raise HTTPException(status_code=404, detail=f"Year {year} is not available.")
+
+
+def _normalize_unit_system(raw: Any) -> UnitSystem:
+    """
+    Narrow arbitrary user input to UnitSystem = Literal["us","metric"].
+    This is the key to eliminating mypy dict.get/index overload errors.
+    """
+    s = str(raw or "us").strip().lower()
+    return "metric" if s == "metric" else "us"
 
 
 def _round_ratio_columns(df: pd.DataFrame, decimals: int = 6) -> pd.DataFrame:
@@ -257,7 +271,7 @@ async def get_bulk_download_options():
         loggers_zip = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
         weather_zip = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
-        ancillary = {}
+        ancillary: Dict[str, bool] = {}
         for key in ANCILLARY_DATASETS.keys():
             try:
                 exists = _ancillary_available_for_year(BIOCHAR_MASTER_XLSX, key, int(year))
@@ -358,12 +372,20 @@ def _find_sheet_for_year(xlsx_path: str, base_sheet: str, year: int) -> Optional
         return base_sheet
 
     target_prefix = f"{year} {base_sheet}".strip().lower()
-    for name in xl.sheet_names:
-        if name.strip().lower() == target_prefix:
+
+    # Exact match first
+    for raw_name in xl.sheet_names:
+        name = str(raw_name)
+        normalized = name.strip().lower()
+        if normalized == target_prefix:
             return name
 
-    for name in xl.sheet_names:
-        if name.strip().lower().startswith(f"{year} ") and base_sheet.lower() in name.strip().lower():
+    # Fallback: starts with year + contains base_sheet
+    base_lower = base_sheet.lower()
+    for raw_name in xl.sheet_names:
+        name = str(raw_name)
+        normalized = name.strip().lower()
+        if normalized.startswith(f"{year} ") and base_lower in normalized:
             return name
 
     return None
@@ -500,7 +522,7 @@ class PlotRequest(BaseModel):
     loggerLocation: str
     depth: str
     traceOption: str
-    unitSystem: str
+    unitSystem: str  # keep str for payload compatibility; narrow inside route
     periods: Optional[List[PeriodSpec]] = Field(default=None)
 
 
@@ -515,7 +537,7 @@ async def api_plot_raw(req: PlotRequest):
     strip = req.strip
     logger_loc = req.loggerLocation
     depth = req.depth
-    unit = req.unitSystem
+    unit: UnitSystem = _normalize_unit_system(req.unitSystem)
     trace_option = TRACE_OPTION_MAP[req.traceOption]
     start = req.startDate
     end = req.endDate
@@ -604,7 +626,7 @@ async def api_plot_ratio(req: PlotRequest):
     strip = req.strip
     logger_loc = req.loggerLocation
     depth = int(req.depth)
-    unit = req.unitSystem
+    unit: UnitSystem = _normalize_unit_system(req.unitSystem)
     start, end = req.startDate, req.endDate
 
     if gran == "gseason":
@@ -660,6 +682,7 @@ async def api_plot_ratio(req: PlotRequest):
 
     return JSONResponse(fig)
 
+
 @api_router.post("/get_summary_stats")
 async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     """
@@ -684,9 +707,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     # Depth is a CODE: "1"|"2"|"3"
     depth_code = str(payload["depth"]).strip()
 
-    unit_system = str(payload.get("unitSystem", "us")).strip().lower()
-    if unit_system not in ("us", "metric"):
-        unit_system = "us"
+    unit_system: UnitSystem = _normalize_unit_system(payload.get("unitSystem", "us"))
 
     start = payload.get("startDate")
     end = payload.get("endDate")
@@ -714,7 +735,8 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     # Resolve unit-aware labels (string or {us, metric})
     if isinstance(label_entry, dict):
-        pretty_var = label_entry.get(unit_system) or variable
+        # label_entry is likely dict[UnitSystem,str] at runtime; narrow via UnitSystem key
+        pretty_var = cast(Dict[UnitSystem, str], label_entry).get(unit_system) or variable
     else:
         pretty_var = str(label_entry)
 
@@ -774,15 +796,25 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         periods_raw = payload.get("periods") or []
         periods_list = periods_to_list_of_dicts(periods_raw)
 
-        df_gs = load_gseason_df(
+        # Keep side-effects/caching behavior if load_gseason_df does it
+        _ = load_gseason_df(
             year=year,
             periods=periods_list,
             unit_system=unit_system,
             use_ratios=False,
         )
 
-        # IMPORTANT: keep using depth_code ("1"/"2"/"3") to match your column naming
-        flat = get_flat_gseason_summary(df_gs, variable=variable, strip=strip, depth=depth_code)
+        # Full flattened seasonal table (year-only signature)
+        flat_df = get_flat_gseason_summary(year)
+
+        # Filter to requested slice
+        flat_df = flat_df[
+            (flat_df["variable"] == variable)
+            & (flat_df["depth"] == depth_code)
+            & (flat_df["strip"] == strip)
+        ]
+
+        flat = flat_df.to_dict(orient="records")
 
         return JSONResponse(
             {
@@ -815,15 +847,13 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         }
     )
 
+
 # ---------------------------------------------------------------------------
 # Lab table routes (NIR + Soil) — STANDARD
 # ---------------------------------------------------------------------------
 @api_router.get("/get_soilbio_table")
 async def api_get_soilbio_table():
     payload = build_soilbio_table(WARD_MASTER_SOILBIO_CSV, min_year=2023)
-    sets = [
-
-    ]
     return JSONResponse(payload)
 
 

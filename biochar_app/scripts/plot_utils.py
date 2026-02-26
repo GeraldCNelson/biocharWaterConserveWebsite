@@ -1,14 +1,42 @@
-import logging
-import json
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+"""
+plot_utils.py
 
-import numpy as np
+Plotly figure builders + small helpers used by routes.
+
+This version focuses on:
+- Quieting PyCharm type warnings (esp. pandas / numpy stub mis-inference)
+- Using shared shims from type_utils.py for the repetitive “typing pain” spots:
+    * df[cols] always returns DataFrame
+    * safe .tolist() on Optional/Series/arrays
+    * finite min/max ignoring NaN/inf
+    * safe scalar timestamp parsing
+- Keeping runtime behavior the same
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Literal, Sequence, cast
+
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.utils import PlotlyJSONEncoder
 from fastapi import HTTPException
-from flask import abort
+from plotly.utils import PlotlyJSONEncoder
+
 from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts
+
+# --- shim helpers (centralized typing fixes) ---
+from biochar_app.scripts.type_utils import (  # noqa: E402
+    df_cols,
+    finite_min_max,
+    safe_timestamp,
+    safe_tolist,
+    to_float_series,
+    UnitSystem,
+)
+
+from biochar_app.scripts.type_utils import df_agg, gb_agg, NAN, POS_INF, NEG_INF
 
 if TYPE_CHECKING:
     from biochar_app.scripts.routes import PeriodSpec  # noqa: F401
@@ -16,7 +44,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 from biochar_app.scripts.config import (  # noqa: E402
-    PRECIP_COLS,
     bar_width_map,
     label_name_mapping,
     sensor_depth_mapping,
@@ -24,29 +51,11 @@ from biochar_app.scripts.config import (  # noqa: E402
     TRACE_CHOICES,
     variable_name_abbrev,
     UNIT_CONVERSIONS,
-    # IRR_COLOR,  # kept in config if other modules use it, but we use PLOT_COLORS here
     PLOT_COLORS,
     TITLE_FONT_SIZE,
 )
 
-def bad_request(msg: str) -> None:
-    raise HTTPException(status_code=400, detail=msg)
-
-def _depth_color(depth_key: str) -> Optional[str]:
-    """
-    Deterministic depth colors based on PLOT_COLORS keys:
-      depth_1, depth_2, depth_3
-    """
-    return PLOT_COLORS.get(f"depth_{str(depth_key)}")
-
-
-SWC_DEPTH_INCHES = {
-    depth_key: float(labels["us"].split()[0])
-    for depth_key, labels in sensor_depth_mapping.items()
-}
-
 from biochar_app.scripts.plot_helpers import (  # noqa: E402
-    compute_global_min_max,
     common_xaxis_config,
     common_yaxis_config,
     common_yaxis2_config,
@@ -56,75 +65,108 @@ from biochar_app.scripts.plot_helpers import (  # noqa: E402
     common_legend_config,
 )
 
+# ---------------------------------------------------------------------------
+# Types / constants
+# ---------------------------------------------------------------------------
+
 
 # ---------------------------------------------------------------------------
-# Internal helper: safe scalar timestamp parsing
+# Small helpers
 # ---------------------------------------------------------------------------
 
-def _safe_parse_timestamp(value: Any) -> Optional[pd.Timestamp]:
+
+def bad_request(msg: str) -> None:
+    raise HTTPException(status_code=400, detail=msg)
+
+
+def coerce_unit_system(unit_system: str) -> UnitSystem:
+    s = (unit_system or "").strip().lower()
+    if s in {"us", "usa", "imperial", "customary"}:
+        return "us"
+    if s in {"metric", "si"}:
+        return "metric"
+    return "us"
+
+
+def _depth_color(depth_key: str) -> Optional[str]:
     """
-    Best-effort conversion of a single value to a scalar Timestamp.
-
-    Returns:
-        - pd.Timestamp if we can parse a single scalar
-        - None if the value is None, container-like, or could not be parsed
+    Deterministic depth colors based on PLOT_COLORS keys:
+      depth_1, depth_2, depth_3
     """
-    if value is None:
-        return None
+    return PLOT_COLORS.get(f"depth_{str(depth_key)}")
 
-    if isinstance(value, (pd.Series, pd.DataFrame, pd.DatetimeIndex, np.ndarray, list, tuple)):
-        return None
 
-    ts = pd.to_datetime(value, errors="coerce")
+SWC_DEPTH_INCHES: Dict[str, float] = {
+    str(depth_key): float(str(labels["us"]).split()[0])
+    for depth_key, labels in sensor_depth_mapping.items()
+}
 
-    if isinstance(ts, (pd.Series, pd.DatetimeIndex)):
-        if len(ts) == 0:
-            return None
-        ts = ts[0]
 
-    if pd.isna(ts):
-        return None
+def _ensure_timestamp_datetime(df_in: pd.DataFrame) -> pd.DataFrame:
+    df = df_in.copy()
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    return df
 
-    return ts
+
+def _x_time_strings(df: pd.DataFrame) -> List[str]:
+    """
+    Plotly x values as ISO-like strings for time-series plots.
+    Centralized to reduce duplicated code fragments.
+    """
+    if "timestamp" not in df.columns:
+        return []
+    ts = pd.to_datetime(df["timestamp"], errors="coerce")
+    return ts.dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
 
 def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
-    """
-    Ensures the returned structure is JSON-serializable (no numpy arrays, no Timestamps).
-    PlotlyJSONEncoder handles numpy types well.
-    """
     raw = json.dumps(fig, cls=PlotlyJSONEncoder)
-    return json.loads(raw)
+    return cast(Dict[str, Any], json.loads(raw))
+
+
+# ---------------------------------------------------------------------------
+# Precipitation overlay
+# ---------------------------------------------------------------------------
 
 
 def add_precipitation_bars(
-        fig: go.Figure,
-        df: pd.DataFrame,
-        unit_system: str,
-        granularity: str,
+    fig: go.Figure,
+    df: pd.DataFrame,
+    unit_system: str,
+    granularity: str,
 ) -> None:
-    bw = bar_width_map.get(granularity, bar_width_map["daily"])
+    usys: UnitSystem = coerce_unit_system(unit_system)
+    df = _ensure_timestamp_datetime(df)
+
+    bw = bar_width_map.get(granularity, bar_width_map.get("daily", 0))
     if granularity == "daily":
-        bw = int(bw * 1.5)
+        try:
+            bw = int(float(bw) * 1.5)
+        except (TypeError, ValueError):
+            pass
 
-    primary = {"metric": "precip_mm", "us": "precip_in"}[unit_system]
-    fallback = {"metric": "precip_in", "us": "precip_mm"}[unit_system]
+    primary = {"metric": "precip_mm", "us": "precip_in"}[usys]
+    fallback = {"metric": "precip_in", "us": "precip_mm"}[usys]
 
+    vals: Optional[pd.Series] = None
     if primary in df.columns:
-        vals = df[primary].astype(float)
+        vals = to_float_series(df[primary])
     elif fallback in df.columns:
-        tmp = df[fallback].astype(float)
-        vals = tmp * (25.4 if unit_system == "metric" else 1 / 25.4)
-    else:
+        tmp = to_float_series(df[fallback])
+        vals = tmp * (25.4 if usys == "metric" else 1.0 / 25.4)
+
+    if vals is None or "timestamp" not in df.columns:
         return
 
-    label = get_unit_aware_label("precip", unit_system)
-    unit_suffix = "in" if unit_system == "us" else "mm"
+    label = get_unit_aware_label("precip", usys)
+    unit_suffix = "in" if usys == "us" else "mm"
     hovertemplate = "Precip: %{y:.2f} " + unit_suffix + "<extra></extra>"
+
     fig.add_trace(
         go.Bar(
-            x=df["timestamp"].tolist(),
-            y=vals.tolist(),
+            x=safe_tolist(df["timestamp"]),
+            y=safe_tolist(vals),
             yaxis="y2",
             name=label,
             width=bw,
@@ -134,17 +176,22 @@ def add_precipitation_bars(
             hovertemplate=hovertemplate,
         )
     )
-    fig.update_layout(yaxis2=common_yaxis2_config(unit_system))
+    fig.update_layout(yaxis2=common_yaxis2_config(usys))
+
+
+# ---------------------------------------------------------------------------
+# Irrigation overlays
+# ---------------------------------------------------------------------------
 
 
 def add_irrigation_shapes(
-        fig: go.Figure,
-        strip: str,
-        year: int,
-        unit_system: str,
-        sum_only: bool = False,
-        periods: Optional[List[Any]] = None,
-        category_labels: Optional[List[str]] = None,
+    fig: go.Figure,
+    strip: str,
+    year: int,
+    unit_system: str,
+    sum_only: bool = False,
+    periods: Optional[Sequence[Any]] = None,
+    category_labels: Optional[List[str]] = None,
 ) -> None:
     """
     Draw irrigation:
@@ -153,11 +200,13 @@ def add_irrigation_shapes(
       • sum_only=False -> one vertical line per event on a date axis.
       • Always adds a dummy legend entry matching the dotted line style.
     """
+    usys: UnitSystem = coerce_unit_system(unit_system)
+
     events_df = load_irrigation_events(strip, year)
     recs = events_df.to_dict(orient="records")
 
     conv = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
-    unit_lbl = "<br>k L" if unit_system == "metric" else "<br>k gal"
+    unit_lbl = "<br>k L" if usys == "metric" else "<br>k gal"
 
     irr_color = PLOT_COLORS.get("irrigation", "black")
     irr_anno_color = irr_color
@@ -169,35 +218,28 @@ def add_irrigation_shapes(
         ]
 
         for i, p in enumerate(periods):
-            start_raw = getattr(p, "start", None)
-            end_raw = getattr(p, "end", None)
-
-            start_ts = _safe_parse_timestamp(start_raw)
-            end_ts = _safe_parse_timestamp(end_raw)
-
+            start_ts = safe_timestamp(getattr(p, "start", None))
+            end_ts = safe_timestamp(getattr(p, "end", None))
             if start_ts is None or end_ts is None:
                 continue
 
             total = 0.0
             for ev in recs:
-                ts_raw = ev.get("start") or ev.get("timestamp")
-                ts = _safe_parse_timestamp(ts_raw)
-                if ts is None:
+                ts = safe_timestamp(ev.get("start") or ev.get("timestamp"))
+                if ts is None or ts < start_ts or ts > end_ts:
                     continue
-                if ts < start_ts or ts > end_ts:
-                    continue
-
                 try:
-                    total += float(ev.get("volume_gal", 0))
+                    total += float(ev.get("volume_gal", 0) or 0.0)
                 except (TypeError, ValueError):
                     pass
 
             if total <= 0:
                 continue
-            if unit_system == "metric":
-                total = conv(total)
 
-            cat = labels[i]
+            if usys == "metric":
+                total = float(conv(total))
+
+            cat = labels[i] if i < len(labels) else str(i + 1)
 
             fig.add_shape(
                 type="line",
@@ -215,15 +257,14 @@ def add_irrigation_shapes(
                 x=cat,
                 yref="paper",
                 y=1.02,
-                text=f"{total/1000:.0f} {unit_lbl}",
+                text=f"{total / 1000.0:.0f} {unit_lbl}",
                 showarrow=False,
                 font=dict(size=10, color=irr_anno_color),
             )
 
     elif not sum_only:
         for ev in recs:
-            ts_raw = ev.get("start") or ev.get("timestamp")
-            ts = _safe_parse_timestamp(ts_raw)
+            ts = safe_timestamp(ev.get("start") or ev.get("timestamp"))
             if ts is None:
                 continue
 
@@ -240,22 +281,23 @@ def add_irrigation_shapes(
             )
 
             try:
-                vol = float(ev.get("volume_gal", 0))
+                vol = float(ev.get("volume_gal", 0) or 0.0)
             except (TypeError, ValueError):
                 continue
-            if unit_system == "metric":
-                vol = conv(vol)
+
+            if usys == "metric":
+                vol = float(conv(vol))
 
             fig.add_annotation(
                 x=ts,
                 y=1.02,
                 yref="paper",
-                text=f"{vol/1000:.0f} {unit_lbl}",
+                text=f"{vol / 1000.0:.0f} {unit_lbl}",
                 showarrow=False,
                 font=dict(size=10, color=irr_anno_color),
             )
 
-    legend_label = get_unit_aware_label("irrigation", unit_system)
+    legend_label = get_unit_aware_label("irrigation", usys)
     fig.add_trace(
         go.Scatter(
             x=[None],
@@ -268,56 +310,68 @@ def add_irrigation_shapes(
     )
 
 
+# ---------------------------------------------------------------------------
+# Primary y-axis scaling
+# ---------------------------------------------------------------------------
+
+
 def configure_primary_yaxis(
-        fig: go.Figure,
-        df: pd.DataFrame,
-        y_cols: List[str],
-        variable: str,
-        unit_system: str,
-        kind: str,
+    fig: go.Figure,
+    df: pd.DataFrame,
+    y_cols: List[str],
+    variable: str,
+    unit_system: str,
+    kind: str,
 ) -> None:
     if not y_cols:
         return
 
-    scaled = df[y_cols].astype(float)
-    gmin, gmax = compute_global_min_max(scaled, y_cols)
+    usys: UnitSystem = coerce_unit_system(unit_system)
+
+    # Use shim for stable numeric conversion + finite min/max (avoids pandas union typing issues)
+    block = df_cols(df, y_cols)
+    gmin, gmax = finite_min_max(block)
+    if gmin is None or gmax is None:
+        return
 
     if kind == "ratio" and variable in ("VWC", "SWC"):
         gmin = min(0.0, gmin)
 
-    fig.update_layout(
-        yaxis=common_yaxis_config(kind, variable, unit_system, gmin, gmax)
-    )
+    fig.update_layout(yaxis=common_yaxis_config(kind, variable, usys, gmin, gmax))
 
-    if kind == "raw":
-        precip_col = f"precip_{PRECIP_COLS[unit_system]}"
-        if precip_col in df.columns:
-            fig.update_layout(yaxis2=common_yaxis2_config(unit_system))
+
+# ---------------------------------------------------------------------------
+# RAW (time series)
+# ---------------------------------------------------------------------------
 
 
 def make_raw_figure(
-        *,
-        df: pd.DataFrame,
-        variable: str,
-        strip: str,
-        logger_location: str,
-        depth: str,
-        unit_system: str,
-        year: int,
-        granularity: str,
-        start: str,
-        end: str,
-        trace_option: str,
+    *,
+    df: pd.DataFrame,
+    variable: str,
+    strip: str,
+    logger_location: str,
+    depth: str,
+    unit_system: str,
+    year: int,
+    granularity: str,
+    start: str,
+    end: str,
+    trace_option: str,
 ) -> Dict[str, Any]:
+    usys: UnitSystem = coerce_unit_system(unit_system)
+
     if trace_option not in TRACE_CHOICES:
-        bad_request( f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
+        bad_request(f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
 
     display_variable = variable
     source_variable = "VWC" if variable == "SWC" else variable
 
-    df_plot = df.copy()
+    df_plot = _ensure_timestamp_datetime(df)
+    if "timestamp" not in df_plot.columns:
+        raise HTTPException(status_code=400, detail="No timestamp column available for plotting.")
 
-    human_var = get_unit_aware_label(display_variable, unit_system)
+    human_var = get_unit_aware_label(display_variable, usys)
     human_logger_loc = logger_location_mapping.get(logger_location, logger_location)
 
     fig = go.Figure()
@@ -325,31 +379,34 @@ def make_raw_figure(
     use_secondary_y = False
 
     def swc_from_vwc(series: pd.Series, depth_key: str) -> pd.Series:
-        vwc_pct = pd.to_numeric(series, errors="coerce")
+        vwc_pct = to_float_series(series)
         depth_in = SWC_DEPTH_INCHES.get(str(depth_key))
         if depth_in is None:
-            return pd.Series(np.nan, index=series.index)
+            return pd.Series([NAN] * len(series), index=series.index)
 
-        swc_in = (vwc_pct / 100.0) * depth_in
-        if unit_system == "metric":
-            return UNIT_CONVERSIONS["us_to_metric"]["swc"](swc_in)
+        swc_in = (vwc_pct / 100.0) * float(depth_in)
+        if usys == "metric":
+            conv_swc = UNIT_CONVERSIONS["us_to_metric"]["swc"]
+            return swc_in.apply(lambda x: float(conv_swc(x)) if pd.notna(x) else NAN)
         return swc_in
+
+    x_vals = _x_time_strings(df_plot)
 
     if trace_option == TRACE_CHOICES[0]:
         for d, names in sensor_depth_mapping.items():
-            base_col = f"{source_variable}_{d}_raw_{strip}_{logger_location}"
+            d_str = str(d)
+            base_col = f"{source_variable}_{d_str}_raw_{strip}_{logger_location}"
             if base_col not in df_plot.columns:
                 continue
 
             if display_variable == "SWC":
-                df_plot[base_col] = swc_from_vwc(df_plot[base_col], d)
+                df_plot[base_col] = swc_from_vwc(df_plot[base_col], d_str)
 
             y_cols.append(base_col)
-            x_vals = df_plot["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-            y_vals = pd.to_numeric(df_plot[base_col], errors="coerce").tolist()
+            y_vals = safe_tolist(to_float_series(df_plot[base_col]))
 
             line_kwargs: Dict[str, Any] = dict(width=2)
-            depth_col = _depth_color(str(d))
+            depth_col = _depth_color(d_str)
             if depth_col:
                 line_kwargs["color"] = depth_col
 
@@ -358,22 +415,22 @@ def make_raw_figure(
                     x=x_vals,
                     y=y_vals,
                     mode="lines",
-                    name=names[unit_system],
+                    name=names[usys],
                     line=line_kwargs,
                 )
             )
     else:
+        depth_str = str(depth)
         for loc_key, loc_name in logger_location_mapping.items():
-            base_col = f"{source_variable}_{depth}_raw_{strip}_{loc_key}"
+            base_col = f"{source_variable}_{depth_str}_raw_{strip}_{loc_key}"
             if base_col not in df_plot.columns:
                 continue
 
             if display_variable == "SWC":
-                df_plot[base_col] = swc_from_vwc(df_plot[base_col], depth)
+                df_plot[base_col] = swc_from_vwc(df_plot[base_col], depth_str)
 
             y_cols.append(base_col)
-            x_vals = df_plot["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-            y_vals = pd.to_numeric(df_plot[base_col], errors="coerce").tolist()
+            y_vals = safe_tolist(to_float_series(df_plot[base_col]))
 
             fig.add_trace(
                 go.Scatter(
@@ -386,8 +443,9 @@ def make_raw_figure(
             )
 
     if not y_cols:
-        abort(400,
-            (
+        raise HTTPException(
+            status_code=400,
+            detail=(
                 f"No valid data to plot for '{display_variable}' "
                 f"@ strip='{strip}', loc='{logger_location}', depth='{depth}' "
                 f"between {start} and {end}."
@@ -395,23 +453,22 @@ def make_raw_figure(
         )
 
     if display_variable in ("VWC", "SWC"):
-        logger.info("ℹ️ looking for precip columns (‘precip_in’/‘precip_mm’) in DataFrame")
-        add_precipitation_bars(fig, df, unit_system, granularity)
+        add_precipitation_bars(fig, df_plot, usys, granularity)
         use_secondary_y = True
 
     if display_variable == "T":
-        temp_col = None
-        if unit_system == "metric" and "temp_air_degC" in df.columns:
+        temp_col: Optional[str] = None
+        if usys == "metric" and "temp_air_degC" in df_plot.columns:
             temp_col = "temp_air_degC"
-        elif "temp_air_degF" in df.columns:
+        elif "temp_air_degF" in df_plot.columns:
             temp_col = "temp_air_degF"
 
         if temp_col is not None:
-            label = get_unit_aware_label("temp_air", unit_system)
+            label = get_unit_aware_label("temp_air", usys)
             fig.add_trace(
                 go.Scatter(
-                    x=df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
-                    y=pd.to_numeric(df[temp_col], errors="coerce").tolist(),
+                    x=x_vals,
+                    y=safe_tolist(to_float_series(df_plot[temp_col])),
                     mode="lines",
                     name=label,
                     yaxis="y2",
@@ -425,9 +482,9 @@ def make_raw_figure(
             use_secondary_y = True
 
     if use_secondary_y:
-        fig.update_layout(yaxis2=common_yaxis2_config(unit_system))
+        fig.update_layout(yaxis2=common_yaxis2_config(usys))
 
-    add_irrigation_shapes(fig, strip, year, unit_system)
+    add_irrigation_shapes(fig, strip, year, usys)
 
     title_text = (
         f"{granularity.capitalize()} Data Plot for {human_var} "
@@ -446,13 +503,9 @@ def make_raw_figure(
     )
 
     if use_secondary_y:
-        # keep the y2 definition created earlier (secondary_y=True traces)
         layout_kwargs["yaxis2"] = fig.layout.yaxis2
-
-        # give enough room for y2 ticks/title + legend so Plotly doesn't shrink plot width
         layout_kwargs["margin"]["r"] = 240
 
-        # place legend outside the plotting area (in the right margin)
         base_legend = common_legend_config("Legend") or {}
         layout_kwargs["legend"] = {
             **base_legend,
@@ -463,7 +516,6 @@ def make_raw_figure(
         }
 
     fig.update_layout(**layout_kwargs)
-
     fig.update_layout(font={"size": 12})
 
     configure_primary_yaxis(
@@ -471,47 +523,57 @@ def make_raw_figure(
         df=df_plot,
         y_cols=y_cols,
         variable=display_variable,
-        unit_system=unit_system,
+        unit_system=usys,
         kind="raw",
     )
+
     return prepare_plot_for_json(fig)
 
 
+# ---------------------------------------------------------------------------
+# Ratio (time series or gseason)
+# ---------------------------------------------------------------------------
+
+
 def make_ratio_figure(
-        df: pd.DataFrame,
-        variable: str,
-        strip: str,
-        logger_location: str,
-        unit_system: str,
-        granularity: str,
-        year: int,
-        start: str,
-        end: str,
-        depth: str,
+    df: pd.DataFrame,
+    variable: str,
+    strip: str,
+    logger_location: str,
+    unit_system: str,
+    granularity: str,
+    year: int,
+    start: str,
+    end: str,
+    depth: str,
 ) -> Dict[str, Any]:
+    usys: UnitSystem = coerce_unit_system(unit_system)
     is_gs = granularity.lower() == "gseason"
+
     fig = go.Figure()
 
     ratio_prefix = "VWC" if variable == "SWC" else variable
+    depth_str = str(depth)
 
     y_cols = [
-        c for c in df.columns
-        if c.startswith(f"{ratio_prefix}_{depth}_ratio_")
-           and c.endswith(f"_{logger_location}")
+        c
+        for c in df.columns
+        if c.startswith(f"{ratio_prefix}_{depth_str}_ratio_") and c.endswith(f"_{logger_location}")
     ]
     if not y_cols:
-        bad_request( "No ratio data available for the selected filters.")
+        bad_request("No ratio data available for the selected filters.")
 
-    df_plot = convert_units(df, unit_system)
+    df_plot = convert_units(_ensure_timestamp_datetime(df), usys).copy()
 
-    for idx, col in enumerate(y_cols):
+    for idx, col in enumerate(y_cols, start=1):
         if is_gs:
-            x = df_plot["period_code"].tolist()
+            x_series = df_plot.get("period_code")
+            x = safe_tolist(x_series)
         else:
-            x = df_plot["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+            x = _x_time_strings(df_plot)
 
         p1, p2 = col.split("_ratio_")[1].split("_")[:2]
-        y = df_plot[col].astype(float).tolist()
+        y = safe_tolist(to_float_series(df_plot[col]))
         name = f"{variable_name_abbrev.get(variable, variable)} ratio {p1}/{p2}"
 
         pair_key = f"{p1}_{p2}"
@@ -519,8 +581,10 @@ def make_ratio_figure(
 
         if is_gs:
             bar_kwargs: Dict[str, Any] = dict(
-                x=x, y=y, name=name,
-                offsetgroup=str(idx + 1),
+                x=x,
+                y=y,
+                name=name,
+                offsetgroup=str(idx),
                 opacity=0.8,
             )
             if pair_color:
@@ -530,24 +594,27 @@ def make_ratio_figure(
             line_kwargs: Dict[str, Any] = dict(width=2)
             if pair_color:
                 line_kwargs["color"] = pair_color
-            fig.add_trace(go.Scatter(
-                x=x, y=y, mode="lines", name=name, line=line_kwargs
-            ))
+            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, line=line_kwargs))
 
-    human_var = get_unit_aware_label(variable, unit_system)
     human_logger_loc = logger_location_mapping.get(logger_location, logger_location)
-    var_abbrev = variable  # already something like "VWC", "EC", "T", etc.
-
     title = (
-        f"{granularity.capitalize()} Ratio Plot for "
-        f"{var_abbrev} in {year} ({human_logger_loc} Logger)"
+        f"{granularity.capitalize()} Ratio Plot for {variable} in {year} "
+        f"(Strip {strip}, {human_logger_loc} Logger)"
     )
-    xcfg = {"title": "Season", "type": "category"} if is_gs else common_xaxis_config(granularity, start, end)
+    xcfg: Dict[str, Any] = (
+        {"title": "Season", "type": "category"}
+        if is_gs
+        else common_xaxis_config(granularity, start, end)
+    )
 
     fig.add_shape(
         type="line",
-        xref="paper", x0=0, x1=1,
-        yref="y", y0=1, y1=1,
+        xref="paper",
+        x0=0,
+        x1=1,
+        yref="y",
+        y0=1,
+        y1=1,
         line=dict(color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"), width=1),
     )
 
@@ -563,42 +630,60 @@ def make_ratio_figure(
         height=400,
         autosize=True,
     )
-    configure_primary_yaxis(fig, df_plot, y_cols, variable, unit_system, kind="ratio")
+
+    configure_primary_yaxis(fig, df_plot, y_cols, variable, usys, kind="ratio")
     return prepare_plot_for_json(fig)
 
 
+# ---------------------------------------------------------------------------
+# Temperature delta (time series)
+# ---------------------------------------------------------------------------
+
+
 def make_temperature_delta_figure(
-        df: pd.DataFrame,
-        depth: int,
-        logger_location: str,
-        unit_system: str,
-        granularity: str,
-        year: int,
-        start: str,
-        end: str,
+    df: pd.DataFrame,
+    depth: int,
+    logger_location: str,
+    unit_system: str,
+    granularity: str,
+    year: int,
+    start: str,
+    end: str,
 ) -> Dict[str, Any]:
+    usys: UnitSystem = coerce_unit_system(unit_system)
+
+    df2 = _ensure_timestamp_datetime(df)
+    if "timestamp" not in df2.columns:
+        bad_request("No timestamp column available for temperature delta plot.")
+
+    depth_str = str(depth)
     loc = logger_location
 
-    col_s1 = f"T_{depth}_raw_S1_{loc}"
-    col_s2 = f"T_{depth}_raw_S2_{loc}"
-    col_s3 = f"T_{depth}_raw_S3_{loc}"
-    col_s4 = f"T_{depth}_raw_S4_{loc}"
+    col_s1 = f"T_{depth_str}_raw_S1_{loc}"
+    col_s2 = f"T_{depth_str}_raw_S2_{loc}"
+    col_s3 = f"T_{depth_str}_raw_S3_{loc}"
+    col_s4 = f"T_{depth_str}_raw_S4_{loc}"
 
-    missing = [c for c in (col_s1, col_s2, col_s3, col_s4) if c not in df.columns]
+    missing = [c for c in (col_s1, col_s2, col_s3, col_s4) if c not in df2.columns]
     if missing:
         raise ValueError(f"make_temperature_delta_figure: missing temperature columns: {missing}")
 
-    delta_12 = (df[col_s1] - df[col_s2]).astype(float)
-    delta_34 = (df[col_s3] - df[col_s4]).astype(float)
+    s1 = to_float_series(df2[col_s1])
+    s2 = to_float_series(df2[col_s2])
+    s3 = to_float_series(df2[col_s3])
+    s4 = to_float_series(df2[col_s4])
 
-    x_vals = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
-    d12_vals = pd.to_numeric(delta_12, errors="coerce").tolist()
-    d34_vals = pd.to_numeric(delta_34, errors="coerce").tolist()
+    delta_12 = (s1 - s2).astype(float)
+    delta_34 = (s3 - s4).astype(float)
 
-    unit_label = "°F" if unit_system.lower().startswith("us") else "°C"
+    x_vals = _x_time_strings(df2)
+    d12_vals = safe_tolist(delta_12)
+    d34_vals = safe_tolist(delta_34)
+
+    unit_label = "°F" if usys == "us" else "°C"
     y_label = f"Soil temperature difference ({unit_label})"
 
-    depth_label = sensor_depth_mapping.get(str(depth), {}).get(unit_system, f"{depth}")
+    depth_label = sensor_depth_mapping.get(depth_str, {}).get(usys, depth_str)
     loc_label = logger_location_mapping.get(loc, loc)
 
     title = (
@@ -607,49 +692,43 @@ def make_temperature_delta_figure(
     )
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Scatter(
             x=x_vals,
             y=d12_vals,
             mode="lines",
             name="S1 − S2",
-            line=dict(
-                width=2,
-                color=PLOT_COLORS.get("delta_T_S1_S2", None),
-            ),
+            line=dict(width=2, color=PLOT_COLORS.get("delta_T_S1_S2", None)),
         )
     )
-
     fig.add_trace(
         go.Scatter(
             x=x_vals,
             y=d34_vals,
             mode="lines",
             name="S3 − S4",
-            line=dict(
-                width=2,
-                color=PLOT_COLORS.get("delta_T_S3_S4", None),
-            ),
+            line=dict(width=2, color=PLOT_COLORS.get("delta_T_S3_S4", None)),
         )
     )
 
     fig.add_shape(
         type="line",
-        xref="paper", x0=0, x1=1,
-        yref="y", y0=0, y1=0,
-        line=dict(
-            color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"),
-            width=1,
-            dash="dash",
-        ),
+        xref="paper",
+        x0=0,
+        x1=1,
+        yref="y",
+        y0=0,
+        y1=0,
+        line=dict(color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"), width=1, dash="dash"),
     )
 
-    max_abs = max(
-        float(np.nanmax(np.abs(np.asarray(d12_vals, dtype=float)))),
-        float(np.nanmax(np.abs(np.asarray(d34_vals, dtype=float)))),
-    )
-    if not np.isfinite(max_abs) or max_abs <= 0:
+    # Avoid numpy typing issues: compute max abs via pandas safely.
+    arr12 = pd.Series(d12_vals, dtype="float64")
+    arr34 = pd.Series(d34_vals, dtype="float64")
+    max12 = arr12.abs().max(skipna=True)
+    max34 = arr34.abs().max(skipna=True)
+    max_abs = float(max(max12 if pd.notna(max12) else 0.0, max34 if pd.notna(max34) else 0.0))
+    if max_abs <= 0:
         max_abs = 1.0
     max_abs *= 1.05
 
@@ -661,12 +740,9 @@ def make_temperature_delta_figure(
             "zeroline": False,
             "range": [-max_abs, max_abs],
             "autorange": False,
-            # add the left y-axis line
             "showline": True,
             "linecolor": "black",
             "linewidth": 1,
-            # optional: also draw top/right if you like the boxed look
-            # "mirror": True,
         },
         legend=common_legend_config("Legend"),
         template="plotly_white",
@@ -678,73 +754,61 @@ def make_temperature_delta_figure(
     return prepare_plot_for_json(fig)
 
 
+# -----------------------------------------------------------------------------
+# RAW gseason (categorical)
+# -----------------------------------------------------------------------------
+
+
 def make_raw_gseason_figure(
-        *,
-        df: pd.DataFrame,
-        periods: List[Any],
-        variable: str,
-        strip: str,
-        logger_location: str,
-        depth: int,
-        unit_system: str,
-        year: int,
-        trace_option: str,
+    *,
+    df: pd.DataFrame,
+    periods: List[Any],
+    variable: str,
+    strip: str,
+    logger_location: str,
+    depth: int,
+    unit_system: str,
+    year: int,
+    trace_option: str,
 ) -> Dict[str, Any]:
-    """
-    Growing-season RAW figure.
+    usys: UnitSystem = coerce_unit_system(unit_system)
 
-    For most variables this uses the usual `{variable}_{depth}_raw_{strip}_{logger}`
-    columns (mirroring the non-seasonal plots).
-
-    For SWC we use the aggregated volume columns:
-
-        SWC_vol_gal_{strip}_{logger}_{depth}   (US)
-        SWC_vol_L_{strip}_{logger}_{depth}     (metric)
-
-    and apply the same 'depths' vs 'locations' logic for traces.
-    """
-    df = convert_units(df, unit_system)
-
+    df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
     labels = [f"{p['label']} ({p['start']}-{p['end']})" for p in norm_periods]
 
     fig = go.Figure()
 
-    # ------------------------------------------------------------------ #
-    # Precipitation overlay (VWC only, as before)
-    # ------------------------------------------------------------------ #
+    # Precip overlay (VWC only)
     precip_col_us = "precip_in"
     precip_col_mm = "precip_mm"
-    have_precip = (
-            variable == "VWC"
-            and (precip_col_us in df.columns or precip_col_mm in df.columns)
-    )
+    have_precip = variable == "VWC" and (precip_col_us in df2.columns or precip_col_mm in df2.columns)
 
-    precip_vals = None
+    precip_vals: Optional[pd.Series] = None
     if have_precip:
-        if unit_system == "metric" and precip_col_mm in df.columns:
-            precip_col = precip_col_mm
-        else:
-            precip_col = precip_col_us
+        precip_col = precip_col_mm if (usys == "metric" and precip_col_mm in df2.columns) else precip_col_us
+        precip_vals = to_float_series(df2[precip_col])
 
-        precip_vals = pd.to_numeric(df[precip_col], errors="coerce").astype(float)
+        unit_suffix = "in" if usys == "us" else "mm"
+        precip_list = safe_tolist(precip_vals)
+        precip_text: List[str] = []
+        for v in precip_list:
+            try:
+                fv = float(v)
+                precip_text.append(f"{fv:.2f} {unit_suffix}" if pd.notna(fv) else "")
+            except (TypeError, ValueError):
+                precip_text.append("")
 
-        unit_suffix = "in" if unit_system == "us" else "mm"
         fig.add_trace(
             go.Bar(
                 x=labels,
-                y=precip_vals.tolist(),
-                name=label_name_mapping["precip"][unit_system],
+                y=safe_tolist(precip_vals),
+                name=label_name_mapping["precip"][usys],
                 marker=dict(color=PLOT_COLORS.get("precip", "LightSteelBlue")),
                 yaxis="y2",
                 offsetgroup="0",
                 opacity=0.55,
-                text=[
-                    f"{v:.2f} {unit_suffix}"
-                    if (v is not None and np.isfinite(v))
-                    else ""
-                    for v in precip_vals
-                ],
+                text=precip_text,
                 textposition="outside",
                 textfont=dict(size=12),
                 cliponaxis=False,
@@ -752,138 +816,128 @@ def make_raw_gseason_figure(
             )
         )
 
-    # ------------------------------------------------------------------ #
     # Sensor bars
-    # ------------------------------------------------------------------ #
-    human_var = label_name_mapping[variable][unit_system]
+    human_var = label_name_mapping[variable][usys]
     abbr = variable_name_abbrev.get(variable, variable)
     legend_fmt = f"{abbr}, {{}}"
-
     sensor_cols_plotted: List[str] = []
 
-    # ----- SWC special case (use SWC_vol_* columns) -------------------- #
+    depth_str = str(depth)
+
     if variable == "SWC":
-        vol_suffix = "gal" if unit_system == "us" else "L"
+        vol_suffix = "gal" if usys == "us" else "L"
         base = f"SWC_vol_{vol_suffix}"
 
         if trace_option == "depths":
-            # One bar per depth for the chosen strip & logger location.
             for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
-                col = f"{base}_{strip}_{logger_location}_{d}"
-                if col not in df.columns:
+                d_str = str(d)
+                col = f"{base}_{strip}_{logger_location}_{d_str}"
+                if col not in df2.columns:
                     continue
                 sensor_cols_plotted.append(col)
 
-                series = pd.to_numeric(df[col], errors="coerce").astype(float)
-
+                series = to_float_series(df2[col])
                 bar_kwargs: Dict[str, Any] = dict(
                     x=labels,
-                    y=series.tolist(),
-                    name=legend_fmt.format(depth_map[unit_system]),
+                    y=safe_tolist(series),
+                    name=legend_fmt.format(depth_map[usys]),
                     offsetgroup=str(idx),
                     opacity=0.85,
                 )
-                depth_col = _depth_color(str(d))
+                depth_col = _depth_color(d_str)
                 if depth_col:
                     bar_kwargs["marker"] = dict(color=depth_col)
-
                 fig.add_trace(go.Bar(**bar_kwargs))
         else:
-            # One bar per logger location at the chosen depth.
-            for idx, (loc_key, loc_label) in enumerate(
-                    logger_location_mapping.items(), start=1
-            ):
-                col = f"{base}_{strip}_{loc_key}_{depth}"
-                if col not in df.columns:
+            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+                col = f"{base}_{strip}_{loc_key}_{depth_str}"
+                if col not in df2.columns:
                     continue
                 sensor_cols_plotted.append(col)
 
-                series = pd.to_numeric(df[col], errors="coerce").astype(float)
-
+                series = to_float_series(df2[col])
                 fig.add_trace(
                     go.Bar(
                         x=labels,
-                        y=series.tolist(),
+                        y=safe_tolist(series),
                         name=legend_fmt.format(loc_label),
                         offsetgroup=str(idx),
                         opacity=0.85,
                     )
                 )
 
-    # ----- All other variables (VWC, EC, T, etc.) ---------------------- #
     else:
         if trace_option == "depths":
             for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
-                col = f"{variable}_{d}_raw_{strip}_{logger_location}"
-                if col not in df.columns:
+                d_str = str(d)
+                col = f"{variable}_{d_str}_raw_{strip}_{logger_location}"
+                if col not in df2.columns:
                     continue
                 sensor_cols_plotted.append(col)
 
-                bar_kwargs: Dict[str, Any] = dict(
+                series = to_float_series(df2[col])
+                bar_kwargs2: Dict[str, Any] = dict(
                     x=labels,
-                    y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
-                    name=legend_fmt.format(depth_map[unit_system]),
+                    y=safe_tolist(series),
+                    name=legend_fmt.format(depth_map[usys]),
                     offsetgroup=str(idx),
                     opacity=0.85,
                 )
-                depth_col = _depth_color(str(d))
+                depth_col = _depth_color(d_str)
                 if depth_col:
-                    bar_kwargs["marker"] = dict(color=depth_col)
-
-                fig.add_trace(go.Bar(**bar_kwargs))
+                    bar_kwargs2["marker"] = dict(color=depth_col)
+                fig.add_trace(go.Bar(**bar_kwargs2))
         else:
-            for idx, (loc_key, loc_label) in enumerate(
-                    logger_location_mapping.items(), start=1
-            ):
-                col = f"{variable}_{depth}_raw_{strip}_{loc_key}"
-                if col not in df.columns:
+            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+                col = f"{variable}_{depth_str}_raw_{strip}_{loc_key}"
+                if col not in df2.columns:
                     continue
                 sensor_cols_plotted.append(col)
+
+                series = to_float_series(df2[col])
                 fig.add_trace(
                     go.Bar(
                         x=labels,
-                        y=pd.to_numeric(df[col], errors="coerce")
-                        .astype(float)
-                        .tolist(),
+                        y=safe_tolist(series),
                         name=legend_fmt.format(loc_label),
                         offsetgroup=str(idx),
                         opacity=0.85,
-                        )
+                    )
                 )
 
-    # Irrigation overlays (still VWC-only for now)
+    # Irrigation overlays (VWC-only)
     if variable == "VWC" and norm_periods:
         add_irrigation_shapes(
             fig=fig,
             strip=strip,
             year=year,
-            unit_system=unit_system,
+            unit_system=usys,
             sum_only=True,
             periods=periods,
             category_labels=labels,
         )
 
+    primary_min: Optional[float]
+    primary_max: Optional[float]
     if sensor_cols_plotted:
-        primary_min = df[sensor_cols_plotted].min(numeric_only=True).min()
-        primary_max = df[sensor_cols_plotted].max(numeric_only=True).max()
+        block = df_cols(df2, sensor_cols_plotted)
+        primary_min, primary_max = finite_min_max(block)
     else:
         primary_min = None
         primary_max = None
 
-    yaxis_cfg = common_yaxis_config(
-        "raw", variable, unit_system, primary_min, primary_max
-    )
-    y2_cfg: Dict[str, Any] = common_yaxis2_config(unit_system)
+    yaxis_cfg = common_yaxis_config("raw", variable, usys, primary_min, primary_max)
+    y2_cfg: Dict[str, Any] = common_yaxis2_config(usys)
 
     if have_precip and precip_vals is not None:
-        pvals = precip_vals.to_numpy(dtype=float)
-        good = pvals[np.isfinite(pvals)]
-        pmax = float(good.max()) if good.size else 0.0
-        y2_cfg["range"] = [0.0, (pmax * 1.15) if pmax > 0 else 1.0]
+        p_block = pd.DataFrame({"p": to_float_series(precip_vals)})
+        _pmin, pmax = finite_min_max(p_block)
+        pmax_val = float(pmax) if pmax is not None else 0.0
+        y2_cfg["range"] = [0.0, (pmax_val * 1.15) if pmax_val > 0 else 1.0]
 
     title_text = (
         f"Growing-season Data Plot for {human_var} in Strip {strip}, {year} "
-        f"({logger_location_mapping[logger_location]} Logger)"
+        f"({logger_location_mapping.get(logger_location, logger_location)} Logger)"
     )
 
     fig.update_layout(
@@ -909,108 +963,79 @@ def make_raw_gseason_figure(
     return prepare_plot_for_json(fig)
 
 
+# -----------------------------------------------------------------------------
+# Ratio gseason (categorical)
+# -----------------------------------------------------------------------------
+
+
 def make_ratio_gseason_figure(
-        *,
-        df: pd.DataFrame,
-        periods: List[Any],
-        variable: str,
-        strip: str,
-        logger_location: str,
-        depth: int,
-        unit_system: str,
-        year: int,
+    *,
+    df: pd.DataFrame,
+    periods: List[Any],
+    variable: str,
+    strip: str,
+    logger_location: str,
+    depth: int,
+    unit_system: str,
+    year: int,
 ) -> Dict[str, Any]:
-    """
-    Growing-season RATIO figure.
+    usys: UnitSystem = coerce_unit_system(unit_system)
 
-    * For VWC (and other ratio-ready variables) we use the precomputed
-      `{variable}_{depth}_ratio_*_{logger}` columns.
+    df2 = convert_units(df, usys).copy()
 
-    * For SWC we build ratios on the fly:
-
-        SWC ratio S1/S2  =  SWC_vol_{unit}_S1_{logger}_{depth}
-                           / SWC_vol_{unit}_S2_{logger}_{depth}
-
-        SWC ratio S3/S4  =  SWC_vol_{unit}_S3_{logger}_{depth}
-                           / SWC_vol_{unit}_S4_{logger}_{depth}
-
-      so the growing-season SWC ratio plot has the same structure as the
-      VWC ratio plot: two bars per season (S1/S2 and S3/S4).
-    """
-    df = convert_units(df, unit_system)
-
-    # Normalized periods + x-axis labels
     norm_periods = periods_to_list_of_dicts(periods or [])
     labels = [f"{p['label']} ({p['start']}-{p['end']})" for p in norm_periods]
 
     fig = go.Figure()
 
-    # ------------------------------------------------------------------ #
-    # Shared label / title helpers (auto-detect what to show)
-    # ------------------------------------------------------------------ #
-    # Abbreviation like "VWC", "SWC", "EC", ...
     abbr = variable_name_abbrev.get(variable, variable)
 
-    # Full unit-aware label (e.g. "Volumetric Water Content (%)")
-    full_label = label_name_mapping[variable][unit_system]
-    human_base = full_label.split(" (")[0]  # drop units → "Volumetric Water Content"
+    full_label = label_name_mapping[variable][usys]
+    human_base = str(full_label).split(" (")[0]
 
-    # Logger location label, e.g. "Top"
     logger_label = logger_location_mapping.get(logger_location, "")
     logger_suffix = f" ({logger_label} Logger)" if logger_label else ""
 
     def _make_title(no_data: bool = False) -> str:
-        """
-        Build a ratio title that is consistent with the daily ratio plots:
-        - Use abbreviation (VWC, SWC, ...)
-        - Mention year and logger location
-        - Mention that these are strip ratios S1/S2 and S3/S4
-        - Optionally append a 'no data' message.
-        """
-        base = f"Growing-season Ratio Plot for {abbr} in {year}{logger_suffix} " \
-               "(Strip Ratios S1/S2 and S3/S4)"
+        title_text = (
+            f"Growing-season Ratio Plot for {abbr} in {year}{logger_suffix} "
+            f"(Strip {strip}; Strip Ratios S1/S2 and S3/S4)"
+        )
         if no_data:
-            base += " — no ratio data available for selected filters"
-        return base
+            title_text += " — no ratio data available for selected filters"
+        return title_text
 
-    # ------------------------------------------------------------------ #
-    # SWC: construct S1/S2 and S3/S4 ratios from SWC_vol_* columns
-    # ------------------------------------------------------------------ #
+    depth_str = str(depth)
+
     if variable == "SWC":
-        vol_suffix = "gal" if unit_system == "us" else "L"
+        vol_suffix = "gal" if usys == "us" else "L"
         base = f"SWC_vol_{vol_suffix}"
 
-        s1_col = f"{base}_S1_{logger_location}_{depth}"
-        s2_col = f"{base}_S2_{logger_location}_{depth}"
-        s3_col = f"{base}_S3_{logger_location}_{depth}"
-        s4_col = f"{base}_S4_{logger_location}_{depth}"
-
-        # Debug: check that at least some SWC columns exist for this slice
-        swc_cols = [c for c in df.columns if c.startswith("SWC_")]
-        logger.info("[SWC gseason ratio] available SWC columns: %s", swc_cols)
+        s1_col = f"{base}_S1_{logger_location}_{depth_str}"
+        s2_col = f"{base}_S2_{logger_location}_{depth_str}"
+        s3_col = f"{base}_S3_{logger_location}_{depth_str}"
+        s4_col = f"{base}_S4_{logger_location}_{depth_str}"
 
         ratios: Dict[str, pd.Series] = {}
 
-        if s1_col in df.columns and s2_col in df.columns:
-            s1 = pd.to_numeric(df[s1_col], errors="coerce")
-            s2 = pd.to_numeric(df[s2_col], errors="coerce")
-            r12 = (s1 / s2).replace([np.inf, -np.inf], np.nan)
+        if s1_col in df2.columns and s2_col in df2.columns:
+            s1 = to_float_series(df2[s1_col])
+            s2 = to_float_series(df2[s2_col])
+            r12 = (s1 / s2).replace([POS_INF, NEG_INF], NAN)
             ratios["S1/S2"] = r12
 
-        if s3_col in df.columns and s4_col in df.columns:
-            s3 = pd.to_numeric(df[s3_col], errors="coerce")
-            s4 = pd.to_numeric(df[s4_col], errors="coerce")
-            r34 = (s3 / s4).replace([np.inf, -np.inf], np.nan)
+        if s3_col in df2.columns and s4_col in df2.columns:
+            s3 = to_float_series(df2[s3_col])
+            s4 = to_float_series(df2[s4_col])
+            r34 = (s3 / s4).replace([POS_INF, NEG_INF], NAN)
             ratios["S3/S4"] = r34
 
         if not ratios:
-            # Nothing to plot – return an empty but valid figure with a clear title
             logger.warning(
-                "[SWC gseason ratio] No usable SWC_vol columns for "
-                "strip=%s, logger=%s, depth=%s",
+                "[SWC gseason ratio] No usable SWC_vol columns for strip=%s, logger=%s, depth=%s",
                 strip,
                 logger_location,
-                depth,
+                depth_str,
             )
             fig.update_layout(
                 title={"text": _make_title(no_data=True), "x": 0.5},
@@ -1024,10 +1049,9 @@ def make_ratio_gseason_figure(
             )
             return prepare_plot_for_json(fig)
 
-        # Build traces
         all_vals: List[pd.Series] = []
         for idx, (pair_label, series) in enumerate(ratios.items(), start=1):
-            vals = pd.to_numeric(series, errors="coerce").astype(float)
+            vals = to_float_series(series)
             all_vals.append(vals)
 
             color_key = f"ratio_SWC_{pair_label.replace('/', '_')}"
@@ -1035,7 +1059,7 @@ def make_ratio_gseason_figure(
 
             bar_kwargs: Dict[str, Any] = dict(
                 x=labels,
-                y=vals.tolist(),
+                y=safe_tolist(vals),
                 name=f"{abbr} ratio {pair_label}",
                 offsetgroup=str(idx),
                 opacity=0.8,
@@ -1045,10 +1069,11 @@ def make_ratio_gseason_figure(
 
             fig.add_trace(go.Bar(**bar_kwargs))
 
-        # Global y-range from all ratio series
         combined = pd.concat(all_vals, axis=0)
-        global_min = float(combined.min()) if not combined.empty else None
-        global_max = float(combined.max()) if not combined.empty else None
+        global_min_val = combined.min()
+        global_max_val = combined.max()
+        global_min = float(global_min_val) if pd.notna(global_min_val) else None
+        global_max = float(global_max_val) if pd.notna(global_max_val) else None
 
         fig.update_layout(
             barmode="group",
@@ -1066,7 +1091,7 @@ def make_ratio_gseason_figure(
                 **common_yaxis_config(
                     kind="ratio",
                     variable="SWC",
-                    unit_system=unit_system,
+                    unit_system=usys,
                     global_min=global_min,
                     global_max=global_max,
                 ),
@@ -1080,22 +1105,18 @@ def make_ratio_gseason_figure(
 
         return prepare_plot_for_json(fig)
 
-    # ------------------------------------------------------------------ #
-    # Default path: use precomputed *_ratio_* columns (e.g. VWC)
-    # ------------------------------------------------------------------ #
+    # Default: use precomputed *_ratio_* columns
     y_cols = [
         c
-        for c in df.columns
-        if c.startswith(f"{variable}_{depth}_ratio_")
-           and c.endswith(f"_{logger_location}")
+        for c in df2.columns
+        if c.startswith(f"{variable}_{depth_str}_ratio_") and c.endswith(f"_{logger_location}")
     ]
 
     if not y_cols:
         logger.warning(
-            "[gseason ratio] No ratio columns for variable=%s, depth=%s, "
-            "strip=%s, logger=%s",
+            "[gseason ratio] No ratio columns for variable=%s, depth=%s, strip=%s, logger=%s",
             variable,
-            depth,
+            depth_str,
             strip,
             logger_location,
         )
@@ -1111,25 +1132,25 @@ def make_ratio_gseason_figure(
         )
         return prepare_plot_for_json(fig)
 
-    # Reuse the same figure object; add traces for each ratio column
     for idx, col in enumerate(y_cols, start=1):
         p1, p2 = col.split("_ratio_")[1].split("_")[:2]
         pair_color = PLOT_COLORS.get(f"ratio_{p1}_{p2}", None)
 
-        bar_kwargs: Dict[str, Any] = dict(
+        series = to_float_series(df2[col])
+        bar_kwargs3: Dict[str, Any] = dict(
             x=labels,
-            y=pd.to_numeric(df[col], errors="coerce").astype(float).tolist(),
+            y=safe_tolist(series),
             name=f"{abbr} ratio {p1}/{p2}",
             offsetgroup=str(idx),
             opacity=0.8,
         )
         if pair_color:
-            bar_kwargs["marker"] = dict(color=pair_color)
+            bar_kwargs3["marker"] = dict(color=pair_color)
 
-        fig.add_trace(go.Bar(**bar_kwargs))
+        fig.add_trace(go.Bar(**bar_kwargs3))
 
-    global_min = df[y_cols].min(numeric_only=True).min()
-    global_max = df[y_cols].max(numeric_only=True).max()
+    block = df_cols(df2, y_cols)
+    global_min, global_max = finite_min_max(block)
 
     fig.update_layout(
         barmode="group",
@@ -1147,7 +1168,7 @@ def make_ratio_gseason_figure(
             **common_yaxis_config(
                 kind="ratio",
                 variable=variable,
-                unit_system=unit_system,
+                unit_system=usys,
                 global_min=global_min,
                 global_max=global_max,
             ),

@@ -27,7 +27,11 @@ from typing import Any, Dict, List, Optional, Pattern, Sequence, Tuple
 import re
 import pandas as pd
 
-NAN = float("nan")
+# ---------------------------------------------------------------------------
+# Canonical NaN literal for this project
+# Use this instead of np.nan or math.nan for type-checker stability.
+# ---------------------------------------------------------------------------
+NAN: float = float("nan")
 
 # ============================================================================
 # HUMAN-EDITABLE THRESHOLDS (edit these)

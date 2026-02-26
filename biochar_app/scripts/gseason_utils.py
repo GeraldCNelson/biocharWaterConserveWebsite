@@ -62,6 +62,7 @@ def generate_gseason_summary(
     }
     """
     import re
+    from collections import defaultdict as dd
 
     # 0) config + input/output paths
     summary_path = Path(DATA_PROCESSED_DIR) / f"gseason_summary_{year}.json"
@@ -87,6 +88,7 @@ def generate_gseason_summary(
     )
 
     # 2) assign period_code to each row using wrap-aware mapper
+    # NOTE: 'periods' arg currently unused here; keeping signature as-is.
     df["period_code"] = df["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
     df = df[df["period_code"].notna()]
 
@@ -95,6 +97,7 @@ def generate_gseason_summary(
             "🍂 generate_gseason_summary(%s): no rows mapped to any growing-season period; writing empty JSON",
             year,
         )
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(json.dumps({}, indent=2))
         return
 
@@ -113,11 +116,12 @@ def generate_gseason_summary(
     )
 
     # 4) build nested accumulator
-    from collections import defaultdict as dd
+    # mypy fix: keep top-level keys as real str by normalizing group keys.
+    nested: dict[str, dict[str, dict[str, dict[str, dict[str, dict[str, float]]]]]] = dd(
+        lambda: dd(lambda: dd(dict))
+    )
 
-    nested: dict[str, dict] = dd(lambda: dd(lambda: dd(dict)))
-
-    def stats(series: pd.Series) -> dict:
+    def stats(series: pd.Series) -> dict[str, float]:
         s = pd.to_numeric(series, errors="coerce").dropna()
         if s.empty:
             return {}
@@ -129,13 +133,17 @@ def generate_gseason_summary(
         }
 
     # 5) per period, compute stats for RAW and RATIO groups
-    for pcode, g in df.groupby("period_code", dropna=True):
+    for pcode_raw, g in df.groupby("period_code", dropna=True):
+        # mypy: pandas group keys are "Hashable"/object; normalize to str for dict[str,...]
+        pcode = str(pcode_raw)
+
         logger.info(
             "🍂 generate_gseason_summary(%s): period=%s rows=%d",
             year,
             pcode,
             len(g),
         )
+
         for col in g.columns:
             # Skip non-data columns
             if col in {"timestamp", "period_code"}:
@@ -143,44 +151,48 @@ def generate_gseason_summary(
 
             m = raw_re.match(col)
             if m:
-                var = m.group("var")
-                depth = m.group("depth")
-                strip = m.group("strip")
+                var = str(m.group("var"))
+                depth = str(m.group("depth"))
+                strip = str(m.group("strip"))
                 key = f"{strip}_D{depth}"
+
                 rs = stats(g[col])
                 if rs:
                     slot = nested[pcode][var].setdefault(
                         key, {"raw_statistics": {}, "ratio_statistics": {}}
                     )
-                    slot["raw_statistics"][col] = rs
+                    # slot dicts are untyped; keep runtime behavior but keep mypy happy
+                    slot["raw_statistics"][str(col)] = rs
                 continue
 
             m = ratio_re.match(col)
             if m:
-                var = m.group("var")
-                depth = m.group("depth")
-                pair = m.group("pair")  # S1_S2 or S3_S4
+                var = str(m.group("var"))
+                depth = str(m.group("depth"))
+                pair = str(m.group("pair"))  # S1_S2 or S3_S4
                 key = f"{pair}_D{depth}"  # keep pairs separate from single-strip keys
+
                 rs = stats(g[col])
                 if rs:
                     slot = nested[pcode][var].setdefault(
                         key, {"raw_statistics": {}, "ratio_statistics": {}}
                     )
-                    slot["ratio_statistics"][col] = rs
+                    slot["ratio_statistics"][str(col)] = rs
                 continue
 
             # --- SWC special case: treat SWC_vol_* as the raw SWC values ----
             m = swc_raw_re.match(col)
             if m:
-                depth = m.group("depth")
-                strip = m.group("strip")
+                depth = str(m.group("depth"))
+                strip = str(m.group("strip"))
                 key = f"{strip}_D{depth}"
+
                 rs = stats(g[col])
                 if rs:
                     slot = nested[pcode]["SWC"].setdefault(
                         key, {"raw_statistics": {}, "ratio_statistics": {}}
                     )
-                    slot["raw_statistics"][col] = rs
+                    slot["raw_statistics"][str(col)] = rs
                 continue
 
     # 6) write JSON

@@ -62,6 +62,7 @@ from biochar_app.scripts.config import (
     PARQUET_DIR,  # used to detect whether logger data exists for the year
 )
 
+
 logger = logging.getLogger(__name__)
 
 # Internal base 5-min column names (before unit suffix)
@@ -100,6 +101,8 @@ def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
     from biochar_app.scripts.config import US_UNITS, METRIC_UNITS
 
     unit_map = US_UNITS if units == "us" else METRIC_UNITS
+
+    from biochar_app.scripts.type_utils import gb_agg, NAN, POS_INF, NEG_INF
     final_map: dict[str, str] = {}
 
     for raw_key, base_name in COAGMET_VARIABLE_MAP.items():
@@ -184,7 +187,7 @@ def fetch_weather_data(year: int) -> pd.DataFrame:
         StringIO(resp.text),
         header=0,           # first row is header
         skiprows=[1],       # second row is units; treat it as non-data
-        na_values=["-999", -999, "-999.0"],
+        na_values=["-999", "-999.0"],
         low_memory=False,
     )
 
@@ -279,12 +282,12 @@ def fetch_weather_data(year: int) -> pd.DataFrame:
         c: ("sum" if c.startswith("precip") else "mean")
         for c in data_cols
     }
-
+    from biochar_app.scripts.type_utils import df_agg
     df_15 = (
-        df_new
-        .set_index("timestamp")
-        .resample("15min")
-        .agg(agg_map)
+        df_agg(
+            df_new.set_index("timestamp").resample("15min"),
+            agg_map,
+        )
         .round(3)
         .reset_index()
     )

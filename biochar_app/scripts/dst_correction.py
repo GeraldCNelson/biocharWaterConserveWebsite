@@ -3,6 +3,7 @@ import pandas as pd
 import logging
 from pathlib import Path
 from biochar_app.scripts.config import DATA_RAW_DIR
+from typing import Any
 
 # Base directory with subfolders datfiles_2023, datfiles_2024, datfiles_2025
 BASE_DIR = Path(DATA_RAW_DIR)
