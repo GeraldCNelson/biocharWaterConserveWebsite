@@ -93,6 +93,8 @@
     <div class="container-fluid pt-3">
       <!-- Navigation Tabs -->
       <ul class="nav nav-tabs" role="tablist">
+
+        <!-- Intro -->
         <li class="nav-item" role="presentation">
           <a id="intro-tab" class="nav-link active" data-bs-toggle="tab"
              href="#intro" role="tab" aria-controls="intro" aria-selected="true">
@@ -100,6 +102,7 @@
           </a>
         </li>
 
+        <!-- Experiment Design -->
         <li class="nav-item" role="presentation">
           <a id="experiment-tab" class="nav-link" data-bs-toggle="tab"
              href="#experiment" role="tab" aria-controls="experiment" aria-selected="false">
@@ -107,55 +110,77 @@
           </a>
         </li>
 
-        <li class="nav-item" role="presentation">
-          <a id="gseason-tab" class="nav-link" data-bs-toggle="tab"
-             href="#gseason" role="tab" aria-controls="gseason" aria-selected="false">
-            Custom Season
+        <!-- Continuous Monitoring (dropdown) -->
+        <li class="nav-item dropdown" role="presentation">
+          <a class="nav-link dropdown-toggle"
+             id="monitoringDropdown"
+             data-bs-toggle="dropdown"
+             href="#"
+             role="button"
+             aria-expanded="false">
+            Continuous Monitoring Results
           </a>
+          <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
+            <li>
+              <a id="main-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#main" role="tab" aria-controls="main" aria-selected="false">
+                Interactive Plots
+              </a>
+            </li>
+            <li>
+              <a id="summary-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#summary" role="tab" aria-controls="summary" aria-selected="false">
+                Summary Statistics
+              </a>
+            </li>
+            <li>
+              <a id="gseason-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#gseason" role="tab" aria-controls="gseason" aria-selected="false">
+                Custom Season
+              </a>
+            </li>
+          </ul>
         </li>
 
-        <li class="nav-item" role="presentation">
-          <a id="main-tab" class="nav-link" data-bs-toggle="tab"
-             href="#main" role="tab" aria-controls="main" aria-selected="false">
-            Interactive Plots
+        <!-- Lab-Based Results (dropdown) -->
+        <li class="nav-item dropdown" role="presentation">
+          <a class="nav-link dropdown-toggle"
+             id="labDropdown"
+             data-bs-toggle="dropdown"
+             href="#"
+             role="button"
+             aria-expanded="false">
+            Lab-Based Results
           </a>
+          <ul class="dropdown-menu" aria-labelledby="labDropdown">
+            <li>
+              <a id="nir-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#nir" role="tab" aria-controls="nir" aria-selected="false">
+                Pasture Quality Metrics
+              </a>
+            </li>
+            <li>
+              <a id="biomass-field-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
+                Biomass (Field Samples)
+              </a>
+            </li>
+            <li>
+              <a id="soilbio-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#soilbio" role="tab" aria-controls="soilbio" aria-selected="false">
+                Soil Biological Health
+              </a>
+            </li>
+            <li>
+              <a id="soilchem-tab" class="dropdown-item" data-bs-toggle="tab"
+                 href="#soilchem" role="tab" aria-controls="soilchem" aria-selected="false">
+                Soil Chemistry
+              </a>
+            </li>
+          </ul>
         </li>
 
-        <li class="nav-item" role="presentation">
-          <a id="summary-tab" class="nav-link" data-bs-toggle="tab"
-             href="#summary" role="tab" aria-controls="summary" aria-selected="false">
-            Summary Statistics
-          </a>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <a id="nir-tab" class="nav-link" data-bs-toggle="tab"
-             href="#nir" role="tab" aria-controls="nir" aria-selected="false">
-            Pasture Quality Metrics
-          </a>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <a id="biomass-field-tab" class="nav-link" data-bs-toggle="tab"
-             href="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
-            Biomass (Field Samples)
-          </a>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <a id="soilbio-tab" class="nav-link" data-bs-toggle="tab"
-             href="#soilbio" role="tab" aria-controls="soilbio" aria-selected="false">
-            Soil Biological Health
-          </a>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <a id="soilchem-tab" class="nav-link" data-bs-toggle="tab"
-             href="#soilchem" role="tab" aria-controls="soilchem" aria-selected="false">
-            Soil Chemistry
-          </a>
-        </li>
-
+        <!-- Technical Details -->
         <li class="nav-item" role="presentation">
           <a id="tech-details-tab" class="nav-link" data-bs-toggle="tab"
              href="#tech-details" role="tab" aria-controls="tech-details" aria-selected="false">
@@ -163,12 +188,14 @@
           </a>
         </li>
 
+        <!-- Bulk Downloads -->
         <li class="nav-item" role="presentation">
           <a class="nav-link" id="bulk-tab" data-bs-toggle="tab"
              href="#bulk-pane" role="tab" aria-controls="bulk-pane" aria-selected="false">
             Bulk Downloads
           </a>
         </li>
+
       </ul>
     </div>
   </div>
@@ -706,6 +733,32 @@
 
     gran?.addEventListener("change", toggleDateControls);
     toggleDateControls();
+  });
+</script>
+
+<!-- Keep dropdown parents visually "active" when a child tab is active -->
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const monitoringToggle = document.getElementById("monitoringDropdown");
+    const labToggle = document.getElementById("labDropdown");
+
+    function clearActive() {
+      monitoringToggle?.classList.remove("active");
+      labToggle?.classList.remove("active");
+    }
+
+    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(a => {
+      a.addEventListener("shown.bs.tab", (e) => {
+        const target = e.target?.getAttribute("href") || "";
+        clearActive();
+
+        if (["#main", "#summary", "#gseason"].includes(target)) {
+          monitoringToggle?.classList.add("active");
+        } else if (["#nir", "#biomass-field", "#soilbio", "#soilchem"].includes(target)) {
+          labToggle?.classList.add("active");
+        }
+      });
+    });
   });
 </script>
 

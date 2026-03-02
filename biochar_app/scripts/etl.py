@@ -24,7 +24,7 @@ import csv
 import math
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, cast
 from datetime import datetime
 
 import pandas as pd
@@ -54,9 +54,9 @@ from biochar_app.scripts.config import (
 from biochar_app.scripts.type_utils import NAN, df_agg
 
 # Centralized bounds + reporting
-from biochar_app.scripts.config.thresholds import apply_value_bounds as enforce_value_bounds
+from biochar_app.config.thresholds import apply_value_bounds as enforce_value_bounds
 
-from process_data import calculate_ratios
+from biochar_app.scripts.process_data import calculate_ratios
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -99,7 +99,6 @@ def ts_to_iso_date(ts_any: Any) -> str:
             ts_any = pd.Timestamp(ts_any)
     return ts_any.strftime("%Y-%m-%d")
 
-
 def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
     """
     Build a pd.Timestamp and guarantee it's not NaT.
@@ -116,12 +115,11 @@ def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
 def force_datetime64_ns(s: pd.Series) -> pd.Series:
     """
     Force a series to datetime64[ns], dropping NaT.
-    (PyCharm understands this dtype better than 'maybe object'.)
+    Avoids pandas-stubs TimestampSeries vs Series[Timestamp] reassignment issues.
     """
-    out = pd.to_datetime(s, errors="coerce")
-    out = out.dropna()
-    # Ensure dtype exactly datetime64[ns]
-    return out.astype("datetime64[ns]")
+    dt = pd.to_datetime(s, errors="coerce")          # TimestampSeries (per stubs)
+    dt_nonnull = dt.dropna()                         # Series[Timestamp] (per stubs)
+    return cast(pd.Series, dt_nonnull.astype("datetime64[ns]"))
 
 
 def normalize_logger_timestamp_series(ts: Series) -> Series:
@@ -142,11 +140,13 @@ def normalize_weather_timestamp_series(ts: pd.Series, tz: str = "America/Denver"
       - drop tz info (timezone-naive)
     """
     s = pd.to_datetime(ts, errors="coerce")
-    tzinfo = s.dt.tz
-    if tzinfo is None:
+
+    # pandas-stubs can be picky here; keep it simple & explicit
+    if s.dt.tz is None:
         s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
     else:
         s = s.dt.tz_convert(tz)
+
     return s.dt.tz_localize(None)
 
 
@@ -775,8 +775,7 @@ def generate_summaries(years: List[int]) -> None:
             out_dir.mkdir(parents=True, exist_ok=True)
 
             agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in dfw_clean.columns}
-            dfr = dfw_clean.resample(code).agg(agg_map).round(3).reset_index()
-
+            dfr = dfw_clean.resample(code).agg(cast(Any, agg_map)).round(3).reset_index()
             fn = f"{year}_{freq}.parquet"
             dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")

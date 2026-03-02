@@ -1,16 +1,11 @@
-// tab_biomass_field.js
+// static/js/tab_biomass_field.js
+//
+// Biomass (Field Samples) tab renderer.
+
 import { fetchJson } from "./api_requests.js";
 import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { makeSetSectionTitle } from "./tab_ui.js";
-import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
-/**
- * Biomass (Field Samples) tab renderer.
- *
- * Notes:
- * - Styling is handled via styles.css (tab-scoped rules), not JS.
- * - We only render once per page load by default (dataset.rendered guard).
- * - If you want “always refresh” behavior, remove the dataset.rendered guard.
- */
+
 export async function renderBiomassFieldTables() {
   const container = document.getElementById("biomass-field-content");
   if (!container) {
@@ -23,14 +18,14 @@ export async function renderBiomassFieldTables() {
 
   container.innerHTML = "";
 
-  // Loading indicator
   const loading = document.createElement("div");
   loading.className = "text-muted";
   loading.textContent = "Loading…";
   container.appendChild(loading);
 
   try {
-    const rawPayload = await fetchJson("/api/get_biomass_field_table");
+    // ✅ switched to unified endpoint
+    const rawPayload = await fetchJson("/api/lab_table/biomass_field");
     loading.remove();
 
     const payload = normalizePayload(rawPayload);
@@ -45,32 +40,22 @@ export async function renderBiomassFieldTables() {
       return;
     }
 
-    // Usually only 1 set, but keep this generic
     for (const setPayload of payload.sets) {
       const label = setPayload.label || "Biomass (Field Samples)";
 
-      // One section per set.
-      // IMPORTANT: use the same CSS variant as your other “compact metric tables”.
-      // If your compact CSS is scoped to #nir/#soilbio/#soilchem, you can either:
-      //  - change that CSS to also include the biomass container, OR
-      //  - introduce a "biomass" variant in tab_ui.js later.
-      // For now, keep "nir" so the section uses nir-* wrapper classes if you extend CSS.
       const section = makeSetSectionTitle(
         label,
-        "Rows: field locations (e.g., S1M, S1B). Columns: sampling dates. Values are dry biomass (g).",
+        "Rows: field locations (e.g., S1T/S1M/S1B). Columns: sampling dates. Values are dry biomass (g).",
         "nir"
       );
       container.appendChild(section);
 
-      // Render table content into the section
       renderOneSetFromPayload(section, setPayload);
     }
 
     container.dataset.rendered = "true";
   } catch (err) {
     console.error("Failed to render Biomass Field tables:", err);
-
-    // If loading is already removed, this is safe (no-op)
     loading.remove();
 
     const div = document.createElement("div");

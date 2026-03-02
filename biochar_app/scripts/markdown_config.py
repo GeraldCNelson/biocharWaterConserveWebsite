@@ -123,11 +123,46 @@ This file keeps ALL Markdown and modal dependencies synchronized.
 ===============================================================================
 """
 
+from __future__ import annotations
+
+from typing import Dict, List, TypedDict
+
+
+# ---------------------------------------------------------------------------
+# Typed config shapes (fixes mypy "object is not indexable")
+# ---------------------------------------------------------------------------
+
+class ImageSpec(TypedDict):
+    file: str
+    caption: str
+    alt: str
+    title: str
+
+
+class DocxConfig(TypedDict, total=False):
+    # required
+    output_md: str
+    # optional
+    images: List[ImageSpec]
+    side_by_side: List[List[str]]
+
+
+DocxMarkdownConfig = Dict[str, DocxConfig]
+
+
+class ModalSpec(TypedDict):
+    source: str
+    output: str
+
+
+ModalConfig = Dict[str, ModalSpec]
+
+
 # ---------------------------------------------------------------------------
 # Main page Markdown sources (.docx → .md)
 # ---------------------------------------------------------------------------
 
-docx_markdown_config = {
+docx_markdown_config: DocxMarkdownConfig = {
     "intro.docx": {
         "output_md": "intro.md",
         "images": [
@@ -154,7 +189,6 @@ docx_markdown_config = {
             ["lignin_diagram.jpg", "biochar_diagram.jpg"],
         ],
     },
-
     "experimentDesign.docx": {
         "output_md": "experimentDesign.md",
         "images": [
@@ -172,19 +206,19 @@ docx_markdown_config = {
             },
         ],
     },
-
     # ACTIVE technical details file
     "techDetails_updated.docx": {
         "output_md": "techDetails.md",
-        "images": [],  # Add images here later if desired
+        "images": [],
     },
 }
+
 
 # ---------------------------------------------------------------------------
 # Modal help Markdown sources (.docx → .md)
 # ---------------------------------------------------------------------------
 
-modal_config = {
+modal_config: ModalConfig = {
     "main": {
         "source": "help_main.docx",
         "output": "help_main.md",
@@ -194,6 +228,7 @@ modal_config = {
         "output": "help_summary.md",
     },
 }
+
 
 # ---------------------------------------------------------------------------
 # DOM container → Markdown URL mapping
@@ -214,11 +249,10 @@ def build_markdown_mapping() -> dict[str, str]:
     """
     return {
         # Main tabs
-        "intro-content":      f"/markdown/{docx_markdown_config['intro.docx']['output_md']}",
+        "intro-content": f"/markdown/{docx_markdown_config['intro.docx']['output_md']}",
         "experiment-content": f"/markdown/{docx_markdown_config['experimentDesign.docx']['output_md']}",
-        "tech-content":       f"/markdown/{docx_markdown_config['techDetails_updated.docx']['output_md']}",
-
+        "tech-content": f"/markdown/{docx_markdown_config['techDetails_updated.docx']['output_md']}",
         # Modals
-        "modal-main-help":    f"/markdown/{modal_config['main']['output']}",
+        "modal-main-help": f"/markdown/{modal_config['main']['output']}",
         "modal-summary-help": f"/markdown/{modal_config['summary']['output']}",
     }

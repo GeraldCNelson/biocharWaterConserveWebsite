@@ -570,19 +570,17 @@ button:hover {
     }
 }
 
-/* =============================================================================
-   Metric tables (Pasture NIR + Soil Bio + Soil Chem + Biomass)
-   ============================================================================= */
-
 #nir,
 #soilbio,
-#soilchem {
+#soilchem,
+#biomass-field {
     text-align: left;
 }
 
 #nir .nir-scroll,
 #soilbio .nir-scroll,
-#soilchem .nir-scroll {
+#soilchem .nir-scroll,
+#biomass-field .nir-scroll {
     display: block;
     width: 100%;
     overflow-x: auto;
@@ -594,14 +592,16 @@ button:hover {
 
 #nir .nir-content,
 #soilbio .nir-content,
-#soilchem .nir-content {
+#soilchem .nir-content,
+#biomass-field .nir-content {
     display: block;
     text-align: left;
 }
 
 #nir .nir-content h5,
 #soilbio .nir-content h5,
-#soilchem .nir-content h5 {
+#soilchem .nir-content h5,
+#biomass-field .nir-content h5 {
     margin: 0.6rem 0 0.35rem 0;
     font-size: 1.0rem;
     font-weight: 600;
@@ -610,7 +610,8 @@ button:hover {
 
 #nir .nir-content table,
 #soilbio .nir-content table,
-#soilchem .nir-content table {
+#soilchem .nir-content table,
+#biomass-field .nir-content table {
     font-size: 0.82rem;
     line-height: 1.05;
     width: auto !important;
@@ -623,7 +624,8 @@ button:hover {
 
 #nir .nir-content .table-responsive,
 #soilbio .nir-content .table-responsive,
-#soilchem .nir-content .table-responsive {
+#soilchem .nir-content .table-responsive,
+#biomass-field .nir-content .table-responsive {
     display: block;
     width: 100%;
     margin-left: 0 !important;
@@ -638,7 +640,9 @@ button:hover {
 #soilbio .nir-content table th,
 #soilbio .nir-content table td,
 #soilchem .nir-content table th,
-#soilchem .nir-content table td {
+#soilchem .nir-content table td,
+#biomass-field .nir-content table th,
+#biomass-field .nir-content table td {
     padding: 0.20rem 0.35rem !important;
     white-space: nowrap;
     text-align: right !important;
@@ -650,7 +654,9 @@ button:hover {
 #soilbio .nir-content table th:first-child,
 #soilbio .nir-content table td:first-child,
 #soilchem .nir-content table th:first-child,
-#soilchem .nir-content table td:first-child {
+#soilchem .nir-content table td:first-child,
+#biomass-field .nir-content table th:first-child,
+#biomass-field .nir-content table td:first-child {
     text-align: left !important;
     width: 5.5rem !important;
 }
@@ -660,49 +666,23 @@ button:hover {
 #soilbio .nir-content table th:not(:first-child),
 #soilbio .nir-content table td:not(:first-child),
 #soilchem .nir-content table th:not(:first-child),
-#soilchem .nir-content table td:not(:first-child) {
+#soilchem .nir-content table td:not(:first-child),
+#biomass-field .nir-content table th:not(:first-child),
+#biomass-field .nir-content table td:not(:first-child) {
     width: 5.0rem !important;
 }
 
 #nir .nir-content table thead th,
 #soilbio .nir-content table thead th,
-#soilchem .nir-content table thead th {
+#soilchem .nir-content table thead th,
+#biomass-field .nir-content table thead th {
     font-weight: 600;
     font-size: 0.80rem;
 }
 
 #nir .nir-content .mb-4,
 #soilbio .nir-content .mb-4,
-#soilchem .nir-content .mb-4 {
+#soilchem .nir-content .mb-4,
+#biomass-field .nir-content .mb-4 {
     margin-bottom: 0.9rem !important;
-}
-
-/* Biomass tables — match NIR / Soil behavior */
-#biomass-field .nir-content table {
-    font-size: 0.82rem;
-    line-height: 1.05;
-    width: auto !important;
-    max-width: 100%;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    table-layout: fixed;
-}
-
-#biomass-field .nir-content table th,
-#biomass-field .nir-content table td {
-    padding: 0.20rem 0.35rem !important;
-    white-space: nowrap;
-    text-align: right !important;
-    vertical-align: middle;
-}
-
-#biomass-field .nir-content table th:first-child,
-#biomass-field .nir-content table td:first-child {
-    text-align: left !important;
-    width: 5.5rem !important;
-}
-
-#biomass-field .nir-content table th:not(:first-child),
-#biomass-field .nir-content table td:not(:first-child) {
-    width: 5.0rem !important;
 }

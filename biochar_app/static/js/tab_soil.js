@@ -4,9 +4,9 @@
 // Uses shared helpers in tables.js so Soil/NIR/Biomass all behave consistently.
 
 import { makeSetSectionTitle } from "./tab_ui.js";
-import { normalizePayload, renderOneSetFromPayload, safeStr } from "./tables.js";
+import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
-import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
+import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 async function renderSoilTab({
   containerId,
@@ -23,15 +23,12 @@ async function renderSoilTab({
   // Prevent double-render if the user clicks tabs repeatedly
   if (container.dataset.rendered === "true") return;
 
-  // ✅ Use the shared animated overlay (prevents static “Loading…” text)
-  // NOTE: keep this import at the top of tab_soil.js:
-  // import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
+  // Show overlay and clear content
+  container.innerHTML = "";
   showLoadingOverlay(container, "Loading");
-  container.innerHTML = ""; // safe: overlay is appended after we call showLoadingOverlay()
 
   try {
     const rawPayload = await fetchJson(endpoint);
-
     const payload = normalizePayload(rawPayload);
 
     if (!payload || !Array.isArray(payload.sets) || payload.sets.length === 0) {
@@ -46,25 +43,19 @@ async function renderSoilTab({
 
     for (const setPayload of payload.sets) {
       const label = setPayload.label || fallbackLabel;
-
-      // Prefer setPayload.notes if present; else fallback
       const note = setPayload.notes || setPayload.note || subtitleText || "";
 
-      // --- Create a per-set wrapper so each set is clearly separated ---
       const setWrapper = document.createElement("div");
       setWrapper.className = "mb-4";
       container.appendChild(setWrapper);
 
-      // Title (and note)
       const titleEl = makeSetSectionTitle(label, note, "soil");
       setWrapper.appendChild(titleEl);
 
-      // Body container for the tables
       const bodyEl = document.createElement("div");
       bodyEl.className = "soil-set-body";
       setWrapper.appendChild(bodyEl);
 
-      // Render tables INTO the body, not into the title element
       renderOneSetFromPayload(bodyEl, setPayload);
     }
 
@@ -77,7 +68,6 @@ async function renderSoilTab({
     div.textContent = "Failed to load tables. Check server logs.";
     container.appendChild(div);
   } finally {
-    // ✅ Always clear overlay
     hideLoadingOverlay(container);
   }
 }
@@ -86,7 +76,7 @@ async function renderSoilTab({
 export async function renderSoilChemTable() {
   return renderSoilTab({
     containerId: "soilchem-content",
-    endpoint: "/api/get_soilchem_table",
+    endpoint: "/api/lab_table/soilchem", // ✅ switched to unified endpoint
     fallbackLabel: "Soil Chemistry",
   });
 }
@@ -94,7 +84,7 @@ export async function renderSoilChemTable() {
 export async function renderSoilBioTable() {
   return renderSoilTab({
     containerId: "soilbio-content",
-    endpoint: "/api/get_soilbio_table",
+    endpoint: "/api/lab_table/soilbio", // ✅ switched to unified endpoint
     fallbackLabel: "Soil Biological Health",
   });
 }

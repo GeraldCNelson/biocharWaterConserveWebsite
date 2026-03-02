@@ -79,6 +79,14 @@ from biochar_app.scripts.config import (
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
+from types import SimpleNamespace
+
+from biochar_app.config import table_specs as ts
+from biochar_app.scripts.tables_lab import (
+    build_lab_table_payload_long,
+    build_lab_table_payload_wide,
+)
+
 # ✅ NEW soil table modules
 from biochar_app.scripts.tables_soil_bio import build_soilbio_table
 from biochar_app.scripts.tables_soil_chem import build_soilchem_table
@@ -117,6 +125,25 @@ _LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+
+def _spec_dicts_to_objs(specs: list[dict[str, Any]]) -> list[Any]:
+    """
+    tables_lab.py expects each variable spec to have .key .label .candidates.
+    In table_specs.py we store dicts, so convert dict -> SimpleNamespace.
+    """
+    out: list[Any] = []
+    for d in specs or []:
+        if not isinstance(d, dict):
+            continue
+        out.append(
+            SimpleNamespace(
+                key=d.get("key", ""),
+                label=d.get("label", ""),
+                candidates=d.get("candidates", []) or [],
+            )
+        )
+    return out
+
 def _normalize_sheet_name(s: str) -> str:
     return (s or "").strip()
 
@@ -978,3 +1005,40 @@ async def api_bulk_download(req: BulkDownloadRequest):
 async def api_get_biomass_field_table():
     payload = get_biomass_field_table_payload(BIOMASS_FIELD_CSV, min_year=2023)
     return JSONResponse(payload)
+
+
+# ---------------------------------------------------------------------------
+# Lab table routes (generic) — NEW
+# ---------------------------------------------------------------------------
+@api_router.get("/lab_table/{table_key}")
+async def api_get_lab_table(table_key: str):
+    """
+    Unified lab table endpoint:
+      /api/lab_table/nir
+      /api/lab_table/soilbio
+      /api/lab_table/soilchem
+      /api/lab_table/biomass_field
+    """
+    key = (table_key or "").strip().lower()
+
+    try:
+        if key == "nir":
+            # reuse the existing endpoint implementation
+            return await api_get_nir_table()
+
+        if key == "soilbio":
+            return await api_get_soilbio_table()
+
+        if key == "soilchem":
+            return await api_get_soilchem_table()
+
+        if key in ("biomass_field", "biomass-field", "biomass"):
+            return await api_get_biomass_field_table()
+
+        raise HTTPException(status_code=404, detail=f"Unknown lab_table key: {table_key!r}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("❌ /api/lab_table/%s failed", key)
+        raise HTTPException(status_code=500, detail=str(e))

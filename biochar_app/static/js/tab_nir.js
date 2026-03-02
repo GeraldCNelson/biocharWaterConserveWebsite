@@ -2,7 +2,7 @@
 //
 // Renderer for the Pasture Quality Metrics tab.
 // Expects endpoint:
-//   GET /api/get_nir_table
+//   GET /api/lab_table/nir
 //
 // Payload supported:
 // - Standard multi-set: { title, sets: [ ... ] }
@@ -31,7 +31,7 @@ export async function renderNirTables() {
   container.appendChild(loading);
 
   try {
-    const rawPayload = await fetchJson("/api/get_nir_table");
+    const rawPayload = await fetchJson("/api/lab_table/nir");
     loading.remove();
 
     const payload = normalizePayload(rawPayload);
@@ -53,6 +53,7 @@ export async function renderNirTables() {
     }
 
     container.dataset.rendered = "true";
+
   } catch (err) {
     console.error("Failed to render NIR tables:", err);
     loading.remove();
