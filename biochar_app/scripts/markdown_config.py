@@ -127,7 +127,6 @@ from __future__ import annotations
 
 from typing import Dict, List, TypedDict
 
-
 # ---------------------------------------------------------------------------
 # Typed config shapes (fixes mypy "object is not indexable")
 # ---------------------------------------------------------------------------

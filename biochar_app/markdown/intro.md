@@ -1,70 +1,71 @@
-# Welcome to the Fruita Biochar Project
-
-The Fruita Biochar Project is beginning its fourth year. This is the second version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <nelson.gerald.c@gmail.com>.
-
-This is an introduction to the project and the website. Here’s what you can expect:
-
-- An introduction to what biochar is and why it is potentially valuable in western Colorado (and other drought prone areas of the world).
-
-- Overview of the biochar experiment at the Colorado State University research station, located outside Fruita, CO.
-
-- Digital data collection results in graphical (Interactive Plots tab) and tabular form (Summary Statistics tab).
-
-- Tabs that present data on forage quality and quantity, soil chemistry and soil biological health.
-
-- Technical details on the data collection process.
-
-- Bulk download of all data available – Campbell Scientific sensor data, local weather variables, fertilizer application and irrigation water applied, soil results and yield quantity and quality.
-
-## What is biochar?
-
-Biochar is the solid material obtained from the thermochemical conversion of biomass in an oxygen-limited environment ([International Biochar Initiative](https://biochar-international.org/)). The surface area inside the biochar pores is approximately 2,000 ft/gram (about half a basketball court!). Its water holding capacity is up to 7 times the weight of the biochar (Figure 1).
-
+<head><style>html {
+  color: #1a1a1a;
+  background-color: #fdfdfd;
+}
+body {
+  margin: 0 auto;
+  max-width: 1500px;
+  padding-left: 50px;
+  padding-right: 50px;
+  padding-top: 50px;
+  padding-bottom: 50px;
+  hyphens: auto;
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  font-family: Georgia, serif;
+}
+img { max-width: 100%; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em auto;
+  display: table;
+}
+th, td {
+  padding: 0.5em;
+  text-align: center;
+  border: 1px solid #ddd;
+}
+figcaption, caption {
+  font-style: italic;
+  text-align: center;
+  margin-top: 0.5em;
+}</style></head><h1 id="welcome-to-the-fruita-biochar-project">Welcome to the Fruita Biochar Project</h1>
+<p>The Fruita Biochar Project is beginning its fourth year. This is the second version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <a href="mailto:nelson.gerald.c@gmail.com">nelson.gerald.c@gmail.com</a>.</p>
+<p>This is an introduction to the project and the website. Here’s what you can expect:</p>
+<ul>
+<li><p>An introduction to what biochar is and why it is potentially valuable in western Colorado (and other drought prone areas of the world).</p></li>
+<li><p>Overview of the biochar experiment at the Colorado State University research station, located outside Fruita, CO.</p></li>
+<li><p>Digital data collection results in graphical (Interactive Plots tab) and tabular form (Summary Statistics tab).</p></li>
+<li><p>Tabs that present data on forage quality and quantity, soil chemistry and soil biological health.</p></li>
+<li><p>Technical details on the data collection process.</p></li>
+<li><p>Bulk download of all data available – Campbell Scientific sensor data, local weather variables, fertilizer application and irrigation water applied, soil results and yield quantity and quality.</p></li>
+</ul>
+<h2 id="what-is-biochar">What is biochar?</h2>
+<p>Biochar is the solid material obtained from the thermochemical conversion of biomass in an oxygen-limited environment (<a href="https://biochar-international.org/">International Biochar Initiative</a>). The surface area inside the biochar pores is approximately 2,000 ft/gram (about half a basketball court!). Its water holding capacity is up to 7 times the weight of the biochar (Figure 1).</p>
 <figure>
-  <img src="/static/images/biocharMicro1.jpg" alt="Scanning electron microscope image of biochar" title="Scanning electron microscope image of biochar" style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
-  <figcaption style="text-align: center;"><p><em>Figure 1. Scanning electron microscope image of biochar</em></p></figcaption>
+<img alt="Scanning electron microscope image of biochar" src="/static/images/biocharMicro1.jpg" style="width:3.32721in;height:2.5in"/>
+<figcaption>Figure 1. . Scanning electron microscope image of biochar</figcaption>
 </figure>
-
-
-## Plant biology and biochar structure
-
-For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.
-
-
+<h2 id="plant-biology-and-biochar-structure">Plant biology and biochar structure</h2>
+<p>For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.</p>
 <table>
-  <colgroup>
-    <col style="width: 50%" />
-    <col style="width: 50%" />
-  </colgroup>
-  <thead>
-    <tr>
-      <th>
-        <p>
-          <img src="/static/images/lignin_diagram.jpg"
-               alt="Diagram showing lignin structure"
-               title="Diagram showing lignin structure"
-               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
-        </p>
-        <p><em>Figure 2. Lignin chemical structure</em></p>
-      </th>
-      <th>
-        <p>
-          <img src="/static/images/biochar_diagram.jpg"
-               alt="Diagram showing biochar chemical structure"
-               title="Diagram showing biochar chemical structure"
-               style="max-width: 70%; height: auto; display: block; margin: 0 auto;" />
-        </p>
-        <p><em>Figure 3. Biochar chemical structure</em></p>
-      </th>
-    </tr>
-  </thead>
-  <tbody>
-  </tbody>
+<colgroup>
+<col style="width: 52%"/>
+<col style="width: 47%"/>
+</colgroup>
+<thead>
+<tr>
+<th><p><img alt="Lignin chemical structure" src="/static/images/lignin_diagram.jpg" style="width:3.29167in;height:3.80989in"/></p>
+<p>. Lignin chemical structure</p></th>
+<th><p><img alt="Biochar chemical structure" src="/static/images/biochar_diagram.jpg" style="width:2.96261in;height:2.36111in"/></p>
+<p>. Biochar chemical structure</p></th>
+</tr>
+</thead>
+<tbody>
+</tbody>
 </table>
-
-
-Image sources:
-
-Figure 2- <https://www.sciencedirect.com/topics/materials-science/lignin>
-
-Figure 3 - <https://www.envchemgroup.com/nanostructures-biochar.html>
+<p>Image sources:</p>
+<p>Figure 2- <a href="https://www.sciencedirect.com/topics/materials-science/lignin">https://www.sciencedirect.com/topics/materials-science/lignin</a></p>
+<p>Figure 3 - <a href="https://www.envchemgroup.com/nanostructures-biochar.html">https://www.envchemgroup.com/nanostructures-biochar.html</a></p>
