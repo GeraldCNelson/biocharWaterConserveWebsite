@@ -5,7 +5,11 @@ etl.py
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
   - Normalize logger timestamps as timezone-naive Mountain local wall time
-  - Mask extreme placeholders → NaN (covers typical logger codes like -9999/6999/9999)
+  - Apply per-logger clock corrections (MST/MDT jumps, resets) using LOGGER_CLOCK_CORRECTIONS
+  - Backfill late-2023 BattV_Min data that lives in datfiles_2024/*_Table1.dat
+      * For year=2023, we also read datfiles_2024/{tag}_Table1.dat and keep rows < 2024-01-01
+      * If you created *_late2023_withBattV.dat files inside datfiles_2023, we also read those
+  - Mask extreme placeholders → NaN
   - Convert VWC fractions → percent (×100) deterministically
   - Convert soil temperature (°C → °F) deterministically
   - Apply site-specific value bounds (centralized in thresholds.py) + produce a report
@@ -24,7 +28,7 @@ import csv
 import math
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple, cast
+from typing import Dict, List, Optional, Any, Tuple, cast, Iterable
 from datetime import datetime
 
 import pandas as pd
@@ -64,6 +68,50 @@ logger = logging.getLogger(__name__)
 LOGGER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# Logger clock corrections
+# ---------------------------------------------------------------------------
+# Semantics:
+#   For a given logger tag, each tuple is (start_timestamp, add_minutes).
+#   For rows with timestamp >= start_timestamp, we add add_minutes to the raw timestamp.
+#
+# This is intended to “stitch” together known clock mode changes (MST/MDT) and clock resets
+# so that the final timeline is consistent for analysis.
+#
+# NOTE: This mapping was derived from your clock_state_timeline CSVs and *compressed*
+# to only the points where the correction changes.
+LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
+    "S1B": [("2024-02-23 15:30:00", 60)],
+    "S1M": [("2024-02-23 15:15:00", 60)],
+    "S1T": [("2024-02-23 10:45:00", 60)],
+    "S2B": [("2024-02-23 15:45:00", 60)],
+    "S2M": [("2026-02-23 08:45:00", 60)],
+    "S2T": [("2024-04-02 16:00:00", -60)],
+    "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
+    "S3M": [("2023-09-04 10:30:00", -60), ("2024-07-07 06:30:00", -120), ("2025-01-16 23:45:00", -180)],
+    "S3T": [("2024-02-23 11:30:00", 60)],
+    "S4B": [("2023-09-04 10:30:00", -60), ("2023-09-20 18:30:00", -120), ("2026-02-23 09:00:00", -60)],
+    "S4M": [("2024-02-23 14:30:00", 60)],
+    "S4T": [("2024-02-23 11:45:00", 60)],
+}
+
+
+def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
+    """
+    Apply piecewise clock corrections (add minutes) to a timestamp series.
+    """
+    pts = LOGGER_CLOCK_CORRECTIONS.get(logger_tag)
+    if not pts:
+        return ts
+
+    out = pd.to_datetime(ts, errors="coerce").astype("datetime64[ns]")
+    for start_s, add_min in pts:
+        start_ts = pd.Timestamp(start_s)
+        mask = out >= start_ts
+        if mask.any():
+            out = out.where(~mask, out + pd.Timedelta(minutes=int(add_min)))
+    return out
+
 
 # ---------------------------------------------------------------------------
 # Timestamp helpers (PyCharm-friendly)
@@ -84,6 +132,7 @@ def ts_to_iso_minute(ts_any: Any) -> str:
             ts_any = pd.Timestamp(ts_any)
     return ts_any.strftime("%Y-%m-%dT%H:%M")
 
+
 def ts_to_iso_date(ts_any: Any) -> str:
     """
     Accepts Timestamp / NaT / None and returns YYYY-MM-DD or "".
@@ -99,15 +148,15 @@ def ts_to_iso_date(ts_any: Any) -> str:
             ts_any = pd.Timestamp(ts_any)
     return ts_any.strftime("%Y-%m-%d")
 
+
 def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
     """
     Build a pd.Timestamp and guarantee it's not NaT.
     Raises ValueError if parsing fails.
     """
-    ts = pd.Timestamp(value)  # PyCharm treats this as Timestamp (but may still allow NaT at runtime)
+    ts = pd.Timestamp(value)
     if pd.isna(ts):
         raise ValueError(f"Invalid timestamp {value!r}" + (f" ({context})" if context else ""))
-    # Explicit narrowing for PyCharm
     assert isinstance(ts, pd.Timestamp)
     return ts
 
@@ -117,8 +166,8 @@ def force_datetime64_ns(s: pd.Series) -> pd.Series:
     Force a series to datetime64[ns], dropping NaT.
     Avoids pandas-stubs TimestampSeries vs Series[Timestamp] reassignment issues.
     """
-    dt = pd.to_datetime(s, errors="coerce")          # TimestampSeries (per stubs)
-    dt_nonnull = dt.dropna()                         # Series[Timestamp] (per stubs)
+    dt = pd.to_datetime(s, errors="coerce")
+    dt_nonnull = dt.dropna()
     return cast(pd.Series, dt_nonnull.astype("datetime64[ns]"))
 
 
@@ -141,7 +190,6 @@ def normalize_weather_timestamp_series(ts: pd.Series, tz: str = "America/Denver"
     """
     s = pd.to_datetime(ts, errors="coerce")
 
-    # pandas-stubs can be picky here; keep it simple & explicit
     if s.dt.tz is None:
         s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
     else:
@@ -198,7 +246,14 @@ def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
     return df.rename(columns=mapping)
 
 
+def _clean_col_name(s: object) -> str:
+    return str(s).lstrip("\ufeff").strip().strip('"').strip("'").strip()
+
+
 def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
+    """
+    TOA5 reader: column names are on the second row.
+    """
     with datfile.open("r", newline="") as f:
         r = csv.reader(f)
         _meta = next(r, None)
@@ -208,73 +263,120 @@ def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
 
     if not colnames:
         raise ValueError(f"{datfile.name}: missing TOA5 column-name row.")
-    if "TIMESTAMP" not in colnames and "timestamp" not in colnames:
+    cols = [_clean_col_name(c) for c in colnames]
+    if "TIMESTAMP" not in cols and "timestamp" not in cols:
         raise ValueError(f"{datfile.name}: TOA5 column-name row does not include TIMESTAMP.")
 
     return pd.read_csv(
         datfile,
         skiprows=4,
         header=None,
-        names=colnames,
+        names=cols,
         na_values=["", "NA", "NAN"],
         engine="python",
     )
 
 
+def _candidate_logger_files(tag: str, year: int) -> list[Path]:
+    """
+    Resolve which .dat files should contribute to a (tag,year).
+
+    Special case: year==2023
+      - read the normal datfiles_2023/{tag}_Table1.dat (if present)
+      - ALSO read datfiles_2024/{tag}_Table1.dat (if present) and keep rows < 2024-01-01
+        (this is where BattV_Min first appears mid-Oct 2023 in your deployment)
+      - ALSO read datfiles_2023/{tag}_Table1_late2023_withBattV.dat (if present)
+        (if you wrote those extracted files into datfiles_2023)
+    """
+    files: list[Path] = []
+
+    base = Path(DATA_RAW_DIR)
+
+    p_main = base / f"datfiles_{year}" / f"{tag}_Table1.dat"
+    if p_main.exists():
+        files.append(p_main)
+
+    if year == 2023:
+        p_next = base / "datfiles_2024" / f"{tag}_Table1.dat"
+        if p_next.exists():
+            files.append(p_next)
+
+        p_late = base / "datfiles_2023" / f"{tag}_Table1_late2023_withBattV.dat"
+        if p_late.exists():
+            files.append(p_late)
+
+    return files
+
+
 def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
-    datfile = Path(DATA_RAW_DIR) / f"datfiles_{year}" / f"{tag}_Table1.dat"
-    if not datfile.exists():
-        logger.warning(f"⚠️ Not found: {datfile}")
+    files = _candidate_logger_files(tag, year)
+    if not files:
+        logger.warning(f"⚠️ Not found: datfiles_{year}/{tag}_Table1.dat (and no backfill sources)")
         return None
 
-    try:
-        df = _read_toa5_table1_dat(datfile)
-    except Exception as e:
-        logger.error(f"❌ Failed reading TOA5 file {datfile.name}: {e}")
+    frames: list[pd.DataFrame] = []
+    raw_ts_examples: list[str] = []
+
+    for datfile in files:
+        try:
+            df = _read_toa5_table1_dat(datfile)
+        except Exception as e:
+            logger.error(f"❌ Failed reading TOA5 file {datfile.name}: {e}")
+            continue
+
+        if "TIMESTAMP" in df.columns and "timestamp" not in df.columns:
+            df = df.rename(columns={"TIMESTAMP": "timestamp"})
+        df = df.drop(columns=["RECORD"], errors="ignore")
+
+        if df.empty or "timestamp" not in df.columns:
+            continue
+
+        raw_ts = df["timestamp"].copy()
+        df["timestamp"] = normalize_logger_timestamp_series(raw_ts)
+
+        bad_mask = df["timestamp"].isna()
+        n_nat = int(bad_mask.sum())
+        if n_nat:
+            bad_idx = df.index[bad_mask][:10].tolist()
+            for i in bad_idx:
+                raw_ts_examples.append(f"{datfile.name}: row={int(i)} raw={raw_ts.iloc[i]!r}")
+            df = df.loc[~bad_mask].copy()
+
+        if df.empty:
+            continue
+
+        # Apply clock corrections BEFORE year-window filtering
+        df["timestamp"] = apply_logger_clock_corrections(df["timestamp"], tag)
+
+        # Force dtype for PyCharm and safe comparisons
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").astype("datetime64[ns]")
+        df = df.dropna(subset=["timestamp"])
+        if df.empty:
+            continue
+
+        frames.append(df)
+
+    if not frames:
+        if raw_ts_examples:
+            logger.warning(f"⚠️ NaT examples for {tag}: " + "; ".join(raw_ts_examples[:10]))
         return None
 
-    if "TIMESTAMP" in df.columns and "timestamp" not in df.columns:
-        df = df.rename(columns={"TIMESTAMP": "timestamp"})
-    df = df.drop(columns=["RECORD"], errors="ignore")
+    df_all = pd.concat(frames, ignore_index=True)
 
-    if df.empty or "timestamp" not in df.columns:
-        return None
-
-    raw_ts = df["timestamp"].copy()
-    df["timestamp"] = normalize_logger_timestamp_series(raw_ts)
-
-    bad_mask = df["timestamp"].isna()
-    n_nat = int(bad_mask.sum())
-    if n_nat:
-        bad_idx = df.index[bad_mask][:10].tolist()
-        examples: List[str] = []
-        for i in bad_idx:
-            examples.append(f"row={int(i)} raw={raw_ts.iloc[i]!r}")
-        logger.warning(
-            f"⚠️ {n_nat} NaT timestamps in {tag} ({datfile.name}). Examples: " + "; ".join(examples)
-        )
-        df = df.loc[~bad_mask].copy()
-
-    if df.empty:
-        return None
-
-    # Force dtype for PyCharm and safe comparisons
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").astype("datetime64[ns]")
-    df = df.dropna(subset=["timestamp"])
-    if df.empty:
-        return None
+    # Prefer “later” files in case of overlaps (e.g., the datfiles_2024 copy may have BattV_Min)
+    df_all = df_all.sort_values("timestamp")
+    df_all = df_all.drop_duplicates(subset=["timestamp"], keep="last").reset_index(drop=True)
 
     start_ts = pd.Timestamp(year=year, month=1, day=1)
     end_ts = pd.Timestamp(year=year + 1, month=1, day=1)
 
-    ts_vals = df["timestamp"].to_numpy()
+    ts_vals = df_all["timestamp"].to_numpy()
     mask_year = (ts_vals >= start_ts.to_datetime64()) & (ts_vals < end_ts.to_datetime64())
-    df = df.loc[mask_year].copy()
-
-    if df.empty:
+    df_all = df_all.loc[mask_year].copy()
+    if df_all.empty:
         return None
 
-    return rename_logger_columns(df, tag)
+    return rename_logger_columns(df_all, tag)
 
 
 def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
@@ -590,6 +692,7 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "Notes",
                 "-----",
                 "  - Placeholder/sentinel values (e.g., -9999/9999) have been converted to NaN.",
+                "  - Clock corrections (MST/MDT jumps/resets) may have been applied to logger timestamps.",
                 "  - Cross-strip comparison variables (ΔT, ΔSWC, ratio columns, etc.)",
                 "    are not included in these per-logger CSVs.",
             ]
@@ -695,10 +798,18 @@ def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
     if pd.notna(spike) and spike > 1.5:
         logger.warning(f"⚠️ CoAgMet 5 min precip spike detected: {spike:.2f} in")
 
-    bad_ts = df_copy["timestamp"].isna().sum()
+    bad_mask = df_copy["timestamp"].isna()
+    bad_ts = int(bad_mask.sum())
     if bad_ts:
-        logger.warning(f"⚠️ Dropping {int(bad_ts)} weather rows with invalid/ambiguous timestamps")
-        df_copy = df_copy.dropna(subset=["timestamp"])
+        # show a few examples *before* dropping
+        ex = df_copy.loc[bad_mask].head(10).copy()
+        cols_to_show = [c for c in ["timestamp", "precip_in", "temp_air_degF"] if c in ex.columns]
+        logger.warning(
+            "⚠️ Dropping %d weather rows with invalid/ambiguous timestamps. Examples:\n%s",
+            bad_ts,
+            ex[cols_to_show].to_string(index=False),
+        )
+        df_copy = df_copy.loc[~bad_mask].copy()
 
     return df_copy
 
@@ -733,11 +844,28 @@ def generate_summaries(years: List[int]) -> None:
                     f"⚠️ Bounds enforcement: {len(bounds_reports)} columns had violations "
                     f"({total_violations} total masked values). Showing up to 10 entries:"
                 )
+
+                def _fmt_ts(x: Any) -> str:
+                    if x is None or pd.isna(x):
+                        return ""
+                    try:
+                        return pd.to_datetime(x, errors="coerce").strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        return str(x)
+
                 for r in bounds_reports[:10]:
                     logger.warning(
                         f"  - {r.get('rule')} col={r.get('column')} violations={r.get('violations')} "
                         f"min={r.get('min')} max={r.get('max')} label={r.get('label')}"
                     )
+
+                    ex = r.get("examples") or []
+                    if ex:
+                        # Print a few concrete examples of what got masked
+                        for e in ex:
+                            logger.warning(
+                                f"      example: ts={_fmt_ts(e.get('timestamp'))} value={e.get('value')}"
+                            )
 
             df = add_swc_cylinder_volumes(df)
             df = add_temperature_differences(df)
@@ -747,7 +875,6 @@ def generate_summaries(years: List[int]) -> None:
             aggregate_and_write(year, df)
 
         # ---------------- Weather ----------------
-        # noinspection PyBroadException
         try:
             dfw = fetch_weather_data(year)
         except Exception as e:
