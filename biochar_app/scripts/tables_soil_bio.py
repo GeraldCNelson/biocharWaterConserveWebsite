@@ -16,7 +16,6 @@ from typing import Any, Dict, List
 from biochar_app.scripts.tables_common import build_grouped_tab_payload
 from biochar_app.scripts.tables_soil_common import VariableSpec, build_soil_table_payload
 
-
 # -----------------------------------------------------------------------------
 # Shared top-level note (STANDARD)
 # -----------------------------------------------------------------------------
