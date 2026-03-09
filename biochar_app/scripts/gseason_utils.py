@@ -44,9 +44,9 @@ def generate_gseason_summary(
 ) -> None:
     """
     Build and persist growing-season summary JSON for a given year
-    directly from the 15-min logger parquet.
+    directly from the 15-min logger parquet + 15-min ratio parquet.
 
-    Output schema (per your existing frontend):
+    Output schema:
     {
       "<period_code>": {
         "<VARIABLE>": {
@@ -64,33 +64,50 @@ def generate_gseason_summary(
     import re
     from collections import defaultdict as dd
 
-    # 0) config + input/output paths
     summary_path = Path(DATA_PROCESSED_DIR) / f"gseason_summary_{year}.json"
     if summary_path.exists() and not overwrite:
         return
 
-    # 1) load 15-min logger data for this year’s *growing season*
-    parquet_15 = Path(PARQUET_DIR) / "summary" / "15min" / f"{year}_15min.parquet"
-    if not parquet_15.exists():
-        raise FileNotFoundError(f"Missing 15-min parquet: {parquet_15}")
+    raw_path = Path(PARQUET_DIR) / "summary" / "15min" / f"{year}_15min.parquet"
+    ratio_path = Path(PARQUET_DIR) / "summary" / "15min" / f"{year}_15min_ratios.parquet"
 
-    df = pd.read_parquet(parquet_15)
-    if "timestamp" not in df.columns:
-        raise ValueError("15-min parquet must contain a 'timestamp' column.")
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df = df.dropna(subset=["timestamp"])
+    if not raw_path.exists():
+        raise FileNotFoundError(f"Missing 15-min parquet: {raw_path}")
+    if not ratio_path.exists():
+        raise FileNotFoundError(f"Missing 15-min ratio parquet: {ratio_path}")
+
+    df_raw = pd.read_parquet(raw_path)
+    df_ratio = pd.read_parquet(ratio_path)
+
+    if "timestamp" not in df_raw.columns:
+        raise ValueError("15-min raw parquet must contain a 'timestamp' column.")
+    if "timestamp" not in df_ratio.columns:
+        raise ValueError("15-min ratio parquet must contain a 'timestamp' column.")
+
+    df_raw["timestamp"] = pd.to_datetime(df_raw["timestamp"], errors="coerce")
+    df_ratio["timestamp"] = pd.to_datetime(df_ratio["timestamp"], errors="coerce")
+
+    df_raw = df_raw.dropna(subset=["timestamp"])
+    df_ratio = df_ratio.dropna(subset=["timestamp"])
+
+    # Keep timestamp once, append only non-duplicate ratio columns
+    ratio_only_cols = [c for c in df_ratio.columns if c != "timestamp" and c not in df_raw.columns]
+    df = df_raw.merge(
+        df_ratio[["timestamp"] + ratio_only_cols],
+        on="timestamp",
+        how="left",
+    )
 
     logger.info(
-        "🍂 generate_gseason_summary(%s): 15-min slice rows=%d, cols=%d",
+        "🍂 generate_gseason_summary(%s): merged 15-min rows=%d, cols=%d",
         year,
         len(df),
         len(df.columns),
     )
 
-    # 2) assign period_code to each row using wrap-aware mapper
-    # NOTE: 'periods' arg currently unused here; keeping signature as-is.
+    # Map each 15-min row into a growing-season period
     df["period_code"] = df["timestamp"].apply(lambda ts: assign_gseason_periods(ts, year))
-    df = df[df["period_code"].notna()]
+    df = df[df["period_code"].notna()].copy()
 
     if df.empty:
         logger.warning(
@@ -101,22 +118,27 @@ def generate_gseason_summary(
         summary_path.write_text(json.dumps({}, indent=2))
         return
 
-    # 3) discover variable/strip/depth from column names
-    #    RAW:   VAR_DEPTH_raw_S?_?   e.g., VWC_1_raw_S1_T
-    #    RATIO: VAR_DEPTH_ratio_S1_S2_?  or _S3_S4_?
-    #    SWC:   SWC_vol_gal_S1_T_1  or SWC_vol_L_S1_T_1
+    # RAW examples:
+    #   VWC_1_raw_S1_T
+    #   T_2_raw_S3_B
     raw_re = re.compile(
         r"^(?P<var>[A-Z]+)_(?P<depth>\d)_raw_(?P<strip>S\d)_(?P<loc>[A-Z])$"
     )
+
+    # RATIO examples:
+    #   VWC_1_ratio_S1_S2_T
+    #   EC_3_ratio_S3_S4_B
     ratio_re = re.compile(
         r"^(?P<var>[A-Z]+)_(?P<depth>\d)_ratio_(?P<pair>S\d_S\d)_(?P<loc>[A-Z])$"
     )
+
+    # SWC raw examples:
+    #   SWC_vol_gal_S1_T_1
+    #   SWC_vol_L_S3_B_2
     swc_raw_re = re.compile(
         r"^SWC_vol_(?P<unit>L|gal)_(?P<strip>S\d)_(?P<loc>[A-Z])_(?P<depth>\d)$"
     )
 
-    # 4) build nested accumulator
-    # mypy fix: keep top-level keys as real str by normalizing group keys.
     nested: dict[str, dict[str, dict[str, dict[str, dict[str, dict[str, float]]]]]] = dd(
         lambda: dd(lambda: dd(dict))
     )
@@ -132,9 +154,7 @@ def generate_gseason_summary(
             "std": round(float(s.std()), 4),
         }
 
-    # 5) per period, compute stats for RAW and RATIO groups
     for pcode_raw, g in df.groupby("period_code", dropna=True):
-        # mypy: pandas group keys are "Hashable"/object; normalize to str for dict[str,...]
         pcode = str(pcode_raw)
 
         logger.info(
@@ -145,7 +165,6 @@ def generate_gseason_summary(
         )
 
         for col in g.columns:
-            # Skip non-data columns
             if col in {"timestamp", "period_code"}:
                 continue
 
@@ -161,7 +180,6 @@ def generate_gseason_summary(
                     slot = nested[pcode][var].setdefault(
                         key, {"raw_statistics": {}, "ratio_statistics": {}}
                     )
-                    # slot dicts are untyped; keep runtime behavior but keep mypy happy
                     slot["raw_statistics"][str(col)] = rs
                 continue
 
@@ -169,8 +187,8 @@ def generate_gseason_summary(
             if m:
                 var = str(m.group("var"))
                 depth = str(m.group("depth"))
-                pair = str(m.group("pair"))  # S1_S2 or S3_S4
-                key = f"{pair}_D{depth}"  # keep pairs separate from single-strip keys
+                pair = str(m.group("pair"))
+                key = f"{pair}_D{depth}"
 
                 rs = stats(g[col])
                 if rs:
@@ -180,7 +198,6 @@ def generate_gseason_summary(
                     slot["ratio_statistics"][str(col)] = rs
                 continue
 
-            # --- SWC special case: treat SWC_vol_* as the raw SWC values ----
             m = swc_raw_re.match(col)
             if m:
                 depth = str(m.group("depth"))
@@ -195,7 +212,6 @@ def generate_gseason_summary(
                     slot["raw_statistics"][str(col)] = rs
                 continue
 
-    # 6) write JSON
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(nested, f, indent=2, default=str)

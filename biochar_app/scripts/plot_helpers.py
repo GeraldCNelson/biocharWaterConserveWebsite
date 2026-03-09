@@ -821,13 +821,12 @@ def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
         format="%Y-%m-%d %H:%M:%S",
         errors="coerce",
     )
-    start = start.fillna(
-        pd.to_datetime(
-            date_str + " " + time_on,
-            format="%Y-%m-%d %H:%M",
-            errors="coerce",
-        )
+    fallback_start = pd.to_datetime(
+        date_str + " " + time_on,
+        format="%Y-%m-%d %H:%M",
+        errors="coerce",
     )
+    start = start.where(start.notna(), fallback_start)
 
     end = pd.to_datetime(
         date_str + " " + time_off,

@@ -3,20 +3,18 @@ from __future__ import annotations
 
 import os
 import sys
-import glob
 import subprocess
 import logging
 from pathlib import Path
 
 import pandas as pd
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from dotenv import load_dotenv
 
-# ─── Your imports ──────────────────────────────────────────────────────────────
 from biochar_app.scripts.config import (
     BASE_DIR,
     DEFAULT_GRANULARITY,
@@ -24,30 +22,11 @@ from biochar_app.scripts.config import (
     YEARS,
     DEFAULT_GSEASON_PERIODS,
 )
+from biochar_app.config.paths import PARQUET_DIR
 from biochar_app.scripts.routes_utils import load_logger_year as _orig_load_logger_year
 from biochar_app.scripts.routes import main_router, api_router
-
-from biochar_app.scripts import state
-
 from biochar_app.scripts.date_ranges import build_date_ranges
-PARQUET_ROOT = Path(BASE_DIR) / "data-processed" / "parquet"
-
-state.DATE_RANGES = build_date_ranges(
-    base_dir=PARQUET_ROOT,
-    years=YEARS,
-    granularities=["raw", "15min", "daily", "monthly", "gseason"],
-)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-# logger.info("📅 Date ranges loaded:")
-# for y, gmap in state.DATE_RANGES.items():
-#     for g, r in gmap.items():
-#         logger.info(f"  {y} {g}: {r['min']} → {r['max']}")
+from biochar_app.scripts import state
 
 # ─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -55,29 +34,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Global caches ─────────────────────────────────────────────────────────────
 _cache: dict[tuple[int, str], pd.DataFrame] = {}  # (year, granularity) -> df
-DATE_RANGES: dict[int, dict[str, dict[str, str]]] = {}  # year -> key -> {"min": "...", "max": "..."}
 
-
-# ============================= Date range helpers ============================= #
-
-def parquet_timestamp_range(path: Path) -> dict[str, str] | None:
-    """
-    Return {"min": "YYYY-MM-DD", "max": "YYYY-MM-DD"} from a parquet file,
-    reading only the timestamp column.
-    """
-    try:
-        s = pd.read_parquet(path, columns=["timestamp"])["timestamp"]
-    except Exception:
-        return None
-
-    s = pd.to_datetime(s, errors="coerce").dropna()
-    if s.empty:
-        return None
-
-    return {
-        "min": s.min().date().isoformat(),
-        "max": s.max().date().isoformat(),
-    }
 
 # ============================= Caching hook ============================= #
 
@@ -90,35 +47,43 @@ def _cached_load_logger_year(year: int, granularity: str) -> pd.DataFrame:
     if key not in _cache:
         df = _orig_load_logger_year(int(year), str(granularity))
         _cache[key] = df
-        logger.info(f"📥 Cached slice {key[0]}×{key[1]} (rows={len(df)})")
+        logger.info("📥 Cached slice %s×%s (rows=%d)", key[0], key[1], len(df))
     return _cache[key]
 
 
 # ============================= App setup ============================= #
 
 load_dotenv()
+
 app = FastAPI(
     title="Biochar Water Conserve API",
     description="Plots & data endpoints for biocharresearch.org",
 )
 
+base_dir = Path(BASE_DIR)
+static_dir = base_dir / "static"
+templates_dir = base_dir / "templates"
+
 # 1) Serve static assets
-static_dir = os.path.join(BASE_DIR, "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # 2) Include routers
 app.include_router(main_router)
 app.include_router(api_router)
 
 # 3) SPA entrypoint via Jinja2
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates = Jinja2Templates(directory=str(templates_dir))
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_spa(request: Request):
-    # Convert the PERIODS dict into a list suitable for JSON
+async def serve_spa(request: Request) -> HTMLResponse:
     periods_list = [
-        {"code": code, "label": info["label"], "start": info["start"], "end": info["end"]}
+        {
+            "code": code,
+            "label": info["label"],
+            "start": info["start"],
+            "end": info["end"],
+        }
         for code, info in DEFAULT_GSEASON_PERIODS.items()
     ]
 
@@ -134,46 +99,67 @@ async def serve_spa(request: Request):
 
 
 # 4) Ensure processed data exists
-PARQUET_ROOT = os.path.join(BASE_DIR, "data-processed", "parquet")
-os.makedirs(PARQUET_ROOT, exist_ok=True)
-if not glob.glob(os.path.join(PARQUET_ROOT, "*", "*.parquet")):
-    logger.info("⚙️  No parquet files found; running ETL")
+PARQUET_DIR.mkdir(parents=True, exist_ok=True)
+
+has_any_parquet = any(PARQUET_DIR.rglob("*.parquet"))
+if not has_any_parquet:
+    logger.info("⚙️ No parquet files found under %s; running ETL", PARQUET_DIR)
     try:
         subprocess.run([sys.executable, "-m", "biochar_app.scripts.etl"], check=True)
         logger.info("✅ ETL completed successfully")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ ETL failed: {e}")
+    except subprocess.CalledProcessError as exc:
+        logger.error("❌ ETL failed: %s", exc)
 
 
 # 5) Monkey-patch loader so all routes use caching “for free”
 import biochar_app.scripts.routes_utils as _ru
-_ru.load_logger_year = _cached_load_logger_year  # type: ignore
+_ru.load_logger_year = _cached_load_logger_year  # type: ignore[attr-defined]
 
 
-# 6) Build DATE_RANGES once at import time (timestamp-only scan)
-logger.info("⏳ Preloading parquet date ranges (timestamp-only scan)...")
+# 6) Build DATE_RANGES once at import time
+logger.info("⏳ Preloading parquet date ranges...")
 try:
-    # log a short summary
-    for year, d in DATE_RANGES.items():
-        if "raw_logger" in d:
-            logger.info(f"📅 {year} raw_logger: {d['raw_logger']['min']} → {d['raw_logger']['max']}")
-        if "daily" in d:
-            logger.info(f"📅 {year} daily     : {d['daily']['min']} → {d['daily']['max']}")
-except Exception as e:
-    logger.exception(f"❌ Failed to build DATE_RANGES: {e}")
-    DATE_RANGES = {}
+    state.DATE_RANGES = build_date_ranges(
+        base_dir=PARQUET_DIR,
+        years=YEARS,
+        granularities=["raw", "15min", "daily", "monthly", "gseason"],
+    )
+
+    for year, ranges in state.DATE_RANGES.items():
+        if "raw_logger" in ranges:
+            logger.info(
+                "📅 %s raw_logger: %s → %s",
+                year,
+                ranges["raw_logger"]["min"],
+                ranges["raw_logger"]["max"],
+            )
+        if "daily" in ranges:
+            logger.info(
+                "📅 %s daily     : %s → %s",
+                year,
+                ranges["daily"]["min"],
+                ranges["daily"]["max"],
+            )
+except Exception as exc:
+    logger.exception("❌ Failed to build DATE_RANGES: %s", exc)
+    state.DATE_RANGES = {}
 
 logger.info("✅ Date range preload complete")
 
 
-# 7) Preload only the default slice at boot (optional, but nice)
+# 7) Preload only the default slice at boot
 try:
     df0 = _cached_load_logger_year(DEFAULT_YEAR, DEFAULT_GRANULARITY)
-    logger.info(f"✅ Preloaded default slice ({DEFAULT_YEAR}, {DEFAULT_GRANULARITY}) rows={len(df0)}")
+    logger.info(
+        "✅ Preloaded default slice (%s, %s) rows=%d",
+        DEFAULT_YEAR,
+        DEFAULT_GRANULARITY,
+        len(df0),
+    )
 except FileNotFoundError:
-    logger.warning(f"⚠️ No parquet found for default slice {DEFAULT_YEAR}/{DEFAULT_GRANULARITY}")
-except Exception as e:
-    logger.exception(f"❌ Failed to preload default slice: {e}")
+    logger.warning("⚠️ No parquet found for default slice %s/%s", DEFAULT_YEAR, DEFAULT_GRANULARITY)
+except Exception as exc:
+    logger.exception("❌ Failed to preload default slice: %s", exc)
 
 
 # 8) Run with Uvicorn when invoked directly

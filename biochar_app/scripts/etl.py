@@ -4,11 +4,12 @@ etl.py
 
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
-  - Normalize logger timestamps as timezone-naive Mountain local wall time
+  - Parse raw logger timestamps as naive clock text
   - Apply per-logger clock corrections (MST/MDT jumps, resets) using LOGGER_CLOCK_CORRECTIONS
+  - Convert corrected logger timestamps from a fixed MST base into America/Denver civil time
   - Backfill late-2023 BattV_Min data that lives in datfiles_2024/*_Table1.dat
-      * For year=2023, we also read datfiles_2024/{tag}_Table1.dat and keep rows < 2024-01-01
-      * If you created *_late2023_withBattV.dat files inside datfiles_2023, we also read those
+      * For year=2023, also read datfiles_2024/{tag}_Table1.dat and keep rows < 2024-01-01
+      * If *_late2023_withBattV.dat files exist in datfiles_2023, also read those
   - Mask extreme placeholders → NaN
   - Convert VWC fractions → percent (×100) deterministically
   - Convert soil temperature (°C → °F) deterministically
@@ -19,6 +20,21 @@ Full ETL including growing-season (gseason) summaries:
   - Build DEFAULT gseason summaries from daily data (with cross-year support)
   - Fetch CoAgMet 5 min weather; clean precip increments; write resampled Parquet
   - Build bulk-download ZIPs for 15-min logger and weather data
+
+Logger time policy
+------------------
+Option B: final logger timestamps should reflect seasonal Mountain Time switches.
+
+Implementation:
+1. Parse the raw logger timestamp text as naive.
+2. Apply manual LOGGER_CLOCK_CORRECTIONS.
+3. Treat the corrected series as a fixed MST base (UTC-7 all year).
+4. Convert that fixed-base timeline to America/Denver civil time.
+5. Keep logger timestamps timezone-aware internally through resampling.
+6. Drop tz info only when writing parquet / CSV-like outputs.
+
+This allows spring-forward / fall-back behavior to exist in the final outputs,
+instead of flattening everything into one continuous naive 15-minute sequence.
 """
 
 from __future__ import annotations
@@ -28,7 +44,7 @@ import csv
 import math
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple, cast, Iterable
+from typing import Dict, List, Optional, Any, Tuple, cast
 from datetime import datetime
 
 import pandas as pd
@@ -56,10 +72,7 @@ from biochar_app.scripts.config import (
 )
 
 from biochar_app.scripts.type_utils import NAN, df_agg
-
-# Centralized bounds + reporting
 from biochar_app.config.thresholds import apply_value_bounds as enforce_value_bounds
-
 from biochar_app.scripts.process_data import calculate_ratios
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -75,11 +88,8 @@ WEATHER_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 #   For a given logger tag, each tuple is (start_timestamp, add_minutes).
 #   For rows with timestamp >= start_timestamp, we add add_minutes to the raw timestamp.
 #
-# This is intended to “stitch” together known clock mode changes (MST/MDT) and clock resets
-# so that the final timeline is consistent for analysis.
-#
-# NOTE: This mapping was derived from your clock_state_timeline CSVs and *compressed*
-# to only the points where the correction changes.
+# These corrections are intended to stitch together known logger clock mode
+# changes / resets into one consistent fixed-base timeline.
 LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S1B": [("2024-02-23 15:30:00", 60)],
     "S1M": [("2024-02-23 15:15:00", 60)],
@@ -95,10 +105,14 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S4T": [("2024-02-23 11:45:00", 60)],
 }
 
+# Fixed Mountain Standard Time base used before converting to civil Denver time.
+# (Etc/GMT+7 is fixed UTC-7; the sign is reversed by POSIX convention.)
+LOGGER_FIXED_STANDARD_TZ = "Etc/GMT+7"
+
 
 def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
     """
-    Apply piecewise clock corrections (add minutes) to a timestamp series.
+    Apply piecewise clock corrections (add minutes) to a naive timestamp series.
     """
     pts = LOGGER_CLOCK_CORRECTIONS.get(logger_tag)
     if not pts:
@@ -113,15 +127,36 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
     return out
 
 
+def apply_logger_seasonal_civil_time(
+    ts: pd.Series,
+    *,
+    fixed_tz: str = LOGGER_FIXED_STANDARD_TZ,
+    local_tz: str = DEFAULT_TIMEZONE,
+) -> pd.Series:
+    """
+    Convert corrected logger timestamps from a fixed MST base into America/Denver
+    civil time.
+
+    Example effect:
+      - spring: 02:00 local standard-base becomes 03:00 civil time
+      - fall: repeated 01:00 hour is represented in the tz-aware series
+
+    Returns a timezone-aware Series in local_tz.
+    """
+    s = pd.to_datetime(ts, errors="coerce")
+
+    # First interpret corrected naive timestamps as fixed MST (UTC-7 all year)
+    s_fixed = s.dt.tz_localize(fixed_tz)
+
+    # Then convert to America/Denver civil time
+    return s_fixed.dt.tz_convert(local_tz)
+
+
 # ---------------------------------------------------------------------------
-# Timestamp helpers (PyCharm-friendly)
+# Timestamp helpers
 # ---------------------------------------------------------------------------
 
 def ts_to_iso_minute(ts_any: Any) -> str:
-    """
-    Format Timestamp-like -> 'YYYY-MM-DDTHH:MM' safely.
-    Returns '' if None/NaT.
-    """
     if ts_any is None or pd.isna(ts_any):
         return ""
     if not isinstance(ts_any, pd.Timestamp):
@@ -134,10 +169,6 @@ def ts_to_iso_minute(ts_any: Any) -> str:
 
 
 def ts_to_iso_date(ts_any: Any) -> str:
-    """
-    Accepts Timestamp / NaT / None and returns YYYY-MM-DD or "".
-    Avoids PyCharm warnings about NaTType.strftime().
-    """
     if ts_any is None or pd.isna(ts_any):
         return ""
     if not isinstance(ts_any, pd.Timestamp):
@@ -150,10 +181,6 @@ def ts_to_iso_date(ts_any: Any) -> str:
 
 
 def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
-    """
-    Build a pd.Timestamp and guarantee it's not NaT.
-    Raises ValueError if parsing fails.
-    """
     ts = pd.Timestamp(value)
     if pd.isna(ts):
         raise ValueError(f"Invalid timestamp {value!r}" + (f" ({context})" if context else ""))
@@ -162,10 +189,6 @@ def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
 
 
 def force_datetime64_ns(s: pd.Series) -> pd.Series:
-    """
-    Force a series to datetime64[ns], dropping NaT.
-    Avoids pandas-stubs TimestampSeries vs Series[Timestamp] reassignment issues.
-    """
     dt = pd.to_datetime(s, errors="coerce")
     dt_nonnull = dt.dropna()
     return cast(pd.Series, dt_nonnull.astype("datetime64[ns]"))
@@ -173,8 +196,10 @@ def force_datetime64_ns(s: pd.Series) -> pd.Series:
 
 def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
-    Logger timestamps are treated as timezone-naive Mountain local wall time.
-    DO NOT tz-localize them.
+    Parse raw logger timestamp text to naive datetime.
+
+    This function does NOT do DST handling. DST handling for logger data now
+    happens later via apply_logger_seasonal_civil_time().
     """
     s = ts.astype("string").str.strip()
     return pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S", errors="coerce")
@@ -198,6 +223,30 @@ def normalize_weather_timestamp_series(ts: pd.Series, tz: str = "America/Denver"
     return s.dt.tz_localize(None)
 
 
+def make_timestamp_column_naive(df_in: pd.DataFrame, col: str = "timestamp") -> pd.DataFrame:
+    """
+    If df[col] is timezone-aware, convert to DEFAULT_TIMEZONE and drop tz info.
+    """
+    df_out = df_in.copy()
+    if col in df_out.columns:
+        try:
+            if isinstance(df_out[col].dtype, pd.DatetimeTZDtype):
+                df_out[col] = df_out[col].dt.tz_convert(DEFAULT_TIMEZONE).dt.tz_localize(None)
+        except Exception:
+            pass
+    return df_out
+
+
+def make_datetimeindex_naive(df_in: pd.DataFrame) -> pd.DataFrame:
+    """
+    If df.index is a tz-aware DatetimeIndex, convert to DEFAULT_TIMEZONE and drop tz info.
+    """
+    df_out = df_in.copy()
+    if isinstance(df_out.index, pd.DatetimeIndex) and df_out.index.tz is not None:
+        df_out.index = df_out.index.tz_convert(DEFAULT_TIMEZONE).tz_localize(None)
+    return df_out
+
+
 # ---------------------------------------------------------------------------
 # Strip pairing assumptions (treated vs control)
 # ---------------------------------------------------------------------------
@@ -216,7 +265,7 @@ def convert_soil_t_to_fahrenheit(df_in: pd.DataFrame) -> pd.DataFrame:
     if not t_cols:
         return df_out
 
-    to_f = UNIT_CONVERSIONS["metric_to_us"]["temp"]  # λ x: (x * 9/5) + 32
+    to_f = UNIT_CONVERSIONS["metric_to_us"]["temp"]
     for col_name in t_cols:
         df_out[col_name] = pd.to_numeric(df_out[col_name], errors="coerce").apply(to_f)
 
@@ -251,9 +300,6 @@ def _clean_col_name(s: object) -> str:
 
 
 def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
-    """
-    TOA5 reader: column names are on the second row.
-    """
     with datfile.open("r", newline="") as f:
         r = csv.reader(f)
         _meta = next(r, None)
@@ -284,12 +330,9 @@ def _candidate_logger_files(tag: str, year: int) -> list[Path]:
     Special case: year==2023
       - read the normal datfiles_2023/{tag}_Table1.dat (if present)
       - ALSO read datfiles_2024/{tag}_Table1.dat (if present) and keep rows < 2024-01-01
-        (this is where BattV_Min first appears mid-Oct 2023 in your deployment)
       - ALSO read datfiles_2023/{tag}_Table1_late2023_withBattV.dat (if present)
-        (if you wrote those extracted files into datfiles_2023)
     """
     files: list[Path] = []
-
     base = Path(DATA_RAW_DIR)
 
     p_main = base / f"datfiles_{year}" / f"{tag}_Table1.dat"
@@ -345,10 +388,9 @@ def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
         if df.empty:
             continue
 
-        # Apply clock corrections BEFORE year-window filtering
+        # Apply manual logger-specific clock stitching first (still naive).
         df["timestamp"] = apply_logger_clock_corrections(df["timestamp"], tag)
 
-        # Force dtype for PyCharm and safe comparisons
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").astype("datetime64[ns]")
         df = df.dropna(subset=["timestamp"])
         if df.empty:
@@ -363,10 +405,12 @@ def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
 
     df_all = pd.concat(frames, ignore_index=True)
 
-    # Prefer “later” files in case of overlaps (e.g., the datfiles_2024 copy may have BattV_Min)
+    # Prefer later files for overlapping timestamps (e.g. 2024 copy with BattV_Min)
+    # at the corrected naive timestamp stage.
     df_all = df_all.sort_values("timestamp")
     df_all = df_all.drop_duplicates(subset=["timestamp"], keep="last").reset_index(drop=True)
 
+    # Year filtering can safely happen here because year boundaries are in standard time.
     start_ts = pd.Timestamp(year=year, month=1, day=1)
     end_ts = pd.Timestamp(year=year + 1, month=1, day=1)
 
@@ -375,6 +419,9 @@ def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
     df_all = df_all.loc[mask_year].copy()
     if df_all.empty:
         return None
+
+    # Now convert the corrected fixed-base timeline into civil America/Denver time.
+    df_all["timestamp"] = apply_logger_seasonal_civil_time(df_all["timestamp"])
 
     return rename_logger_columns(df_all, tag)
 
@@ -388,7 +435,6 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
             if df is None or df.empty:
                 continue
             df = df.set_index("timestamp")
-            df = df[~df.index.duplicated(keep="first")]
             frames.append(df)
 
     if not frames:
@@ -506,9 +552,6 @@ def add_swc_differences(df_in: pd.DataFrame) -> pd.DataFrame:
 # ============================= Growing-season summary ============================= #
 
 def unpack_gseason_period(period_code: str, period_meta: Any) -> Tuple[str, str, str]:
-    """
-    Returns: (period_label, start_mmdd, end_mmdd)
-    """
     if isinstance(period_meta, (tuple, list)) and len(period_meta) == 2:
         return period_code, str(period_meta[0]), str(period_meta[1])
 
@@ -643,6 +686,8 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
     if "timestamp" not in df.columns:
         raise ValueError("write_logger_download_zip: df_15min must have 'timestamp' as index or column")
 
+    df = make_timestamp_column_naive(df, col="timestamp")
+
     readme_lines: List[str] = [
         "Biochar Fruita CSU Experiment – Logger 15-minute Data",
         f"Year: {year}",
@@ -682,7 +727,7 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "",
                 "Column naming convention",
                 "------------------------",
-                "  timestamp                         : local time (America/Denver), 15-min step (timezone-naive)",
+                "  timestamp                         : America/Denver local civil time (timezone-naive on export)",
                 "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
                 "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
                 "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
@@ -692,7 +737,7 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "Notes",
                 "-----",
                 "  - Placeholder/sentinel values (e.g., -9999/9999) have been converted to NaN.",
-                "  - Clock corrections (MST/MDT jumps/resets) may have been applied to logger timestamps.",
+                "  - Manual logger clock corrections may have been applied before seasonal civil-time conversion.",
                 "  - Cross-strip comparison variables (ΔT, ΔSWC, ratio columns, etc.)",
                 "    are not included in these per-logger CSVs.",
             ]
@@ -744,13 +789,23 @@ def write_weather_download_zip(year: int, df_15min: pd.DataFrame, download_url: 
 # ============================= Aggregation (loggers) ============================= #
 
 def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
+    """
+    Aggregate logger data.
+
+    Internally, logger timestamps may be timezone-aware America/Denver.
+    We keep them that way through resampling, then drop tz info only when
+    writing outputs.
+    """
     year_dir = Path(PARQUET_DIR) / str(year)
     year_dir.mkdir(parents=True, exist_ok=True)
 
+    # Raw logger output
+    df_write = make_datetimeindex_naive(df)
     raw_path = year_dir / f"{year}_raw_logger.parquet"
     ratio_path = year_dir / f"{year}_raw_logger_ratios.parquet"
-    df.reset_index().to_parquet(raw_path, index=False, compression="snappy")
-    calculate_ratios(df).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
+
+    df_write.reset_index().to_parquet(raw_path, index=False, compression="snappy")
+    calculate_ratios(df_write).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
     sensor_prefixes = ("VWC_", "T_", "EC_", "SWC_", "Tdiff_", "SWCdiff_")
@@ -767,6 +822,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in df.columns}
         df_s = df_agg(df.resample(code), agg_map).round(3)
         df_s = df_s.dropna(subset=sensor_cols, how="all").reset_index()
+        df_s = make_timestamp_column_naive(df_s, col="timestamp")
 
         fn_raw = f"{year}_{freq}.parquet"
         df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
@@ -801,7 +857,6 @@ def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
     bad_mask = df_copy["timestamp"].isna()
     bad_ts = int(bad_mask.sum())
     if bad_ts:
-        # show a few examples *before* dropping
         ex = df_copy.loc[bad_mask].head(10).copy()
         cols_to_show = [c for c in ["timestamp", "precip_in", "temp_air_degF"] if c in ex.columns]
         logger.warning(
@@ -827,7 +882,6 @@ def generate_summaries(years: List[int]) -> None:
             df = df.dropna(subset=["timestamp"]).copy()
 
             df = replace_bad_values(df, threshold=DEFAULT_BAD_VALUE_THRESHOLD)
-
             df = scale_vwc_to_percent(df)
             df = convert_soil_t_to_fahrenheit(df)
 
@@ -861,7 +915,6 @@ def generate_summaries(years: List[int]) -> None:
 
                     ex = r.get("examples") or []
                     if ex:
-                        # Print a few concrete examples of what got masked
                         for e in ex:
                             logger.warning(
                                 f"      example: ts={_fmt_ts(e.get('timestamp'))} value={e.get('value')}"

@@ -36,21 +36,23 @@ PARQUET_SUMMARY_WEATHER_DAILY_DIR = PARQUET_SUMMARY_WEATHER_DIR / "daily"
 PARQUET_SUMMARY_WEATHER_MONTHLY_DIR = PARQUET_SUMMARY_WEATHER_DIR / "monthly"
 
 # Lab tests / ancillary datasets
-LAB_TESTS_DIR = DATA_PROCESSED_DIR / "lab-tests"
-HAY_TESTS_DIR = LAB_TESTS_DIR / "hay-tests" / "csv-files"
-SOIL_BIO_DIR = LAB_TESTS_DIR / "soil-tests-bio" / "csv-files"
-SOIL_CHEM_DIR = LAB_TESTS_DIR / "soil-tests-chem" / "csv-files"
-BIOMASS_DIR = LAB_TESTS_DIR / "biomass-field" / "csv-files"
+LAB_TESTS_RAW_DIR = DATA_RAW_DIR / "lab-tests"
+LAB_TESTS_PROCESSED_DIR = DATA_PROCESSED_DIR / "lab-tests"
+HAY_TESTS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "hay-tests" / "csv-files"
+SOIL_BIO_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-bio" / "csv-files"
+SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files"
+SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
+BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"
 
 # Authoritative cleaned masters (routes should prefer these)
-WARD_MASTER_NIR_CSV = HAY_TESTS_DIR / "ward_master_nir_clean.csv"
+WARD_MASTER_NIR_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
 WARD_MASTER_SOILBIO_CSV = (
-    SOIL_BIO_DIR / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v2.csv"
+    SOIL_BIO_PROCESSED_DIR / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v3.csv"
 )
 WARD_MASTER_SOILCHEM_CSV = (
-    SOIL_CHEM_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
+    SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
 )
-BIOMASS_FIELD_CSV = BIOMASS_DIR / "field_biomass_dry_g_wide_clean.csv"
+BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 
 DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
