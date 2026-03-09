@@ -2,81 +2,54 @@
 """
 clean_ward_master_soilchem.py
 
-Clean the compiled Soil Chemistry "master" workbook into a machine-readable CSV.
+Clean the compiled Soil Chemistry workbook into a canonical machine-readable CSV
+for the Biochar dashboard.
 
-Key behaviors:
-- Preserve "Sample ID" through the first cleaning pass (do NOT admin-drop early)
-- Build strip from Sample ID (special case: "WEST FIELD" -> STRIP 4)
-- Normalize dates
-- Enforce fixed depth 0–8 inches
-- Drop admin columns AFTER strip is created
-- Create canonical “expected” columns used by table builders:
-    - soil_ph_1_1 from 1_1_soil_ph (if needed)
-    - ec_1_1 from 1_1_s_salts_mmho_cm (if needed)
-    - cec_meq_100g and sum_of_cations_meq_100g from cec_sum_of_cations_me_100g (if needed)
-- Write:
-  - ward_master_soilchem_clean.csv
-  - ward_master_soilChem_headers_machine_to_human.json
+Code to run in a terminal
+python -m biochar_app.scripts.clean_ward_master_soilchem
+
+Conventions
+-----------
+* lab/master CSV strip values are canonicalized to:
+    strip_1, strip_2, strip_3, strip_4
+
+Key behaviors
+-------------
+* Reads the compiled soil chemistry workbook
+* Preserves Sample ID through the first pass
+* Builds canonical strip from Sample ID
+* Drops non-project rows whose Sample ID does not resolve to strip_1..strip_4
+  (e.g. WEST FIELD, EAST FIELD, HAY FIELD)
+* Normalizes date fields to YYYY-MM-DD
+* Enforces fixed depth 0–8 inches
+* Creates stable columns used by downstream table builders
+* Writes:
+    - cleaned master CSV
+    - machine->human headers JSON
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
-from clean_ward_master_common import (
-    ADMIN_DROP_COLS,
+from biochar_app.config.paths import LAB_TESTS_RAW_DIR, SOIL_CHEM_PROCESSED_DIR
+from biochar_app.scripts.clean_ward_master_common import (
     clean_compiled_workbook,
-    drop_admin_columns,
-    normalize_strip_column,
-    normalize_date_columns,
-    add_fixed_depth_columns,
+    standardize_ward_dataframe,
+    validate_and_report,
     write_clean_outputs,
+    normalize_strip,
 )
 
-HERE = Path(__file__).resolve().parent
-PROJECT_ROOT = HERE.parents[1]
+MASTER_XLSX = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files" / "Lobato - Soil chemistry results compiled.xlsx"
 
-# ------------------------------------------------------------
-# INPUT: raw Lobato soil chemistry workbook
-# ------------------------------------------------------------
-MASTER_XLSX = (
-    PROJECT_ROOT
-    / "biochar_app"
-    / "data-raw"
-    / "lab-tests"
-    / "soil-tests-chem"
-    / "csv-files"
-    / "Lobato - Soil chemistry results compiled_v2.xlsx"
-)
-
-# ------------------------------------------------------------
-# OUTPUTS
-# ------------------------------------------------------------
-OUT_CLEAN_CSV = (
-    PROJECT_ROOT
-    / "biochar_app"
-    / "data-processed"
-    / "lab-tests"
-    / "soil-tests-chem"
-    / "csv-files"
-    / "ward_master_soilchem_clean.csv"
-)
-
-OUT_HEADERS_JSON = (
-    PROJECT_ROOT
-    / "biochar_app"
-    / "data-processed"
-    / "lab-tests"
-    / "soil-tests-chem"
-    / "csv-files"
-    / "ward_master_soilChem_headers_machine_to_human.json"
-)
+OUT_CLEAN_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v3.csv"
+OUT_HEADERS_JSON = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_headers_machine_to_human.json"
 
 
-def _find_machine_col_by_human_header(header_map: dict, human_name: str) -> Optional[str]:
+def _find_machine_col_by_human_header(header_map: dict[str, str], human_name: str) -> Optional[str]:
     target = " ".join(str(human_name).strip().split()).lower()
     for machine, human in header_map.items():
         h = " ".join(str(human).strip().split()).lower()
@@ -85,86 +58,80 @@ def _find_machine_col_by_human_header(header_map: dict, human_name: str) -> Opti
     return None
 
 
-def _coerce_sample_id_column(df_clean: pd.DataFrame, header_map: dict) -> pd.DataFrame:
-    df = df_clean.copy()
+def _ensure_sample_id_column(df_clean: pd.DataFrame, header_map: dict[str, str]) -> pd.DataFrame:
+    out = df_clean.copy()
 
-    if "sample_id" in df.columns:
-        return df
+    if "sample_id" in out.columns:
+        return out
 
     machine = _find_machine_col_by_human_header(header_map, "Sample ID")
-
     if machine is None:
         for m, h in header_map.items():
             if "sample id" in str(h).strip().lower():
                 machine = m
                 break
 
-    if machine is None:
-        for c in df.columns:
-            if str(c).strip().lower() in ("sample_id", "sample_id_1", "sampleid"):
-                machine = c
-                break
-
-    if machine is None or machine not in df.columns:
-        sampleish = [c for c in df.columns if "sample" in c.lower()]
+    if machine is None or machine not in out.columns:
+        sampleish = [c for c in out.columns if "sample" in c.lower()]
         raise ValueError(
-            "Could not locate a cleaned Sample ID column. "
-            f"Columns containing 'sample': {sampleish}. "
-            "This likely means the cleaner dropped it; ensure admin-drop is disabled on first pass."
+            "Could not locate Sample ID column in cleaned soil chem workbook. "
+            f"Columns containing 'sample': {sampleish}"
         )
 
-    df["sample_id"] = df[machine].astype(str)
-    return df
+    out["sample_id"] = out[machine].astype(str)
+    return out
 
 
-def _normalize_strip_from_sample_id(df_clean: pd.DataFrame) -> pd.DataFrame:
-    df = df_clean.copy()
+def _filter_to_project_rows(df_clean: pd.DataFrame) -> pd.DataFrame:
+    """
+    Keep only rows whose sample_id resolves to one of the project strips.
+    This removes rows like WEST FIELD / EAST FIELD / HAY FIELD.
+    """
+    out = df_clean.copy()
 
-    if "sample_id" not in df.columns:
-        raise ValueError("Expected 'sample_id' to exist before building strip.")
+    if "sample_id" not in out.columns:
+        raise ValueError("Expected 'sample_id' before filtering project rows.")
 
-    def _fix_sample_id(x: object) -> str:
-        s = str(x).strip()
-        if s == "":
-            return s
-        if s.strip().lower() == "west field":
-            return "STRIP 4"
-        return s
+    norm = out["sample_id"].apply(normalize_strip)
+    mask = norm.notna()
 
-    df["sample_id"] = df["sample_id"].map(_fix_sample_id)
+    kept = int(mask.sum())
+    dropped = int((~mask).sum())
+    print(f"🔎 Soil Chem project-row filter: kept={kept}, dropped={dropped}")
 
-    df["strip"] = df["sample_id"]
-    df = normalize_strip_column(df, strip_col="strip")
-    return df
+    out = out.loc[mask].copy()
+    out["sample_id"] = out["sample_id"].astype(str)
+    return out
 
 
 def _ensure_expected_soilchem_columns(df_clean: pd.DataFrame) -> pd.DataFrame:
     """
-    Create the canonical columns your table builder expects, based on what Ward actually provides.
-    We do NOT recompute values—just copy into stable names.
-
-    - soil_ph_1_1 <- 1_1_soil_ph
-    - ec_1_1      <- 1_1_s_salts_mmho_cm
-    - cec_meq_100g, sum_of_cations_meq_100g <- cec_sum_of_cations_me_100g
+    Create stable downstream columns without recomputing values.
     """
-    df = df_clean.copy()
+    out = df_clean.copy()
 
-    # pH (1:1)
-    if "soil_ph_1_1" not in df.columns and "1_1_soil_ph" in df.columns:
-        df["soil_ph_1_1"] = df["1_1_soil_ph"]
+    if "soil_ph_1_1" not in out.columns and "1_1_soil_ph" in out.columns:
+        out["soil_ph_1_1"] = out["1_1_soil_ph"]
 
-    # EC / salts (1:1)
-    if "ec_1_1" not in df.columns and "1_1_s_salts_mmho_cm" in df.columns:
-        df["ec_1_1"] = df["1_1_s_salts_mmho_cm"]
+    if "ec_1_1" not in out.columns and "1_1_s_salts_mmho_cm" in out.columns:
+        out["ec_1_1"] = out["1_1_s_salts_mmho_cm"]
 
-    # Ward combined CEC/Sum-of-cations column
-    if "cec_sum_of_cations_me_100g" in df.columns:
-        if "cec_meq_100g" not in df.columns:
-            df["cec_meq_100g"] = df["cec_sum_of_cations_me_100g"]
-        if "sum_of_cations_meq_100g" not in df.columns:
-            df["sum_of_cations_meq_100g"] = df["cec_sum_of_cations_me_100g"]
+    if "cec_sum_of_cations_me_100g" in out.columns:
+        if "cec_meq_100g" not in out.columns:
+            out["cec_meq_100g"] = out["cec_sum_of_cations_me_100g"]
+        if "sum_of_cations_meq_100g" not in out.columns:
+            out["sum_of_cations_meq_100g"] = out["cec_sum_of_cations_me_100g"]
 
-    return df
+    return out
+
+
+EXPECTED_SOILCHEM_COLUMNS = [
+    "strip",
+    "date_rec",
+    "date_rept",
+    "begin_depth_in",
+    "end_depth_in",
+]
 
 
 def clean_ward_master_soilchem(sheet: Optional[str] = None) -> None:
@@ -175,48 +142,58 @@ def clean_ward_master_soilchem(sheet: Optional[str] = None) -> None:
     print(f"📥 Reading Soil Chem master: {MASTER_XLSX}")
     print(f"🧠 Loaded {df_raw.shape[0]} rows × {df_raw.shape[1]} columns")
 
-    # 1) Clean headers / normalize names (do NOT admin-drop yet)
+    # 1) Normalize headers without early admin-drop so Sample ID survives
     df_clean, header_map = clean_compiled_workbook(df_raw, admin_drop_cols=[])
 
-    # Ensure sample_id survives
-    df_clean = _coerce_sample_id_column(df_clean, header_map)
+    # 2) Ensure sample_id exists
+    df_clean = _ensure_sample_id_column(df_clean, header_map)
 
-    # 2) Build strip from sample_id
-    df_clean = _normalize_strip_from_sample_id(df_clean)
+    # 3) Filter to actual project rows before shared standardization
+    df_clean = _filter_to_project_rows(df_clean)
 
-    # 3) Normalize dates
-    date_map = {}
-    if "date_recd" in df_clean.columns:
-        date_map["date_recd"] = "date_rec"
-    if "date_recd_" in df_clean.columns:
-        date_map["date_recd_"] = "date_rec"
-    if "date_rec" in df_clean.columns:
-        date_map["date_rec"] = "date_rec"
-    if "date_received" in df_clean.columns:
-        date_map["date_received"] = "date_rec"
+    # 4) Apply common standardization
+    df_clean = standardize_ward_dataframe(
+        df_clean,
+        strip_source_candidates=("strip", "sample_id", "sample_id_1"),
+        date_cols={
+            "date_recd": "date_rec",
+            "date_received": "date_rec",
+            "date_rec": "date_rec",
+            "date_rept": "date_rept",
+            "date_reported": "date_rept",
+        },
+        below_detection_to_zero=True,
+        extra_drop_cols=(),
+        fixed_depth=(0, 8),
+        numeric_exclude_cols=("strip", "date_rec", "date_rept", "date_recd", "sample_id"),
+        add_compatibility_aliases=True,
+    )
 
-    if "date_rept" in df_clean.columns:
-        date_map["date_rept"] = "date_rept"
-    if "date_reported" in df_clean.columns:
-        date_map["date_reported"] = "date_rept"
-
-    if date_map:
-        df_clean = normalize_date_columns(df_clean, date_cols=date_map)
-
-    # 4) Fixed depth 0–8 in
-    df_clean = add_fixed_depth_columns(df_clean, begin_in=0, end_in=8)
-
-    # 5) Create canonical columns expected by table builder
+    # 5) Dataset-specific stable columns
     df_clean = _ensure_expected_soilchem_columns(df_clean)
 
-    # 6) Drop admin columns AFTER strip is created
-    df_clean = drop_admin_columns(df_clean, extra_drop=list(ADMIN_DROP_COLS))
+    # 6) Put key columns first
+    key_cols = [c for c in ["strip", "date_rec", "date_rept", "begin_depth_in", "end_depth_in"] if c in df_clean.columns]
+    other_cols = [c for c in df_clean.columns if c not in key_cols]
+    df_clean = df_clean[key_cols + other_cols]
+
+    # Diagnostics
+    validate_and_report(
+        df_clean,
+        strip_col="strip",
+        date_col="date_rept",
+        expected_columns=EXPECTED_SOILCHEM_COLUMNS,
+        matched_output_columns=df_clean.columns,
+        ignore_unmatched_columns=(),
+    )
 
     # 7) Write outputs
-    OUT_CLEAN_CSV.parent.mkdir(parents=True, exist_ok=True)
-    OUT_HEADERS_JSON.parent.mkdir(parents=True, exist_ok=True)
-
-    write_clean_outputs(df_clean, header_map, out_csv=OUT_CLEAN_CSV, out_headers_json=OUT_HEADERS_JSON)
+    write_clean_outputs(
+        df_clean,
+        header_map,
+        out_csv=OUT_CLEAN_CSV,
+        out_headers_json=OUT_HEADERS_JSON,
+    )
 
     print(f"✅ Wrote soil chem clean CSV: {OUT_CLEAN_CSV}")
     print(f"✅ Wrote headers map JSON:   {OUT_HEADERS_JSON}")
