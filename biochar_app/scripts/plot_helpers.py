@@ -311,9 +311,15 @@ def common_yaxis2_config(unit_system: UnitSystem = "us") -> Dict[str, Any]:
     """
     Secondary y-axis config for precipitation overlays.
     """
-    unit_label = "mm" if unit_system == "metric" else "inches"
+    unit_label = "mm" if unit_system == "metric" else "in"
+
     return {
-        "title": {"text": f"Precipitation ({unit_label})", "font": {"size": 12}},
+        "title": {
+            "text": f"Precip ({unit_label})",
+            "font": {"size": 12},
+            # Keep some separation, but do not force the title too far inward.
+            "standoff": 20,
+        },
         "overlaying": "y",
         "side": "right",
         "showgrid": False,
@@ -324,27 +330,28 @@ def common_yaxis2_config(unit_system: UnitSystem = "us") -> Dict[str, Any]:
         "rangemode": "tozero",
         "constrain": "range",
         "zeroline": False,
-        "tickformat": ".2f",
+        # Cleaner tick formatting:
+        #   metric -> integers when possible
+        #   us     -> concise decimals
+        "tickformat": ",.0f" if unit_system == "metric" else ".2~f",
         "nticks": 5,
+        # Do not let Plotly auto-pull the axis title inward in narrow layouts.
+        "automargin": False,
     }
 
 
 def common_legend_config(title: str) -> dict:
-    """
-    Standardized legend settings for all plots.
-    Makes the legend compact with minimal vertical spacing.
-    """
     return dict(
-        title=dict(text=title),
-        bgcolor="rgba(255, 255, 255, 0.9)",
-        bordercolor="rgba(0, 0, 0, 0.25)",
+        title=dict(text=f"<b>{title}</b>", side="top"),
+        bgcolor="rgba(255, 255, 255, 0.50)",
+        bordercolor="rgba(0, 0, 0, 0.15)",
         borderwidth=1,
         orientation="v",
-        x=1.02,
+        x=1.01,
         xanchor="left",
         y=1.0,
         yanchor="top",
-        font=dict(size=11),
+        font=dict(size=10),
         itemsizing="constant",
         tracegroupgap=0,
         itemwidth=30,
@@ -672,201 +679,87 @@ def _reconcile_irrigation_gallons(
 
 def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     """
-    Load irrigation events for a given strip + year from the master workbook.
+    Load irrigation events for a given strip + year from the cleaned
+    management CSV, not directly from the workbook.
 
-    Returns DataFrame with:
+    Returns DataFrame with columns:
         start (Timestamp), end (Timestamp), volume_gal (float)
+
+    Notes
+    -----
+    - Irrigation is applied by strip pair:
+        S1/S2 -> west
+        S3/S4 -> east
+    - The cleaned CSV stores this as `strip_group` with values:
+        S1_S2, S3_S4
     """
-    group = "west" if strip in ("S1", "S2") else "east"
+    from biochar_app.config.paths import IRRIGATION_CSV
+
+    group = "S1_S2" if strip in ("S1", "S2") else "S3_S4"
     cache_key = (year, group)
+
     if cache_key in _IRRIGATION_CACHE:
         return _IRRIGATION_CACHE[cache_key].copy()
 
-    xls = _get_irrigation_workbook()
-    if xls is None:
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+    empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+
+    if not IRRIGATION_CSV.exists():
+        logger.warning("Irrigation CSV not found: %s", IRRIGATION_CSV)
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
-    sheet_name = _find_irrigation_sheet_name(xls, year)
-    if sheet_name is None:
-        logger.warning(
-            "No irrigation sheet found for year %s. Sheets available: %s",
-            year,
-            xls.sheet_names,
-        )
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
+    try:
+        df = pd.read_csv(IRRIGATION_CSV)
+    except Exception as e:
+        logger.warning("Failed to read irrigation CSV %s: %s", IRRIGATION_CSV, e)
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
-
-    df_raw = xls.parse(sheet_name=sheet_name)
-    if df_raw.empty:
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
-        _IRRIGATION_CACHE[cache_key] = empty
-        return empty.copy()
-
-    # ------------------------------
-    # Normalize column names
-    # ------------------------------
-    rename_map: dict[str, str] = {}
-    for col in df_raw.columns:
-        c = str(col).strip().upper()
-
-        if c.startswith("DATE"):
-            rename_map[col] = "date"
-        elif "STRIP" in c:
-            rename_map[col] = "strip_id"
-        elif c.startswith("LOCATION"):
-            rename_map[col] = "location"
-        elif "TIME ON" in c or ("START" in c and "METER" not in c):
-            rename_map[col] = "time_on"
-        elif "TIME OFF" in c or ("END" in c and "METER" not in c):
-            rename_map[col] = "time_off"
-        elif "GAL. USED" in c:
-            rename_map[col] = "gallons"
-        elif "ACRE FT" in c:
-            rename_map[col] = "acre_ft"
-
-    df = df_raw.rename(columns=rename_map)
-
-    # Drop duplicate columns if any were renamed to same thing
-    if bool(df.columns.duplicated().any()):
-        dup_cols = df.columns[df.columns.duplicated()].tolist()
-        logger.info(
-            "Duplicate irrigation columns after rename: %s; keeping first occurrence(s).",
-            dup_cols,
-        )
-        df = df.loc[:, ~df.columns.duplicated()]
-
-    # Required columns
-    if "date" not in df.columns or ("gallons" not in df.columns and "acre_ft" not in df.columns):
-        logger.warning(
-            "Irrigation sheet %s missing essential columns. Found: %s",
-            sheet_name,
-            list(df.columns),
-        )
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
-        _IRRIGATION_CACHE[cache_key] = empty
-        return empty.copy()
-
-    # ------------------------------
-    # Determine west/east group
-    # ------------------------------
-    def infer_group(row: pd.Series) -> str:
-        loc = str(row.get("location", "")).strip().lower()
-        if loc in {"west", "w"}:
-            return "west"
-        if loc in {"east", "e"}:
-            return "east"
-
-        strip_id = str(row.get("strip_id", "")).strip()
-        if strip_id.startswith(("1", "2")):
-            return "west"
-        if strip_id.startswith(("3", "4")):
-            return "east"
-
-        return "unknown"
-
-    df["group"] = df.apply(infer_group, axis=1)
-    df = df[df["group"] == group].copy()
 
     if df.empty:
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
-    # ------------------------------
-    # Build datetime start/end
-    # ------------------------------
-    if "time_on" not in df.columns or "time_off" not in df.columns:
+    required_cols = {"year", "strip_group", "start_timestamp", "end_timestamp", "gallons"}
+    missing = sorted(required_cols - set(df.columns))
+    if missing:
         logger.warning(
-            "Year %s irrigation sheet lacks TIME ON / TIME OFF columns. Columns available: %s",
-            year,
-            list(df.columns),
+            "Irrigation CSV %s missing required columns: %s",
+            IRRIGATION_CSV,
+            missing,
         )
-        empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
-    # Date -> *Series[str]* (critical so pd.to_datetime returns a Series, not scalar/union)
-    date_series = pd.to_datetime(df["date"], errors="coerce")
-    date_str = date_series.dt.strftime("%Y-%m-%d").astype(str)  # NaT -> "nan" strings (fine with errors="coerce")
+    # Filter to requested year + strip pair
+    df = df.copy()
+    # derive year from timestamp (more reliable than CSV column)
+    start_ts = pd.to_datetime(df["start_timestamp"], errors="coerce")
+    df = df.assign(_year=start_ts.dt.year)
 
-    # Handle possible duplicate-column issue where df["time_on"] → DataFrame
-    time_on_raw = df["time_on"]
-    if isinstance(time_on_raw, pd.DataFrame):
-        logger.warning(
-            "Multiple 'time_on' columns detected for year %s; using first one. Subcolumns: %s",
-            year,
-            list(time_on_raw.columns),
-        )
-        time_on_raw = time_on_raw.iloc[:, 0]
+    df = df[
+        (df["_year"] == year)
+        & (df["strip_group"].astype(str).str.strip() == group)
+        ].copy()
 
-    time_off_raw = df["time_off"]
-    if isinstance(time_off_raw, pd.DataFrame):
-        logger.warning(
-            "Multiple 'time_off' columns detected for year %s; using first one. Subcolumns: %s",
-            year,
-            list(time_off_raw.columns),
-        )
-        time_off_raw = time_off_raw.iloc[:, 0]
+    if df.empty:
+        _IRRIGATION_CACHE[cache_key] = empty
+        return empty.copy()
 
-    # Force Series[str] (not object/scalar) so concatenation is Series[str]
-    time_on = time_on_raw.astype(str).str.strip()
-    time_off = time_off_raw.astype(str).str.strip()
-
-    # Parse timestamps: try HH:MM:SS first, then HH:MM fallback
-    start = pd.to_datetime(
-        date_str + " " + time_on,
-        format="%Y-%m-%d %H:%M:%S",
-        errors="coerce",
-    )
-    fallback_start = pd.to_datetime(
-        date_str + " " + time_on,
-        format="%Y-%m-%d %H:%M",
-        errors="coerce",
-    )
-    start = start.where(start.notna(), fallback_start)
-
-    end = pd.to_datetime(
-        date_str + " " + time_off,
-        format="%Y-%m-%d %H:%M:%S",
-        errors="coerce",
-    )
-    end = end.fillna(
-        pd.to_datetime(
-            date_str + " " + time_off,
-            format="%Y-%m-%d %H:%M",
-            errors="coerce",
-        )
-    )
-
-    # ------------------------------
-    # Gallons & acre-ft
-    # ------------------------------
-    df["gallons"] = pd.to_numeric(
-        df.get("gallons", pd.Series([NAN] * len(df), index=df.index)),
-        errors="coerce",
-    )
-    df["acre_ft"] = pd.to_numeric(
-        df.get("acre_ft", pd.Series([NAN] * len(df), index=df.index)),
-        errors="coerce",
-    )
-
-    _reconcile_irrigation_gallons(df, year=year, group=group)
-
-    missing_gal = df["gallons"].isna() & df["acre_ft"].notna()
-    if bool(missing_gal.any()):
-        df.loc[missing_gal, "gallons"] = df.loc[missing_gal, "acre_ft"] * GALLONS_PER_ACRE_FT
-
+    start = pd.to_datetime(df["start_timestamp"], errors="coerce")
+    end = pd.to_datetime(df["end_timestamp"], errors="coerce")
     gallons = pd.to_numeric(df["gallons"], errors="coerce")
 
-    # ------------------------------
-    # Build final table
-    # ------------------------------
-    events = pd.DataFrame({"start": start, "end": end, "volume_gal": gallons})
+    events = pd.DataFrame(
+        {
+            "start": start,
+            "end": end,
+            "volume_gal": gallons,
+        },
+        index=df.index,
+    )
 
-    overnight = (events["end"] < events["start"]) & events["end"].notna()
+    # Safety for overnight events, though extraction script should already handle this.
+    overnight = (events["end"] < events["start"]) & events["end"].notna() & events["start"].notna()
     if bool(overnight.any()):
         events.loc[overnight, "end"] = events.loc[overnight, "end"] + pd.Timedelta(days=1)
 

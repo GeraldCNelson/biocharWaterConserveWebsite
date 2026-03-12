@@ -27,7 +27,6 @@ from pydantic import BaseModel, Field
 from biochar_app.scripts.bulk_downloads import bulk_router
 from biochar_app.scripts.biomass_field_tables import get_biomass_field_table_payload
 
-# ✅ Fix: package-qualified import
 from biochar_app.scripts.bulk_download_utils import default_bulk_registry
 from biochar_app.scripts.bulk_download_utils import build_manifest, build_zip_for_selection
 
@@ -48,7 +47,6 @@ from biochar_app.scripts.plot_utils import (
     make_temperature_delta_figure,
 )
 
-# ✅ Canonical UnitSystem type (Literal["us","metric"])
 from biochar_app.scripts.type_utils import UnitSystem
 
 from biochar_app.scripts import state
@@ -72,10 +70,15 @@ from biochar_app.scripts.config import (
     variable_name_mapping,
     granularity_name_mapping,
     strip_name_mapping,
+)
+from biochar_app.config.paths import (
+    BIOCHAR_MASTER_WORKBOOK,
     WARD_MASTER_NIR_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_SOILCHEM_CSV,
     BIOMASS_FIELD_CSV,
+    IRRIGATION_CSV,
+    FERTILIZER_CSV,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
@@ -87,11 +90,9 @@ from biochar_app.scripts.tables_lab import (
     build_lab_table_payload_wide,
 )
 
-# ✅ NEW soil table modules
 from biochar_app.scripts.tables_soil_bio import build_soilbio_table
 from biochar_app.scripts.tables_soil_chem import build_soilchem_table
 
-# NIR tables (Sets 1–4)
 from biochar_app.scripts.tables_nir import (
     build_nir_set1_table,
     build_nir_set2_table,
@@ -117,8 +118,6 @@ DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
 WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
-# User confirmed: biochar-data-master.xlsx is in data-raw
-BIOCHAR_MASTER_XLSX = "biochar_app/data-raw/biochar-data-master.xlsx"
 _LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
 
 
@@ -144,6 +143,7 @@ def _spec_dicts_to_objs(specs: list[dict[str, Any]]) -> list[Any]:
         )
     return out
 
+
 def _normalize_sheet_name(s: str) -> str:
     return (s or "").strip()
 
@@ -168,7 +168,6 @@ def _ensure_year_allowed(year: int) -> None:
 def _normalize_unit_system(raw: Any) -> UnitSystem:
     """
     Narrow arbitrary user input to UnitSystem = Literal["us","metric"].
-    This is the key to eliminating mypy dict.get/index overload errors.
     """
     s = str(raw or "us").strip().lower()
     return "metric" if s == "metric" else "us"
@@ -301,7 +300,7 @@ async def get_bulk_download_options():
         ancillary: Dict[str, bool] = {}
         for key in ANCILLARY_DATASETS.keys():
             try:
-                exists = _ancillary_available_for_year(BIOCHAR_MASTER_XLSX, key, int(year))
+                exists = _ancillary_available_for_year(BIOCHAR_MASTER_WORKBOOK, key, int(year))
                 ancillary[key] = exists
             except Exception:
                 ancillary[key] = False
@@ -341,7 +340,7 @@ async def download_weather_zip(year: int):
 async def download_irrigation_zip(year: int):
     _ensure_year_allowed(year)
     try:
-        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_XLSX, "irrigation", year)
+        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_WORKBOOK, "irrigation", year)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Irrigation data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_Irrigation_{year}.zip"'}
@@ -352,7 +351,7 @@ async def download_irrigation_zip(year: int):
 async def download_soil_chem_zip(year: int):
     _ensure_year_allowed(year)
     try:
-        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_XLSX, "soil_chem", year)
+        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_WORKBOOK, "soil_chem", year)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Soil chemistry data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_SoilChem_{year}.zip"'}
@@ -363,7 +362,7 @@ async def download_soil_chem_zip(year: int):
 async def download_soil_bio_zip(year: int):
     _ensure_year_allowed(year)
     try:
-        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_XLSX, "soil_bio", year)
+        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_WORKBOOK, "soil_bio", year)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Soil biology data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_SoilBio_{year}.zip"'}
@@ -374,7 +373,7 @@ async def download_soil_bio_zip(year: int):
 async def download_biomass_zip(year: int):
     _ensure_year_allowed(year)
     try:
-        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_XLSX, "biomass", year)
+        zip_bytes = _build_ancillary_zip_bytes(BIOCHAR_MASTER_WORKBOOK, "biomass", year)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Biomass/hay data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_BiomassHay_{year}.zip"'}
@@ -383,13 +382,13 @@ async def download_biomass_zip(year: int):
 
 ANCILLARY_DATASETS: Dict[str, Dict[str, str]] = {
     "irrigation": {"sheet": "IRRIGATION", "csv": "irrigation.csv"},
-    "soil_chem":  {"sheet": "SOIL CHEM",  "csv": "soil_chem.csv"},
-    "soil_bio":   {"sheet": "SOIL BIO",   "csv": "soil_bio.csv"},
-    "biomass":    {"sheet": "Hay Data All", "csv": "biomass_hay.csv"},
+    "soil_chem": {"sheet": "SOIL CHEM", "csv": "soil_chem.csv"},
+    "soil_bio": {"sheet": "SOIL BIO", "csv": "soil_bio.csv"},
+    "biomass": {"sheet": "Hay Data All", "csv": "biomass_hay.csv"},
 }
 
 
-def _find_sheet_for_year(xlsx_path: str, base_sheet: str, year: int) -> Optional[str]:
+def _find_sheet_for_year(xlsx_path: Path | str, base_sheet: str, year: int) -> Optional[str]:
     try:
         xl = pd.ExcelFile(xlsx_path)
     except FileNotFoundError:
@@ -400,14 +399,12 @@ def _find_sheet_for_year(xlsx_path: str, base_sheet: str, year: int) -> Optional
 
     target_prefix = f"{year} {base_sheet}".strip().lower()
 
-    # Exact match first
     for raw_name in xl.sheet_names:
         name = str(raw_name)
         normalized = name.strip().lower()
         if normalized == target_prefix:
             return name
 
-    # Fallback: starts with year + contains base_sheet
     base_lower = base_sheet.lower()
     for raw_name in xl.sheet_names:
         name = str(raw_name)
@@ -418,7 +415,7 @@ def _find_sheet_for_year(xlsx_path: str, base_sheet: str, year: int) -> Optional
     return None
 
 
-def _load_ancillary_df_for_year(xlsx_path: str, dataset_key: str, year: int) -> pd.DataFrame:
+def _load_ancillary_df_for_year(xlsx_path: Path | str, dataset_key: str, year: int) -> pd.DataFrame:
     if dataset_key not in ANCILLARY_DATASETS:
         raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset_key}")
 
@@ -444,7 +441,7 @@ def _load_ancillary_df_for_year(xlsx_path: str, dataset_key: str, year: int) -> 
     return df
 
 
-def _build_ancillary_zip_bytes(xlsx_path: str, dataset_key: str, year: int) -> bytes:
+def _build_ancillary_zip_bytes(xlsx_path: Path | str, dataset_key: str, year: int) -> bytes:
     df = _load_ancillary_df_for_year(xlsx_path, dataset_key, year)
 
     csv_name = ANCILLARY_DATASETS[dataset_key]["csv"]
@@ -465,7 +462,7 @@ def _build_ancillary_zip_bytes(xlsx_path: str, dataset_key: str, year: int) -> b
     return out.getvalue()
 
 
-def _ancillary_available_for_year(xlsx_path: str, dataset_key: str, year: int) -> bool:
+def _ancillary_available_for_year(xlsx_path: Path | str, dataset_key: str, year: int) -> bool:
     try:
         df = _load_ancillary_df_for_year(xlsx_path, dataset_key, year)
         return not df.empty
@@ -549,7 +546,7 @@ class PlotRequest(BaseModel):
     loggerLocation: str
     depth: str
     traceOption: str
-    unitSystem: str  # keep str for payload compatibility; narrow inside route
+    unitSystem: str
     periods: Optional[List[PeriodSpec]] = Field(default=None)
 
 
@@ -596,7 +593,7 @@ async def api_plot_raw(req: PlotRequest):
 
     t0 = perf_counter()
     df = load_logger_year(year, gran)
-    logger.info("⏱ load_logger_year(15min) %.3fs", perf_counter() - t0)
+    logger.info("⏱ load_logger_year(%s) %.3fs", gran, perf_counter() - t0)
 
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
@@ -712,15 +709,6 @@ async def api_plot_ratio(req: PlotRequest):
 
 @api_router.post("/get_summary_stats")
 async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
-    """
-    Summary stats endpoint used by the Summary Statistics tab.
-
-    Expected keys:
-      year, variable, strip, granularity, depth
-      startDate, endDate (optional)
-      unitSystem (optional)
-      periods (optional when granularity == 'gseason')
-    """
     required = ["year", "variable", "strip", "granularity", "depth"]
     missing = [k for k in required if payload.get(k) is None]
     if missing:
@@ -730,8 +718,6 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     variable = str(payload["variable"])
     strip = str(payload["strip"])
     granularity = str(payload["granularity"]).lower()
-
-    # Depth is a CODE: "1"|"2"|"3"
     depth_code = str(payload["depth"]).strip()
 
     unit_system: UnitSystem = _normalize_unit_system(payload.get("unitSystem", "us"))
@@ -748,9 +734,6 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             return None
         return obj
 
-    # ------------------------------------------------------------------
-    # Title: ALWAYS compute from mappings (don’t depend on cache path)
-    # ------------------------------------------------------------------
     depth_label = (
         sensor_depth_mapping.get(depth_code, {}).get(unit_system)
         or sensor_depth_mapping.get(depth_code, {}).get("us")
@@ -759,10 +742,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     )
 
     label_entry = label_name_mapping.get(variable, variable)
-
-    # Resolve unit-aware labels (string or {us, metric})
     if isinstance(label_entry, dict):
-        # label_entry is likely dict[UnitSystem,str] at runtime; narrow via UnitSystem key
         pretty_var = cast(Dict[UnitSystem, str], label_entry).get(unit_system) or variable
     else:
         pretty_var = str(label_entry)
@@ -775,11 +755,6 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         f"{year}"
     )
 
-    # ------------------------------------------------------------------
-    # SPEEDUP:
-    # - non-gseason: use hourly
-    # - gseason: keep 15min (your current load_gseason_df uses 15min)
-    # ------------------------------------------------------------------
     source_granularity = "15min" if granularity == "gseason" else "hourly"
     cache_key = (year, source_granularity)
 
@@ -787,7 +762,6 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     if df_base is None:
         df_base = load_logger_year(year, source_granularity)
         if df_base is not None and not getattr(df_base, "empty", True):
-            # normalize timestamp once before caching
             if "timestamp" in df_base.columns:
                 df_base = df_base.copy()
                 df_base["timestamp"] = pd.to_datetime(df_base["timestamp"], errors="coerce")
@@ -804,26 +778,22 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
                 "title": title,
                 "raw_statistics": {},
                 "ratio_statistics": {},
-                "gseason_stats": {},
+                "gseason_stats": [],
             }
         )
 
-    # do not mutate cached df
     df_req = df_base
 
-    # Filter by date range if provided
     if "timestamp" in df_req.columns and start and end:
         start_dt = pd.to_datetime(start, errors="coerce")
         end_dt = pd.to_datetime(end, errors="coerce")
         if pd.notna(start_dt) and pd.notna(end_dt):
             df_req = df_req[(df_req["timestamp"] >= start_dt) & (df_req["timestamp"] <= end_dt)]
 
-    # ---- gseason ----
     if granularity == "gseason":
         periods_raw = payload.get("periods") or []
         periods_list = periods_to_list_of_dicts(periods_raw)
 
-        # Keep side-effects/caching behavior if load_gseason_df does it
         _ = load_gseason_df(
             year=year,
             periods=periods_list,
@@ -831,16 +801,58 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             use_ratios=False,
         )
 
-        # Full flattened seasonal table (year-only signature)
         flat_df = get_flat_gseason_summary(year)
 
-        # Filter to requested slice
-        flat_df = flat_df[
-            (flat_df["variable"] == variable)
-            & (flat_df["depth"] == depth_code)
-            & (flat_df["strip"] == strip)
-        ]
+        if flat_df is None or getattr(flat_df, "empty", True):
+            return JSONResponse(
+                {
+                    "year": year,
+                    "variable": variable,
+                    "strip": strip,
+                    "granularity": granularity,
+                    "depth": depth_code,
+                    "title": title,
+                    "gseason_stats": [],
+                }
+            )
 
+        flat_df = flat_df.copy()
+
+        for col in ["period_code", "variable", "strip", "depth", "logger_location"]:
+            if col in flat_df.columns:
+                flat_df[col] = flat_df[col].astype(str)
+
+        if "variable" in flat_df.columns:
+            flat_df = flat_df[flat_df["variable"] == variable].copy()
+
+        if periods_list and "period_code" in flat_df.columns:
+            requested_codes = {
+                str(p.get("period_code", "")).strip()
+                for p in periods_list
+                if p.get("period_code") is not None
+            }
+            if requested_codes:
+                flat_df = flat_df[flat_df["period_code"].isin(requested_codes)].copy()
+
+        ratio_strip_values = {"S1/S2", "S3/S4", "S1_S2", "S3_S4"}
+
+        raw_mask = pd.Series(False, index=flat_df.index)
+        if "strip" in flat_df.columns:
+            raw_mask = flat_df["strip"] == strip
+
+        if "depth" in flat_df.columns:
+            raw_mask = raw_mask & (flat_df["depth"] == depth_code)
+
+        ratio_mask = pd.Series(False, index=flat_df.index)
+        if "strip" in flat_df.columns:
+            ratio_mask = flat_df["strip"].isin(ratio_strip_values)
+
+        if "depth" in flat_df.columns:
+            ratio_depth_values = set(flat_df.loc[ratio_mask, "depth"].dropna().astype(str).unique().tolist())
+            if depth_code in ratio_depth_values:
+                ratio_mask = ratio_mask & (flat_df["depth"] == depth_code)
+
+        flat_df = flat_df.loc[raw_mask | ratio_mask].copy()
         flat = flat_df.to_dict(orient="records")
 
         return JSONResponse(
@@ -855,7 +867,6 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
             }
         )
 
-    # ---- non-gseason ----
     stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, depth_code)
 
     if variable in ["T", "temp_air", "temp_soil_5cm", "temp_soil_15cm"]:
@@ -970,7 +981,7 @@ class BulkDownloadRequest(BaseModel):
 
 @api_router.get("/bulk_download_manifest")
 async def api_bulk_download_manifest():
-    manifest = build_manifest(BIOCHAR_MASTER_XLSX)
+    manifest = build_manifest(BIOCHAR_MASTER_WORKBOOK)
     return JSONResponse(manifest)
 
 
@@ -986,7 +997,7 @@ async def api_bulk_download(req: BulkDownloadRequest):
         if missing:
             raise HTTPException(status_code=400, detail=f"Unknown dataset keys: {missing}")
 
-        zip_bytes = build_zip_for_selection(BIOCHAR_MASTER_XLSX, req.keys, registry=reg)
+        zip_bytes = build_zip_for_selection(BIOCHAR_MASTER_WORKBOOK, req.keys, registry=reg)
 
     except HTTPException:
         raise
@@ -1012,18 +1023,10 @@ async def api_get_biomass_field_table():
 # ---------------------------------------------------------------------------
 @api_router.get("/lab_table/{table_key}")
 async def api_get_lab_table(table_key: str):
-    """
-    Unified lab table endpoint:
-      /api/lab_table/nir
-      /api/lab_table/soilbio
-      /api/lab_table/soilchem
-      /api/lab_table/biomass_field
-    """
     key = (table_key or "").strip().lower()
 
     try:
         if key == "nir":
-            # reuse the existing endpoint implementation
             return await api_get_nir_table()
 
         if key == "soilbio":

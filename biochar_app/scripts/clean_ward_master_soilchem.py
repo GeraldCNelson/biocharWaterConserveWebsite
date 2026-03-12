@@ -45,7 +45,7 @@ from biochar_app.scripts.clean_ward_master_common import (
 
 MASTER_XLSX = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files" / "Lobato - Soil chemistry results compiled.xlsx"
 
-OUT_CLEAN_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v3.csv"
+OUT_CLEAN_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean.csv"
 OUT_HEADERS_JSON = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_headers_machine_to_human.json"
 
 

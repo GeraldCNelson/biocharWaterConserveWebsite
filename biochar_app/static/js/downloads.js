@@ -20,7 +20,6 @@ function buildFilename(parts) {
 function getFilenameFromContentDisposition(cd) {
   if (!cd) return "";
 
-  // filename*=UTF-8''encoded
   const starMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
   if (starMatch && starMatch[1]) {
     try {
@@ -30,7 +29,6 @@ function getFilenameFromContentDisposition(cd) {
     }
   }
 
-  // filename="plain"
   const match = cd.match(/filename\s*=\s*("?)([^";]+)\1/i);
   if (match && match[2]) return match[2].trim();
 
@@ -279,7 +277,6 @@ function buildPlotFilename({ plotType, format }) {
 
 export async function downloadPlot(target = "raw", format = "png", sizeMode = "screen") {
   try {
-    // noinspection JSUnresolvedVariable
     const Plotly = window.Plotly;
     if (!Plotly) {
       alert("Plotly is not available; cannot download plot image.");
@@ -307,7 +304,10 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
       for (const id of idCandidates) {
         const candidate = document.getElementById(id);
-        if (candidate) { el = candidate; break; }
+        if (candidate) {
+          el = candidate;
+          break;
+        }
       }
 
       if (!el) {
@@ -371,6 +371,7 @@ const ALL_YEARS_UI_ALIASES = {
   biomass: "hay_all",
   biomass_hay: "hay_all",
   hay: "hay_all",
+  hay_nir: "hay_all",
 };
 
 const BULK_DATASET_TOKEN = {
@@ -379,7 +380,6 @@ const BULK_DATASET_TOKEN = {
   irrigation: "irrigation",
   fertilizing: "fertilizing",
   biomass: "biomass",
-  biomass_hay: "biomass",
 };
 
 function normalizeBulkDataset(uiDatasetRaw) {
@@ -396,7 +396,6 @@ function normalizeResolution(raw) {
   let g = String(raw).trim().toLowerCase();
   if (!g) return null;
 
-  // Common UI variants → manifest/backend tokens
   const map = {
     "15-min": "15min",
     "15 min": "15min",
@@ -419,7 +418,7 @@ function normalizeResolution(raw) {
     "g season": "gseason",
     "g_season": "gseason",
     "gseason": "gseason",
-};
+  };
   if (map[g]) g = map[g];
 
   return g;
@@ -441,7 +440,6 @@ function findEntryByKey(manifest, key) {
 function findManifestKey(manifest, { dataset, year, granularity }) {
   if (!manifest) return null;
 
-  // If dataset is already a manifest key, return it if present.
   if (isAllYearsDataset(dataset)) {
     return findEntryByKey(manifest, dataset)?.key || null;
   }
@@ -507,7 +505,6 @@ export async function initBulkDownloadTab() {
     btn.setAttribute("aria-disabled", String(!enabled));
   }
 
-  // Fetch manifest
   let manifest = null;
   try {
     const resp = await fetch("/api/bulk_download_manifest");
@@ -527,119 +524,95 @@ export async function initBulkDownloadTab() {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
       .map((y) => `<option value="${y}">${y}</option>`)
       .join("");
-    yearEl.innerHTML = `<option value="">Select year…</option>${opts}`;
+    yearEl.innerHTML = `<option value="">Select year...</option>${opts}`;
   }
 
   if (granEl && granEl.options.length === 0) {
     const gList = granularities.length ? granularities : ["15min", "hourly", "daily", "monthly", "gseason"];
     granEl.innerHTML =
-      `<option value="">Select granularity…</option>` +
+      `<option value="">Select granularity...</option>` +
       gList.map((g) => `<option value="${g}">${g}</option>`).join("");
   }
 
-function normalizeGranularityToken(v) {
-  const s = String(v || "").trim().toLowerCase();
-  if (!s) return "";
+  function normalizeGranularityToken(v) {
+    const s = String(v || "").trim().toLowerCase();
+    if (!s) return "";
 
-  // Normalize common variants to manifest tokens
-  // e.g. "15-min", "15 min", "15_min" -> "15min"
-  const compact = s.replace(/\s+/g, "").replace(/_/g, "-");
-  if (compact === "15-min" || compact === "15min") return "15min";
+    const compact = s.replace(/\s+/g, "").replace(/_/g, "-");
+    if (compact === "15-min" || compact === "15min") return "15min";
 
-  // pass-through for known tokens
-  if (["hourly", "daily", "monthly", "gseason"].includes(compact)) return compact;
+    if (["hourly", "daily", "monthly", "gseason"].includes(compact)) return compact;
 
-  // last resort: strip hyphens
-  return compact.replace(/-/g, "");
-}
+    return compact.replace(/-/g, "");
+  }
 
-function normalizeDatasetToken(v) {
-  return String(v || "").trim().toLowerCase();
-}
+  function normalizeDatasetToken(v) {
+    return String(v || "").trim().toLowerCase();
+  }
 
-function refreshEnabledState() {
-  const y = selectedYear();
-  const gRaw = selectedGranularity();
-  const g = normalizeGranularityToken(gRaw);
+  function refreshEnabledState() {
+    const y = selectedYear();
+    const gRaw = selectedGranularity();
+    const g = normalizeGranularityToken(gRaw);
 
-  const entries = getManifestEntries(manifest);
-  const hasEntries = Array.isArray(entries) && entries.length > 0;
+    const entries = getManifestEntries(manifest);
+    const hasEntries = Array.isArray(entries) && entries.length > 0;
 
-  for (const btn of buttons) {
-    const uiDsRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
-    const ds = normalizeBulkDataset(uiDsRaw);
+    for (const btn of buttons) {
+      const uiDsRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
+      const ds = normalizeBulkDataset(uiDsRaw);
 
-    // If we have an entry-based manifest, be strict: only enable if we can resolve a manifest key.
-    if (hasEntries) {
-      // All-years (file) datasets: soil_chem_all, soil_bio_all, hay_all
-      if (isAllYearsDataset(ds)) {
-        const entry = findEntryByKey(manifest, ds);
-        setButtonEnabled(btn, Boolean(entry?.key));
-        continue;
-      }
+      if (hasEntries) {
+        if (isAllYearsDataset(ds)) {
+          const entry = findEntryByKey(manifest, ds);
+          setButtonEnabled(btn, Boolean(entry?.key));
+          continue;
+        }
 
-      // Logger / Weather require year + granularity
-      if (ds === "loggers" || ds === "weather") {
-        if (!y || !g) {
+        if (ds === "loggers" || ds === "weather") {
+          if (!y || !g) {
+            setButtonEnabled(btn, false);
+            continue;
+          }
+
+          const key = findManifestKey(manifest, {
+            dataset: normalizeDatasetToken(ds),
+            year: y,
+            granularity: g,
+          });
+
+          setButtonEnabled(btn, Boolean(key));
+          continue;
+        }
+
+        if (!y) {
           setButtonEnabled(btn, false);
           continue;
         }
 
-        // Make sure findManifestKey sees normalized dataset + granularity
         const key = findManifestKey(manifest, {
           dataset: normalizeDatasetToken(ds),
           year: y,
-          granularity: g,
+          granularity: null,
         });
 
         setButtonEnabled(btn, Boolean(key));
         continue;
       }
 
-      // Year-only datasets (irrigation/fertilizing/biomass)
-      if (!y) {
-        setButtonEnabled(btn, false);
+      if (isAllYearsDataset(ds)) {
+        setButtonEnabled(btn, true);
         continue;
       }
 
-      const key = findManifestKey(manifest, {
-        dataset: normalizeDatasetToken(ds),
-        year: y,
-        granularity: null,
-      });
-
-      setButtonEnabled(btn, Boolean(key));
-      continue;
-    }
-
-    // Fallback mode (old manifest shape)
-    if (isAllYearsDataset(ds)) {
-      setButtonEnabled(btn, true);
-      continue;
-    }
-
-    if (ds === "loggers" || ds === "weather") {
-      if (!y || !g) {
-        setButtonEnabled(btn, false);
+      if (ds === "loggers" || ds === "weather") {
+        setButtonEnabled(btn, Boolean(y && g));
         continue;
       }
-      setButtonEnabled(btn, isParquetAvailable(ds, y, g));
-      continue;
-    }
 
-    if (!y) {
-      setButtonEnabled(btn, false);
-      continue;
+      setButtonEnabled(btn, Boolean(y));
     }
-
-    if (ds === "irrigation" || ds === "fertilizing" || ds === "biomass") {
-      setButtonEnabled(btn, isWorkbookAvailable(ds, y));
-      continue;
-    }
-
-    setButtonEnabled(btn, true);
   }
-}
 
   if (yearEl) yearEl.addEventListener("change", refreshEnabledState);
   if (granEl) granEl.addEventListener("change", refreshEnabledState);

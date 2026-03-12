@@ -159,16 +159,16 @@ def add_precipitation_bars(
     if vals is None or "timestamp" not in df.columns:
         return
 
-    label = get_unit_aware_label("precip", usys)
-    unit_suffix = "in" if usys == "us" else "mm"
-    hovertemplate = "Precip: %{y:.2f} " + unit_suffix + "<extra></extra>"
+    unit_suffix = "mm" if usys == "metric" else "in"
+    legend_label = "Precip"
+    hovertemplate = f"Precip: %{{y:.2f}} {unit_suffix}<extra></extra>"
 
     fig.add_trace(
         go.Bar(
             x=safe_tolist(df["timestamp"]),
             y=safe_tolist(vals),
             yaxis="y2",
-            name=label,
+            name=legend_label,
             width=bw,
             marker=dict(color=PLOT_COLORS.get("precip", "LightSteelBlue")),
             offsetgroup="0",
@@ -195,7 +195,7 @@ def add_irrigation_shapes(
 ) -> None:
     """
     Draw irrigation:
-      • sum_only=True  -> one vertical dotted line per period at the *category* position,
+      • sum_only=True  -> one vertical dotted line per period at the category position,
                           with "### k gal/k L" annotation above the plot.
       • sum_only=False -> one vertical line per event on a date axis.
       • Always adds a dummy legend entry matching the dotted line style.
@@ -297,15 +297,15 @@ def add_irrigation_shapes(
                 font=dict(size=10, color=irr_anno_color),
             )
 
-    legend_label = get_unit_aware_label("irrigation", usys)
     fig.add_trace(
         go.Scatter(
             x=[None],
             y=[None],
             mode="lines",
             line=dict(color=irr_color, dash="dot", width=2),
-            name=legend_label,
+            name="Irrig",
             showlegend=True,
+            hoverinfo="skip",
         )
     )
 
@@ -344,7 +344,6 @@ def configure_primary_yaxis(
 # RAW (time series)
 # ---------------------------------------------------------------------------
 
-
 def make_raw_figure(
     *,
     df: pd.DataFrame,
@@ -378,6 +377,29 @@ def make_raw_figure(
     y_cols: List[str] = []
     use_secondary_y = False
 
+    def _compact_legend_label(label: str) -> str:
+        """
+        Make legend labels more compact without hard-coding specific depths.
+        """
+        s = str(label).strip()
+
+        replacements = {
+            " inches": " in",
+            " inch": " in",
+            " centimeters": " cm",
+            " centimeter": " cm",
+            "Volumetric Water Content": "VWC",
+            "Soil Water Content": "SWC",
+            "Air Temperature": "Air Temp",
+            "Precipitation": "Precip",
+            "Irrigation Volume": "Irrig",
+        }
+
+        for old, new in replacements.items():
+            s = s.replace(old, new)
+
+        return s
+
     def swc_from_vwc(series: pd.Series, depth_key: str) -> pd.Series:
         vwc_pct = to_float_series(series)
         depth_in = SWC_DEPTH_INCHES.get(str(depth_key))
@@ -410,12 +432,14 @@ def make_raw_figure(
             if depth_col:
                 line_kwargs["color"] = depth_col
 
+            depth_label = names.get(usys, names.get("us", d_str))
+
             fig.add_trace(
                 go.Scatter(
                     x=x_vals,
                     y=y_vals,
                     mode="lines",
-                    name=names[usys],
+                    name=_compact_legend_label(depth_label),
                     line=line_kwargs,
                 )
             )
@@ -437,7 +461,7 @@ def make_raw_figure(
                     x=x_vals,
                     y=y_vals,
                     mode="lines",
-                    name=loc_name,
+                    name=_compact_legend_label(loc_name),
                     line=dict(width=2),
                 )
             )
@@ -464,13 +488,12 @@ def make_raw_figure(
             temp_col = "temp_air_degF"
 
         if temp_col is not None:
-            label = get_unit_aware_label("temp_air", usys)
             fig.add_trace(
                 go.Scatter(
                     x=x_vals,
                     y=safe_tolist(to_float_series(df_plot[temp_col])),
                     mode="lines",
-                    name=label,
+                    name="Air Temp",
                     yaxis="y2",
                     line=dict(
                         dash="dot",
@@ -487,7 +510,7 @@ def make_raw_figure(
     add_irrigation_shapes(fig, strip, year, usys)
 
     title_text = (
-        f"{granularity.capitalize()} Data Plot for {human_var} "
+        f"{granularity.capitalize()} {human_var} "
         f"in Strip {strip}, {year} ({human_logger_loc} Logger)"
     )
 
@@ -504,16 +527,13 @@ def make_raw_figure(
 
     if use_secondary_y:
         layout_kwargs["yaxis2"] = fig.layout.yaxis2
-        layout_kwargs["margin"]["r"] = 240
 
-        base_legend = common_legend_config("Legend") or {}
-        layout_kwargs["legend"] = {
-            **base_legend,
-            "x": 1.02,
-            "xanchor": "left",
-            "y": 1.0,
-            "yanchor": "top",
-        }
+        # Smaller right margin to reduce wasted whitespace.
+        # Metric needs a touch more room because the right-axis title/ticks are wider.
+        layout_kwargs["margin"]["r"] = 105 if usys == "us" else 115
+
+        # Let common_legend_config() own legend placement.
+        layout_kwargs["legend"] = common_legend_config("Legend")
 
     fig.update_layout(**layout_kwargs)
     fig.update_layout(font={"size": 12})

@@ -144,7 +144,7 @@ SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
     {
         "group_key": "soilchem_crop_recs",
         "group_label": "Crop & Fertility Recommendations",
-        "notes": SOIL_TABLE_TOP_NOTE,
+        "notes": "Units are actual pounds of plant nutrient per acre",
         "variables": [
             VariableSpec("yg_1", "Yield goal", ("yg_1",)),
             VariableSpec("nitrogen_rec", "Nitrogen recommendation", ("nitrogen_rec",)),

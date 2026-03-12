@@ -14,8 +14,7 @@ This keeps table "shape" consistent across tabs and prevents drift.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 # A build function that returns the standard set payload dict
 SetPayloadBuilder = Callable[[], Dict[str, Any]]

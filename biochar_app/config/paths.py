@@ -44,15 +44,18 @@ SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files
 SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
 BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"
 
-# Authoritative cleaned masters (routes should prefer these)
+# Authoritative cleaned masters
 WARD_MASTER_NIR_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
-WARD_MASTER_SOILBIO_CSV = (
-    SOIL_BIO_PROCESSED_DIR / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v3.csv"
-)
-WARD_MASTER_SOILCHEM_CSV = (
-    SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean_plus_Soil_2025-11-03_v1.csv"
-)
+WARD_MASTER_SOILBIO_CSV = SOIL_BIO_PROCESSED_DIR / "ward_master_soilbio_clean.csv"
+WARD_MASTER_SOILCHEM_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean.csv"
 BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
+
+# Management workbook / cleaned management datasets
+BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
+
+MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
+IRRIGATION_CSV = MANAGEMENT_PROCESSED_DIR / "irrigation_clean.csv"
+FERTILIZER_CSV = MANAGEMENT_PROCESSED_DIR / "fertilizer_clean.csv"
 
 DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"

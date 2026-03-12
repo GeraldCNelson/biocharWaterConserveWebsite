@@ -17,7 +17,9 @@ import {
 } from "./downloads.js";
 
 // 3) Debugging & logging
-import { debugLog, debugGroup } from "./plots.js";
+import { renderMainPlots, waitForAllDropdowns  } from "./plots.js";
+
+import { debugLog, debugGroup  } from "./debug_utils.js";
 
 // 4) Markdown loader
 import { loadMarkdownContent } from "./markdown.js";
@@ -39,8 +41,6 @@ import {
   wireMainDateRangeListeners,
 } from "./ui_controls.js";
 
-// 6) Main plotting routines
-import { renderMainPlots, waitForAllDropdowns } from "./plot_utils.js";
 
 // 7) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";

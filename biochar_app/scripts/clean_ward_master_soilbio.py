@@ -26,22 +26,38 @@ Key behaviors
 * Writes:
     - cleaned master CSV
     - machine->human headers JSON
+
+Additional behavior
+-------------------
+If a late raw Ward biological file exists that matches the currently known
+supplemental file naming pattern, it is merged into the canonical cleaned CSV
+after the compiled master is written. This lets the canonical file remain:
+
+    ward_master_soilbio_clean.csv
+
+while still including the latest late-2025 rows.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict
 
 import pandas as pd
 
-from biochar_app.config.paths import SOIL_BIO_RAW_DIR, SOIL_BIO_PROCESSED_DIR
+from biochar_app.config.paths import (
+    SOIL_BIO_PROCESSED_DIR,
+    SOIL_BIO_RAW_DIR,
+    WARD_MASTER_SOILBIO_CSV,
+)
 from biochar_app.scripts.clean_ward_master_common import (
     clean_compiled_workbook,
     standardize_ward_dataframe,
     validate_and_report,
     write_clean_outputs,
 )
+from biochar_app.scripts.tables_soil_bio import _prepare_soilbio_csv
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -51,13 +67,16 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # ---------------------------------------------------------------------
 IN_MASTER_CSV = SOIL_BIO_RAW_DIR / "Lobato PLFA Data - Compiled.csv"
 
-OUT_CLEAN_CSV = (
-    SOIL_BIO_PROCESSED_DIR / "ward_master_soilbio_clean_plus_Biological_2025-11-03_v5.csv"
-)
+# Canonical processed output path lives in config.paths
+OUT_CLEAN_CSV = WARD_MASTER_SOILBIO_CSV
 
 OUT_HEADERS_JSON = (
     SOIL_BIO_PROCESSED_DIR / "ward_master_soilbio_headers_machine_to_human.json"
 )
+
+# Known supplemental raw file to merge after cleaning, if present.
+# This is the late-2025 PLFA file you added manually.
+LATE_RAW_BIO_CSV = SOIL_BIO_RAW_DIR / "Biological_2025-11-03.csv"
 
 FIXED_BEGIN_DEPTH_IN = 0
 FIXED_END_DEPTH_IN = 8
@@ -66,8 +85,6 @@ FIXED_END_DEPTH_IN = 8
 # ---------------------------------------------------------------------
 # Canonical soil-bio column mapping
 # ---------------------------------------------------------------------
-# These names reflect the actual machine names produced by clean_compiled_workbook()
-# from the PLFA compiled CSV headers you pasted.
 SOILBIO_RENAME_MAP: Dict[str, str] = {
     # dates
     "date_recd": "date_rec",
@@ -181,6 +198,48 @@ def _apply_rename_map(df: pd.DataFrame, rename_map: Dict[str, str]) -> pd.DataFr
     return out
 
 
+def _merge_late_raw_if_present() -> None:
+    """
+    Merge the known late raw Ward soil-bio file into the canonical cleaned CSV,
+    if that raw file exists.
+
+    The merge is done in place so WARD_MASTER_SOILBIO_CSV remains the canonical
+    dataset referenced across the project.
+    """
+    if not OUT_CLEAN_CSV.exists():
+        raise FileNotFoundError(f"Canonical cleaned soil-bio CSV not found: {OUT_CLEAN_CSV}")
+
+    if not LATE_RAW_BIO_CSV.exists():
+        print(f"ℹ️ No supplemental late raw soil-bio file found at: {LATE_RAW_BIO_CSV}")
+        print("ℹ️ Leaving canonical cleaned soil-bio CSV as compiled-master-only output.")
+        return
+
+    print(f"➕ Merging supplemental late raw soil-bio CSV: {LATE_RAW_BIO_CSV}")
+
+    # Write back to the same canonical file.
+    _prepare_soilbio_csv(
+        clean_csv=OUT_CLEAN_CSV,
+        output_csv=OUT_CLEAN_CSV,
+        supplemental_raw_csv=LATE_RAW_BIO_CSV,
+    )
+
+    merged_df = pd.read_csv(OUT_CLEAN_CSV)
+
+    if "date_rec" in merged_df.columns:
+        date_counts = (
+            merged_df["date_rec"]
+            .fillna("")
+            .astype(str)
+            .value_counts(dropna=False)
+            .sort_index()
+        )
+        print("\nCounts by 'date_rec' after supplemental merge:")
+        for date_value, count in date_counts.items():
+            print(f"  {date_value}: {count}")
+
+    print(f"✅ Updated canonical soil bio clean CSV with supplemental rows: {OUT_CLEAN_CSV}")
+
+
 def clean_ward_master_soilbio() -> None:
     if not IN_MASTER_CSV.exists():
         raise FileNotFoundError(f"Input not found: {IN_MASTER_CSV}")
@@ -226,7 +285,7 @@ def clean_ward_master_soilbio() -> None:
     other_cols = [c for c in df_clean.columns if c not in key_cols and c not in expected_rest]
     df_clean = df_clean[key_cols + expected_rest + other_cols]
 
-    # Diagnostics
+    # Diagnostics on the compiled-master clean output
     validate_and_report(
         df_clean,
         strip_col="strip",
@@ -236,7 +295,7 @@ def clean_ward_master_soilbio() -> None:
         ignore_unmatched_columns=("sample_id_1", "sample_id", "sample_id_2"),
     )
 
-    # Write outputs
+    # Write compiled-master clean output first
     write_clean_outputs(
         df_clean,
         header_map,
@@ -246,6 +305,9 @@ def clean_ward_master_soilbio() -> None:
 
     print(f"✅ Wrote soil bio clean CSV: {OUT_CLEAN_CSV}")
     print(f"✅ Wrote headers map JSON:   {OUT_HEADERS_JSON}")
+
+    # Then merge in the known late raw file if present.
+    _merge_late_raw_if_present()
 
 
 if __name__ == "__main__":

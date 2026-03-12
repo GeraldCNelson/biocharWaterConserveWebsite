@@ -4,7 +4,7 @@
 // and the two Directions modals). Also re-runs MathJax so inline
 // equations like $\frac{T_{experiment}}{T_{reference}}$ render correctly.
 
-import { debugLog } from "./plots.js";
+import { debugLog } from "./debug_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 let markdownRenderer = null;

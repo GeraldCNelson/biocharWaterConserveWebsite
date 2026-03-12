@@ -200,37 +200,120 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
     return `<p class="text-muted">No seasonal periods are defined.</p>`;
   }
 
+  function normalizeFlatGseasonStats(stats) {
+    const grouped = {};
+
+    if (!Array.isArray(stats)) {
+      return grouped;
+    }
+
+    stats.forEach((row) => {
+      if (!row || typeof row !== "object") return;
+
+      const periodCode = row.period_code;
+      if (!periodCode) return;
+
+      if (!grouped[periodCode]) {
+        grouped[periodCode] = {
+          raw_statistics: {},
+          ratio_statistics: {},
+        };
+      }
+
+      const strip = String(row.strip || "").trim();
+      const depth = String(row.depth || "").trim();
+      const loggerLocation = String(row.logger_location || "").trim();
+
+      const rawKeyParts = [strip];
+      if (depth) rawKeyParts.push(`D${depth}`);
+      if (loggerLocation) rawKeyParts.push(loggerLocation);
+      const rawKey = rawKeyParts.join("_");
+
+      const hasRawStats =
+        row.raw_min != null ||
+        row.raw_mean != null ||
+        row.raw_max != null ||
+        row.raw_std != null;
+
+      if (hasRawStats && rawKey) {
+        grouped[periodCode].raw_statistics[rawKey] = {
+          min: row.raw_min,
+          mean: row.raw_mean,
+          max: row.raw_max,
+          std: row.raw_std,
+        };
+      }
+
+      const ratioStrip = String(row.ratio_group || row.ratio_strip || row.strip_ratio || row.strip || "").trim();
+      const ratioKeyParts = [ratioStrip];
+      if (depth) ratioKeyParts.push(`D${depth}`);
+      if (loggerLocation) ratioKeyParts.push(loggerLocation);
+      const ratioKey = ratioKeyParts.join("_");
+
+      const hasRatioStats =
+        row.ratio_min != null ||
+        row.ratio_mean != null ||
+        row.ratio_max != null ||
+        row.ratio_std != null;
+
+      const looksLikeRatioGroup =
+        ratioStrip.includes("S1/S2") ||
+        ratioStrip.includes("S3/S4") ||
+        ratioStrip.includes("S1_S2") ||
+        ratioStrip.includes("S3_S4");
+
+      if (hasRatioStats && ratioKey && looksLikeRatioGroup) {
+        grouped[periodCode].ratio_statistics[ratioKey] = {
+          min: row.ratio_min,
+          mean: row.ratio_mean,
+          max: row.ratio_max,
+          std: row.ratio_std,
+        };
+      }
+    });
+
+    return grouped;
+  }
+
+  const groupedStats = Array.isArray(gseasonStats)
+    ? normalizeFlatGseasonStats(gseasonStats)
+    : (gseasonStats && typeof gseasonStats === "object" ? gseasonStats : {});
+
   let html = `<div class="accordion" id="${idBase}">`;
 
   seasonEntries.forEach(([code, spec], idx) => {
     const headingId = `${idBase}-heading-${code}`;
     const collapseId = `${idBase}-collapse-${code}`;
 
-    const block = (gseasonStats && gseasonStats[code]) ? gseasonStats[code] : {};
-    const rawStats = block?.raw_statistics || {};
-    const ratioStats = block?.ratio_statistics || {};
+    const block = groupedStats[code] || {};
+    const rawStats = block.raw_statistics || {};
+    const ratioStats = block.ratio_statistics || {};
 
     const rawPretty = prettifyStatsKeys(rawStats, variable, unitSystem);
 
     const s1s2 = {};
     const s3s4 = {};
-    Object.entries(ratioStats || {}).forEach(([k, v]) => {
-      if (String(k).includes("S1_S2")) s1s2[k] = v;
-      else if (String(k).includes("S3_S4")) s3s4[k] = v;
+    Object.entries(ratioStats).forEach(([k, v]) => {
+      const key = String(k);
+      if (key.includes("S1/S2") || key.includes("S1_S2")) {
+        s1s2[k] = v;
+      } else if (key.includes("S3/S4") || key.includes("S3_S4")) {
+        s3s4[k] = v;
+      }
     });
 
     const s1s2Pretty = prettifyStatsKeys(s1s2, variable, unitSystem);
     const s3s4Pretty = prettifyStatsKeys(s3s4, variable, unitSystem);
 
-    const rawHTML = Object.keys(rawPretty || {}).length
+    const rawHTML = Object.keys(rawPretty).length
       ? generateSummaryTable(rawPretty, variable, { returnType: "html" })
       : `<p class="text-muted mb-0">No raw data available for this period.</p>`;
 
-    const s1s2HTML = Object.keys(s1s2Pretty || {}).length
+    const s1s2HTML = Object.keys(s1s2Pretty).length
       ? generateSummaryTable(s1s2Pretty, variable, { returnType: "html" })
       : `<p class="text-muted mb-0">No S1/S2 ratio summary available.</p>`;
 
-    const s3s4HTML = Object.keys(s3s4Pretty || {}).length
+    const s3s4HTML = Object.keys(s3s4Pretty).length
       ? generateSummaryTable(s3s4Pretty, variable, { returnType: "html" })
       : `<p class="text-muted mb-0">No S3/S4 ratio summary available.</p>`;
 

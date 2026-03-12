@@ -1,5 +1,3 @@
-# bulk_downloads_utils.py
-
 from __future__ import annotations
 
 import io
@@ -9,6 +7,12 @@ from pathlib import Path
 from typing import Any, List, Optional, Dict
 
 import pandas as pd
+
+from biochar_app.config.paths import (
+    WARD_MASTER_SOILCHEM_CSV,
+    WARD_MASTER_SOILBIO_CSV,
+    WARD_MASTER_NIR_CSV,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -38,7 +42,7 @@ def _inject_year_if_missing(df: pd.DataFrame, year: Optional[int]) -> pd.DataFra
     return df
 
 
-def load_sheet_as_dataframe(xlsx_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
+def load_sheet_as_dataframe(xlsx_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     if not spec.sheet_name:
         raise ValueError(f"Spec {spec.dataset_key} has no sheet_name (file-backed?)")
     df = pd.read_excel(xlsx_path, sheet_name=spec.sheet_name, engine="openpyxl")
@@ -46,7 +50,7 @@ def load_sheet_as_dataframe(xlsx_path: str, spec: BulkSheetSpec) -> pd.DataFrame
     return df
 
 
-def load_csv_as_dataframe(csv_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
+def load_csv_as_dataframe(csv_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     p = Path(csv_path)
     if not p.exists():
         raise FileNotFoundError(f"CSV path not found for {spec.dataset_key}: {p}")
@@ -55,7 +59,7 @@ def load_csv_as_dataframe(csv_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
     return df
 
 
-def load_spec_as_dataframe(xlsx_path: str, spec: BulkSheetSpec) -> pd.DataFrame:
+def load_spec_as_dataframe(xlsx_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     if spec.csv_path:
         return load_csv_as_dataframe(spec.csv_path, spec)
     return load_sheet_as_dataframe(xlsx_path, spec)
@@ -72,7 +76,7 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
 # -----------------------------------------------------------------------------
 
 def build_zip_for_selection(
-    xlsx_path: str,
+    xlsx_path: str | Path,
     selected_keys: List[str],
     registry: Optional[List[BulkSheetSpec]] = None,
 ) -> bytes:
@@ -98,7 +102,6 @@ def build_zip_for_selection(
             print(f"   csv_path:            {spec.csv_path!r}")
             print(f"   zip filename:        {spec.filename}")
 
-            # ✅ IMPORTANT: use unified loader (sheet OR csv)
             df = load_spec_as_dataframe(xlsx_path, spec)
 
             csv_bytes = dataframe_to_csv_bytes(df)
@@ -120,15 +123,15 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
       sheet_name=None
       csv_path="path/to/file.csv"
     """
-    soil_chem_csv = "biochar_app/data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv"
-    soil_bio_csv  = "biochar_app/data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv"
-    hay_nir_csv   = "biochar_app/data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv"
+    soil_chem_csv = str(WARD_MASTER_SOILCHEM_CSV)
+    soil_bio_csv = str(WARD_MASTER_SOILBIO_CSV)
+    hay_nir_csv = str(WARD_MASTER_NIR_CSV)
 
     return [
         # Workbook-backed datasets
         BulkSheetSpec("irrigation_2023", "Irrigation (2023)", "2023 IRRIGATION ", 2023, "irrigation_2023.csv"),
-        BulkSheetSpec("irrigation_2024", "Irrigation (2024)", "2024 IRRIGATION",  2024, "irrigation_2024.csv"),
-        BulkSheetSpec("irrigation_2025", "Irrigation (2025)", "2025 IRRIGATION",  2025, "irrigation_2025.csv"),
+        BulkSheetSpec("irrigation_2024", "Irrigation (2024)", "2024 IRRIGATION", 2024, "irrigation_2024.csv"),
+        BulkSheetSpec("irrigation_2025", "Irrigation (2025)", "2025 IRRIGATION", 2025, "irrigation_2025.csv"),
 
         BulkSheetSpec("fertilizing_2023", "Fertilizing (2023)", "2023 FERTILIZING", 2023, "fertilizing_2023.csv"),
         BulkSheetSpec("fertilizing_2024", "Fertilizing (2024)", "2024 FERTILIZING", 2024, "fertilizing_2024.csv"),
@@ -166,9 +169,11 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
     ]
 
 
-def build_manifest(xlsx_path: str) -> List[Dict[str, Any]]:
+def build_manifest(xlsx_path: str | Path) -> List[Dict[str, Any]]:
     """
     Compatibility wrapper for routes.py (if still used somewhere).
     """
     from biochar_app.scripts.bulk_downloads import bulk_download_manifest
-    return bulk_download_manifest()
+    manifest = bulk_download_manifest()
+    entries = manifest.get("entries") if isinstance(manifest, dict) else manifest
+    return entries if isinstance(entries, list) else []

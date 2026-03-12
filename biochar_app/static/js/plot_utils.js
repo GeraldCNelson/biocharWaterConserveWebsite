@@ -1,4 +1,14 @@
 // plot_utils.js
+//
+// Restored from the working Lightsail/test-site layout logic, with small
+// updates for the current POST plot routes.
+//
+// Design goals
+// ------------
+// 1. Keep raw and ratio plots aligned horizontally.
+// 2. Use shared left/right margins across both plots.
+// 3. Sync x-axis domains after render and after resize.
+// 4. Keep legend on the right when there is room; move below only when needed.
 
 import { getSelectedFilters } from "./ui_controls.js";
 import { isMobileDevice } from "./ui_utils.js";
@@ -7,7 +17,7 @@ import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 /**
  * Pause until each of the given dropdown IDs exists in the DOM
  * and has been populated with at least one <option>.
- * @param {string[]} ids – array of element IDs, e.g. ["main-year", "main-variable", …]
+ * @param {string[]} ids – array of element IDs
  */
 export async function waitForAllDropdowns(ids) {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -25,7 +35,6 @@ export async function waitForAllDropdowns(ids) {
 /* Zoom / pan sync state                                              */
 /* ------------------------------------------------------------------ */
 
-// These will hold the actual Plotly graph divs once rendered.
 let rawPlotDiv = null;    // corresponds to #plot-1
 let ratioPlotDiv = null;  // corresponds to #plot-2
 let zoomHandlersAttached = false;
@@ -40,9 +49,7 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
   const hasXRange =
     "xaxis.range[0]" in eventData && "xaxis.range[1]" in eventData;
 
-  if (!hasXRange) {
-    return;
-  }
+  if (!hasXRange) return;
 
   const newRange = [
     eventData["xaxis.range[0]"],
@@ -62,14 +69,13 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
 }
 
 /**
- * Once both plots exist, attach relayout handlers in *both* directions.
+ * Once both plots exist, attach relayout handlers in both directions.
  */
 function maybeAttachZoomSyncHandlers() {
   if (zoomHandlersAttached) return;
   if (!rawPlotDiv || !ratioPlotDiv) return;
 
   const makeHandler = (source, target, label) => (ev) => {
-    // Plotly's .on passes payload directly; no .detail.
     const payload = ev;
     console.log(`📐 ${label} relayout →`, payload);
     syncZoom(source, target, payload);
@@ -86,21 +92,21 @@ function maybeAttachZoomSyncHandlers() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Fetch + render helper                                              */
+/* Responsive gutter / legend logic                                   */
 /* ------------------------------------------------------------------ */
 
 /**
- * Decide how much right margin ("gutter") we need *right now*.
+ * Decide how much right margin ("gutter") we need right now.
  *
  * Supports:
  *  - initial render: pass (containerEl, plotType, plotLayout, plotDataArray)
- *  - after render:   pass (gd, plotType)  where gd is the Plotly graph div
+ *  - after render:   pass (gd, plotType) where gd is the Plotly graph div
  */
 export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null, plotData = null) {
   const el = containerOrGd;
   const w = el?.clientWidth || 1200;
 
-  // Prefer "after render" truth when available
+  // Prefer after-render truth when available
   const fullLayout = el?._fullLayout || null;
   const fullData = el?._fullData || el?.data || null;
 
@@ -115,58 +121,55 @@ export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null,
   const dataUsesY2 = Array.isArray(data) && data.some((t) => (t?.yaxis || "") === "y2");
 
   // Raw plots typically need the extra space (precip bars + legend outside).
-  // This stays safe if you later add y2 to ratio plots.
   const hasY2 = layoutHasY2 || dataUsesY2;
 
   if (!hasY2) return 20;
 
-  // Responsive gutter — scales down as window narrows
-  if (w >= 1200) return 240;
-  if (w >= 1000) return 200;
-  if (w >= 850) return 160;
+  // On mobile, don't try to keep a big right gutter.
+  if (isMobileDevice()) return 20;
 
-  // Small screens: stop reserving a big gutter; legend should move below
+  // Desktop / tablet widths:
+  if (w >= 1400) return 160;
+  if (w >= 1150) return 140;
+  if (w >= 950) return 120;
+  if (w >= 800) return 100;
+
+  // Narrow screens: stop reserving a large right gutter; legend goes below.
   return 20;
 }
 
 /**
  * Update legend placement based on gutter choice.
- * Returns an object with:
- *  - legend: the legend config to apply
- *  - extraBottom: recommended extra bottom margin when legend is below
  */
 function applyResponsiveLegend(layout, rightGutterPx) {
-  if (rightGutterPx >= 160) {
-    const base = layout.legend || {};
+  const base = layout.legend || {};
+
+  if (rightGutterPx >= 100) {
     layout.legend = {
       ...base,
-      x: 1.02,
+      x: 1.01,
       xanchor: "left",
       y: 1.0,
       yanchor: "top",
       orientation: "v",
     };
-    return { extraBottom: 0 };
+    return { extraBottom: 0, minRight: 0 };
   } else {
-    const base = layout.legend || {};
     layout.legend = {
       ...base,
       x: 0,
       xanchor: "left",
-      y: -0.25,
+      y: -0.16,
       yanchor: "top",
       orientation: "h",
     };
-    // give space for the legend rows below the plot
-    return { extraBottom: 80 };
+    return { extraBottom: 45, minRight: 70 };
   }
 }
 
-/**
- * Fetch plot data from the server and render it into a Plotly div.
- * @param {string} plotType – e.g. "raw" or "ratio"
- * @param {string} [plotDivId] – the DOM id of the target <div>; defaults to `plot-${plotType}`
- */
+/* ------------------------------------------------------------------ */
+/* Fetch + render helper                                              */
+/* ------------------------------------------------------------------ */
 
 export async function fetchAndRenderPlot(plotType, plotDivId) {
   const targetId = plotDivId || `plot-${plotType}`;
@@ -184,10 +187,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
   const statusEl = document.getElementById("plots-status");
 
   // ------------------------------------------------------------
-  // ✅ Domain sync helper (this is the missing piece)
-  // Plotly can keep margins equal yet still compute slightly
-  // different xaxis.domain values due to tick/title/layout nuances.
-  // We force plot-2 to use plot-1's xaxis.domain once both exist.
+  // Force plot-2 to use plot-1's xaxis.domain once both exist.
   // ------------------------------------------------------------
   const syncXAxisDomains = () => {
     const p1 = document.getElementById("plot-1");
@@ -197,7 +197,6 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     const d = p1._fullLayout.xaxis.domain;
     if (!Array.isArray(d) || d.length !== 2) return;
 
-    // Only relayout if different (avoid relayout loops)
     const d2 = p2._fullLayout.xaxis.domain;
     const same =
       Array.isArray(d2) &&
@@ -224,6 +223,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     filters.kind = plotType;
 
     const url = `/api/plot_${plotType}`;
+    console.log(`📦 ${plotType} payload:`, filters);
+
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -262,7 +263,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     const parentWidth = container.clientWidth || 1200;
 
     // ------------------------------------
-    // ✅ Consistent margins (key to x-axis alignment)
+    // Consistent margins (key to x-axis alignment)
     // ------------------------------------
     const leftMargin = 60;
     window._plotLeftMargin = leftMargin;
@@ -276,6 +277,14 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       rightGutter = window._plotRightGutter;
     }
 
+    const legendAdjust = { legend: plotData.layout?.legend || {} };
+    const legendResponse = applyResponsiveLegend(legendAdjust, rightGutter);
+
+    const effectiveRight = Math.max(
+      rightGutter,
+      legendResponse.minRight ?? 0
+    );
+
     const layout = {
       ...plotData.layout,
       autosize: false,
@@ -283,10 +292,11 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       height: 500,
       margin: {
         l: leftMargin,
-        r: rightGutter,
+        r: effectiveRight,
         t: plotData.layout?.margin?.t ?? 50,
-        b: plotData.layout?.margin?.b ?? 50,
+        b: Math.max(plotData.layout?.margin?.b ?? 50, 50 + legendResponse.extraBottom),
       },
+      legend: legendAdjust.legend,
     };
 
     // Prevent Plotly from silently changing margins per plot
@@ -295,9 +305,6 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     if (layout.yaxis2) {
       layout.yaxis2.automargin = false;
     }
-
-    // Legend placement depends on gutter
-    applyResponsiveLegend(layout, rightGutter);
 
     const plotConfig = {
       displayModeBar: false,
@@ -312,7 +319,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     if (targetId === "plot-2") ratioPlotDiv = gd;
 
     // ------------------------------------
-    // ✅ Refine gutter *after render* using _fullLayout/_fullData
+    // Refine gutter after render using _fullLayout/_fullData
     // ------------------------------------
     const refineGutter = () => {
       if (!gd) return null;
@@ -325,17 +332,23 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
         g = window._plotRightGutter;
       }
 
+      const tmp = { legend: gd.layout?.legend || {} };
+      const legendResult = applyResponsiveLegend(tmp, g);
+
+      const effectiveRightAfterRender = Math.max(
+        g,
+        legendResult.minRight ?? 0
+      );
+
       const update = {
+        width: parentWidth,
         "margin.l": window._plotLeftMargin ?? 60,
-        "margin.r": g,
+        "margin.r": effectiveRightAfterRender,
+        "margin.b": Math.max(gd.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
         "yaxis.automargin": false,
+        legend: tmp.legend,
       };
       if (gd.layout?.yaxis2) update["yaxis2.automargin"] = false;
-
-      // Legend update (replace legend object)
-      const tmp = { legend: gd.layout?.legend || {} };
-      applyResponsiveLegend(tmp, g);
-      update.legend = tmp.legend;
 
       Plotly.relayout(gd, update);
       Plotly.Plots.resize(gd);
@@ -348,13 +361,12 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     // After rendering plot-2, force domain alignment to plot-1
     if (targetId === "plot-2") {
-      // Wait a frame so _fullLayout is fully settled
       await new Promise((r) => requestAnimationFrame(r));
       syncXAxisDomains();
     }
 
     // ------------------------------------
-    // ✅ Install ONE resize handler (relayout + resize + domain sync)
+    // Install ONE resize handler
     // ------------------------------------
     if (!window._biocharResizePlotsInstalled) {
       window._biocharResizePlotsInstalled = true;
@@ -376,18 +388,23 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
           gutter = window._plotRightGutter;
         }
 
+        const tmp = { legend: el.layout?.legend || {} };
+        const legendResult = applyResponsiveLegend(tmp, gutter);
+
+        const effectiveRightOnResize = Math.max(
+          gutter,
+          legendResult.minRight ?? 0
+        );
+
         const update = {
           width: w,
           "margin.l": window._plotLeftMargin ?? 60,
-          "margin.r": gutter,
+          "margin.r": effectiveRightOnResize,
+          "margin.b": Math.max(el.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
           "yaxis.automargin": false,
+          legend: tmp.legend,
         };
         if (el.layout?.yaxis2) update["yaxis2.automargin"] = false;
-
-        // Legend update
-        const tmp = { legend: el.layout?.legend || {} };
-        applyResponsiveLegend(tmp, gutter);
-        update.legend = tmp.legend;
 
         Plotly.relayout(el, update);
         Plotly.Plots.resize(el);
@@ -420,12 +437,10 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
   }
 }
 
-/* Public helper to render both main plots                             */
+/* ------------------------------------------------------------------ */
+/* Public helper to render both main plots                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Kick off both of your main‐tab plots in sequence.
- */
 export async function renderMainPlots() {
   console.group("▶️ Rendering Interactive Plots…");
 
@@ -436,7 +451,6 @@ export async function renderMainPlots() {
       statusEl.style.display = "";
     }
 
-    // reset in case we re-render everything
     zoomHandlersAttached = false;
     rawPlotDiv = null;
     ratioPlotDiv = null;
@@ -449,4 +463,12 @@ export async function renderMainPlots() {
     if (statusEl) statusEl.style.display = "none";
     console.groupEnd();
   }
+}
+
+/**
+ * Optional explicit hook for existing callers.
+ * The handlers are also attached automatically after both plots render.
+ */
+export function wireMainPlotZoomSync() {
+  maybeAttachZoomSyncHandlers();
 }
