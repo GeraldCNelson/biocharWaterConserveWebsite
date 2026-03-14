@@ -378,12 +378,16 @@ const BULK_DATASET_TOKEN = {
   loggers: "loggers",
   weather: "weather",
   irrigation: "irrigation",
-  fertilizing: "fertilizing",
+  fertilizer: "fertilizer",
   biomass: "biomass",
 };
 
 function normalizeBulkDataset(uiDatasetRaw) {
-  const ui = String(uiDatasetRaw || "").trim();
+  const ui = String(uiDatasetRaw || "").trim().toLowerCase();
+
+  // Backward compatibility while templates/HTML catch up
+  if (ui === "fertilizing") return "fertilizer";
+
   return ALL_YEARS_UI_ALIASES[ui] || ui;
 }
 
@@ -466,6 +470,25 @@ function findManifestKey(manifest, { dataset, year, granularity }) {
   );
 }
 
+function selectHasRealOptions(el) {
+  if (!el) return false;
+  const values = Array.from(el.options || []).map((opt) => String(opt.value || "").trim());
+  return values.some((v) => v !== "");
+}
+
+function hasDatasetFamily(manifest, dataset) {
+  const token = BULK_DATASET_TOKEN[dataset] || dataset;
+  const entries = getManifestEntries(manifest);
+  if (!Array.isArray(entries)) return false;
+
+  return entries.some(
+    (e) =>
+      e &&
+      typeof e === "object" &&
+      String(e.dataset || "").trim().toLowerCase() === String(token).trim().toLowerCase()
+  );
+}
+
 export async function initBulkDownloadTab() {
   const yearEl =
     document.getElementById("bulk-year") ||
@@ -499,10 +522,16 @@ export async function initBulkDownloadTab() {
     return normalizeResolution(granEl.value);
   }
 
-  function setButtonEnabled(btn, enabled) {
-    btn.disabled = !enabled;
-    btn.classList.toggle("disabled", !enabled);
-    btn.setAttribute("aria-disabled", String(!enabled));
+  /**
+   * hardDisable=true:
+   *   truly unavailable; browser blocks clicks
+   * hardDisable=false + visualEnabled=false:
+   *   looks disabled, but click handler still runs and can show guidance
+   */
+  function setButtonState(btn, { visualEnabled, hardDisable = false }) {
+    btn.disabled = hardDisable;
+    btn.classList.toggle("disabled", !visualEnabled);
+    btn.setAttribute("aria-disabled", String(!visualEnabled));
   }
 
   let manifest = null;
@@ -513,21 +542,24 @@ export async function initBulkDownloadTab() {
     window.__bulkDownloadManifest = manifest;
   } catch (e) {
     console.warn("⚠️ Bulk manifest fetch failed:", e);
-    for (const b of buttons) setButtonEnabled(b, false);
+    for (const b of buttons) {
+      setButtonState(b, { visualEnabled: false, hardDisable: true });
+    }
     return;
   }
 
   const years = Array.isArray(manifest?.years) ? manifest.years : [];
   const granularities = Array.isArray(manifest?.granularities) ? manifest.granularities : [];
 
-  if (yearEl && yearEl.options.length === 0) {
+  // Populate if there are no real choices yet (placeholder-only select counts as empty)
+  if (yearEl && !selectHasRealOptions(yearEl)) {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
       .map((y) => `<option value="${y}">${y}</option>`)
       .join("");
     yearEl.innerHTML = `<option value="">Select year...</option>${opts}`;
   }
 
-  if (granEl && granEl.options.length === 0) {
+  if (granEl && !selectHasRealOptions(granEl)) {
     const gList = granularities.length ? granularities : ["15min", "hourly", "daily", "monthly", "gseason"];
     granEl.innerHTML =
       `<option value="">Select granularity...</option>` +
@@ -547,7 +579,8 @@ export async function initBulkDownloadTab() {
   }
 
   function normalizeDatasetToken(v) {
-    return String(v || "").trim().toLowerCase();
+    const s = String(v || "").trim().toLowerCase();
+    return s === "fertilizing" ? "fertilizer" : s;
   }
 
   function refreshEnabledState() {
@@ -565,13 +598,24 @@ export async function initBulkDownloadTab() {
       if (hasEntries) {
         if (isAllYearsDataset(ds)) {
           const entry = findEntryByKey(manifest, ds);
-          setButtonEnabled(btn, Boolean(entry?.key));
+          setButtonState(btn, {
+            visualEnabled: Boolean(entry?.key),
+            hardDisable: !Boolean(entry?.key),
+          });
           continue;
         }
 
+        // logger/weather require BOTH year and granularity
         if (ds === "loggers" || ds === "weather") {
+          const familyExists = hasDatasetFamily(manifest, ds);
+
+          if (!familyExists) {
+            setButtonState(btn, { visualEnabled: false, hardDisable: true });
+            continue;
+          }
+
           if (!y || !g) {
-            setButtonEnabled(btn, false);
+            setButtonState(btn, { visualEnabled: false, hardDisable: false });
             continue;
           }
 
@@ -581,12 +625,24 @@ export async function initBulkDownloadTab() {
             granularity: g,
           });
 
-          setButtonEnabled(btn, Boolean(key));
+          setButtonState(btn, {
+            visualEnabled: Boolean(key),
+            hardDisable: !Boolean(key),
+          });
+          continue;
+        }
+
+        // year-based non-granular datasets: irrigation, fertilizer, biomass
+        const familyExists = hasDatasetFamily(manifest, ds);
+
+        if (!familyExists) {
+          setButtonState(btn, { visualEnabled: false, hardDisable: true });
           continue;
         }
 
         if (!y) {
-          setButtonEnabled(btn, false);
+          // Keep clickable so user gets the "Please select a year." message.
+          setButtonState(btn, { visualEnabled: false, hardDisable: false });
           continue;
         }
 
@@ -596,21 +652,30 @@ export async function initBulkDownloadTab() {
           granularity: null,
         });
 
-        setButtonEnabled(btn, Boolean(key));
+        setButtonState(btn, {
+          visualEnabled: Boolean(key),
+          hardDisable: !Boolean(key),
+        });
         continue;
       }
 
       if (isAllYearsDataset(ds)) {
-        setButtonEnabled(btn, true);
+        setButtonState(btn, { visualEnabled: true, hardDisable: false });
         continue;
       }
 
       if (ds === "loggers" || ds === "weather") {
-        setButtonEnabled(btn, Boolean(y && g));
+        setButtonState(btn, {
+          visualEnabled: Boolean(y && g),
+          hardDisable: false,
+        });
         continue;
       }
 
-      setButtonEnabled(btn, Boolean(y));
+      setButtonState(btn, {
+        visualEnabled: Boolean(y),
+        hardDisable: false,
+      });
     }
   }
 
@@ -631,10 +696,14 @@ export async function initBulkDownloadTab() {
 
       if ((ds === "loggers" || ds === "weather") && (!y || !g)) {
         alert("Please select both a year and a granularity.");
+        if (!y) document.getElementById("bulk-year")?.focus();
+        else document.getElementById("bulk-granularity")?.focus();
         return;
       }
+
       if (!allYears && !y) {
         alert("Please select a year.");
+        document.getElementById("bulk-year")?.focus();
         return;
       }
 
@@ -645,7 +714,13 @@ export async function initBulkDownloadTab() {
       });
 
       if (!key) {
-        console.error("❌ No manifest key found for selection:", { uiDataset, normalized: ds, year: y, granularity: g, manifest });
+        console.error("❌ No manifest key found for selection:", {
+          uiDataset,
+          normalized: ds,
+          year: y,
+          granularity: g,
+          manifest,
+        });
         alert("That dataset/year (and granularity, if applicable) is not available.");
         return;
       }

@@ -129,14 +129,6 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
 
     return [
         # Workbook-backed datasets
-        BulkSheetSpec("irrigation_2023", "Irrigation (2023)", "2023 IRRIGATION ", 2023, "irrigation_2023.csv"),
-        BulkSheetSpec("irrigation_2024", "Irrigation (2024)", "2024 IRRIGATION", 2024, "irrigation_2024.csv"),
-        BulkSheetSpec("irrigation_2025", "Irrigation (2025)", "2025 IRRIGATION", 2025, "irrigation_2025.csv"),
-
-        BulkSheetSpec("fertilizing_2023", "Fertilizing (2023)", "2023 FERTILIZING", 2023, "fertilizing_2023.csv"),
-        BulkSheetSpec("fertilizing_2024", "Fertilizing (2024)", "2024 FERTILIZING", 2024, "fertilizing_2024.csv"),
-        BulkSheetSpec("fertilizing_2025", "Fertilizing (2025)", "2025 FERTILIZING", 2025, "fertilizing_2025.csv"),
-
         BulkSheetSpec("biomass_2023", "Biomass (2023)", "2023 BIOMASS", 2023, "biomass_2023.csv"),
         BulkSheetSpec("biomass_2024", "Biomass (2024)", "2024 BIOMASS", 2024, "biomass_2024.csv"),
         BulkSheetSpec("biomass_2025", "Biomass (2025)", "2025 BIOMASS", 2025, "biomass_2025.csv"),

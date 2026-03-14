@@ -19,6 +19,8 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILCHEM_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
+    IRRIGATION_CSV,
+    FERTILIZER_CSV,
 )
 
 # --------------------------------------------------------------------------------------
@@ -54,9 +56,22 @@ FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
     ),
 }
 
+# Canonical cleaned management CSVs
+MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
+    "irrigation": (
+        IRRIGATION_CSV,
+        "Irrigation",
+        "biochar_irrigation_{year}.csv",
+    ),
+    "fertilizer": (
+        FERTILIZER_CSV,
+        "Fertilizer Use",
+        "biochar_fertilizer_use_{year}.csv",
+    ),
+}
+
+# Workbook-backed only for datasets not yet migrated to cleaned CSVs
 WORKBOOK_TOKENS: dict[str, str] = {
-    "irrigation": "IRRIGATION",
-    "fertilizing": "FERTIL",
     "biomass": "BIOMASS",
 }
 
@@ -77,7 +92,16 @@ def _detect_year_span(df: pd.DataFrame) -> str:
     Try to infer the year span from common date/year columns.
     Returns a friendly string like '2023–2025' or 'unknown'.
     """
-    candidate_date_cols = ["date_rec", "date", "sample_date", "date_rept"]
+    candidate_date_cols = [
+        "date_rec",
+        "date",
+        "sample_date",
+        "date_rept",
+        "start_timestamp",
+        "end_timestamp",
+        "application_date",
+        "timestamp",
+    ]
     candidate_year_cols = ["year", "Year"]
 
     for col in candidate_date_cols:
@@ -207,6 +231,87 @@ def _list_resolutions_on_disk(year: int) -> list[str]:
             found.append(res)
 
     return [r for r in ALLOWED_RESOLUTIONS if r in found]
+
+
+def _extract_years_from_dataframe(df: pd.DataFrame) -> list[int]:
+    """
+    Find distinct years in a dataframe from common timestamp/date/year columns.
+    """
+    candidate_date_cols = [
+        "start_timestamp",
+        "application_date",
+        "date",
+        "timestamp",
+        "date_rec",
+        "end_timestamp",
+    ]
+    candidate_year_cols = ["year", "Year"]
+
+    for col in candidate_date_cols:
+        if col in df.columns:
+            dt = pd.to_datetime(df[col], errors="coerce")
+            years = sorted(int(y) for y in dt.dt.year.dropna().astype(int).unique())
+            if years:
+                return years
+
+    for col in candidate_year_cols:
+        if col in df.columns:
+            vals = pd.to_numeric(df[col], errors="coerce").dropna().astype(int)
+            years = sorted(int(y) for y in vals.unique())
+            if years:
+                return years
+
+    return []
+
+
+def _filter_management_df_to_year(df: pd.DataFrame, dataset: str, year: int) -> pd.DataFrame:
+    """
+    Filter a cleaned management dataframe to a requested year.
+
+    For irrigation, derive year from start_timestamp to stay consistent with
+    plot_helpers.load_irrigation_events().
+
+    For fertilizing, try application_date first, then other common date/year fields.
+    """
+    out = df.copy()
+
+    if dataset == "irrigation":
+        if "start_timestamp" not in out.columns:
+            raise HTTPException(
+                status_code=500,
+                detail="Irrigation CSV missing required column: start_timestamp",
+            )
+
+        start_ts = pd.to_datetime(out["start_timestamp"], errors="coerce")
+        out = out.assign(_year=start_ts.dt.year)
+        out = out[out["_year"] == year].copy()
+        out.drop(columns=["_year"], inplace=True, errors="ignore")
+        return out
+
+    # fertilizing
+    date_candidates = [
+        "application_date",
+        "date",
+        "timestamp",
+        "start_timestamp",
+    ]
+    for col in date_candidates:
+        if col in out.columns:
+            ts = pd.to_datetime(out[col], errors="coerce")
+            out = out.assign(_year=ts.dt.year)
+            out = out[out["_year"] == year].copy()
+            out.drop(columns=["_year"], inplace=True, errors="ignore")
+            return out
+
+    for col in ("year", "Year"):
+        if col in out.columns:
+            yrs = pd.to_numeric(out[col], errors="coerce")
+            return out[yrs == year].copy()
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"Could not infer year for management dataset '{dataset}' from cleaned CSV columns",
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -353,18 +458,43 @@ def bulk_download_manifest() -> dict[str, Any]:
                     }
                 )
 
+    # Canonical cleaned management CSVs
+    for dataset_key, (csv_path, label_base, _) in MANAGEMENT_DATASETS.items():
+        if not csv_path.exists():
+            continue
+
+        try:
+            df = pd.read_csv(csv_path)
+            years_in_df = _extract_years_from_dataframe(df)
+        except Exception:
+            years_in_df = []
+
+        for year in years_in_df:
+            items.append(
+                {
+                    "key": f"{dataset_key}_{year}",
+                    "dataset": dataset_key,
+                    "year": year,
+                    "resolution": None,
+                    "label": f"{label_base} ({year})",
+                    "file_path": str(csv_path),
+                }
+            )
+
+    # Workbook-backed biomass only
     if IRRIGATION_WORKBOOK_PATH.exists():
         try:
             xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
-            sheets = [str(s).strip() for s in xls.sheet_names]
+            sheets = [str(s) for s in xls.sheet_names]
         except Exception:
             sheets = []
 
         for base, token in WORKBOOK_TOKENS.items():
             for s in sheets:
-                if token in s.upper():
+                s_match = s.strip().upper()
+                if token in s_match:
                     year = None
-                    for part in s.replace("-", " ").replace("_", " ").split():
+                    for part in s_match.replace("-", " ").replace("_", " ").split():
                         if len(part) == 4 and part.isdigit():
                             year = int(part)
                             break
@@ -522,7 +652,40 @@ async def bulk_download(payload: dict[str, Any]):
 
         files.append(("README.txt", readme.encode("utf-8")))
 
-    # Workbook-based
+    # Canonical cleaned management CSVs
+    elif dataset in MANAGEMENT_DATASETS:
+        year = _safe_int(parts[1]) if len(parts) >= 2 else None
+        if year is None:
+            raise HTTPException(status_code=400, detail=f"Invalid year in key: {key}")
+
+        csv_path, dataset_label, filename_pattern = MANAGEMENT_DATASETS[dataset]
+
+        if not csv_path.exists():
+            raise HTTPException(status_code=404, detail=f"Management CSV not found: {csv_path}")
+
+        try:
+            management_df = pd.read_csv(csv_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read management CSV {csv_path}: {e}")
+
+        filtered_df = _filter_management_df_to_year(management_df, dataset, year)
+
+        if filtered_df.empty:
+            raise HTTPException(status_code=404, detail=f"No {dataset} records found for year {year}")
+
+        csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
+        files.append((filename_pattern.format(year=year), csv_bytes))
+
+        readme = _readme_text(
+            dataset_label,
+            year,
+            None,
+            notes=f"Source cleaned management CSV: {csv_path}",
+            df=filtered_df,
+        )
+        files.append(("README.txt", readme.encode("utf-8")))
+
+    # Workbook-based biomass only
     elif dataset in WORKBOOK_TOKENS:
         year = _safe_int(parts[1]) if len(parts) >= 2 else None
         if year is None:
@@ -530,7 +693,7 @@ async def bulk_download(payload: dict[str, Any]):
 
         try:
             xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
-            sheets = [str(s).strip() for s in xls.sheet_names]
+            sheets = [str(s) for s in xls.sheet_names]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Cannot read workbook sheets: {e}")
 
@@ -538,8 +701,8 @@ async def bulk_download(payload: dict[str, Any]):
 
         sheet = None
         for s in sheets:
-            s_up = s.upper()
-            if token in s_up and str(year) in s_up:
+            s_match = s.strip().upper()
+            if token in s_match and str(year) in s_match:
                 sheet = s
                 break
 
