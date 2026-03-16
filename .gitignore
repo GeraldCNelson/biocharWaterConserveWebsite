@@ -92,6 +92,7 @@ package-lock.json
 !biochar_app/data-processed/
 !biochar_app/data-processed/lab-tests/
 !biochar_app/data-processed/lab-tests/**
+!biochar_app/data-processed/management/
 
 # --- Authoritative biomass field CSV ---
 !biochar_app/data-processed/lab-tests/biomass-field/
