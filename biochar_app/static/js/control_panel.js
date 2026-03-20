@@ -1,11 +1,101 @@
 // control_panel.js – Shared logic for control panel setup (Main & Summary)
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
-import { updateDepthLabels } from "./ui_controls.js";
+import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js";
 import { updateSummaryStatistics } from "./tab_summary.js";
 import { renderMainPlots } from "./plots.js";
 
 let dateDebounceTimer;
+
+/**
+ * Enable/disable the main-tab fixed selector based on trace grouping.
+ *
+ * If traces are grouped by depth, logger location is the fixed selector,
+ * so the depth dropdown is not used and should be disabled.
+ *
+ * If traces are grouped by logger location, depth is the fixed selector,
+ * so the logger-location dropdown is not used and should be disabled.
+ */
+function updateMainTraceControlState(traceOption) {
+  const depthEl = document.getElementById("main-depth");
+  const loggerLocEl = document.getElementById("main-loggerLocation");
+
+  if (!depthEl || !loggerLocEl) return;
+
+  const mode = String(traceOption || "").trim();
+
+  if (mode === "depth") {
+    depthEl.disabled = true;
+    depthEl.classList.add("disabled");
+
+    loggerLocEl.disabled = false;
+    loggerLocEl.classList.remove("disabled");
+    return;
+  }
+
+  if (mode === "loggerLocation") {
+    depthEl.disabled = false;
+    depthEl.classList.remove("disabled");
+
+    loggerLocEl.disabled = true;
+    loggerLocEl.classList.add("disabled");
+    return;
+  }
+
+  // Fallback: if options are not populated yet, leave both enabled.
+  depthEl.disabled = false;
+  depthEl.classList.remove("disabled");
+
+  loggerLocEl.disabled = false;
+  loggerLocEl.classList.remove("disabled");
+}
+
+/**
+ * Clear stale plot output when an invalid date/filter cancels an update.
+ */
+function clearMainPlots() {
+  const p1 = document.getElementById("plot-1");
+  const p2 = document.getElementById("plot-2");
+
+  try {
+    if (window.Plotly) {
+      if (p1) window.Plotly.purge(p1);
+      if (p2) window.Plotly.purge(p2);
+    }
+  } catch (err) {
+    console.warn("⚠️ Plotly purge failed while clearing plots:", err);
+  }
+
+  if (p1) p1.innerHTML = "";
+  if (p2) p2.innerHTML = "";
+
+  const statusEl = document.getElementById("plots-status");
+  if (statusEl) {
+    statusEl.textContent = "Please correct the date range and try again.";
+    statusEl.style.display = "";
+  }
+}
+
+/**
+ * Wire the main trace-option dropdown so the inactive fixed selector
+ * is disabled immediately and whenever the grouping changes.
+ */
+export function initializeTraceOptionControls() {
+  const traceEl = document.getElementById("main-traceOption");
+  if (!traceEl) {
+    console.warn("⚠️ #main-traceOption not found; trace-option control state not wired.");
+    return;
+  }
+
+  traceEl.addEventListener("change", (e) => {
+    const value = e?.target?.value || "";
+    console.log("🔀 main trace option changed:", value);
+    updateMainTraceControlState(value);
+  });
+
+  // Initialize immediately using current value
+  updateMainTraceControlState(traceEl.value);
+}
 
 /**
  * Wire the "Update Plots" and "Update Summary" buttons.
@@ -17,6 +107,20 @@ export function initializeUpdateButtons() {
     .getElementById("update-plots")
     ?.addEventListener("click", async () => {
       console.log("🔄 Update plots button clicked");
+
+      const filters = getSelectedFilters("main");
+      if (!filters) {
+        console.warn("⚠️ Update plots cancelled due to invalid filters.");
+        clearMainPlots();
+        return;
+      }
+
+      const statusEl = document.getElementById("plots-status");
+      if (statusEl) {
+        statusEl.textContent = "";
+        statusEl.style.display = "none";
+      }
+
       await renderMainPlots();
     });
 
@@ -41,7 +145,7 @@ export function initializeUpdateButtons() {
 export function setupUnitToggleHandlers(initialUnitSystem) {
   console.log("🔄 Setting up unit toggle handlers");
 
-  const mainToggle    = document.getElementById("units-toggle_main");
+  const mainToggle = document.getElementById("units-toggle_main");
   const summaryToggle = document.getElementById("units-toggle_summary");
 
   /**
@@ -64,9 +168,9 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     const src = event?.target;
     if (!src) return;
 
-    const isMetric   = !!src.checked;
-    const sourceId   = src.id || "(unknown-toggle)";
-    const newSystem  = isMetric ? "metric" : "us";
+    const isMetric = !!src.checked;
+    const sourceId = src.id || "(unknown-toggle)";
+    const newSystem = isMetric ? "metric" : "us";
 
     // 1) Update global unit system
     window.unitSystem = newSystem;
@@ -79,7 +183,6 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     mirrorToggles(isMetric);
 
     // 3) Update depth dropdown labels on BOTH tabs
-    //    ui_controls.js uses the mapping set earlier from the backend
     updateDepthLabels(window.unitSystem, window.depthMapping || {});
 
     // 4) Re-render plots and summary in the new unit system

@@ -247,13 +247,94 @@ export function getSelectedFilters(tab) {
     return acc;
   }, {});
 
+  if (tab === "main") {
+    const startEl = document.getElementById("main-startDate");
+    const endEl = document.getElementById("main-endDate");
+
+    const start = (filters.startDate || "").trim();
+    const end = (filters.endDate || "").trim();
+
+    function parseStrictDate(value) {
+      if (!value) return null;
+
+      // Native <input type="date"> format: YYYY-MM-DD
+      let m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        const year = parseInt(m[1], 10);
+        const month = parseInt(m[2], 10);
+        const day = parseInt(m[3], 10);
+
+        if (month < 1 || month > 12 || day < 1) return null;
+
+        const daysInMonth = new Date(year, month, 0).getDate();
+        if (day > daysInMonth) return null;
+
+        return new Date(year, month - 1, day);
+      }
+
+      // Fallback for older text inputs: MM/DD/YYYY
+      m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const month = parseInt(m[1], 10);
+        const day = parseInt(m[2], 10);
+        const year = parseInt(m[3], 10);
+
+        if (month < 1 || month > 12 || day < 1) return null;
+
+        const daysInMonth = new Date(year, month, 0).getDate();
+        if (day > daysInMonth) return null;
+
+        return new Date(year, month - 1, day);
+      }
+
+      return null;
+    }
+
+    console.log("📅 main date values from getSelectedFilters:", {
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    });
+
+    const startDateObj = parseStrictDate(start);
+    const endDateObj = parseStrictDate(end);
+
+    const startMissingOrInvalid = !start || !startDateObj;
+    const endMissingOrInvalid = !end || !endDateObj;
+
+    if (startMissingOrInvalid || endMissingOrInvalid) {
+      let whichDate = "date range";
+      if (startMissingOrInvalid && endMissingOrInvalid) {
+        whichDate = "start and end dates";
+      } else if (startMissingOrInvalid) {
+        whichDate = "start date";
+      } else if (endMissingOrInvalid) {
+        whichDate = "end date";
+      }
+
+      alert(
+        `The ${whichDate} is invalid.\n\n` +
+        `Please revise the ${whichDate} and click Update Plots to see the new plots.`
+      );
+
+      return null;
+    }
+
+    if (startDateObj > endDateObj) {
+      alert(
+        "The start date is after the end date.\n\n" +
+        "Please revise the date range and click Update Plots to see the new plots."
+      );
+      return null;
+    }
+  }
+
   if (tab === "main" && filters.granularity === "gseason") {
     const periods = Array.from(document.querySelectorAll(".period-row")).map(
       (row) => {
-        const code  = row.dataset.code;
+        const code = row.dataset.code;
         const label = row.querySelector(".period-label")?.value;
         const start = row.querySelector(".period-start")?.value;
-        const end   = row.querySelector(".period-end")?.value;
+        const end = row.querySelector(".period-end")?.value;
         return { code, label, start, end };
       }
     );
@@ -327,18 +408,47 @@ export function initializeMainDatepickers() {
 
   startEl.type = "date";
   endEl.type   = "date";
+  attachNativeDateInputGuards(startEl, endEl);
 
-  // Prefer DATE_RANGES for initial values
+  function toIsoDate(value) {
+    if (!value) return "";
+
+    const s = String(value).trim();
+
+    // YYYY-MM-DD
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return s;
+
+    // MM/DD/YYYY
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      const month = m[1].padStart(2, "0");
+      const day = m[2].padStart(2, "0");
+      const year = m[3];
+      return `${year}-${month}-${day}`;
+    }
+
+    console.warn("⚠️ Could not parse date:", value);
+    return "";
+  }
+
   const defaults = window.dropdownOptions.defaults;
   const year = String(defaults.year);
   const granularity = defaults.granularity;
 
-  // This sets start/end to DATE_RANGES if present, else year-wide
+  // Always set from DATE_RANGES first
   applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
 
-  // If you really want to fall back to backend defaults when no dateRanges exist:
-  if (!startEl.value) startEl.value = defaults.startDate;
-  if (!endEl.value)   endEl.value   = defaults.endDate;
+  // ALWAYS normalize (important)
+  startEl.value = toIsoDate(startEl.value) || `${year}-01-01`;
+  endEl.value   = toIsoDate(endEl.value)   || `${year}-12-31`;
+
+  // Only override if backend gives valid ISO AFTER conversion
+  const startFallback = toIsoDate(defaults.startDate);
+  const endFallback   = toIsoDate(defaults.endDate);
+
+  if (startFallback) startEl.value = startFallback;
+  if (endFallback)   endEl.value   = endFallback;
 
   window.mainDatepickers = { start: startEl, end: endEl };
 }
@@ -348,4 +458,23 @@ export function initializeMainDatepickers() {
  */
 export function handleTraceOptionChange(event) {
   // Implement as needed if you change trace behavior in the future.
+}
+
+function attachNativeDateInputGuards(startEl, endEl) {
+  function clearIfInvalid(el) {
+    el.addEventListener("blur", () => {
+      if (!el.value) {
+        el.value = "";
+      }
+    });
+
+    el.addEventListener("change", () => {
+      if (!el.value) {
+        el.value = "";
+      }
+    });
+  }
+
+  clearIfInvalid(startEl);
+  clearIfInvalid(endEl);
 }

@@ -17,9 +17,8 @@ import {
 } from "./downloads.js";
 
 // 3) Debugging & logging
-import { renderMainPlots, waitForAllDropdowns  } from "./plots.js";
-
-import { debugLog, debugGroup  } from "./debug_utils.js";
+import { renderMainPlots, waitForAllDropdowns } from "./plots.js";
+import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader
 import { loadMarkdownContent } from "./markdown.js";
@@ -29,6 +28,7 @@ import {
   initializeUpdateButtons,
   setupUnitToggleHandlers,
   getAllDropdownIds,
+  initializeTraceOptionControls,
 } from "./control_panel.js";
 
 import {
@@ -36,11 +36,9 @@ import {
   populateAllDropdowns,
   initializeMainDatepickers,
   updateDepthLabels,
-  // ✅ date-range helpers:
   applyDateRangeFromDefaults,
   wireMainDateRangeListeners,
 } from "./ui_controls.js";
-
 
 // 7) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";
@@ -59,19 +57,32 @@ window.downloadSummaryData = downloadSummaryData;
 // Tab wiring helper
 // ----------------------------------------------------
 function wireTabRender({ href, tabId, paneId, renderFn, label }) {
-  // Prefer explicit tabId if provided; fallback to href selector
+  // Prefer explicit tabId if provided.
+  // Fallback supports both old anchor tabs (href="#pane")
+  // and new button tabs (data-bs-target="#pane").
   const tabLink =
     (tabId ? document.getElementById(tabId) : null) ||
-    (href ? document.querySelector(`a[href="${href}"]`) : null);
+    (href
+      ? document.querySelector(`[data-bs-target="${href}"], a[href="${href}"]`)
+      : null);
 
   if (!tabLink) {
-    console.warn(`[wireTabRender] Tab link not found`, { href, tabId, paneId, label });
+    console.warn("[wireTabRender] Tab control not found", {
+      href,
+      tabId,
+      paneId,
+      label,
+    });
     return;
   }
 
   if (typeof renderFn !== "function") {
-    console.error(`[wireTabRender] renderFn is not a function`, {
-      href, tabId, paneId, label, renderFnType: typeof renderFn,
+    console.error("[wireTabRender] renderFn is not a function", {
+      href,
+      tabId,
+      paneId,
+      label,
+      renderFnType: typeof renderFn,
     });
     return;
   }
@@ -83,7 +94,9 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
 
   // Render immediately if already active
   if (tabLink.classList.contains("active")) {
-    console.debug(`[wireTabRender] ${label || href || tabId} already active — rendering`);
+    console.debug(
+      `[wireTabRender] ${label || href || tabId} already active — rendering`
+    );
     renderFn();
   }
 }
@@ -112,7 +125,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Populate dropdowns and wire up control-panel buttons
     populateAllDropdowns(options);
-    setupUnitToggleHandlers(options);
+    setupUnitToggleHandlers(window.unitSystem);
     initializeUpdateButtons();
 
     // Wait until all dropdowns exist & are initialized
@@ -130,6 +143,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const mainEl = document.getElementById(`main-${key}`);
       const summaryEl = document.getElementById(`summary-${key}`);
+
       if (mainEl) mainEl.value = value;
       if (summaryEl) summaryEl.value = value;
     }
@@ -142,18 +156,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     const yearEl = document.getElementById("main-year");
     const granEl = document.getElementById("main-granularity");
 
-    const selectedYear = yearEl ? yearEl.value : String(defaults.year);
+    const selectedYear = yearEl ? yearEl.value : String(defaults.year || "");
     const selectedGran = granEl ? granEl.value : defaults.granularity;
 
-    applyDateRangeFromDefaults(selectedYear, selectedGran, window.dateRanges || {});
+    applyDateRangeFromDefaults(
+      selectedYear,
+      selectedGran,
+      window.dateRanges || {}
+    );
     wireMainDateRangeListeners();
 
     // Make sure the depth labels match the current unit system
     updateDepthLabels(window.unitSystem);
 
+    // Wire the trace-option dependent control enable/disable behavior
+    initializeTraceOptionControls();
+
     // Debug summary of defaults & depth mapping
     debugGroup("🎛️ Dropdown defaults & mappings", () => {
       console.table(defaults);
+
       if (window.depthMapping) {
         console.table(
           Object.entries(window.depthMapping).map(([depth, map]) => ({
@@ -163,6 +185,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           }))
         );
       }
+
       if (window.dateRanges) {
         console.log("🗓️ window.dateRanges keys:", Object.keys(window.dateRanges));
       }
@@ -173,6 +196,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ----------------------------------------------------
     wireTabRender({
       href: "#main",
+      tabId: "main-tab",
       paneId: "main",
       renderFn: renderMainPlots,
       label: "Interactive Plots",
@@ -180,6 +204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     wireTabRender({
       href: "#nir",
+      tabId: "nir-tab",
       paneId: "nir",
       renderFn: renderNirTables,
       label: "Pasture Quality Metrics (NIR)",
@@ -187,6 +212,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     wireTabRender({
       href: "#soilchem",
+      tabId: "soilchem-tab",
       paneId: "soilchem",
       renderFn: renderSoilChemTable,
       label: "Soil Chemistry",
@@ -194,6 +220,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     wireTabRender({
       href: "#soilbio",
+      tabId: "soilbio-tab",
       paneId: "soilbio",
       renderFn: renderSoilBioTable,
       label: "Soil Biological Health",
@@ -201,6 +228,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     wireTabRender({
       href: "#biomass-field",
+      tabId: "biomass-field-tab",
       paneId: "biomass-field",
       renderFn: renderBiomassFieldTables,
       label: "Biomass (Field Samples)",
@@ -210,6 +238,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load markdown snippets (from backend mapping)
     // ----------------------------------------------------
     debugLog("📖 Loading markdown mapping from backend…");
+
     let markdownFiles = {};
     try {
       markdownFiles = await fetchMarkdownFiles();

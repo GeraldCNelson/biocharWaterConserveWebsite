@@ -197,28 +197,91 @@ html {
 .nav-tabs .nav-link {
     font-family: "Source Serif Pro", serif;
 }
+
 .nav-tabs {
-  margin-bottom: 0.35rem;  /* space between tabs and content below */
-  row-gap: 0.15rem;        /* space between wrapped rows */
-  column-gap: 0.25rem !important;     /* space between tabs horizontally */
+    margin-bottom: 0.35rem;  /* space between tabs and content below */
+    row-gap: 0.15rem;        /* space between wrapped rows */
+    column-gap: 0.25rem !important;     /* space between tabs horizontally */
+    flex-wrap: wrap;
 }
 
 /* Smaller/tighter tab pills */
 .nav-tabs .nav-link {
-  font-family: "Source Serif Pro", serif;
-  font-size: 0.98rem !important;
-  padding: 0.18rem 0.25rem;  /* this is the big one for vertical tightness */
-  line-height: 1.15 !important;
+    font-family: "Source Serif Pro", serif;
+    font-size: 0.98rem !important;
+    padding: 0.18rem 0.25rem;  /* this is the big one for vertical tightness */
+    line-height: 1.15 !important;
 }
 
 .nav-tabs .nav-link.active {
     font-weight: 600;
 }
 
-/* When tabs wrap to multiple rows */
-.nav-tabs {
-    flex-wrap: wrap;
+/* Dropdown parent tab-buttons:
+   match the other nav tabs, but do not behave like solid blue buttons */
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle,
+.navbar .nav-link.dropdown-toggle {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #0d6efd !important;      /* blue like other tabs */
+    font-weight: 600;               /* bolded */
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    padding: 0.28rem 0.45rem !important;   /* slightly larger click area */
+    font-size: 1.02rem !important;         /* a touch larger */
+    line-height: 1.2 !important;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
 }
+
+/* Prevent long-press / text selection lookup on dropdown-parent text */
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle *,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle *,
+.navbar .nav-link.dropdown-toggle * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* Keep the same look on hover/focus */
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle:hover,
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle:focus,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle:hover,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle:focus,
+.navbar .nav-link.dropdown-toggle:hover,
+.navbar .nav-link.dropdown-toggle:focus {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #0a58ca !important;   /* slightly darker blue on hover */
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Preserve active look if parent is marked active */
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle.active,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle.active {
+    background: transparent !important;
+    color: #0d6efd !important;
+    font-weight: 600;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Make caret a bit larger too */
+.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle::after,
+.navbar .nav-link.dropdown-toggle::after {
+    font-size: 1.05em;
+    margin-left: 0.35em;
+}
+
 /* =============================================================================
    MARKDOWN (tight vertical rhythm + consistent layout)
    ============================================================================= */
@@ -400,13 +463,7 @@ html {
     height: auto;
 }
 
-.tab-pane {
-    display: none;
-}
 
-.tab-pane.active {
-    display: block;
-}
 
 /* =============================================================================
    Control Panels / Plots
@@ -482,16 +539,19 @@ html {
 }
 
 #plot-1 {
-  margin-bottom: 10px;
+    margin-bottom: 10px;
 }
+
 #plot-2 {
     width: 100%;
     height: 450px;
 }
 
-/* Buttons */
+/* Buttons: scope these to app controls so navbar dropdown buttons are unaffected */
 input[type="submit"],
-button {
+.control-panel button,
+.summary-panel button,
+.plot-panel button {
     padding: 10px 15px;
     font-size: 14px;
     font-weight: bold;
@@ -503,7 +563,9 @@ button {
 }
 
 input[type="submit"]:hover,
-button:hover {
+.control-panel button:hover,
+.summary-panel button:hover,
+.plot-panel button:hover {
     background-color: #0056b3;
 }
 
@@ -685,4 +747,18 @@ button:hover {
 #soilchem .nir-content .mb-4,
 #biomass-field .nir-content .mb-4 {
     margin-bottom: 0.9rem !important;
+}
+/* Prevent Safari long-press link preview / callout on all main nav items */
+.nav-tabs .nav-link,
+.nav-tabs .nav-link *,
+.nav-tabs .dropdown-item,
+.nav-tabs .dropdown-item *,
+.navbar .nav-link,
+.navbar .nav-link *,
+.navbar .dropdown-item,
+.navbar .dropdown-item * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
 }

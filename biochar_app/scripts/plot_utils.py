@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Literal, Sequence, cast
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Sequence, cast
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -36,7 +36,7 @@ from biochar_app.scripts.type_utils import (  # noqa: E402
     UnitSystem,
 )
 
-from biochar_app.scripts.type_utils import df_agg, gb_agg, NAN, POS_INF, NEG_INF
+from biochar_app.scripts.type_utils import NAN, POS_INF, NEG_INF
 
 if TYPE_CHECKING:
     from biochar_app.scripts.routes import PeriodSpec  # noqa: F401
@@ -64,11 +64,6 @@ from biochar_app.scripts.plot_helpers import (  # noqa: E402
     load_irrigation_events,
     common_legend_config,
 )
-
-# ---------------------------------------------------------------------------
-# Types / constants
-# ---------------------------------------------------------------------------
-
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -123,6 +118,110 @@ def _x_time_strings(df: pd.DataFrame) -> List[str]:
 def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
     raw = json.dumps(fig, cls=PlotlyJSONEncoder)
     return cast(Dict[str, Any], json.loads(raw))
+
+
+def _compact_unit_phrase(label: str) -> str:
+    """
+    Compact common phrases used in legend labels / titles.
+    Example:
+      '6 inches' -> '6 in'
+      '15 centimeters' -> '15 cm'
+    """
+    s = str(label).strip()
+    replacements = {
+        " inches": " in",
+        " inch": " in",
+        " centimeters": " cm",
+        " centimeter": " cm",
+    }
+    for old, new in replacements.items():
+        s = s.replace(old, new)
+    return s
+
+
+def _depth_display_label(depth_key: str | int, usys: UnitSystem, *, compact: bool = False) -> str:
+    dkey = str(depth_key)
+    label = sensor_depth_mapping.get(dkey, {}).get(
+        usys,
+        sensor_depth_mapping.get(dkey, {}).get("us", dkey),
+    )
+    return _compact_unit_phrase(label) if compact else str(label)
+
+
+def _logger_display_label(logger_location: str) -> str:
+    return str(logger_location_mapping.get(logger_location, logger_location))
+
+
+def _normalize_trace_grouping(trace_option: str) -> str:
+    mode = str(trace_option or "").strip().lower()
+    if mode in {"depth", "depths"}:
+        return "depth"
+    if mode in {"loggerlocation", "logger_location", "logger-location"}:
+        return "loggerLocation"
+    return mode
+
+
+def build_raw_plot_title(
+    *,
+    granularity: str,
+    human_var: str,
+    strip: str,
+    year: int,
+    trace_option: str,
+    logger_location: str,
+    depth: str | int,
+    unit_system: str,
+    is_gseason: bool = False,
+) -> str:
+    """
+    Raw/top-plot title:
+      - grouped by depth  -> logger location is fixed and shown in title
+      - grouped by logger -> depth is fixed and shown in title
+    """
+    usys: UnitSystem = coerce_unit_system(unit_system)
+    grouping = _normalize_trace_grouping(trace_option)
+
+    if grouping == "depth":
+        fixed_label = f"{_logger_display_label(logger_location)} Logger"
+    else:
+        fixed_label = _depth_display_label(depth, usys, compact=True)
+
+    if is_gseason:
+        return f"Growing-season Data Plot for {human_var} in Strip {strip}, {year} ({fixed_label})"
+
+    return f"{granularity.capitalize()} {human_var} in Strip {strip}, {year} ({fixed_label})"
+
+
+def build_ratio_plot_title(
+    *,
+    granularity: str,
+    variable: str,
+    strip: str,
+    logger_location: str,
+    depth: str | int,
+    unit_system: str,
+    year: int,
+    is_gseason: bool = False,
+    no_data: bool = False,
+) -> str:
+    """
+    Ratio/bottom-plot title reflects the selected logger location + depth.
+    It should NOT include a single strip name, because the ratio plot compares
+    strip pairs (for example S1/S2 and S3/S4).
+    Example:
+      Daily Ratio Plot for VWC in 2025 (Top, 6 in)
+    """
+    usys: UnitSystem = coerce_unit_system(unit_system)
+    logger_label = f"{_logger_display_label(logger_location)} Logger"
+    depth_label = _depth_display_label(depth, usys, compact=True)
+
+    prefix = "Growing-season Ratio Plot" if is_gseason else f"{granularity.capitalize()} Ratio Plot"
+    title_text = f"{prefix} for {variable} in {year} ({logger_label}, {depth_label})"
+
+    if no_data:
+        title_text += " — no ratio data available for selected filters"
+
+    return title_text
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +427,6 @@ def configure_primary_yaxis(
 
     usys: UnitSystem = coerce_unit_system(unit_system)
 
-    # Use shim for stable numeric conversion + finite min/max (avoids pandas union typing issues)
     block = df_cols(df, y_cols)
     gmin, gmax = finite_min_max(block)
     if gmin is None or gmax is None:
@@ -343,6 +441,7 @@ def configure_primary_yaxis(
 # ---------------------------------------------------------------------------
 # RAW (time series)
 # ---------------------------------------------------------------------------
+
 
 def make_raw_figure(
     *,
@@ -359,8 +458,9 @@ def make_raw_figure(
     trace_option: str,
 ) -> Dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
+    grouping = _normalize_trace_grouping(trace_option)
 
-    if trace_option not in TRACE_CHOICES:
+    if grouping not in {"depth", "loggerLocation"}:
         bad_request(f"Unknown trace_option {trace_option!r}; must be one of {TRACE_CHOICES}")
 
     display_variable = variable
@@ -371,18 +471,13 @@ def make_raw_figure(
         raise HTTPException(status_code=400, detail="No timestamp column available for plotting.")
 
     human_var = get_unit_aware_label(display_variable, usys)
-    human_logger_loc = logger_location_mapping.get(logger_location, logger_location)
 
     fig = go.Figure()
     y_cols: List[str] = []
     use_secondary_y = False
 
     def _compact_legend_label(label: str) -> str:
-        """
-        Make legend labels more compact without hard-coding specific depths.
-        """
         s = str(label).strip()
-
         replacements = {
             " inches": " in",
             " inch": " in",
@@ -394,10 +489,8 @@ def make_raw_figure(
             "Precipitation": "Precip",
             "Irrigation Volume": "Irrig",
         }
-
         for old, new in replacements.items():
             s = s.replace(old, new)
-
         return s
 
     def swc_from_vwc(series: pd.Series, depth_key: str) -> pd.Series:
@@ -414,7 +507,7 @@ def make_raw_figure(
 
     x_vals = _x_time_strings(df_plot)
 
-    if trace_option == TRACE_CHOICES[0]:
+    if grouping == "depth":
         for d, names in sensor_depth_mapping.items():
             d_str = str(d)
             base_col = f"{source_variable}_{d_str}_raw_{strip}_{logger_location}"
@@ -509,9 +602,16 @@ def make_raw_figure(
 
     add_irrigation_shapes(fig, strip, year, usys)
 
-    title_text = (
-        f"{granularity.capitalize()} {human_var} "
-        f"in Strip {strip}, {year} ({human_logger_loc} Logger)"
+    title_text = build_raw_plot_title(
+        granularity=granularity,
+        human_var=human_var,
+        strip=strip,
+        year=year,
+        trace_option=grouping,
+        logger_location=logger_location,
+        depth=depth,
+        unit_system=usys,
+        is_gseason=False,
     )
 
     layout_kwargs: Dict[str, Any] = dict(
@@ -527,12 +627,7 @@ def make_raw_figure(
 
     if use_secondary_y:
         layout_kwargs["yaxis2"] = fig.layout.yaxis2
-
-        # Smaller right margin to reduce wasted whitespace.
-        # Metric needs a touch more room because the right-axis title/ticks are wider.
         layout_kwargs["margin"]["r"] = 105 if usys == "us" else 115
-
-        # Let common_legend_config() own legend placement.
         layout_kwargs["legend"] = common_legend_config("Legend")
 
     fig.update_layout(**layout_kwargs)
@@ -616,11 +711,18 @@ def make_ratio_figure(
                 line_kwargs["color"] = pair_color
             fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, line=line_kwargs))
 
-    human_logger_loc = logger_location_mapping.get(logger_location, logger_location)
-    title = (
-        f"{granularity.capitalize()} Ratio Plot for {variable} in {year} "
-        f"(Strip {strip}, {human_logger_loc} Logger)"
+    title = build_ratio_plot_title(
+        granularity=granularity,
+        variable=variable,
+        strip=strip,
+        logger_location=logger_location,
+        depth=depth,
+        unit_system=usys,
+        year=year,
+        is_gseason=is_gs,
+        no_data=False,
     )
+
     xcfg: Dict[str, Any] = (
         {"title": "Season", "type": "category"}
         if is_gs
@@ -742,7 +844,6 @@ def make_temperature_delta_figure(
         line=dict(color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"), width=1, dash="dash"),
     )
 
-    # Avoid numpy typing issues: compute max abs via pandas safely.
     arr12 = pd.Series(d12_vals, dtype="float64")
     arr34 = pd.Series(d34_vals, dtype="float64")
     max12 = arr12.abs().max(skipna=True)
@@ -792,6 +893,7 @@ def make_raw_gseason_figure(
     trace_option: str,
 ) -> Dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
+    grouping = _normalize_trace_grouping(trace_option)
 
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
@@ -848,7 +950,7 @@ def make_raw_gseason_figure(
         vol_suffix = "gal" if usys == "us" else "L"
         base = f"SWC_vol_{vol_suffix}"
 
-        if trace_option == "depths":
+        if grouping == "depth":
             for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
                 d_str = str(d)
                 col = f"{base}_{strip}_{logger_location}_{d_str}"
@@ -887,7 +989,7 @@ def make_raw_gseason_figure(
                 )
 
     else:
-        if trace_option == "depths":
+        if grouping == "depth":
             for idx, (d, depth_map) in enumerate(sensor_depth_mapping.items(), start=1):
                 d_str = str(d)
                 col = f"{variable}_{d_str}_raw_{strip}_{logger_location}"
@@ -925,7 +1027,6 @@ def make_raw_gseason_figure(
                     )
                 )
 
-    # Irrigation overlays (VWC-only)
     if variable == "VWC" and norm_periods:
         add_irrigation_shapes(
             fig=fig,
@@ -955,16 +1056,23 @@ def make_raw_gseason_figure(
         pmax_val = float(pmax) if pmax is not None else 0.0
         y2_cfg["range"] = [0.0, (pmax_val * 1.15) if pmax_val > 0 else 1.0]
 
-    title_text = (
-        f"Growing-season Data Plot for {human_var} in Strip {strip}, {year} "
-        f"({logger_location_mapping.get(logger_location, logger_location)} Logger)"
+    title_text = build_raw_plot_title(
+        granularity="gseason",
+        human_var=human_var,
+        strip=strip,
+        year=year,
+        trace_option=grouping,
+        logger_location=logger_location,
+        depth=depth,
+        unit_system=usys,
+        is_gseason=True,
     )
 
     fig.update_layout(
         barmode="group",
         bargap=0.2,
         bargroupgap=0.1,
-        title={"text": title_text, "x": 0.5, "font": {"size": 18}},
+        title={"text": title_text, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis={
             "title": "Season",
             "type": "category",
@@ -1009,21 +1117,21 @@ def make_ratio_gseason_figure(
     fig = go.Figure()
 
     abbr = variable_name_abbrev.get(variable, variable)
-
     full_label = label_name_mapping[variable][usys]
     human_base = str(full_label).split(" (")[0]
 
-    logger_label = logger_location_mapping.get(logger_location, "")
-    logger_suffix = f" ({logger_label} Logger)" if logger_label else ""
-
     def _make_title(no_data: bool = False) -> str:
-        title_text = (
-            f"Growing-season Ratio Plot for {abbr} in {year}{logger_suffix} "
-            f"(Strip {strip}; Strip Ratios S1/S2 and S3/S4)"
+        return build_ratio_plot_title(
+            granularity="gseason",
+            variable=abbr,
+            strip=strip,
+            logger_location=logger_location,
+            depth=depth,
+            unit_system=usys,
+            year=year,
+            is_gseason=True,
+            no_data=no_data,
         )
-        if no_data:
-            title_text += " — no ratio data available for selected filters"
-        return title_text
 
     depth_str = str(depth)
 
@@ -1125,7 +1233,6 @@ def make_ratio_gseason_figure(
 
         return prepare_plot_for_json(fig)
 
-    # Default: use precomputed *_ratio_* columns
     y_cols = [
         c
         for c in df2.columns
