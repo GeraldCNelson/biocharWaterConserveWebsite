@@ -212,7 +212,7 @@ def build_ratio_plot_title(
       Daily Ratio Plot for VWC in 2025 (Top, 6 in)
     """
     usys: UnitSystem = coerce_unit_system(unit_system)
-    logger_label = f"{_logger_display_label(logger_location)} Logger"ssh biochar-test-fetch
+    logger_label = f"{_logger_display_label(logger_location)} Logger"
     depth_label = _depth_display_label(depth, usys, compact=True)
 
     prefix = "Growing-season Ratio Plot" if is_gseason else f"{granularity.capitalize()} Ratio Plot"
