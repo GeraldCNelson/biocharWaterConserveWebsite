@@ -50,35 +50,44 @@ from biochar_app.scripts.plot_utils import (
 from biochar_app.scripts.type_utils import UnitSystem
 
 from biochar_app.scripts import state
-from biochar_app.scripts.config import (
+from biochar_app.config.core import (
     DEFAULT_YEAR,
     DEFAULT_START_DATE,
     DEFAULT_END_DATE,
     DEFAULT_VARIABLE,
-    DEFAULT_DEPTH,
+    DEFAULT_SENSOR_DEPTH_CODE,
+    SENSOR_DEPTH_LABELS,
     DEFAULT_STRIP,
     DEFAULT_LOGGER_LOCATION,
     DEFAULT_GRANULARITY,
-    PARQUET_DIR,
     YEARS,
     PLOT_BASED_ON_OPTIONS,
     TRACE_OPTION_MAP,
     DEFAULT_GSEASON_PERIODS,
-    label_name_mapping,
-    sensor_depth_mapping,
+    DEFAULT_SENSOR_DEPTH_CODE,
+    SENSOR_DEPTH_CODES,
     logger_location_mapping,
     variable_name_mapping,
     granularity_name_mapping,
     strip_name_mapping,
 )
-from biochar_app.config.paths import (
+from biochar_app.config import (
     BIOCHAR_MASTER_WORKBOOK,
     WARD_MASTER_NIR_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_SOILCHEM_CSV,
+)
+
+from biochar_app.config.units import (
+    label_name_mapping,
+    DEFAULT_UNITS,
+)
+
+from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
     IRRIGATION_CSV,
     FERTILIZER_CSV,
+    PARQUET_DIR,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
@@ -198,10 +207,10 @@ def _select_trace_columns(
     source_var = "VWC" if variable == "SWC" else variable
     raw_expected: set[str] = set()
 
-    if trace_option == "depths":
+    if trace_option == "depth":
         raw_expected = {
             f"{source_var}_{d}_raw_{strip}_{logger_location}"
-            for d in sensor_depth_mapping
+            for d in SENSOR_DEPTH_CODES
         }
     else:
         raw_expected = {
@@ -484,7 +493,7 @@ async def get_defaults_and_options():
     years = YEARS
     strips = [{"value": k, "label": strip_name_mapping[k]} for k in strip_name_mapping]
     variables = [{"value": k, "label": variable_name_mapping[k]} for k in variable_name_mapping]
-    depths = [{"value": str(d), "label": sensor_depth_mapping[d]["us"]} for d in sensor_depth_mapping]
+    depths = [{"value": str(d), "label": SENSOR_DEPTH_LABELS[d]["us"]} for d in SENSOR_DEPTH_LABELS]
     logger_locations = [{"value": k, "label": logger_location_mapping[k]} for k in logger_location_mapping]
     granularities = [{"value": g, "label": granularity_name_mapping[g]} for g in granularity_name_mapping]
 
@@ -503,12 +512,12 @@ async def get_defaults_and_options():
             "startDate": start_date,
             "endDate": end_date,
             "variable": DEFAULT_VARIABLE,
-            "depth": str(DEFAULT_DEPTH),
+            "depth": DEFAULT_SENSOR_DEPTH_CODE,
             "strip": DEFAULT_STRIP,
             "loggerLocation": DEFAULT_LOGGER_LOCATION,
             "granularity": DEFAULT_GRANULARITY,
             "traceOption": PLOT_BASED_ON_OPTIONS[0]["value"],
-            "unitSystem": "us",
+            "unitSystem": DEFAULT_UNITS,
         },
         "years": years,
         "strips": strips,
@@ -517,7 +526,7 @@ async def get_defaults_and_options():
         "loggerLocations": logger_locations,
         "granularities": granularities,
         "traceOptions": PLOT_BASED_ON_OPTIONS,
-        "depthMapping": sensor_depth_mapping,
+        "depthMapping": SENSOR_DEPTH_LABELS,
         "gseasonPeriods": DEFAULT_GSEASON_PERIODS,
         "label_name_mapping": label_name_mapping,
         "dateRanges": state.DATE_RANGES,
@@ -600,8 +609,8 @@ async def api_plot_raw(req: PlotRequest):
 
     df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
-    if trace_option == "depths":
-        expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in sensor_depth_mapping]
+    if trace_option == "depth":
+        expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS]
     else:
         expected = [f"{source_var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
 
@@ -735,9 +744,9 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         return obj
 
     depth_label = (
-        sensor_depth_mapping.get(depth_code, {}).get(unit_system)
-        or sensor_depth_mapping.get(depth_code, {}).get("us")
-        or sensor_depth_mapping.get(depth_code, {}).get("metric")
+        SENSOR_DEPTH_LABELS.get(depth_code, {}).get(unit_system)
+        or SENSOR_DEPTH_LABELS.get(depth_code, {}).get("us")
+        or SENSOR_DEPTH_LABELS.get(depth_code, {}).get("metric")
         or f"Depth {depth_code}"
     )
 

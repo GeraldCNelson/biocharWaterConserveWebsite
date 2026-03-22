@@ -1,14 +1,86 @@
+
 """
 biochar_app.config
 
-Package-style configuration.
-
-This is the *new* home for config. For backward compatibility, you can keep a
-top-level config.py that does: `from biochar_app.config import *`
+Curated public config exports.
 """
 
-from .core import *      # noqa
-from .paths import *     # noqa
-from .units import *     # noqa
-from .pakbus import *    # noqa
-from .table_specs import *  # noqa
+from .core import (
+    DEFAULT_GRANULARITY,
+    DEFAULT_GSEASON_PERIODS,
+    DEFAULT_SENSOR_DEPTH_CODE,
+    DEFAULT_YEAR,
+    LOGGER_LOCATIONS,
+    PLOT_COLORS,
+    SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_LABELS,
+    SENSOR_DEPTH_VALUES,
+    STRIPS,
+    TITLE_FONT_SIZE,
+    TRACE_CHOICES,
+    YEARS,
+)
+
+from .pakbus import (
+    PAKBUS,
+)
+
+from .paths import (
+    BASE_DIR,
+    DATA_PROCESSED_DIR,
+    DATA_RAW_DIR,
+    IRRIGATION_CSV,
+    LAB_TESTS_RAW_DIR,
+    PARQUET_DIR,
+    PARQUET_SUMMARY_15MIN_DIR,
+    SOIL_CHEM_PROCESSED_DIR,
+    WARD_MASTER_NIR_CSV,
+    BIOCHAR_MASTER_WORKBOOK,
+    WARD_MASTER_SOILBIO_CSV,
+    WARD_MASTER_SOILCHEM_CSV,
+)
+
+from .thresholds import (
+    DEFAULT_BAD_VALUE_THRESHOLD,
+)
+
+from .units import (
+    METRIC_UNITS,
+    UNIT_CONVERSIONS,
+    US_UNITS,
+    DEFAULT_UNITS,
+)
+
+__all__ = [
+    "BASE_DIR",
+    "DEFAULT_GRANULARITY",
+    "DEFAULT_GSEASON_PERIODS",
+    "DEFAULT_SENSOR_DEPTH_CODE",
+    "DEFAULT_YEAR",
+    "DEFAULT_UNITS",
+    "LOGGER_LOCATIONS",
+    "SENSOR_DEPTH_CODES",
+    "SENSOR_DEPTH_LABELS",
+    "SENSOR_DEPTH_VALUES",
+    "STRIPS",
+    "YEARS",
+    "PAKBUS",
+    "DATA_PROCESSED_DIR",
+    "DATA_RAW_DIR",
+    "IRRIGATION_CSV",
+    "LAB_TESTS_RAW_DIR",
+    "PARQUET_DIR",
+    "PARQUET_SUMMARY_15MIN_DIR",
+    "PLOT_COLORS",
+    "SOIL_CHEM_PROCESSED_DIR",
+    "DEFAULT_BAD_VALUE_THRESHOLD",
+    "METRIC_UNITS",
+    "TITLE_FONT_SIZE",
+    "TRACE_CHOICES",
+    "UNIT_CONVERSIONS",
+    "US_UNITS",
+    "BIOCHAR_MASTER_WORKBOOK",
+    "WARD_MASTER_SOILBIO_CSV",
+    "WARD_MASTER_SOILCHEM_CSV",
+    "WARD_MASTER_NIR_CSV",
+]

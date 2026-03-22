@@ -5,16 +5,15 @@ import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js";
 import { updateSummaryStatistics } from "./tab_summary.js";
 import { renderMainPlots } from "./plots.js";
 
-let dateDebounceTimer;
-
 /**
- * Enable/disable the main-tab fixed selector based on trace grouping.
+ * Keep both top-plot controls available.
  *
- * If traces are grouped by depth, logger location is the fixed selector,
- * so the depth dropdown is not used and should be disabled.
+ * Current UI behavior:
+ * - "Top Plot grouped by" affects only how the TOP plot is grouped
+ * - Depth and Logger Location are both still meaningful selections overall
+ *   because the ratio plot uses both selections
  *
- * If traces are grouped by logger location, depth is the fixed selector,
- * so the logger-location dropdown is not used and should be disabled.
+ * So we no longer disable either control here.
  */
 function updateMainTraceControlState(traceOption) {
   const depthEl = document.getElementById("main-depth");
@@ -23,26 +22,8 @@ function updateMainTraceControlState(traceOption) {
   if (!depthEl || !loggerLocEl) return;
 
   const mode = String(traceOption || "").trim();
+  console.log("🔀 updateMainTraceControlState:", mode);
 
-  if (mode === "depth") {
-    depthEl.disabled = true;
-    depthEl.classList.add("disabled");
-
-    loggerLocEl.disabled = false;
-    loggerLocEl.classList.remove("disabled");
-    return;
-  }
-
-  if (mode === "loggerLocation") {
-    depthEl.disabled = false;
-    depthEl.classList.remove("disabled");
-
-    loggerLocEl.disabled = true;
-    loggerLocEl.classList.add("disabled");
-    return;
-  }
-
-  // Fallback: if options are not populated yet, leave both enabled.
   depthEl.disabled = false;
   depthEl.classList.remove("disabled");
 
@@ -77,8 +58,10 @@ function clearMainPlots() {
 }
 
 /**
- * Wire the main trace-option dropdown so the inactive fixed selector
- * is disabled immediately and whenever the grouping changes.
+ * Wire the main trace-option dropdown.
+ *
+ * We still react to changes so helper text / future logic can stay synced,
+ * but we no longer disable Depth or Logger Location.
  */
 export function initializeTraceOptionControls() {
   const traceEl = document.getElementById("main-traceOption");
@@ -148,9 +131,6 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
   const mainToggle = document.getElementById("units-toggle_main");
   const summaryToggle = document.getElementById("units-toggle_summary");
 
-  /**
-   * Keep both toggles visually in sync.
-   */
   function mirrorToggles(isMetric) {
     if (mainToggle) {
       mainToggle.checked = isMetric;
@@ -160,10 +140,6 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     }
   }
 
-  /**
-   * Handle either toggle being changed.
-   * We *only* trust event.target.checked and then mirror the other toggle.
-   */
   async function onToggleChange(event) {
     const src = event?.target;
     if (!src) return;
@@ -172,38 +148,44 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     const sourceId = src.id || "(unknown-toggle)";
     const newSystem = isMetric ? "metric" : "us";
 
-    // 1) Update global unit system
+    if (window.unitSystem === newSystem) {
+      mirrorToggles(isMetric);
+      updateDepthLabels(window.unitSystem, window.depthMapping || {});
+      return;
+    }
+
     window.unitSystem = newSystem;
     console.log(
       `🌡 Unit system changed to ${window.unitSystem} ` +
       `(source: ${sourceId}, checked=${isMetric})`
     );
 
-    // 2) Mirror to both toggles
     mirrorToggles(isMetric);
-
-    // 3) Update depth dropdown labels on BOTH tabs
     updateDepthLabels(window.unitSystem, window.depthMapping || {});
 
-    // 4) Re-render plots and summary in the new unit system
     await renderMainPlots();
     updateSummaryStatistics();
   }
 
-  // Attach listeners (both toggles share the same handler)
-  if (mainToggle) {
+  if (mainToggle && !mainToggle.dataset.unitToggleBound) {
     mainToggle.addEventListener("change", onToggleChange);
+    mainToggle.dataset.unitToggleBound = "true";
   }
-  if (summaryToggle) {
+
+  if (summaryToggle && !summaryToggle.dataset.unitToggleBound) {
     summaryToggle.addEventListener("change", onToggleChange);
+    summaryToggle.dataset.unitToggleBound = "true";
   }
 
-  // Initialize global unit system & UI based on initial setting
-  window.unitSystem = initialUnitSystem === "metric" ? "metric" : "us";
-  const isMetricDefault = window.unitSystem === "metric";
-  console.log("🌡 Initial unitSystem =", window.unitSystem);
+  if (!window.unitSystem) {
+    window.unitSystem = initialUnitSystem === "metric" ? "metric" : "us";
+    console.log("🌡 Initial unitSystem =", window.unitSystem);
+  } else {
+    console.log("🌡 Preserving existing unitSystem =", window.unitSystem);
+  }
 
-  mirrorToggles(isMetricDefault);
+  const isMetricCurrent = window.unitSystem === "metric";
+  mirrorToggles(isMetricCurrent);
   updateDepthLabels(window.unitSystem, window.depthMapping || {});
 }
 

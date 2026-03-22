@@ -19,7 +19,6 @@ from math import pi
 
 STRIPS = ["S1", "S2", "S3", "S4"]
 VARIABLES = ["VWC", "EC", "T", "SWC"]
-DEPTHS = ["1", "2", "3"]
 YEARS = [2023, 2024, 2025, 2026]
 LOGGER_LOCATIONS = ["T", "M", "B"]
 DATALOGGER_NAMES = ["S1T", "S1M", "S1B", "S2T", "S2M", "S2B", "S3T", "S3B", "S3M", "S4T", "S4M", "S4B"]
@@ -35,6 +34,27 @@ VALUE_COLS_STANDARD = [
     "VWC_2_Avg", "EC_2_Avg", "T_2_Avg",
     "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
 ]
+
+# ---------------------------------------------------------------------------
+# Sensor depth definitions
+# ---------------------------------------------------------------------------
+
+SENSOR_DEPTH_CODES = ["1", "2", "3"]
+DEFAULT_SENSOR_DEPTH_CODE = "1"
+
+# User-facing labels
+SENSOR_DEPTH_LABELS = {
+    "1": {"us": "6 in", "metric": "15 cm"},
+    "2": {"us": "12 in", "metric": "30 cm"},
+    "3": {"us": "18 in", "metric": "45 cm"},
+}
+
+# Numeric depth values for calculations
+SENSOR_DEPTH_VALUES = {
+    "1": {"us": 6.0, "metric": 15.0},
+    "2": {"us": 12.0, "metric": 30.0},
+    "3": {"us": 18.0, "metric": 45.0},
+}
 
 # Granularities:
 # - first element: UI value
@@ -66,7 +86,6 @@ DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
 DEFAULT_END_DATE = datetime.date(DEFAULT_YEAR, 12, 31).isoformat()
 
 DEFAULT_VARIABLE = "VWC"
-DEFAULT_DEPTH = "1"
 DEFAULT_STRIP = "S1"
 DEFAULT_LOGGER_LOCATION = "T"
 DEFAULT_GRANULARITY = "daily"
@@ -121,12 +140,6 @@ variable_name_abbrev = {
     "irrigation": "Irrigation",
 }
 
-# Depth labels are unit-aware (actual conversion logic lives in units.py)
-sensor_depth_mapping = {
-    "1": {"us": "6 inches",  "metric": "15 cm"},
-    "2": {"us": "12 inches", "metric": "30 cm"},
-    "3": {"us": "18 inches", "metric": "45 cm"},
-}
 
 # ---------------------------------------------------------------------
 # Weather data (CoAgMet)

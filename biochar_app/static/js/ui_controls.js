@@ -341,6 +341,10 @@ export function getSelectedFilters(tab) {
     filters.periods = periods;
   }
 
+  if (tab === "main") {
+    filters.unitSystem = window.unitSystem || "us";
+  }
+
   return filters;
 }
 

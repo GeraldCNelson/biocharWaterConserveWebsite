@@ -54,13 +54,16 @@ from typing import Any, Dict, Optional, Tuple, cast
 import pandas as pd
 from fastapi import HTTPException
 
-from biochar_app.scripts.config import (
+from biochar_app.config.core import (
     strip_name_mapping,
     variable_name_mapping,
-    sensor_depth_mapping,
+    SENSOR_DEPTH_LABELS,
+    logger_location_mapping,
+)
+
+from biochar_app.config.units import (
     UNIT_CONVERSIONS,
     label_name_mapping,
-    logger_location_mapping,
 )
 
 from biochar_app.scripts.type_utils import NAN, UnitSystem
@@ -347,7 +350,7 @@ def common_legend_config(title: str) -> dict:
         bordercolor="rgba(0, 0, 0, 0.15)",
         borderwidth=1,
         orientation="v",
-        x=1.01,
+        x=1.5,          # ⬅️ was 1.01
         xanchor="left",
         y=1.0,
         yanchor="top",
@@ -441,7 +444,7 @@ def parse_sensor_column(col: str, unit_system: UnitSystem) -> dict[str, str]:
         raise ValueError(f"Unrecognized sensor column format: {col!r}")
 
     human_var = variable_name_mapping.get(var_code, var_code)
-    human_depth = sensor_depth_mapping.get(depth_code, {}).get(unit_system, depth_code)
+    human_depth = SENSOR_DEPTH_LABELS.get(depth_code, {}).get(unit_system, depth_code)
     human_loc = logger_location_mapping.get(loc_code, loc_code)
 
     return {

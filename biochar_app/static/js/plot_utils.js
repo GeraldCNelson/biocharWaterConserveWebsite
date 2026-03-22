@@ -276,8 +276,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     }
 
     const filters = getSelectedFilters("main");
-    filters.unitSystem = window.unitSystem || "us";
     filters.kind = plotType;
+    console.log("plot filters being sent:", filters);
 
     const url = `/api/plot_${plotType}`;
     console.log(`📦 ${plotType} payload:`, filters);

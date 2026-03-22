@@ -1,7 +1,7 @@
 // static/js/main.js
 
 // 1) Config / constants
-import { FALLBACK_UNIT_SYSTEM, fetchMarkdownFiles } from "./config.js";
+import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
@@ -120,8 +120,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const defaults = options.defaults || {};
 
-    // Decide initial unit system (backend → fallback to config)
-    window.unitSystem = defaults.unitSystem || FALLBACK_UNIT_SYSTEM;
+
+if (!defaults.unitSystem) {
+  console.error("❌ Missing defaults.unitSystem from backend", defaults);
+  throw new Error("unitSystem missing from API defaults");
+}
+
+window.unitSystem = defaults.unitSystem;
+console.log("✅ unitSystem initialized from backend:", window.unitSystem);
 
     // Populate dropdowns and wire up control-panel buttons
     populateAllDropdowns(options);

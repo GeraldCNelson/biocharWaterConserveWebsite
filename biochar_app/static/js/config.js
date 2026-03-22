@@ -20,7 +20,3 @@ export const DEBUG =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
 
-/**
- * Fallback only. Normally the backend sends defaults.unitSystem.
- */
-export const FALLBACK_UNIT_SYSTEM = "us";

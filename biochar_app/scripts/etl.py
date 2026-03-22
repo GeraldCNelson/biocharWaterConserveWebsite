@@ -50,6 +50,7 @@ from datetime import datetime
 import pandas as pd
 from pandas import Series
 
+from biochar_app.config import LOGGER_LOCATIONS, SENSOR_DEPTH_VALUES
 from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.config import (
     DATA_RAW_DIR,
@@ -71,9 +72,8 @@ from biochar_app.scripts.config import (
     DEFAULT_BAD_VALUE_THRESHOLD,
 )
 
-from biochar_app.scripts.type_utils import NAN, df_agg
+from biochar_app.scripts.type_utils import NAN, df_agg, POS_INF, NEG_INF
 from biochar_app.config.thresholds import apply_value_bounds as enforce_value_bounds
-from biochar_app.scripts.process_data import calculate_ratios
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -128,10 +128,10 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
 
 
 def apply_logger_seasonal_civil_time(
-    ts: pd.Series,
-    *,
-    fixed_tz: str = LOGGER_FIXED_STANDARD_TZ,
-    local_tz: str = DEFAULT_TIMEZONE,
+        ts: pd.Series,
+        *,
+        fixed_tz: str = LOGGER_FIXED_STANDARD_TZ,
+        local_tz: str = DEFAULT_TIMEZONE,
 ) -> pd.Series:
     """
     Convert corrected logger timestamps from a fixed MST base into America/Denver
@@ -237,14 +237,14 @@ def make_timestamp_column_naive(df_in: pd.DataFrame, col: str = "timestamp") -> 
     return df_out
 
 
-def make_datetimeindex_naive(df_in: pd.DataFrame) -> pd.DataFrame:
+def make_datetimeindex_naive(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     """
     If df.index is a tz-aware DatetimeIndex, convert to DEFAULT_TIMEZONE and drop tz info.
     """
-    df_out = df_in.copy()
-    if isinstance(df_out.index, pd.DatetimeIndex) and df_out.index.tz is not None:
-        df_out.index = df_out.index.tz_convert(DEFAULT_TIMEZONE).tz_localize(None)
-    return df_out
+    df = df_in.copy() if copy else df_in
+    if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
+        df.index = df.index.tz_convert(DEFAULT_TIMEZONE).tz_localize(None)
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -259,18 +259,18 @@ STRIP_PAIRS = [
 
 # ============================= Common helpers ============================= #
 
-def convert_soil_t_to_fahrenheit(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
-    t_cols = [c for c in df_out.columns if c.startswith("T_") and "_raw_" in c]
+def convert_soil_t_to_fahrenheit(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
+    t_cols = [c for c in df.columns if c.startswith("T_") and "_raw_" in c]
     if not t_cols:
-        return df_out
+        return df
 
     to_f = UNIT_CONVERSIONS["metric_to_us"]["temp"]
     for col_name in t_cols:
-        df_out[col_name] = pd.to_numeric(df_out[col_name], errors="coerce").apply(to_f)
+        df[col_name] = pd.to_numeric(df[col_name], errors="coerce").apply(to_f)
 
     logger.info(f"🌡 Converted {len(t_cols)} soil-temp columns from °C to °F")
-    return df_out
+    return df
 
 
 def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
@@ -445,30 +445,29 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     return merged.reset_index()
 
 
-def replace_bad_values(df_in: pd.DataFrame, threshold: float = DEFAULT_BAD_VALUE_THRESHOLD) -> pd.DataFrame:
-    df_out = df_in.copy()
-    for col_name in df_out.columns:
+def replace_bad_values(df_in: pd.DataFrame, threshold: float = DEFAULT_BAD_VALUE_THRESHOLD, copy: bool = True) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
+    for col_name in df.columns:
         if col_name == "timestamp":
             continue
-        s = pd.to_numeric(df_out[col_name], errors="coerce")
-        df_out[col_name] = s.mask(s.abs() >= threshold, NAN)
+        s = pd.to_numeric(df[col_name], errors="coerce")
+        df[col_name] = s.mask(s.abs() >= threshold, NAN)
     logger.info(f"🧹 Replaced extreme placeholders with NaN (|x| ≥ {threshold:g})")
-    return df_out
+    return df
 
 
-def scale_vwc_to_percent(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
-    vwc_cols = [c for c in df_out.columns if c.startswith("VWC_") and "_raw_" in c]
-    if not vwc_cols:
-        return df_out
+def scale_vwc_to_percent(df_in: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
+
+    vwc_cols = [c for c in df.columns if c.startswith("VWC_") and "_raw_" in c]
     for col_name in vwc_cols:
-        df_out[col_name] = pd.to_numeric(df_out[col_name], errors="coerce") * 100.0
-    logger.info(f"📏 Scaled {len(vwc_cols)} VWC columns ×100 to percent")
-    return df_out
+        df[col_name] = pd.to_numeric(df[col_name], errors="coerce") * 100.0
+
+    return df
 
 
-def add_swc_cylinder_volumes(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
+def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
     cyl_m3 = cylinder_volume_m3()
     cyl_l = cyl_m3 * 1000.0
     cyl_gal = UNIT_CONVERSIONS["metric_to_us"]["irrigation"](cyl_l)
@@ -477,18 +476,22 @@ def add_swc_cylinder_volumes(df_in: pd.DataFrame) -> pd.DataFrame:
         for loc in LOGGER_LOCATIONS:
             for depth in ["1", "2", "3"]:
                 vwc_col = f"VWC_{depth}_raw_{strip}_{loc}"
-                if vwc_col not in df_out.columns:
+                if vwc_col not in df.columns:
                     continue
-                frac = pd.to_numeric(df_out[vwc_col], errors="coerce") / 100.0
-                df_out[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_l
-                df_out[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
+                frac = pd.to_numeric(df[vwc_col], errors="coerce") / 100.0
+                df[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_l
+                df[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
 
     logger.info("💧 Added SWC cylinder volumes (L & gallons) per sensor")
-    return df_out
+    return df
 
 
-def add_temperature_differences(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
+def add_temperature_differences(
+    df_in: pd.DataFrame,
+    *,
+    copy: bool = True,
+) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
     new_cols = 0
 
     for treated, control in STRIP_PAIRS:
@@ -496,12 +499,12 @@ def add_temperature_differences(df_in: pd.DataFrame) -> pd.DataFrame:
             for depth in ["1", "2", "3"]:
                 col_treated = f"T_{depth}_raw_{treated}_{loc}"
                 col_control = f"T_{depth}_raw_{control}_{loc}"
-                if col_treated not in df_out.columns or col_control not in df_out.columns:
+                if col_treated not in df.columns or col_control not in df.columns:
                     continue
                 diff_col = f"Tdiff_{depth}_{treated}_{control}_{loc}"
-                df_out[diff_col] = (
-                    pd.to_numeric(df_out[col_treated], errors="coerce")
-                    - pd.to_numeric(df_out[col_control], errors="coerce")
+                df[diff_col] = (
+                    pd.to_numeric(df[col_treated], errors="coerce")
+                    - pd.to_numeric(df[col_control], errors="coerce")
                 )
                 new_cols += 1
 
@@ -510,11 +513,15 @@ def add_temperature_differences(df_in: pd.DataFrame) -> pd.DataFrame:
         if new_cols
         else "🌡 No ΔT columns added (required T_*_raw_* columns missing)"
     )
-    return df_out
+    return df
 
 
-def add_swc_differences(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
+def add_swc_differences(
+    df_in: pd.DataFrame,
+    *,
+    copy: bool = True,
+) -> pd.DataFrame:
+    df = df_in.copy() if copy else df_in
     new_cols = 0
 
     for treated, control in STRIP_PAIRS:
@@ -525,19 +532,19 @@ def add_swc_differences(df_in: pd.DataFrame) -> pd.DataFrame:
                 col_treated_L = f"SWC_vol_L_{treated}_{loc}_{depth}"
                 col_control_L = f"SWC_vol_L_{control}_{loc}_{depth}"
 
-                if col_treated_gal in df_out.columns and col_control_gal in df_out.columns:
+                if col_treated_gal in df.columns and col_control_gal in df.columns:
                     diff_col_gal = f"SWCdiff_gal_{treated}_{control}_{loc}_{depth}"
-                    df_out[diff_col_gal] = (
-                        pd.to_numeric(df_out[col_treated_gal], errors="coerce")
-                        - pd.to_numeric(df_out[col_control_gal], errors="coerce")
+                    df[diff_col_gal] = (
+                        pd.to_numeric(df[col_treated_gal], errors="coerce")
+                        - pd.to_numeric(df[col_control_gal], errors="coerce")
                     )
                     new_cols += 1
 
-                if col_treated_L in df_out.columns and col_control_L in df_out.columns:
+                if col_treated_L in df.columns and col_control_L in df.columns:
                     diff_col_L = f"SWCdiff_L_{treated}_{control}_{loc}_{depth}"
-                    df_out[diff_col_L] = (
-                        pd.to_numeric(df_out[col_treated_L], errors="coerce")
-                        - pd.to_numeric(df_out[col_control_L], errors="coerce")
+                    df[diff_col_L] = (
+                        pd.to_numeric(df[col_treated_L], errors="coerce")
+                        - pd.to_numeric(df[col_control_L], errors="coerce")
                     )
                     new_cols += 1
 
@@ -546,7 +553,7 @@ def add_swc_differences(df_in: pd.DataFrame) -> pd.DataFrame:
         if new_cols
         else "💧 No ΔSWC columns added (required SWC_vol_* columns missing)"
     )
-    return df_out
+    return df
 
 
 # ============================= Growing-season summary ============================= #
@@ -1000,7 +1007,63 @@ def resolve_target_year(cli_year: Optional[int] = None) -> int:
     except Exception:
         return int(datetime.now().year)
 
+def safe_series_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd.Series:
+    """
+    Compute num / denom but avoid blow-ups when denom ≈ 0.
+
+    Any |denom| < eps becomes NaN so ratio is NaN there too.
+    Also removes ±inf values if they slip through.
+    """
+    num_f = pd.to_numeric(num, errors="coerce").astype(float)
+    denom_f = pd.to_numeric(denom, errors="coerce").astype(float)
+
+    denom_safe = denom_f.copy()
+    small_mask = denom_safe.abs() < float(eps)
+    denom_safe.loc[small_mask] = NAN
+
+    ratio = num_f / denom_safe
+    ratio = ratio.replace([POS_INF, NEG_INF], NAN)
+    return ratio
+
+
+def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+    """
+    For VWC/EC compute (S1/S2) and (S3/S4) per depth and logger location.
+    Also compute SWC ratios using SWC_vol_gal_* columns if present.
+    """
+
+    df = df_in.copy() if copy else df_in
+    pairings = [("S1", "S2"), ("S3", "S4")]
+    RATIO_VARS = ["VWC", "EC"]
+
+    for var in RATIO_VARS:
+        for s1, s2 in pairings:
+            for loc in LOGGER_LOCATIONS:
+                for d in SENSOR_DEPTH_VALUES:
+                    c1 = f"{var}_{d}_raw_{s1}_{loc}"
+                    c2 = f"{var}_{d}_raw_{s2}_{loc}"
+                    out_col = f"{var}_{d}_ratio_{s1}_{s2}_{loc}"
+                    if c1 in df.columns and c2 in df.columns:
+                        df[out_col] = safe_series_ratio(df[c1], df[c2])
+                    else:
+                        df[out_col] = pd.NA
+
+    # SWC ratios (gallons)
+    for s1, s2 in pairings:
+        for loc in LOGGER_LOCATIONS:
+            for d in SENSOR_DEPTH_VALUES:
+                c1 = f"SWC_vol_gal_{s1}_{loc}_{d}"
+                c2 = f"SWC_vol_gal_{s2}_{loc}_{d}"
+                out_col = f"SWC_vol_gal_{d}_ratio_{s1}_{s2}_{loc}"
+                if c1 in df.columns and c2 in df.columns:
+                    df[out_col] = safe_series_ratio(df[c1], df[c2])
+                else:
+                    df[out_col] = pd.NA
+
+    return df
+
 
 if __name__ == "__main__":
     os.makedirs(PARQUET_DIR, exist_ok=True)
     generate_summaries(YEARS)
+
