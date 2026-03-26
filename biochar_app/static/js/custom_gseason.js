@@ -1,3 +1,4 @@
+// @ts-check
 // static/js/custom_gseason.js
 
 /**
@@ -12,16 +13,38 @@
 export function initCustomGseason(cfg) {
   const { defaultYear, years, defaultPeriods } = cfg;
 
-  // in-memory model
+  /** @type {Array<{
+   *   code: string,
+   *   isDefault: boolean,
+   *   label: string,
+   *   start: string,
+   *   end: string,
+   *   startMD?: string,
+   *   endMD?: string
+   * }>} */
   let periodsData = [];
 
+  const yearSelect = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("anchor-year")
+  );
+  const addPeriodBtn = /** @type {HTMLButtonElement | null} */ (
+    document.getElementById("add-period")
+  );
+  const container = /** @type {HTMLDivElement | null} */ (
+    document.getElementById("periods-container")
+  );
+
+  if (!yearSelect || !addPeriodBtn || !container) {
+    console.warn("⚠️ Custom gseason controls not found.");
+    return () => periodsData;
+  }
+
   // 1) populate anchor-year dropdown
-  const yearSelect = document.getElementById("anchor-year");
   yearSelect.innerHTML = "";
   years.forEach((y) => {
     const opt = document.createElement("option");
-    opt.value = y;
-    opt.textContent = y;
+    opt.value = String(y);
+    opt.textContent = String(y);
     if (y === defaultYear) opt.selected = true;
     yearSelect.appendChild(opt);
   });
@@ -31,44 +54,44 @@ export function initCustomGseason(cfg) {
     periodsData = defaultPeriods.map((p) => {
       const [sm] = p.start.split("-");
       const [em] = p.end.split("-");
-      const wraps     = parseInt(sm, 10) > parseInt(em, 10);
+      const wraps = parseInt(sm, 10) > parseInt(em, 10);
       const startYear = wraps ? defaultYear - 1 : defaultYear;
-      const endYear   = wraps ? defaultYear     : defaultYear;
+      const endYear = wraps ? defaultYear : defaultYear;
+
       return {
-        code:      p.code,
+        code: p.code,
         isDefault: true,
-        label:     p.label,
-        startMD:   p.start,
-        endMD:     p.end,
-        start:     `${startYear}-${p.start}`,  // ISO format
-        end:       `${endYear}-${p.end}`,
+        label: p.label,
+        startMD: p.start,
+        endMD: p.end,
+        start: `${startYear}-${p.start}`,
+        end: `${endYear}-${p.end}`,
       };
     });
   }
 
   // 3) render all period rows
   function renderPeriods() {
-    const container = document.getElementById("periods-container");
     container.innerHTML = "";
     const anchor = parseInt(yearSelect.value, 10);
 
     periodsData.forEach((p, idx) => {
-      // if default, recompute on year–change
-      if (p.isDefault) {
+      // if default, recompute on year change
+      if (p.isDefault && p.startMD && p.endMD) {
         const [sm] = p.startMD.split("-");
         const [em] = p.endMD.split("-");
-        const wraps     = parseInt(sm, 10) > parseInt(em, 10);
+        const wraps = parseInt(sm, 10) > parseInt(em, 10);
         const startYear = wraps ? anchor - 1 : anchor;
-        const endYear   = wraps ? anchor     : anchor;
+        const endYear = wraps ? anchor : anchor;
         p.start = `${startYear}-${p.startMD}`;
-        p.end   = `${endYear}-${p.endMD}`;
+        p.end = `${endYear}-${p.endMD}`;
       }
 
       const row = document.createElement("div");
       row.className = "mb-3 p-3 border rounded bg-light";
       row.classList.add("period-row");
-      row.dataset.index = idx;
-      row.dataset.code  = p.code;
+      row.dataset.index = String(idx);
+      row.dataset.code = p.code;
 
       row.innerHTML = `
         <button
@@ -106,29 +129,62 @@ export function initCustomGseason(cfg) {
       `;
       container.appendChild(row);
 
-      // remove‐period handler
-      row.querySelector(".remove-period").onclick = () => {
-        periodsData.splice(idx, 1);
-        renderPeriods();
-      };
-      // live updates
-      row.querySelector(".period-label").oninput  = e => { periodsData[idx].label = e.target.value; };
-      row.querySelector(".period-start").onchange = e => { periodsData[idx].start = e.target.value; };
-      row.querySelector(".period-end").onchange   = e => { periodsData[idx].end   = e.target.value; };
+      const removeBtn = /** @type {HTMLButtonElement | null} */ (
+        row.querySelector(".remove-period")
+      );
+      const labelInput = /** @type {HTMLInputElement | null} */ (
+        row.querySelector(".period-label")
+      );
+      const startInput = /** @type {HTMLInputElement | null} */ (
+        row.querySelector(".period-start")
+      );
+      const endInput = /** @type {HTMLInputElement | null} */ (
+        row.querySelector(".period-end")
+      );
+
+      if (removeBtn) {
+        removeBtn.onclick = () => {
+          periodsData.splice(idx, 1);
+          renderPeriods();
+        };
+      }
+
+      if (labelInput) {
+        labelInput.oninput = (e) => {
+          const target = /** @type {HTMLInputElement | null} */ (e.target);
+          periodsData[idx].label = target?.value || "";
+        };
+      }
+
+      if (startInput) {
+        startInput.onchange = (e) => {
+          const target = /** @type {HTMLInputElement | null} */ (e.target);
+          periodsData[idx].start = target?.value || "";
+        };
+      }
+
+      if (endInput) {
+        endInput.onchange = (e) => {
+          const target = /** @type {HTMLInputElement | null} */ (e.target);
+          periodsData[idx].end = target?.value || "";
+        };
+      }
     });
   }
 
   // 4) “+ Add Period” button
-  document.getElementById("add-period").onclick = () => {
+  addPeriodBtn.onclick = () => {
     const anchor = parseInt(yearSelect.value, 10);
     const newIdx = periodsData.length + 1;
+
     periodsData.push({
-      code:      `CUSTOM_${newIdx}`,
+      code: `CUSTOM_${newIdx}`,
       isDefault: false,
-      label:     "",
-      start:     `${anchor}-01-01`,
-      end:       `${anchor}-12-31`,
+      label: "",
+      start: `${anchor}-01-01`,
+      end: `${anchor}-12-31`,
     });
+
     renderPeriods();
   };
 
@@ -139,7 +195,6 @@ export function initCustomGseason(cfg) {
   initPeriodsData();
   renderPeriods();
 
-  // 7) expose periodsData for debugging just before you POST…
-  //    (call this from your main.js right before fetch)
+  // 7) expose periodsData for debugging just before you POST
   return () => periodsData;
 }

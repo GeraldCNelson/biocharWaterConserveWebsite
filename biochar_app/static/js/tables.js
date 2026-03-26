@@ -92,9 +92,11 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
     (totalSets === null || totalSets > 1);
 
   const label = rawLabel
-    ? (isAlreadyNumbered
-      ? rawLabel
-      : (shouldNumber ? `Set ${idx + 1}: ${rawLabel}` : rawLabel))
+    ? (
+        isAlreadyNumbered
+          ? rawLabel
+          : (shouldNumber ? `Set ${idx + 1}: ${rawLabel}` : rawLabel)
+      )
     : `Set ${idx + 1}`;
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
@@ -145,7 +147,7 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
   const data = isObject(set.data) ? set.data : {};
 
   // IMPORTANT: support both "note" and "notes" from backend
-  const note = safeStr(set.note, "") || safeStr(set.note, "");
+  const note = safeStr(set.note, "") || safeStr(set["notes"], "");
 
   return {
     key,
@@ -209,7 +211,7 @@ export function normalizePayload(raw) {
         rows: raw.rows,
         rowLabels: raw.rowLabels,
         data: raw.data,
-        note: safeStr(raw.note, "") || safeStr(raw.note, ""),
+        note: safeStr(raw.note, "") || safeStr(raw["notes"], ""),
       },
       0,
       1
@@ -276,10 +278,17 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
     if (!varKey) continue;
 
     const tableEl = buildTableForVariable(
-      { label: setPayload.label, periods, rows, rowLabels, data },
+      {
+        label: setPayload.label,
+        periods,
+        rows,
+        rowLabels,
+        data,
+        variables, // keep full normalized variable metadata available
+      },
       varKey,
       varLabel,
-      safeStr(v.note, "") // pass variable note through
+      safeStr(v.note, "")
     );
 
     parentEl.appendChild(tableEl);
@@ -287,13 +296,14 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
 }
 
 // Small helper for safe inline JSON display in HTML warnings.
+
 function escapeHtml(s) {
   return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 /**
@@ -304,6 +314,73 @@ function escapeHtml(s) {
  *   rowLabels: {rowKey: label}
  *   data: { varKey: { rowKey: { periodKey: value|null } } }
  */
+
+function openReferenceModal(variable) {
+  if (!variable || !variable["reference"]) return;
+
+  const modalTitle = document.getElementById("referenceModalLabel");
+  const modalBody = document.getElementById("referenceModalBody");
+  const modalEl = document.getElementById("referenceModal");
+
+  if (!modalTitle || !modalBody || !modalEl) {
+    console.warn("Reference modal elements not found.");
+    return;
+  }
+
+  modalTitle.textContent = variable["label"] || "Reference";
+
+  const ref = variable["reference"];
+  const refs = Array.isArray(ref["references"]) ? ref["references"] : [];
+
+  let html = "";
+
+  if (ref["short_note"]) {
+    html += `<p><strong>Summary:</strong> ${escapeHtml(ref["short_note"])}</p>`;
+  }
+
+  if (ref["detail"]) {
+    html += `<p><strong>Detail:</strong> ${escapeHtml(ref["detail"])}</p>`;
+  }
+
+  if (ref["interpretation"]) {
+    html += `<p><strong>Interpretation:</strong> ${escapeHtml(ref["interpretation"])}</p>`;
+  }
+
+  if (ref["caveat"]) {
+    html += `<p><strong>Caution:</strong> ${escapeHtml(ref["caveat"])}</p>`;
+  }
+
+  if (refs.length > 0) {
+    html += `<hr><h6>References</h6><ul>`;
+    for (const r of refs) {
+      const parts = [
+        r["guide_label"],
+        r["section_title"],
+        r["table_number"],
+        r["table_title"],
+      ].filter(Boolean);
+
+      const text = parts.join(" — ");
+      if (r["source_url"]) {
+        html += `<li><a href="${r["source_url"]}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a></li>`;
+      } else {
+        html += `<li>${escapeHtml(text)}</li>`;
+      }
+    }
+    html += `</ul>`;
+  }
+
+  modalBody.innerHTML = html || "<p>No reference details available.</p>";
+
+  if (!window.bootstrap || !window.bootstrap.Modal) {
+    console.warn("Bootstrap Modal is not available.");
+    return;
+  }
+
+  const modal = new window.bootstrap.Modal(modalEl);
+  modal.show();
+}
+
 export function buildTableForVariable(setPayload, variableKey, variableLabel, variableNote = "") {
   const periods = Array.isArray(setPayload.periods) ? setPayload.periods : [];
   const rows = Array.isArray(setPayload.rows) ? setPayload.rows : [];
@@ -318,6 +395,13 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     return div;
   }
 
+  // Look up the full variable metadata from the normalized set payload
+  const variable =
+    Array.isArray(setPayload.variables)
+      ? setPayload.variables.find((v) => safeStr(v.key, "") === safeStr(variableKey, ""))
+      : null;
+
+  console.log("TABLE VARIABLE DEBUG:", variableKey, variable);
   // ----------------------------
   // Helpers
   // ----------------------------
@@ -372,7 +456,7 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     const num = typeof v === "number" ? v : Number(v);
     if (!Number.isFinite(num)) return "";
 
-    // ✅ Always format ratio rows to 3 decimals
+    // Always format ratio rows to 3 decimals
     if (isRatioRowKey(rowKey)) {
       return num.toFixed(3);
     }
@@ -382,14 +466,7 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     return String(Number(num.toPrecision(6)));
   };
 
-  // Avoid duplicate headings when the set label already equals the variable label
-  const setLabel = safeStr(setPayload.label, "");
-  const rawVarLabel = variableLabel || variableKey;
-
-  const prettyTitle =
-    typeof dedupePercentTitle === "function"
-      ? dedupePercentTitle(setLabel, rawVarLabel)
-      : rawVarLabel;
+  const prettyTitle = variableLabel || variableKey;
 
   // ----------------------------
   // Build DOM
@@ -397,18 +474,47 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
   const wrapper = document.createElement("div");
   wrapper.className = "mb-4";
 
-  // Variable heading
+  // Variable heading (with optional reference indicator)
   const h6 = document.createElement("h6");
-  h6.className = "mt-3 mb-2 fw-bold";
-  h6.textContent = prettyTitle;
+  h6.className = "mt-3 mb-2 fw-bold d-flex align-items-center gap-2";
+
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = prettyTitle;
+  h6.appendChild(titleSpan);
+
+  const hasReference =
+    variable?.["has_reference"] ||
+    variable?.["reference_key"] ||
+    variable?.["reference"];
+
+  if (hasReference) {
+    const refBadge = document.createElement("i");
+    refBadge.className = "bi bi-info-circle info-icon";
+    refBadge.setAttribute("role", "button");
+    refBadge.setAttribute("tabindex", "0");
+    refBadge.setAttribute("aria-label", `More information about ${prettyTitle}`);
+    refBadge.style.cursor = "pointer";
+
+    // Basic browser tooltip
+    if (variable?.["reference"]?.["short_note"]) {
+      refBadge.setAttribute("title", variable["reference"]["short_note"]);
+    }
+
+    // Click stub for future modal hookup
+    refBadge.addEventListener("click", () => {
+      openReferenceModal(variable);
+    });
+
+    h6.appendChild(refBadge);
+  }
+
   wrapper.appendChild(h6);
 
-  // ✅ Variable note directly under heading
-  const noteText = safeStr(variableNote, "");
+  // Variable note directly under heading
+  const noteText = safeStr(variableNote, "") || safeStr(variable?.note, "");
   if (noteText) {
     const p = document.createElement("p");
     p.className = "text-muted mb-2";
-    // IMPORTANT: do NOT use innerHTML; convert URLs safely into <a> nodes
     appendTextWithLinks(p, noteText);
     wrapper.appendChild(p);
   }

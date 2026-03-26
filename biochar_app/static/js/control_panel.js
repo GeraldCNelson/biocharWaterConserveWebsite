@@ -1,3 +1,4 @@
+// @ts-check
 // control_panel.js – Shared logic for control panel setup (Main & Summary)
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
@@ -14,10 +15,16 @@ import { renderMainPlots } from "./plots.js";
  *   because the ratio plot uses both selections
  *
  * So we no longer disable either control here.
+ *
+ * @param {string} traceOption
  */
 function updateMainTraceControlState(traceOption) {
-  const depthEl = document.getElementById("main-depth");
-  const loggerLocEl = document.getElementById("main-loggerLocation");
+  const depthEl = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("main-depth")
+  );
+  const loggerLocEl = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("main-loggerLocation")
+  );
 
   if (!depthEl || !loggerLocEl) return;
 
@@ -64,14 +71,17 @@ function clearMainPlots() {
  * but we no longer disable Depth or Logger Location.
  */
 export function initializeTraceOptionControls() {
-  const traceEl = document.getElementById("main-traceOption");
+  const traceEl = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("main-traceOption")
+  );
   if (!traceEl) {
     console.warn("⚠️ #main-traceOption not found; trace-option control state not wired.");
     return;
   }
 
   traceEl.addEventListener("change", (e) => {
-    const value = e?.target?.value || "";
+    const target = /** @type {HTMLSelectElement | null} */ (e.target);
+    const value = target?.value || "";
     console.log("🔀 main trace option changed:", value);
     updateMainTraceControlState(value);
   });
@@ -128,9 +138,16 @@ export function initializeUpdateButtons() {
 export function setupUnitToggleHandlers(initialUnitSystem) {
   console.log("🔄 Setting up unit toggle handlers");
 
-  const mainToggle = document.getElementById("units-toggle_main");
-  const summaryToggle = document.getElementById("units-toggle_summary");
+  const mainToggle = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("units-toggle_main")
+  );
+  const summaryToggle = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("units-toggle_summary")
+  );
 
+  /**
+   * @param {boolean} isMetric
+   */
   function mirrorToggles(isMetric) {
     if (mainToggle) {
       mainToggle.checked = isMetric;
@@ -140,8 +157,11 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     }
   }
 
+  /**
+   * @param {Event} event
+   */
   async function onToggleChange(event) {
-    const src = event?.target;
+    const src = /** @type {HTMLInputElement | null} */ (event.target);
     if (!src) return;
 
     const isMetric = !!src.checked;
@@ -150,7 +170,7 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
 
     if (window.unitSystem === newSystem) {
       mirrorToggles(isMetric);
-      updateDepthLabels(window.unitSystem, window.depthMapping || {});
+      updateDepthLabels(window.unitSystem);
       return;
     }
 
@@ -161,7 +181,7 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     );
 
     mirrorToggles(isMetric);
-    updateDepthLabels(window.unitSystem, window.depthMapping || {});
+    updateDepthLabels(window.unitSystem);
 
     await renderMainPlots();
     updateSummaryStatistics();
@@ -186,7 +206,7 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
 
   const isMetricCurrent = window.unitSystem === "metric";
   mirrorToggles(isMetricCurrent);
-  updateDepthLabels(window.unitSystem, window.depthMapping || {});
+  updateDepthLabels(window.unitSystem);
 }
 
 /**
@@ -200,6 +220,7 @@ export function triggerUpdates() {
 
 /**
  * The IDs we wait for before doing certain operations (like in waitForAllDropdowns).
+ * @returns {string[]}
  */
 export function getAllDropdownIds() {
   return [

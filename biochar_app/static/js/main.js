@@ -1,3 +1,4 @@
+// @ts-check
 // static/js/main.js
 
 // 1) Config / constants
@@ -53,13 +54,16 @@ window.downloadTraceData = downloadTraceData;
 window.downloadPlot = downloadPlot;
 window.downloadSummaryData = downloadSummaryData;
 
-// ----------------------------------------------------
-// Tab wiring helper
-// ----------------------------------------------------
+/**
+ * @param {{
+ *   href?: string,
+ *   tabId?: string,
+ *   paneId?: string,
+ *   renderFn: Function,
+ *   label?: string
+ * }} args
+ */
 function wireTabRender({ href, tabId, paneId, renderFn, label }) {
-  // Prefer explicit tabId if provided.
-  // Fallback supports both old anchor tabs (href="#pane")
-  // and new button tabs (data-bs-target="#pane").
   const tabLink =
     (tabId ? document.getElementById(tabId) : null) ||
     (href
@@ -92,7 +96,6 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
     renderFn();
   });
 
-  // Render immediately if already active
   if (tabLink.classList.contains("active")) {
     console.debug(
       `[wireTabRender] ${label || href || tabId} already active — rendering`
@@ -108,59 +111,54 @@ document.addEventListener("DOMContentLoaded", async () => {
   debugLog("🌐 Initializing application...");
 
   try {
-    // Fetch defaults & options from the server
     const options = await fetchDefaultsAndOptions();
     if (!options) {
       console.error("❌ fetchDefaultsAndOptions returned null/undefined.");
       return;
     }
 
-    // Make options globally available if needed elsewhere
     window.dropdownOptions = options;
 
     const defaults = options.defaults || {};
 
+    if (!defaults.unitSystem) {
+      console.error("❌ Missing defaults.unitSystem from backend", defaults);
+      throw new Error("unitSystem missing from API defaults");
+    }
 
-if (!defaults.unitSystem) {
-  console.error("❌ Missing defaults.unitSystem from backend", defaults);
-  throw new Error("unitSystem missing from API defaults");
-}
+    window.unitSystem = defaults.unitSystem;
+    console.log("✅ unitSystem initialized from backend:", window.unitSystem);
 
-window.unitSystem = defaults.unitSystem;
-console.log("✅ unitSystem initialized from backend:", window.unitSystem);
-
-    // Populate dropdowns and wire up control-panel buttons
     populateAllDropdowns(options);
-    setupUnitToggleHandlers(window.unitSystem);
+    setupUnitToggleHandlers(window.unitSystem === "metric" ? "metric" : "us");
     initializeUpdateButtons();
 
-    // Wait until all dropdowns exist & are initialized
     await waitForAllDropdowns(getAllDropdownIds());
     await new Promise(requestAnimationFrame);
 
-    // ----------------------------------------------------
-    // Seed defaults into inputs
-    // IMPORTANT: do NOT overwrite startDate/endDate here
-    // because those must come from DATE_RANGES.
-    // ----------------------------------------------------
     const DO_NOT_SEED = new Set(["startDate", "endDate", "dateRanges"]);
     for (const [key, value] of Object.entries(defaults)) {
       if (DO_NOT_SEED.has(key)) continue;
 
-      const mainEl = document.getElementById(`main-${key}`);
-      const summaryEl = document.getElementById(`summary-${key}`);
+      const mainEl = /** @type {HTMLInputElement | HTMLSelectElement | null} */ (
+        document.getElementById(`main-${key}`)
+      );
+      const summaryEl = /** @type {HTMLInputElement | HTMLSelectElement | null} */ (
+        document.getElementById(`summary-${key}`)
+      );
 
-      if (mainEl) mainEl.value = value;
-      if (summaryEl) summaryEl.value = value;
+      if (mainEl) mainEl.value = String(value);
+      if (summaryEl) summaryEl.value = String(value);
     }
 
-    // ----------------------------------------------------
-    // Initialize the date inputs, then apply DATE_RANGES
-    // ----------------------------------------------------
     initializeMainDatepickers();
 
-    const yearEl = document.getElementById("main-year");
-    const granEl = document.getElementById("main-granularity");
+    const yearEl = /** @type {HTMLSelectElement | null} */ (
+      document.getElementById("main-year")
+    );
+    const granEl = /** @type {HTMLSelectElement | null} */ (
+      document.getElementById("main-granularity")
+    );
 
     const selectedYear = yearEl ? yearEl.value : String(defaults.year || "");
     const selectedGran = granEl ? granEl.value : defaults.granularity;
@@ -172,13 +170,10 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
     );
     wireMainDateRangeListeners();
 
-    // Make sure the depth labels match the current unit system
     updateDepthLabels(window.unitSystem);
 
-    // Wire the trace-option dependent control enable/disable behavior
     initializeTraceOptionControls();
 
-    // Debug summary of defaults & depth mapping
     debugGroup("🎛️ Dropdown defaults & mappings", () => {
       console.table(defaults);
 
@@ -197,9 +192,6 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
       }
     });
 
-    // ----------------------------------------------------
-    // Tab wiring
-    // ----------------------------------------------------
     wireTabRender({
       href: "#main",
       tabId: "main-tab",
@@ -240,11 +232,9 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
       label: "Biomass (Field Samples)",
     });
 
-    // ----------------------------------------------------
-    // Load markdown snippets (from backend mapping)
-    // ----------------------------------------------------
     debugLog("📖 Loading markdown mapping from backend…");
 
+    /** @type {Record<string, string>} */
     let markdownFiles = {};
     try {
       markdownFiles = await fetchMarkdownFiles();
@@ -264,9 +254,6 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
       console.warn("⚠️ No markdown mapping returned; skipping markdown load.");
     }
 
-    // ----------------------------------------------------
-    // Initialize the Custom Season editor (if present)
-    // ----------------------------------------------------
     const gseasonContent = document.getElementById("gseason-content");
     if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
       initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
@@ -274,21 +261,18 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
 
     initSummaryTab();
 
-    // Bulk downloads tab
     try {
       await initBulkDownloadTab();
     } catch (err) {
       console.error("Failed to initialize Bulk Downloads tab:", err);
     }
 
-    // Summary Statistics dropdown (Raw / Ratio / All)
     try {
       initSummaryDownloadMenu();
     } catch (err) {
       console.error("Failed to initialize Summary Summary dropdown:", err);
     }
 
-    // Extra: quick visibility check so you *know* the Biomass elements exist
     const bioTab = document.getElementById("biomass-field-tab");
     const bioPane = document.getElementById("biomass-field");
     console.log("🔎 Biomass wiring sanity:", {
@@ -302,7 +286,6 @@ console.log("✅ unitSystem initialized from backend:", window.unitSystem);
   } catch (err) {
     console.error("❌ Fatal error during app initialization:", err);
   } finally {
-    // ✅ CRITICAL: remove the full-screen boot overlay so it can’t hide the UI
     hideBootLoading();
   }
 });

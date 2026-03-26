@@ -1,3 +1,4 @@
+// @ts-check
 // plot_utils.js
 //
 // Restored from the working Lightsail/test-site layout logic, with small
@@ -18,6 +19,25 @@ import { isMobileDevice } from "./ui_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
 /**
+ * Return Plotly from the global window object.
+ * Kept as a helper so TypeScript stops complaining about the bare global.
+ * @returns {any}
+ */
+function getPlotly() {
+  return /** @type {any} */ (window.Plotly);
+}
+
+/**
+ * @typedef {HTMLElement & {
+ *   _fullLayout?: any,
+ *   _fullData?: any,
+ *   data?: any,
+ *   layout?: any,
+ *   on?: (eventName: string, handler: (ev: any) => void) => void
+ * }} PlotlyGraphDiv
+ */
+
+/**
  * Pause until each of the given dropdown IDs exists in the DOM
  * and has been populated with at least one <option>.
  * @param {string[]} ids – array of element IDs
@@ -26,7 +46,7 @@ export async function waitForAllDropdowns(ids) {
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   while (true) {
     const missing = ids.filter((id) => {
-      const el = document.getElementById(id);
+      const el = /** @type {HTMLSelectElement | null} */ (document.getElementById(id));
       return !(el && el.options && el.options.length > 0);
     });
     if (missing.length === 0) break;
@@ -38,15 +58,21 @@ export async function waitForAllDropdowns(ids) {
 /* Zoom / pan sync state                                              */
 /* ------------------------------------------------------------------ */
 
-let rawPlotDiv = null;    // corresponds to #plot-1
-let ratioPlotDiv = null;  // corresponds to #plot-2
+/** @type {PlotlyGraphDiv | null} */
+let rawPlotDiv = null;
+/** @type {PlotlyGraphDiv | null} */
+let ratioPlotDiv = null;
 let zoomHandlersAttached = false;
 let isSyncingZoom = false;
 
 /**
  * Apply the x-axis range from one plot to another.
+ * @param {PlotlyGraphDiv | null} sourceDiv
+ * @param {PlotlyGraphDiv | null} targetDiv
+ * @param {any} eventData
  */
 function syncZoom(sourceDiv, targetDiv, eventData) {
+  void sourceDiv;
   if (!targetDiv || isSyncingZoom || !eventData) return;
 
   const hasXRange =
@@ -62,6 +88,7 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
   console.log("🔁 syncing x-range →", newRange);
 
   isSyncingZoom = true;
+  const Plotly = getPlotly();
   Plotly.relayout(targetDiv, { "xaxis.range": newRange })
     .catch((err) => {
       console.error("❌ Error syncing zoom:", err);
@@ -77,6 +104,7 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
 function maybeAttachZoomSyncHandlers() {
   if (zoomHandlersAttached) return;
   if (!rawPlotDiv || !ratioPlotDiv) return;
+  if (typeof rawPlotDiv.on !== "function" || typeof ratioPlotDiv.on !== "function") return;
 
   const makeHandler = (source, target, label) => (ev) => {
     const payload = ev;
@@ -98,6 +126,10 @@ function maybeAttachZoomSyncHandlers() {
 /* Shared width helpers                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * @param {HTMLElement | null} el
+ * @returns {number}
+ */
 function measurePlotWidth(el) {
   if (!el) return 1200;
   return (
@@ -108,6 +140,11 @@ function measurePlotWidth(el) {
   );
 }
 
+/**
+ * @param {string} targetId
+ * @param {HTMLElement | null} container
+ * @returns {number}
+ */
 function getSharedPlotWidth(targetId, container) {
   const measured = Math.round(measurePlotWidth(container));
 
@@ -127,8 +164,16 @@ function getSharedPlotWidth(targetId, container) {
 /* Responsive gutter / legend logic                                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * @param {any} containerOrGd
+ * @param {string} plotType
+ * @param {any} [plotLayout=null]
+ * @param {any} [plotData=null]
+ * @returns {number}
+ */
 export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null, plotData = null) {
-  const el = containerOrGd;
+  void plotType;
+  const el = /** @type {any} */ (containerOrGd);
   const w = el?.clientWidth || 1200;
 
   const fullLayout = el?._fullLayout || null;
@@ -156,6 +201,10 @@ export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null,
 /**
  * Choose a single legend mode for the pair.
  * plot-1 decides, plot-2 follows.
+ *
+ * @param {string} targetId
+ * @param {number} rightGutterPx
+ * @returns {"right" | "below"}
  */
 function chooseSharedLegendMode(targetId, rightGutterPx) {
   const mode = rightGutterPx >= 100 ? "right" : "below";
@@ -166,7 +215,7 @@ function chooseSharedLegendMode(targetId, rightGutterPx) {
   }
 
   if (targetId === "plot-2" && window._plotLegendMode) {
-    return window._plotLegendMode;
+    return /** @type {"right" | "below"} */ (window._plotLegendMode);
   }
 
   return mode;
@@ -174,6 +223,11 @@ function chooseSharedLegendMode(targetId, rightGutterPx) {
 
 /**
  * Update legend placement based on gutter choice and shared pair mode.
+ *
+ * @param {any} layout
+ * @param {number} rightGutterPx
+ * @param {string} targetId
+ * @returns {{ extraBottom: number, minRight: number }}
  */
 function applyResponsiveLegend(layout, rightGutterPx, targetId) {
   const base = layout.legend || {};
@@ -188,9 +242,6 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
       yanchor: "top",
       orientation: "v",
     };
-    // Critical fix:
-    // Reserve enough right-side width for the wider ratio legend so both
-    // plots end up with the same actual cartesian plot width.
     return { extraBottom: 0, minRight: 160 };
   }
 
@@ -210,8 +261,8 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
 /* ------------------------------------------------------------------ */
 
 async function syncPairGeometryFromRaw() {
-  const p1 = document.getElementById("plot-1");
-  const p2 = document.getElementById("plot-2");
+  const p1 = /** @type {any} */ (document.getElementById("plot-1"));
+  const p2 = /** @type {any} */ (document.getElementById("plot-2"));
 
   if (!p1?._fullLayout || !p2?._fullLayout) return;
 
@@ -230,6 +281,7 @@ async function syncPairGeometryFromRaw() {
       ? Math.max(srcMargin.r ?? 20, 160)
       : (srcMargin.r ?? 20);
 
+  /** @type {Record<string, any>} */
   const update = {
     width: srcWidth,
     "margin.l": srcMargin.l ?? 60,
@@ -243,6 +295,7 @@ async function syncPairGeometryFromRaw() {
 
   console.log("📏 syncing pair geometry from raw → ratio", update);
 
+  const Plotly = getPlotly();
   await Plotly.relayout(p2, update);
   Plotly.Plots.resize(p2);
 }
@@ -251,12 +304,16 @@ async function syncPairGeometryFromRaw() {
 /* Fetch + render helper                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * @param {"raw"|"ratio"} plotType
+ * @param {string} plotDivId
+ */
 export async function fetchAndRenderPlot(plotType, plotDivId) {
   const targetId = plotDivId || `plot-${plotType}`;
   const label = `🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`;
   console.group(label);
 
-  const container = document.getElementById(targetId);
+  const container = /** @type {PlotlyGraphDiv | null} */ (document.getElementById(targetId));
   if (!container) {
     console.error(`❌ Container "#${targetId}" not found`);
     console.groupEnd();
@@ -275,7 +332,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       statusEl.style.display = "";
     }
 
-    const filters = getSelectedFilters("main");
+    /** @type {{ kind?: string } & Record<string, any>} */
+    const filters = getSelectedFilters("main") || {};
     filters.kind = plotType;
     console.log("plot filters being sent:", filters);
 
@@ -313,6 +371,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     container.innerHTML = "";
     await new Promise((r) => requestAnimationFrame(r));
+    const Plotly = getPlotly();
     Plotly.purge(container);
 
     const renderWidth = getSharedPlotWidth(targetId, container);
@@ -361,7 +420,9 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       responsive: false,
     };
 
-    const gd = await Plotly.newPlot(container, plotData.data, layout, plotConfig);
+    const gd = /** @type {PlotlyGraphDiv} */ (
+      await Plotly.newPlot(container, plotData.data, layout, plotConfig)
+    );
 
     if (targetId === "plot-1") rawPlotDiv = gd;
     if (targetId === "plot-2") ratioPlotDiv = gd;
@@ -389,6 +450,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
           ? window._plotRenderWidth
           : renderWidth;
 
+      /** @type {Record<string, any>} */
       const update = {
         width: sharedWidth,
         "margin.l": window._plotLeftMargin ?? 60,
@@ -415,6 +477,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     if (!window._biocharResizePlotsInstalled) {
       window._biocharResizePlotsInstalled = true;
 
+      /** @type {number | null} */
       let t = null;
 
       const relayoutOne = async (el, kind, targetIdForLegend, forceGutter = null, forceWidth = null) => {
@@ -449,6 +512,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
           legendResult.minRight ?? 160
         );
 
+        /** @type {Record<string, any>} */
         const update = {
           width: w,
           "margin.l": window._plotLeftMargin ?? 60,
@@ -468,8 +532,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       window.addEventListener("resize", () => {
         if (t) window.clearTimeout(t);
         t = window.setTimeout(async () => {
-          const p1 = document.getElementById("plot-1");
-          const p2 = document.getElementById("plot-2");
+          const p1 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-1"));
+          const p2 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-2"));
 
           const masterWidth = Math.round(measurePlotWidth(p1));
           const gutter = await relayoutOne(p1, "raw", "plot-1", null, masterWidth);

@@ -42,6 +42,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List
+from biochar_app.config.lab_specs import LabVarSpec
+from biochar_app.scripts.tables.tables_common import build_variable_meta
 
 import pandas as pd
 
@@ -169,11 +171,20 @@ def get_biomass_field_table_payload(
     # So we provide BOTH "value" and "key" with the same var_key.
     # -----------------------------------------------------------------
     var_key = "dry_biomass_g"
+
+    var_spec = LabVarSpec(
+        key=var_key,
+        label="Dry Biomass (g)",
+        candidates=(var_key,),
+        reference_key=None,  # no reference yet
+    )
+
+    var_meta = build_variable_meta(var_spec)
+
     variables = [
         {
-            "value": var_key,   # preferred by option-style renderers
-            "key": var_key,     # backward compatibility
-            "label": "Dry Biomass (g)",
+            "value": var_key,  # keep existing UI behavior
+            **var_meta,  # inject reference-ready metadata
         }
     ]
 

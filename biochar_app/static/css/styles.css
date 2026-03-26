@@ -527,11 +527,14 @@ html {
 }
 
 .info-icon {
-    font-size: 14px;
-    font-weight: bold;
+    font-size: 16px;
     color: #007bff;
     cursor: pointer;
-    margin-left: 5px;
+    margin-left: 6px;
+}
+
+.info-icon:hover {
+    color: #0056b3;
 }
 
 .plot-container {

@@ -21,6 +21,9 @@ class LabVarSpec:
     key: str
     label: str
     candidates: Sequence[str]
+    note: str = ""
+    reference_key: Optional[str] = None
+
 
 @dataclass(frozen=True)
 class LabDatasetSpec:
@@ -38,12 +41,12 @@ class LabDatasetSpec:
     # For "long"
     strip_col: Optional[str] = None
     date_col: Optional[str] = None
-    location_col: Optional[str] = None  # e.g., "location" or "logger_loc"
+    location_col: Optional[str] = None
     begin_depth_col: Optional[str] = None
     end_depth_col: Optional[str] = None
 
     # For "wide"
-    row_id_col: Optional[str] = None  # e.g. "location" for biomass
+    row_id_col: Optional[str] = None
 
     # Optional: explicit event ordering (ISO dates). If None, derive from data.
     event_order_iso: Optional[Sequence[str]] = None
@@ -78,7 +81,7 @@ SOILCHEM_DATASET = LabDatasetSpec(
     label="Soil Chemistry",
     source_csv=WARD_MASTER_SOILCHEM_CSV,
     shape="long",
-    strip_col="strip",      # present in your clean file
+    strip_col="strip",
     date_col="date_rec",
     begin_depth_col="begin_depth_in",
     end_depth_col="end_depth_in",
@@ -93,8 +96,8 @@ BIOMASS_FIELD_DATASET = LabDatasetSpec(
 )
 
 # -----------------------------
-# Variable sets (example: NIR Set 1)
-# Keep expanding these as you migrate other sets/tables.
+# Variable sets
+# Start by wiring reference_key only for the first few variables.
 # -----------------------------
 
 NIR_SET1_VARS: Sequence[LabVarSpec] = (
@@ -109,6 +112,7 @@ NIR_SET1_VARS: Sequence[LabVarSpec] = (
             "Crude Protein Dry Basis %",
             "Crude Protein (Dry Basis, %)",
         ),
+        reference_key="crude_protein_pct_db",
     ),
     LabVarSpec(
         key="adf_pct_db",
@@ -120,6 +124,7 @@ NIR_SET1_VARS: Sequence[LabVarSpec] = (
             "ADF Dry Basis",
             "ADF (Dry Basis, %)",
         ),
+        reference_key=None,
     ),
     LabVarSpec(
         key="ndf_pct_db",
@@ -131,6 +136,7 @@ NIR_SET1_VARS: Sequence[LabVarSpec] = (
             "NDF Dry Basis",
             "NDF (Dry Basis, %)",
         ),
+        reference_key=None,
     ),
     LabVarSpec(
         key="tdn_pct_db",
@@ -142,10 +148,78 @@ NIR_SET1_VARS: Sequence[LabVarSpec] = (
             "Total Digestible Nutrients Dry Basis",
             "Total Digestible Nutrients (Dry Basis, %)",
         ),
+        reference_key=None,
     ),
     LabVarSpec(
         key="rfv",
         label="Relative Feed Value (RFV, unitless index)",
         candidates=("rfv", "RFV", "Relative Feed Value"),
+        reference_key="rfv",
+    ),
+)
+
+SOILBIO_CORE_VARS: Sequence[LabVarSpec] = (
+    LabVarSpec(
+        key="soil_respiration",
+        label="Soil Respiration",
+        candidates=("soil_respiration", "co2_c_respiration", "respiration"),
+        reference_key="soil_respiration",
+    ),
+    LabVarSpec(
+        key="weoc",
+        label="Water Extractable Organic Carbon (WEOC)",
+        candidates=("weoc", "water_extractable_organic_carbon"),
+        reference_key="weoc",
+    ),
+    LabVarSpec(
+        key="weon",
+        label="Water Extractable Organic Nitrogen (WEON)",
+        candidates=("weon", "water_extractable_organic_nitrogen"),
+        reference_key="weon",
+    ),
+    LabVarSpec(
+        key="mac",
+        label="Microbially Active Carbon (%MAC)",
+        candidates=("mac", "percent_mac", "microbially_active_carbon"),
+        reference_key="mac",
+    ),
+    LabVarSpec(
+        key="soil_health_score",
+        label="Soil Health Score",
+        candidates=("soil_health_score", "sha_score", "soil_health_number"),
+        reference_key="soil_health_score",
+    ),
+)
+
+SOILCHEM_CORE_VARS: Sequence[LabVarSpec] = (
+    LabVarSpec(
+        key="phosphorus",
+        label="Phosphorus (ppm)",
+        candidates=("phosphorus", "p", "olsen_p", "bray_p1", "mehlich_p3"),
+        reference_key="phosphorus",
+    ),
+    LabVarSpec(
+        key="potassium",
+        label="Potassium (ppm)",
+        candidates=("potassium", "k"),
+        reference_key="potassium",
+    ),
+    LabVarSpec(
+        key="organic_matter",
+        label="Organic Matter (%)",
+        candidates=("organic_matter", "om", "organic_matter_pct"),
+        reference_key="organic_matter",
+    ),
+    LabVarSpec(
+        key="cec",
+        label="CEC",
+        candidates=("cec", "cation_exchange_capacity"),
+        reference_key="cec",
+    ),
+    LabVarSpec(
+        key="ph",
+        label="pH",
+        candidates=("ph", "soil_ph", "ph_1_1"),
+        reference_key="ph",
     ),
 )

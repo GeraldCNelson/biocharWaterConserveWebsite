@@ -1,3 +1,4 @@
+// @ts-check
 // static/js/tab_summary.js
 //
 // Summary Statistics tab controller:
@@ -9,27 +10,24 @@ import { fetchJson, generateSummaryTable, formatGseasonLabel } from "./api_reque
 import { getDropdownValue } from "./ui_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
+/**
+ * @param {string} str
+ * @returns {string}
+ */
 function capitalizeFirst(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
 }
-
-/**
- * Strict unit-aware label resolver.
- *
- * Accepts:
- *  - string
- *  - object like { us: "...", metric: "..." }
- *
- * Rules:
- *  - if object form is used, BOTH keys must exist
- *  - NO fallback to the other unit system (prevents silent wrong labels)
- *  - throws on invalid shape so we catch bugs early
- */
 
 function isTemperatureVariable(variableKey) {
   return String(variableKey || "").trim().toUpperCase() === "T";
 }
 
+/**
+ * @param {any} labelEntry
+ * @param {"us" | "metric"} unitSystem
+ * @param {string} fallback
+ * @returns {string}
+ */
 function resolveUnitLabelStrict(labelEntry, unitSystem, fallback) {
   if (!labelEntry) {
     throw new Error(
@@ -68,11 +66,20 @@ function resolveUnitLabelStrict(labelEntry, unitSystem, fallback) {
   throw new Error(`Invalid label entry type: ${typeof labelEntry}`);
 }
 
+/**
+ * @returns {"us" | "metric"}
+ */
 function getUnitSystemForSummary() {
-  const toggle = document.getElementById("units-toggle_summary");
+  const toggle = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("units-toggle_summary")
+  );
   return toggle && toggle.checked ? "metric" : "us";
 }
 
+/**
+ * @param {any} v
+ * @returns {boolean}
+ */
 function isPlainObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
@@ -81,12 +88,17 @@ function isPlainObject(v) {
  * Convert depth dropdown value to a display label:
  * - Assumes dropdown value is inches as a string like "6", "12", "18"
  * - Uses the dropdown selected text if parsing fails
+ *
+ * @param {"us" | "metric"} unitSystem
+ * @returns {string}
  */
 function getDepthDisplayLabel(unitSystem) {
-  const depthEl = document.getElementById("summary-depth");
+  const depthEl = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("summary-depth")
+  );
   if (!depthEl) return "";
 
-  const rawVal = depthEl.value; // expected "6" / "12" / "18" (inches)
+  const rawVal = depthEl.value;
   const fallbackText = depthEl.selectedOptions?.[0]?.textContent?.trim() || "";
 
   const inches = parseFloat(rawVal);
@@ -106,8 +118,14 @@ function getDepthDisplayLabel(unitSystem) {
 }
 
 /**
- * Make a clean title WITHOUT using backend data.title.
- * This prevents the "{metric:..., us:...}" stringification problem.
+ * @param {{
+ *   year: number,
+ *   variable: string,
+ *   strip: string | null,
+ *   granularity: string,
+ *   unitSystem: "us" | "metric"
+ * }} args
+ * @returns {string}
  */
 function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
   const labelMap = window.labelNameMapping || {};
@@ -128,8 +146,10 @@ function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
 }
 
 /**
- * Make stats keys human-readable (Top/Mid/Bottom, strip, ratio groups).
- * Compatibility layer: transforms { key: {min, mean, ...}, ... } only.
+ * @param {any} stats
+ * @param {string} variable
+ * @param {"us" | "metric"} unitSystem
+ * @returns {any}
  */
 function prettifyStatsKeys(stats, variable, unitSystem) {
   if (!isPlainObject(stats)) return stats;
@@ -152,6 +172,7 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
 
   const loggerMap = { T: "Top", M: "Mid", B: "Bottom" };
 
+  /** @type {Record<string, any>} */
   const out = {};
   keys.forEach((k) => {
     const val = stats[k];
@@ -165,7 +186,7 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
 
     const ratioGroup =
       String(k).includes("S1_S2") ? "S1/S2" :
-        (String(k).includes("S3_S4") ? "S3/S4" : null);
+      (String(k).includes("S3_S4") ? "S3/S4" : null);
 
     let displayKey = prettyVar;
 
@@ -189,7 +210,10 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
 }
 
 /**
- * Build Bootstrap accordion HTML for gseason payload.
+ * @param {any} gseasonStats
+ * @param {string} variable
+ * @param {"us" | "metric"} unitSystem
+ * @returns {string}
  */
 function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
   const periods = window.gseasonPeriods || {};
@@ -200,7 +224,12 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
     return `<p class="text-muted">No seasonal periods are defined.</p>`;
   }
 
+  /**
+   * @param {any} stats
+   * @returns {Record<string, any>}
+   */
   function normalizeFlatGseasonStats(stats) {
+    /** @type {Record<string, any>} */
     const grouped = {};
 
     if (!Array.isArray(stats)) {
@@ -291,8 +320,11 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
 
     const rawPretty = prettifyStatsKeys(rawStats, variable, unitSystem);
 
+    /** @type {Record<string, any>} */
     const s1s2 = {};
+    /** @type {Record<string, any>} */
     const s3s4 = {};
+
     Object.entries(ratioStats).forEach(([k, v]) => {
       const key = String(k);
       if (key.includes("S1/S2") || key.includes("S1_S2")) {
@@ -360,7 +392,6 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
   return html;
 }
 
-// NEW: small helpers so we always show/hide the summary status consistently
 function showSummaryStatus(text = "") {
   const el = document.getElementById("summary-status");
   if (!el) return;
@@ -378,7 +409,6 @@ function hideSummaryStatus() {
 export async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: Updating summary statistics...");
 
-  // NEW: ensure the status line is visible while loading
   showSummaryStatus("");
   startLoadingDots("summary-status", "Loading summary tables..");
 
@@ -394,12 +424,13 @@ export async function updateSummaryStatistics() {
   container.innerHTML = "";
 
   try {
-    const year = parseInt(getDropdownValue("summary-year"), 10);
-    const variable = getDropdownValue("summary-variable"); // backend variable key (e.g., VWC, T, EC, SWC)
-    const stripRaw = getDropdownValue("summary-strip");
+    const yearVal = getDropdownValue("summary-year");
+    const year = parseInt(String(yearVal ?? ""), 10);
+    const variable = /** @type {string} */ (getDropdownValue("summary-variable") || "");
+    const stripRaw = /** @type {string | null} */ (getDropdownValue("summary-strip"));
     const strip = stripRaw ? stripRaw : null;
-    const granularity = getDropdownValue("summary-granularity");
-    const depthRaw = getDropdownValue("summary-depth");
+    const granularity = /** @type {string} */ (getDropdownValue("summary-granularity") || "");
+    const depthRaw = /** @type {string | null} */ (getDropdownValue("summary-depth"));
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
 
@@ -448,22 +479,15 @@ export async function updateSummaryStatistics() {
 
     container.innerHTML = "";
 
-    // ----------------------------
-    // Growing season special render
-    // ----------------------------
     if (granularity === "gseason") {
       container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
       console.log("✅ Seasonal accordion rendered.");
 
-      // NEW: stop + hide status on success
       stopLoadingDots("summary-status", "");
       hideSummaryStatus();
       return;
     }
 
-    // ----------------------------
-    // Raw block
-    // ----------------------------
     const rawHeader = document.createElement("h5");
     rawHeader.textContent = "Raw Data";
     container.appendChild(rawHeader);
@@ -479,9 +503,6 @@ export async function updateSummaryStatistics() {
       container.appendChild(warn);
     }
 
-    // ----------------------------
-    // Ratio block
-    // ----------------------------
     const ratioHeader = document.createElement("h5");
     ratioHeader.className = "mt-4";
     ratioHeader.textContent = "Ratio Data";
@@ -499,7 +520,6 @@ export async function updateSummaryStatistics() {
 
       console.log("ℹ️ Temperature variable selected; ratio stats intentionally suppressed.");
 
-      // NEW: stop + hide status on success
       stopLoadingDots("summary-status", "");
       hideSummaryStatus();
       return;
@@ -530,7 +550,6 @@ export async function updateSummaryStatistics() {
 
     console.log("✅ Summary statistics tables updated.");
 
-    // NEW: stop + hide status on success
     stopLoadingDots("summary-status", "");
     hideSummaryStatus();
   } catch (error) {
@@ -543,7 +562,6 @@ export async function updateSummaryStatistics() {
       "Failed to load summary statistics. Check server logs and browser console.";
     container.appendChild(div);
 
-    // NEW: show status on error
     stopLoadingDots("summary-status", "Failed to load summary.");
     showSummaryStatus("Failed to load summary.");
   } finally {
@@ -563,14 +581,13 @@ export function initSummaryTab() {
     updateSummaryStatistics();
   });
 
-  // Auto-load when the Summary tab is opened the first time (non-blocking)
-  const summaryTab = document.getElementById("summary-tab"); // adjust if your id differs
+  const summaryTab = document.getElementById("summary-tab");
   const container = document.getElementById("summary-table-container");
   if (summaryTab && container && container.dataset.autoloaded !== "true") {
     summaryTab.addEventListener("shown.bs.tab", () => {
       if (container.dataset.autoloaded === "true") return;
       container.dataset.autoloaded = "true";
-      updateSummaryStatistics(); // no await
+      updateSummaryStatistics();
     });
   }
 

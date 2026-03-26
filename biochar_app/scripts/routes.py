@@ -20,6 +20,7 @@ from fastapi.responses import (
     FileResponse,
     JSONResponse,
     Response,
+    HTMLResponse,
 )
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -55,7 +56,6 @@ from biochar_app.config.core import (
     DEFAULT_START_DATE,
     DEFAULT_END_DATE,
     DEFAULT_VARIABLE,
-    DEFAULT_SENSOR_DEPTH_CODE,
     SENSOR_DEPTH_LABELS,
     DEFAULT_STRIP,
     DEFAULT_LOGGER_LOCATION,
@@ -85,24 +85,16 @@ from biochar_app.config.units import (
 
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
-    IRRIGATION_CSV,
-    FERTILIZER_CSV,
     PARQUET_DIR,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
 from types import SimpleNamespace
 
-from biochar_app.config import table_specs as ts
-from biochar_app.scripts.tables_lab import (
-    build_lab_table_payload_long,
-    build_lab_table_payload_wide,
-)
+from biochar_app.scripts.tables.tables_soil_bio import build_soilbio_table
+from biochar_app.scripts.tables.tables_soil_chem import build_soilchem_table
 
-from biochar_app.scripts.tables_soil_bio import build_soilbio_table
-from biochar_app.scripts.tables_soil_chem import build_soilchem_table
-
-from biochar_app.scripts.tables_nir import (
+from biochar_app.scripts.tables.tables_nir import (
     build_nir_set1_table,
     build_nir_set2_table,
     build_nir_set3_table,
@@ -126,6 +118,8 @@ templates = Jinja2Templates(
 DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
 WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
+
+LAB_REF_DIR = Path(__file__).resolve().parents[1] / "data-processed" / "ward-html"
 
 _LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
 
@@ -1054,3 +1048,14 @@ async def api_get_lab_table(table_key: str):
     except Exception as e:
         logger.exception("❌ /api/lab_table/%s failed", key)
         raise HTTPException(status_code=500, detail=str(e))
+
+@main_router.get("/lab-references/ward-guide", response_class=HTMLResponse)
+async def ward_guide():
+    file_path = LAB_REF_DIR / "ward_guide.html"
+    return file_path.read_text(encoding="utf-8")
+
+
+@main_router.get("/lab-references/soil-health-guide", response_class=HTMLResponse)
+async def soil_health_guide():
+    file_path = LAB_REF_DIR / "soil_health_guide.html"
+    return file_path.read_text(encoding="utf-8")

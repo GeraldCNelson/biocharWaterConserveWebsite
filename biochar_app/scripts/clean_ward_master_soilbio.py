@@ -41,7 +41,6 @@ while still including the latest late-2025 rows.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Dict
 
 import pandas as pd
@@ -57,7 +56,7 @@ from biochar_app.scripts.clean_ward_master_common import (
     validate_and_report,
     write_clean_outputs,
 )
-from biochar_app.scripts.tables_soil_bio import _prepare_soilbio_csv
+from biochar_app.scripts.tables.tables_soil_bio import _prepare_soilbio_csv
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
