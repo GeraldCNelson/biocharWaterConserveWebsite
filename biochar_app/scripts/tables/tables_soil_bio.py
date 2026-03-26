@@ -51,8 +51,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 
-from biochar_app.scripts.tables_common import build_grouped_tab_payload
-from biochar_app.scripts.tables_soil_common import VariableSpec, build_soil_table_payload
+from biochar_app.scripts.tables.tables_common import build_grouped_tab_payload
+from biochar_app.scripts.tables.tables_soil_common import VariableSpec, build_soil_table_payload
 
 # -----------------------------------------------------------------------------
 # Shared top-level note (STANDARD)
@@ -238,6 +238,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                     "PLFAs are found in cell membranes of living organisms; different groups "
                     "have characteristic PLFA fingerprints."
                 ),
+                reference_key="total_biomass",
             ),
             VariableSpec(
                 key="bacteria_biomass",
@@ -250,6 +251,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                     "bacteria_ng_per_g",
                 ),
                 note="Bacterial biomass from PLFA (ng/g).",
+                reference_key="bacteria_biomass",
             ),
             VariableSpec(
                 key="fungi_biomass",
@@ -262,12 +264,14 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                     "fungi_ng_per_g",
                 ),
                 note="Fungal biomass from PLFA (ng/g).",
+                reference_key="fungi_biomass",
             ),
             VariableSpec(
                 key="fungi_bacteria",
                 label="Fungi : Bacteria",
                 candidates=("fungi_bacteria", "fungi_bacteria_ratio"),
                 note="Fungal-to-bacterial biomass ratio (unitless).",
+                reference_key="fungi_bacteria",
             ),
             VariableSpec(
                 key="actinobacteria_biomass",
@@ -279,12 +283,14 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                     "actinobacteria_ng_per_g",
                 ),
                 note="Actinobacteria (actinomycetes) biomass from PLFA (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="rhizobia_biomass",
                 label="Rhizobia Biomass (ng/g)",
                 candidates=("rhizobia_biomass", "rhizobia_ng_per_g"),
                 note="Rhizobia biomass from PLFA (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="mycorrhizae_biomass",
@@ -296,6 +302,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                     "mycorrhizae_ng_per_g",
                 ),
                 note="Arbuscular mycorrhizal fungi biomass from PLFA (ng/g).",
+                reference_key="mycorrhizae_biomass",
             ),
         ],
     },
@@ -309,30 +316,35 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Gram+ Biomass (ng/g)",
                 candidates=("gram_pos_biomass", "gram_pos_ng_per_g", "gram_positive_ng_per_g"),
                 note="Gram-positive bacterial biomass (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="gram_neg_biomass",
                 label="Gram− Biomass (ng/g)",
                 candidates=("gram_biomass", "gram_neg_biomass", "gram_neg_ng_per_g", "gram_negative_ng_per_g"),
                 note="Gram-negative bacterial biomass (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="protozoan_biomass",
                 label="Protozoan Biomass (ng/g)",
                 candidates=("protozoa_biomass", "protozoan_biomass", "protozoan_ng_per_g"),
                 note="Protozoan biomass (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="saprophytes_biomass",
                 label="Saprophytes Biomass (ng/g)",
                 candidates=("saprophytes_biomass",),
                 note="Saprophytic fungi biomass (ng/g).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="undifferentiated_biomass",
                 label="Undifferentiated Biomass (ng/g)",
                 candidates=("undifferentiated_biomass",),
                 note="Undifferentiated biomass (ng/g).",
+                reference_key=None,
             ),
         ],
     },
@@ -346,30 +358,35 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Diversity Index",
                 candidates=("diversity_index",),
                 note="PLFA diversity index (unitless).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="pre_16_1w7c_cy17_0",
                 label="Pre 16:1w7c : cy17:0",
                 candidates=("pre_16_1w7c_cy17_0",),
                 note="Stress indicator ratio (interpret in context).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="pre_18_1w7c_cy19_0",
                 label="Pre 18:1w7c : cy19:0",
                 candidates=("pre_18_1w7c_cy19_0",),
                 note="Stress indicator ratio (interpret in context).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="sat_unsat",
                 label="Saturated : Unsaturated",
                 candidates=("sat_unsat",),
                 note="Ratio of saturated to unsaturated fatty acids (unitless).",
+                reference_key=None,
             ),
             VariableSpec(
                 key="mono_poly",
                 label="Monounsaturated : Polyunsaturated",
                 candidates=("mono_poly",),
                 note="Ratio of mono- to polyunsaturated fatty acids (unitless).",
+                reference_key=None,
             ),
         ],
     },
@@ -383,12 +400,14 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Predator : Prey",
                 candidates=("predator_prey", "predator_pre", "predator_prey_ratio"),
                 note="Often expressed as protozoa:bacteria; interpret in context.",
+                reference_key=None,
             ),
             VariableSpec(
                 key="gram_pos_gram",
                 label="Gram+ : Gram−",
                 candidates=("gram_pos_gram", "gram_pos_neg", "gram_pos_gram_neg", "gram_pos_to_neg"),
                 note="Ratio of Gram+ to Gram− bacterial biomass (unitless).",
+                reference_key=None,
             ),
         ],
     },

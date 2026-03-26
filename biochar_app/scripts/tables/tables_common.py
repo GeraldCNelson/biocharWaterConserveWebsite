@@ -16,6 +16,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from biochar_app.config.lab_specs import LabVarSpec
+from biochar_app.scripts.lab.reference_helpers import get_reference_for_varspec
+from biochar_app.scripts.lab.serializers import serialize_reference_bundle
+
 # A build function that returns the standard set payload dict
 SetPayloadBuilder = Callable[[], Dict[str, Any]]
 
@@ -112,4 +116,28 @@ def build_grouped_tab_payload(
         "title": title,
         "note": top_note,
         "sets": sets,
+    }
+
+
+def build_variable_meta(var_spec: LabVarSpec) -> Dict[str, Any]:
+    """
+    Build a standard variable metadata payload, including optional Ward reference info.
+
+    This does not include any values. It only describes the variable for the frontend:
+    - key
+    - label
+    - short note
+    - reference key
+    - whether a reference exists
+    - serialized reference bundle (if present)
+    """
+    bundle = get_reference_for_varspec(var_spec)
+
+    return {
+        "key": var_spec.key,
+        "label": var_spec.label,
+        "note": bundle.short_note if bundle else "",
+        "reference_key": var_spec.reference_key,
+        "has_reference": bundle is not None,
+        "reference": serialize_reference_bundle(bundle),
     }

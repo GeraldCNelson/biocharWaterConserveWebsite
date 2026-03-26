@@ -40,7 +40,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-
+from biochar_app.scripts.tables.tables_common import build_variable_meta
 import pandas as pd
 
 
@@ -143,7 +143,43 @@ def _parse_date_rec(df: pd.DataFrame) -> pd.DataFrame:
     datetime column for sorting/filtering.
     """
     out = df.copy()
-    out["_date_rec_dt"] = pd.to_datetime(out["date_rec"], errors="coerce")
+
+    # Normalize raw strings
+    s = out["date_rec"].astype(str).str.strip()
+    s = s.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "NaT": pd.NA})
+
+    # First pass: ISO format
+    parsed = pd.to_datetime(s, format="%Y-%m-%d", errors="coerce")
+
+    # Second pass: slash dates with 4-digit year
+    mask = parsed.isna() & s.notna()
+    if mask.any():
+        parsed.loc[mask] = pd.to_datetime(
+            s.loc[mask],
+            format="%m/%d/%Y",
+            errors="coerce",
+        )
+
+    # Third pass: slash dates with 2-digit year
+    mask = parsed.isna() & s.notna()
+    if mask.any():
+        parsed.loc[mask] = pd.to_datetime(
+            s.loc[mask],
+            format="%m/%d/%y",
+            errors="coerce",
+        )
+
+    # Debug any leftovers that still failed
+    failed_mask = parsed.isna() & s.notna()
+    if failed_mask.any():
+        bad_values = s.loc[failed_mask].unique()
+
+        print("\n⚠️ DATE PARSE DEBUG — Unparsed values:")
+        for val in bad_values[:20]:
+            print(f"  -> '{val}'")
+        print(f"Total unparsed: {len(bad_values)}\n")
+
+    out["_date_rec_dt"] = parsed
     return out
 
 
@@ -183,6 +219,7 @@ class VariableSpec:
     label: str
     candidates: Tuple[str, ...]
     note: str = ""
+    reference_key: Optional[str] = None
 
 
 def _pick_first_existing_column(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
@@ -320,7 +357,7 @@ def build_soil_table_payload(
 
     out: Dict[str, Any] = {
         "periods": periods,
-        "variables": [{"key": v.key, "label": v.label, "note": v.note} for v in variables],
+        "variables": [build_variable_meta(v) for v in variables],
         "rows": rows,
         "rowLabels": row_labels,
         "data": {},

@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import logging
 import numpy as np
 import pandas as pd
 
+from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.config.paths import WARD_MASTER_NIR_CSV
+from biochar_app.scripts.tables.tables_common import build_variable_meta
 
 logger = logging.getLogger(__name__)
 
@@ -21,83 +23,155 @@ NIR_MAX_YEAR = 2025  # inclusive
 # ---------------------------------------------------------------------
 # Variable sets
 # ---------------------------------------------------------------------
-NIR_VARIABLES_SET1: List[Dict[str, Any]] = [
-    {
-        "key": "crude_protein_pct_db",
-        "label": "Crude Protein (Dry Basis, %)",
-        "candidates": [
+NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
+    LabVarSpec(
+        key="crude_protein_pct_db",
+        label="Crude Protein (Dry Basis, %)",
+        candidates=(
             "crude_protein_pct_db",
             "cp_pct_db",
             "Crude Protein Dry Basis",
             "Crude Protein Dry Basis (%)",
             "Crude Protein Dry Basis %",
             "Crude Protein (Dry Basis, %)",
-        ],
-    },
-    {
-        "key": "adf_pct_db",
-        "label": "Acid Detergent Fiber (Dry Basis, %)",
-        "candidates": [
+        ),
+        note="Crude protein estimates the total protein-related nitrogen content of the forage.",
+        reference_key="crude_protein_pct_db",
+    ),
+    LabVarSpec(
+        key="adf_pct_db",
+        label="Acid Detergent Fiber (Dry Basis, %)",
+        candidates=(
             "adf_pct_db",
             "Acid Detergent Fiber Dry Basis",
             "Acid Detergent Fiber Dry Basis (%)",
             "ADF Dry Basis",
             "ADF (Dry Basis, %)",
-        ],
-    },
-    {
-        "key": "ndf_pct_db",
-        "label": "Neutral Detergent Fiber (Dry Basis, %)",
-        "candidates": [
+        ),
+    ),
+    LabVarSpec(
+        key="ndf_pct_db",
+        label="Neutral Detergent Fiber (Dry Basis, %)",
+        candidates=(
             "ndf_pct_db",
             "Neutral Detergent Fiber Dry Basis",
             "Neutral Detergent Fiber Dry Basis (%)",
             "NDF Dry Basis",
             "NDF (Dry Basis, %)",
-        ],
-    },
-    {
-        "key": "tdn_pct_db",
-        "label": "Total Digestible Nutrients (Dry Basis, %)",
-        "candidates": [
+        ),
+    ),
+    LabVarSpec(
+        key="tdn_pct_db",
+        label="Total Digestible Nutrients (Dry Basis, %)",
+        candidates=(
             "tdn_pct_db",
             "TDN Est. Dry Basis",
             "TDN Est. Dry Basis (%)",
             "Total Digestible Nutrients Dry Basis",
             "Total Digestible Nutrients (Dry Basis, %)",
-        ],
-    },
-    {
-        "key": "rfv",
-        "label": "Relative Feed Value (RFV, unitless index)",
-        "candidates": ["rfv", "RFV", "Relative Feed Value"],
-    },
+        ),
+    ),
+    LabVarSpec(
+        key="rfv",
+        label="Relative Feed Value (RFV, unitless index)",
+        candidates=("rfv", "RFV", "Relative Feed Value"),
+        note="Relative Feed Value is an index used to compare forage quality.",
+        reference_key="rfv",
+    ),
 ]
 
-NIR_VARIABLES_SET2: List[Dict[str, Any]] = [
-    {"key": "nfc_pct_db", "label": "Non-Fiber Carbohydrates (Dry Basis, %)", "candidates": ["nfc_pct_db"]},
-    {"key": "starch_pct_db", "label": "Starch (Dry Basis, %)", "candidates": ["starch_pct_db"]},
-    {"key": "wsc_pct_db", "label": "Water-Soluble Carbohydrates (Dry Basis, %)", "candidates": ["wsc_pct_db"]},
-    {"key": "fructan_pct_db", "label": "Fructans (Dry Basis, %)", "candidates": ["fructan_pct_db"]},
-    {"key": "nel_pct_db", "label": "Net Energy for Lactation (Dry Basis, %)", "candidates": ["nel_pct_db"]},
-    {"key": "nem_pct_db", "label": "Net Energy for Maintenance (Dry Basis, %)", "candidates": ["nem_pct_db"]},
-    {"key": "neg_pct_db", "label": "Net Energy for Gain (Dry Basis, %)", "candidates": ["neg_pct_db"]},
+NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
+    LabVarSpec(
+        key="nfc_pct_db",
+        label="Non-Fiber Carbohydrates (Dry Basis, %)",
+        candidates=("nfc_pct_db",),
+    ),
+    LabVarSpec(
+        key="starch_pct_db",
+        label="Starch (Dry Basis, %)",
+        candidates=("starch_pct_db",),
+    ),
+    LabVarSpec(
+        key="wsc_pct_db",
+        label="Water-Soluble Carbohydrates (Dry Basis, %)",
+        candidates=("wsc_pct_db",),
+    ),
+    LabVarSpec(
+        key="fructan_pct_db",
+        label="Fructans (Dry Basis, %)",
+        candidates=("fructan_pct_db",),
+    ),
+    LabVarSpec(
+        key="nel_pct_db",
+        label="Net Energy for Lactation (Dry Basis, %)",
+        candidates=("nel_pct_db",),
+    ),
+    LabVarSpec(
+        key="nem_pct_db",
+        label="Net Energy for Maintenance (Dry Basis, %)",
+        candidates=("nem_pct_db",),
+    ),
+    LabVarSpec(
+        key="neg_pct_db",
+        label="Net Energy for Gain (Dry Basis, %)",
+        candidates=("neg_pct_db",),
+    ),
 ]
 
-NIR_VARIABLES_SET3: List[Dict[str, Any]] = [
-    {"key": "ash_pct_db", "label": "Ash (Dry Basis, %)", "candidates": ["ash_pct_db"]},
-    {"key": "ca_pct_db", "label": "Calcium (Dry Basis, %)", "candidates": ["ca_pct_db", "Ca_pct_db"]},
-    {"key": "p_pct_db", "label": "Phosphorus (Dry Basis, %)", "candidates": ["p_pct_db", "P_pct_db"]},
-    {"key": "k_pct_db", "label": "Potassium (Dry Basis, %)", "candidates": ["k_pct_db", "K_pct_db"]},
-    {"key": "mg_pct_db", "label": "Magnesium (Dry Basis, %)", "candidates": ["mg_pct_db", "Mg_pct_db"]},
+NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
+    LabVarSpec(
+        key="ash_pct_db",
+        label="Ash (Dry Basis, %)",
+        candidates=("ash_pct_db",),
+    ),
+    LabVarSpec(
+        key="ca_pct_db",
+        label="Calcium (Dry Basis, %)",
+        candidates=("ca_pct_db", "Ca_pct_db"),
+    ),
+    LabVarSpec(
+        key="p_pct_db",
+        label="Phosphorus (Dry Basis, %)",
+        candidates=("p_pct_db", "P_pct_db"),
+    ),
+    LabVarSpec(
+        key="k_pct_db",
+        label="Potassium (Dry Basis, %)",
+        candidates=("k_pct_db", "K_pct_db"),
+    ),
+    LabVarSpec(
+        key="mg_pct_db",
+        label="Magnesium (Dry Basis, %)",
+        candidates=("mg_pct_db", "Mg_pct_db"),
+    ),
 ]
 
-NIR_VARIABLES_SET4: List[Dict[str, Any]] = [
-    {"key": "ndfd48_pctndf_db", "label": "NDF Digestibility at 48h (% of NDF)", "candidates": ["ndfd48_pctndf_db"]},
-    {"key": "ivtdmd48_pctndf_db", "label": "In Vitro True Digestibility (48h, % of NDF)", "candidates": ["ivtdmd48_pctndf_db"]},
-    {"key": "fat_pct_db", "label": "Crude Fat (Dry Basis, %)", "candidates": ["fat_pct_db"]},
-    {"key": "lignin_pct_db", "label": "Lignin (Dry Basis, %)", "candidates": ["lignin_pct_db"]},
-    {"key": "RFQ", "label": "Relative Forage Quality (RFQ)", "candidates": ["RFQ", "rfq"]},
+NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
+    LabVarSpec(
+        key="ndfd48_pctndf_db",
+        label="NDF Digestibility at 48h (% of NDF)",
+        candidates=("ndfd48_pctndf_db",),
+    ),
+    LabVarSpec(
+        key="ivtdmd48_pctndf_db",
+        label="In Vitro True Digestibility (48h, % of NDF)",
+        candidates=("ivtdmd48_pctndf_db",),
+    ),
+    LabVarSpec(
+        key="fat_pct_db",
+        label="Crude Fat (Dry Basis, %)",
+        candidates=("fat_pct_db",),
+    ),
+    LabVarSpec(
+        key="lignin_pct_db",
+        label="Lignin (Dry Basis, %)",
+        candidates=("lignin_pct_db",),
+    ),
+    LabVarSpec(
+        key="RFQ",
+        label="Relative Forage Quality (RFQ)",
+        candidates=("RFQ", "rfq"),
+    ),
 ]
 
 
@@ -108,7 +182,7 @@ def _normalize_colname(s: str) -> str:
     return " ".join(str(s).strip().split())
 
 
-def _pick_first_existing(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+def _pick_first_existing(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
     norm_map = {_normalize_colname(c): c for c in df.columns}
     for cand in candidates:
         key = _normalize_colname(cand)
@@ -122,7 +196,6 @@ def _pick_first_existing(df: pd.DataFrame, candidates: List[str]) -> Optional[st
             if low == str(c).strip().lower():
                 return c
     return None
-
 
 def _parse_date_any(x: Any) -> Optional[pd.Timestamp]:
     if x is None:
@@ -324,7 +397,7 @@ def _build_period_list(df: pd.DataFrame) -> List[Dict[str, str]]:
 
 def _build_nir_table_payload(
     df: pd.DataFrame,
-    variables: List[Dict[str, Any]],
+    variables: Sequence[LabVarSpec],
     extra_event_csvs: Optional[List[Path]] = None,
 ) -> Dict[str, Any]:
     # IMPORTANT: don't reuse a loop var name across different types (mypy hates that)
@@ -348,19 +421,19 @@ def _build_nir_table_payload(
 
     out: Dict[str, Any] = {
         "periods": periods,
-        "variables": [{"key": v["key"], "label": v["label"]} for v in variables],
+        "variables": [build_variable_meta(v) for v in variables],
         "rows": rows,
         "rowLabels": {r: r for r in rows},
         "data": {},
     }
 
     for v in variables:
-        var_key = str(v.get("key", "")).strip()
-        candidates = v.get("candidates") or [var_key]
+        var_key = v.key.strip()
+        candidates = v.candidates or (var_key,)
         if not var_key:
             continue
 
-        col = _pick_first_existing(df, list(candidates))
+        col = _pick_first_existing(df, candidates)
         table_for_var: Dict[str, Dict[str, Optional[float]]] = {
             r: {period["key"]: None for period in periods} for r in rows
         }
