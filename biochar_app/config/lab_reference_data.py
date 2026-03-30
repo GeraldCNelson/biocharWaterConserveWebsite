@@ -1,4 +1,3 @@
-# biochar_app/config/lab_reference_data.py
 from __future__ import annotations
 
 from biochar_app.config.lab_reference_models import (
@@ -8,16 +7,51 @@ from biochar_app.config.lab_reference_models import (
     VariableReferenceBundle,
 )
 
+
+def combine_reference_bundles(
+    *bundles: VariableReferenceBundle,
+) -> VariableReferenceBundle:
+    references = []
+    seen = set()
+
+    for bundle in bundles:
+        for ref in bundle.references:
+            key = (
+                ref.guide_key,
+                ref.section_title,
+                ref.table_title,
+                ref.anchor,
+                ref.source_url,
+            )
+            if key not in seen:
+                seen.add(key)
+                references.append(ref)
+
+    first = bundles[0]
+
+    return VariableReferenceBundle(
+        short_note=first.short_note,
+        detail=first.detail,
+        interpretation=first.interpretation,
+        caveat=first.caveat,
+        references=tuple(references),
+        thresholds=first.thresholds,
+    )
+
+
 # ---------------------------------------------------------------------
 # Guide URLs / reference landing pages
 # ---------------------------------------------------------------------
-# These can later be centralized in ward_reference_config.py if desired.
 WARD_GUIDE_HTML = "/lab-references/ward-guide"
 SHA_GUIDE_HTML = "/lab-references/soil-health-guide"
+WARD_BIOLOGICAL_REPORT_HTML = "/lab-references/ward-biological-report"
 
 WARD_GUIDE_PDF = "/lab-references/ward-guide/pdf"
 SHA_GUIDE_PDF = "/lab-references/soil-health-guide/pdf"
+WARD_BIOLOGICAL_REPORT_PDF = "/lab-references/ward-biological-report/pdf"
 
+WARD_BIOLOGICAL_REPORT_DATE = "2025-11-05"
+WARD_BIOLOGICAL_REPORT_LABEL = f"Ward Biological Report ({WARD_BIOLOGICAL_REPORT_DATE})"
 
 # ---------------------------------------------------------------------
 # Soil chemistry references
@@ -63,12 +97,15 @@ PHOSPHORUS_REFERENCE = VariableReferenceBundle(
             guide_key="ward_guide",
             guide_label="WardGuide",
             table_number="Table 60",
-            table_title="Phosphorus Sufficiency Levels for Mehlich P-3, Bray P-1, and Olsen P Soil Tests",
+            table_title=(
+                "Phosphorus Sufficiency Levels for Mehlich P-3, Bray P-1, "
+                "and Olsen P Soil Tests"
+            ),
             page_hint=99,
             source_url=f"{WARD_GUIDE_HTML}#table-60",
         ),
     ),
-    thresholds=None,  # TODO: add exact method-specific bands once the final Ward table values are confirmed
+    thresholds=None,
 )
 
 POTASSIUM_REFERENCE = VariableReferenceBundle(
@@ -114,7 +151,7 @@ POTASSIUM_REFERENCE = VariableReferenceBundle(
             source_url=f"{WARD_GUIDE_HTML}#table-61",
         ),
     ),
-    thresholds=None,  # TODO: add exact K bands once the final Ward table values are confirmed
+    thresholds=None,
 )
 
 ORGANIC_MATTER_REFERENCE = VariableReferenceBundle(
@@ -213,6 +250,548 @@ PH_REFERENCE = VariableReferenceBundle(
     ),
 )
 
+BUFFER_PH_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Buffer pH helps estimate reserve acidity and supports lime recommendation decisions."
+    ),
+    detail=(
+        "WardGuide explains that a buffer pH measurement is used with soil pH to estimate reserve acidity "
+        "held on clays and organic matter, which supports liming recommendations."
+    ),
+    interpretation=(
+        "Interpret buffer pH together with soil pH, crop type, and lime program rather than as an isolated value."
+    ),
+    caveat=(
+        "Buffer pH is a recommendation support measurement, not a direct substitute for soil pH."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Lime Recommendations",
+            anchor="lime-recommendations",
+            page_hint=48,
+            source_url=f"{WARD_GUIDE_HTML}#lime-recommendations",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 30",
+            table_title="Lime Recommendation Based on Buffer pH",
+            page_hint=49,
+            source_url=f"{WARD_GUIDE_HTML}#table-30-lime-recommendation-based-on-buffer-ph",
+        ),
+    ),
+)
+
+SALINITY_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Soluble salts and salinity are commonly interpreted from electrical conductivity measurements."
+    ),
+    detail=(
+        "WardGuide explains that salt-affected soils are influenced by soluble salts in the soil solution, "
+        "and that salinity is commonly measured by electrical conductivity. For routine soil test reports, "
+        "soluble salt interpretations are often tied to 1:1 soil:water measurements."
+    ),
+    interpretation=(
+        "Interpret EC or soluble salts in context. The same measured salinity can have different practical "
+        "consequences depending on crop sensitivity, leaching, irrigation water quality, and whether sodium "
+        "hazards are also present."
+    ),
+    caveat=(
+        "Do not treat salinity as a stand-alone issue. WardGuide distinguishes among soluble salts, salinity, "
+        "sodicity, and irrigation-water hazards, which can overlap but are not identical."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Salt Affected Soil",
+            anchor="salt-affected-soil",
+            page_hint=104,
+            source_url=f"{WARD_GUIDE_HTML}#salt-affected-soil",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 38",
+            table_title="Soluble Salt Ratings",
+            page_hint=55,
+            source_url=f"{WARD_GUIDE_HTML}#table-38-soluble-salt-ratings",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 65",
+            table_title="The Relationship Between Conductivity and Degree of Salinity",
+            page_hint=105,
+            source_url=f"{WARD_GUIDE_HTML}#table-65-the-relationship-between-conductivity-and-degree-of-salinity",
+        ),
+    ),
+)
+
+EXCESS_LIME_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Excess lime affects soil chemistry, nutrient availability, and how pH-related recommendations should be interpreted."
+    ),
+    detail=(
+        "WardGuide discusses liming, buffer pH, and carbonate effects on soil chemistry, while also noting that "
+        "free lime or calcareous conditions can influence nutrient availability and the behavior of several soil tests."
+    ),
+    interpretation=(
+        "Treat excess lime as an important contextual factor, especially when interpreting phosphorus, iron, zinc, "
+        "manganese, and other nutrients that may behave differently in calcareous soils."
+    ),
+    caveat=(
+        "Excess lime is not simply the same thing as a high pH reading. Its practical meaning depends on carbonate "
+        "content, crop sensitivity, and how the lab’s extraction methods respond under calcareous conditions."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Lime Recommendations",
+            anchor="lime-recommendations",
+            page_hint=48,
+            source_url=f"{WARD_GUIDE_HTML}#lime-recommendations",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 30",
+            table_title="Lime Recommendation Based on Buffer pH",
+            page_hint=49,
+            source_url=f"{WARD_GUIDE_HTML}#table-30-lime-recommendation-based-on-buffer-ph",
+        ),
+    ),
+)
+
+NITRATE_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Soil nitrate is the mobile, plant-available nitrogen pool most commonly used in fertilizer recommendation work."
+    ),
+    detail=(
+        "WardGuide describes nitrate as the end product of much of the soil nitrogen cycle and emphasizes that it is "
+        "water-soluble, mobile, and often measured to estimate nitrogen carryover for the next crop."
+    ),
+    interpretation=(
+        "Interpret nitrate in relation to sampling depth, crop yield goal, subsoil nitrate, manure history, irrigation, "
+        "and leaching potential."
+    ),
+    caveat=(
+        "WardGuide notes several limitations of the nitrate test, including that it does not directly measure recent "
+        "ammonium from anhydrous ammonia, nitrogen from legumes, or manure mineralization that has not yet occurred."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Nitrate",
+            anchor="soil-test-methods-nitrate",
+            page_hint=97,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-nitrate",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Nitrogen and Sulfur Fertilizer Recommendation Calculations",
+            anchor="nitrogen-and-sulfur-fertilizer-recommendation-calculations",
+            page_hint=55,
+            source_url=f"{WARD_GUIDE_HTML}#nitrogen-and-sulfur-fertilizer-recommendation-calculations",
+        ),
+    ),
+)
+
+SULFUR_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Sulfur is an essential nutrient whose availability depends on organic matter, sulfate supply, irrigation water, and leaching."
+    ),
+    detail=(
+        "WardGuide explains that sulfur in soil is strongly tied to organic matter and sulfate dynamics. It emphasizes "
+        "that sulfur availability is influenced by soil texture, organic matter mineralization, irrigation water, and "
+        "atmospheric contributions."
+    ),
+    interpretation=(
+        "Interpret sulfur in relation to the sulfate test, organic matter, irrigation water sulfur, soil texture, and "
+        "cropping system."
+    ),
+    caveat=(
+        "WardGuide notes that sulfur interpretation is more complicated than many other nutrients because multiple "
+        "sources can supply crop sulfur, and sulfate is mobile in soil."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Sulfur",
+            anchor="soil-sulfur",
+            page_hint=91,
+            source_url=f"{WARD_GUIDE_HTML}#soil-sulfur",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Sulfur",
+            anchor="soil-test-methods-sulfur",
+            page_hint=101,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-sulfur",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 24",
+            table_title="Sulfur Recommendations for Various Crops",
+            page_hint=42,
+            source_url=f"{WARD_GUIDE_HTML}#table-24-sulfur-recommendations-for-various-crops",
+        ),
+    ),
+)
+
+CALCIUM_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Soil calcium is usually interpreted together with pH, liming status, and the broader exchange complex."
+    ),
+    detail=(
+        "WardGuide explains that much soil calcium is present as exchangeable calcium and that interpretation of soil "
+        "calcium is strongly tied to pH, liming, carbonate status, and the exchangeable cation pool."
+    ),
+    interpretation=(
+        "Interpret calcium in the broader context of soil pH, liming need, and cation balance rather than treating it "
+        "as an isolated sufficiency number in most field settings."
+    ),
+    caveat=(
+        "WardGuide notes that simple Ca:Mg ratios are often overemphasized. The practical significance of calcium values "
+        "depends more on pH, exchangeability, and broader soil constraints."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Calcium",
+            anchor="calcium",
+            page_hint=14,
+            source_url=f"{WARD_GUIDE_HTML}#calcium",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Calcium and Magnesium",
+            anchor="soil-test-methods-calcium-and-magnesium",
+            page_hint=103,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-calcium-and-magnesium",
+        ),
+    ),
+)
+
+MAGNESIUM_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Soil magnesium is interpreted mainly from exchangeable Mg levels, with additional context from pH and crop sensitivity."
+    ),
+    detail=(
+        "WardGuide explains that magnesium availability is tied to exchangeable Mg and that plant response is most likely "
+        "when exchangeable magnesium is low. It also discusses interactions with crop type and liming practices."
+    ),
+    interpretation=(
+        "Interpret magnesium using exchangeable Mg levels, crop sensitivity, and soil context rather than relying heavily "
+        "on fixed cation-ratio rules."
+    ),
+    caveat=(
+        "WardGuide specifically notes that Ca:Mg ratios are often less important than the actual exchangeable magnesium level."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Magnesium",
+            anchor="magnesium",
+            page_hint=14,
+            source_url=f"{WARD_GUIDE_HTML}#magnesium",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Calcium and Magnesium",
+            anchor="soil-test-methods-calcium-and-magnesium",
+            page_hint=103,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-calcium-and-magnesium",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 31",
+            table_title="Magnesium Soil Test Ratings",
+            page_hint=50,
+            source_url=f"{WARD_GUIDE_HTML}#table-31-magnesium-soil-test-ratings",
+        ),
+    ),
+)
+
+SODIUM_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Sodium is most important in soil interpretation when it contributes to sodicity, infiltration problems, and salt-affected conditions."
+    ),
+    detail=(
+        "WardGuide explains that sodium becomes especially important in salt-affected soils, where high exchangeable sodium "
+        "can disperse clay, reduce permeability, and create structural problems."
+    ),
+    interpretation=(
+        "Interpret sodium alongside salinity, SAR, exchangeable sodium effects, and irrigation-water quality rather than as "
+        "a stand-alone soil fertility number."
+    ),
+    caveat=(
+        "High sodium is often more a structural and water-management issue than a conventional nutrient sufficiency issue."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Salt Affected Soil",
+            anchor="salt-affected-soil",
+            page_hint=104,
+            source_url=f"{WARD_GUIDE_HTML}#salt-affected-soil",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 64",
+            table_title="Classification of Salt Affected Soils Based on Saturation Extracts",
+            page_hint=105,
+            source_url=f"{WARD_GUIDE_HTML}#table-64-classification-of-salt-affected-soils-based-on-saturation-extracts",
+        ),
+    ),
+)
+
+ZINC_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Zinc is a micronutrient whose availability is strongly influenced by soil pH, crop sensitivity, and soil test level."
+    ),
+    detail=(
+        "WardGuide discusses zinc as a key micronutrient, notes that availability declines with increasing pH, and describes "
+        "soil testing and fertilizer recommendations based on DTPA zinc and crop responsiveness."
+    ),
+    interpretation=(
+        "Interpret zinc using both the soil test value and crop sensitivity, especially in calcareous or high-pH soils."
+    ),
+    caveat=(
+        "WardGuide notes that phosphorus interactions, pH, and crop-specific responsiveness all influence how meaningful a zinc test value is."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Zinc",
+            anchor="soil-zinc",
+            page_hint=93,
+            source_url=f"{WARD_GUIDE_HTML}#soil-zinc",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Zinc, Iron, Manganese and Copper",
+            anchor="soil-test-methods-zinc-iron-manganese-and-copper",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-zinc-iron-manganese-and-copper",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 62",
+            table_title="Zinc, Iron, Manganese and Copper Availability Ratings for Various Crops",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#table-62-zinc-iron-manganese-and-copper-availability-ratings-for-various-crops",
+        ),
+    ),
+)
+
+IRON_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Iron availability is strongly affected by soil pH, excess lime, and crop sensitivity."
+    ),
+    detail=(
+        "WardGuide explains that low soil-test iron is often associated with calcareous, high-pH, low-organic-matter soils "
+        "and that iron chlorosis is especially important in sensitive crops."
+    ),
+    interpretation=(
+        "Interpret iron in the context of soil test level, pH, excess lime, crop susceptibility, and observed chlorosis."
+    ),
+    caveat=(
+        "WardGuide notes that iron problems are often closely tied to calcareous conditions and bicarbonate effects, not just total iron content."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Zinc, Iron, Manganese and Copper",
+            anchor="soil-test-methods-zinc-iron-manganese-and-copper",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-zinc-iron-manganese-and-copper",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 26",
+            table_title="Iron Soil Test Ratings",
+            page_hint=45,
+            source_url=f"{WARD_GUIDE_HTML}#table-26-iron-soil-test-ratings",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 62",
+            table_title="Zinc, Iron, Manganese and Copper Availability Ratings for Various Crops",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#table-62-zinc-iron-manganese-and-copper-availability-ratings-for-various-crops",
+        ),
+    ),
+)
+
+MANGANESE_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Manganese availability varies with pH, drainage, organic matter, and redox conditions."
+    ),
+    detail=(
+        "WardGuide explains that manganese availability is influenced by soil pH, wetness, drainage, and organic matter, "
+        "and that both deficiency and excess conditions can occur depending on soil environment."
+    ),
+    interpretation=(
+        "Interpret manganese using soil test level, crop sensitivity, and site conditions such as alkalinity, waterlogging, and organic matter."
+    ),
+    caveat=(
+        "WardGuide notes that manganese is especially sensitive to redox and environmental conditions, so a soil test should not be interpreted in isolation."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Zinc, Iron, Manganese and Copper",
+            anchor="soil-test-methods-zinc-iron-manganese-and-copper",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-zinc-iron-manganese-and-copper",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 28",
+            table_title="Manganese Fertilizer Recommendations for Various Crops",
+            page_hint=47,
+            source_url=f"{WARD_GUIDE_HTML}#table-28-manganese-fertilizer-recommendations-for-various-crops",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 62",
+            table_title="Zinc, Iron, Manganese and Copper Availability Ratings for Various Crops",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#table-62-zinc-iron-manganese-and-copper-availability-ratings-for-various-crops",
+        ),
+    ),
+)
+
+COPPER_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Copper is a micronutrient most often interpreted in relation to deficiency risk, soil type, and DTPA copper levels."
+    ),
+    detail=(
+        "WardGuide explains that copper deficiency is less common than some other micronutrient deficiencies, but it may occur "
+        "in certain sandy, organic, acid, or no-till settings."
+    ),
+    interpretation=(
+        "Interpret copper using soil test level, site context, and crop sensitivity rather than assuming a broad deficiency or adequacy rule."
+    ),
+    caveat=(
+        "WardGuide notes that copper issues are relatively localized and soil type matters substantially."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Zinc, Iron, Manganese and Copper",
+            anchor="soil-test-methods-zinc-iron-manganese-and-copper",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-zinc-iron-manganese-and-copper",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 27",
+            table_title="Copper Fertilizer Recommendations",
+            page_hint=46,
+            source_url=f"{WARD_GUIDE_HTML}#table-27-copper-fertilizer-recommendations",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 62",
+            table_title="Zinc, Iron, Manganese and Copper Availability Ratings for Various Crops",
+            page_hint=102,
+            source_url=f"{WARD_GUIDE_HTML}#table-62-zinc-iron-manganese-and-copper-availability-ratings-for-various-crops",
+        ),
+    ),
+)
+
+WATER_STABLE_AGGREGATES_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Water-stable aggregates reflect how well soil particles remain bound together when wetted."
+    ),
+    detail=(
+        "WardGuide connects aggregate stability to organic matter, microbial activity, and soil structure. "
+        "It notes that microbial products help bind particles together and that management practices that "
+        "build organic matter can help improve structural stability and water relations."
+    ),
+    interpretation=(
+        "Higher water-stable aggregation generally suggests stronger soil structure, better resistance to "
+        "slaking and crusting, and improved conditions for infiltration, aeration, and root growth."
+    ),
+    caveat=(
+        "Interpret aggregate stability in context. Texture, organic matter, residue management, tillage, "
+        "and biological activity all influence the measurement, so it is most useful for comparing treatments "
+        "or tracking change over time."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Texture",
+            anchor="soil-texture",
+            page_hint=120,
+            source_url=f"{WARD_GUIDE_HTML}#soil-texture",
+        ),
+    ),
+)
+
+BASE_SATURATION_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Percent base saturation describes the share of exchange sites occupied by base cations such as potassium, calcium, magnesium, and sodium."
+    ),
+    detail=(
+        "WardGuide explains that percent base saturation reflects how much of the CEC is occupied by exchangeable bases rather than hydrogen "
+        "and aluminum, and that it is linked to soil acidity and cation balance."
+    ),
+    interpretation=(
+        "Interpret base saturation in relation to pH, CEC, region, and broader cation context rather than as a rigid universal target."
+    ),
+    caveat=(
+        "WardGuide notes that ratios and saturation values can vary widely without necessarily causing yield loss, so interpretation should remain contextual."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Percent Base Saturation",
+            anchor="percent-base-saturation",
+            page_hint=121,
+            source_url=f"{WARD_GUIDE_HTML}#percent-base-saturation",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Test Methods: Calcium and Magnesium",
+            anchor="soil-test-methods-calcium-and-magnesium",
+            page_hint=103,
+            source_url=f"{WARD_GUIDE_HTML}#soil-test-methods-calcium-and-magnesium",
+        ),
+    ),
+)
 
 # ---------------------------------------------------------------------
 # Soil biology / soil health references
@@ -240,10 +819,10 @@ SOIL_RESPIRATION_REFERENCE = VariableReferenceBundle(
         ReferenceInfo(
             guide_key="sha_guide",
             guide_label="Soil Health Assessment Guide",
-            section_title="Soil Respiration",
-            anchor="soil-respiration",
+            section_title="Biological Indicators Table",
+            anchor="table-1-biological",
             page_hint=1,
-            source_url=f"{SHA_GUIDE_HTML}#soil-respiration",
+            source_url=f"{SHA_GUIDE_HTML}#table-1-biological",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -360,9 +939,9 @@ MAC_REFERENCE = VariableReferenceBundle(
             guide_key="sha_guide",
             guide_label="Soil Health Assessment Guide",
             section_title="Microbially Active Carbon (%MAC)",
-            anchor="microbially-active-carbon",
+            anchor="microbially-active-carbon-mac",
             page_hint=3,
-            source_url=f"{SHA_GUIDE_HTML}#microbially-active-carbon",
+            source_url=f"{SHA_GUIDE_HTML}#microbially-active-carbon-mac",
         ),
     ),
     thresholds=InterpretationInfo(
@@ -443,104 +1022,49 @@ ORGANIC_CN_REFERENCE = VariableReferenceBundle(
             guide_key="ward_guide",
             guide_label="WardGuide",
             table_number="Table 68",
-            table_title="Organic C:N Ration Ranking Table",
+            table_title="Organic C:N Ratio Ranking Table",
             page_hint=114,
             source_url=f"{WARD_GUIDE_HTML}#table-68",
         ),
     ),
-    thresholds=None,  # TODO: add exact bands after confirming the final WardGuide table values
+    thresholds=None,
 )
-
 
 # ---------------------------------------------------------------------
 # NIR / forage references
 # ---------------------------------------------------------------------
 
-CRUDE_PROTEIN_REFERENCE = VariableReferenceBundle(
-    short_note=(
-        "Crude protein estimates the total protein-related nitrogen content of the forage."
-    ),
-    detail=(
-        "WardGuide places crude protein within the core nutrient feed tests used to evaluate "
-        "feed value and ration quality."
-    ),
-    interpretation=(
-        "Interpret crude protein in the context of forage type, animal class, and overall ration balance."
-    ),
-    caveat=(
-        "Crude protein is informative but should not be read by itself without fiber, digestibility, "
-        "and energy context."
-    ),
-    references=(
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            section_title="Nutrient Feed Tests",
-            anchor="nutrient-feed-tests",
-            page_hint=19,
-            source_url=f"{WARD_GUIDE_HTML}#nutrient-feed-tests",
-        ),
-    ),
-)
-
-RFV_REFERENCE = VariableReferenceBundle(
-    short_note=(
-        "Relative Feed Value (RFV) is an index used to compare forage quality."
-    ),
-    detail=(
-        "WardGuide includes forage quality indexes and presents RFV as one of the summary metrics "
-        "used to compare feed value."
-    ),
-    interpretation=(
-        "Higher RFV generally indicates higher quality forage, but interpretation still depends on "
-        "animal type and production goals."
-    ),
-    caveat=(
-        "RFV is a comparative index and should not replace full ration interpretation."
-    ),
-    references=(
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            section_title="Forage Quality Indexes",
-            anchor="forage-quality-indexes",
-            page_hint=28,
-            source_url=f"{WARD_GUIDE_HTML}#forage-quality-indexes",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 7",
-            table_title="Relative Forage Quality Suggested for Different Cattle Types",
-            page_hint=28,
-            source_url=f"{WARD_GUIDE_HTML}#table-7",
-        ),
-    ),
-)
-
 NIRS_REFERENCE = VariableReferenceBundle(
     short_note=(
-        "Near-Infrared Spectroscopy (NIRS) is used to estimate forage constituents efficiently."
+        "Near-Infrared Spectroscopy (NIRS) is used to estimate forage constituents quickly and efficiently."
     ),
     detail=(
-        "WardGuide includes a dedicated NIRS section and a table distinguishing recommended NIR "
-        "tests from tests that require wet chemistry."
+        "WardGuide describes NIRS as a rapid secondary analytical method based on reflectance. "
+        "It is commonly used to estimate crude protein, soluble protein, non-protein nitrogen (npn), "
+        "fiber fractions including crude fiber, acid detergent fiber (adf), and neutral detergent fiber (ndf), "
+        "as well as energy-related values such as total digestible nutrients (tdn), digestible energy, "
+        "relative feed value (rfv), and relative forage quality (rfq). NIRS allows fast turnaround and is "
+        "widely used for routine forage evaluation when appropriate calibrations are available."
     ),
     interpretation=(
-        "NIRS is useful for rapid estimation of many forage traits, but some analytes still require "
-        "wet chemistry depending on the testing goal."
+        "NIRS is most useful as a rapid screening and evaluation tool for forage quality. It performs best "
+        "when the sample type matches the calibration set used by the laboratory. Fiber fractions, protein "
+        "measures, and derived indices like rfv and rfq are commonly interpreted together to understand "
+        "intake potential, digestibility, and overall feed value."
     ),
     caveat=(
-        "Interpret NIR-derived values with awareness of method limits and when wet chemistry confirmation is needed."
+        "WardGuide emphasizes that NIRS is a secondary method calibrated against wet chemistry. Accuracy depends "
+        "on calibration quality and sample fit. Some analytes may require wet chemistry confirmation for precise "
+        "ration formulation or diagnostic work."
     ),
     references=(
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
             section_title="Near-Infrared Spectroscopy (NIRS)",
-            anchor="near-infrared-spectroscopy",
+            anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy",
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -552,6 +1076,759 @@ NIRS_REFERENCE = VariableReferenceBundle(
         ),
     ),
 )
+
+CRUDE_PROTEIN_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Crude protein estimates the total protein-related nitrogen content of the forage."
+    ),
+    detail=(
+        "WardGuide explains that crude protein is not actually a direct measurement of true protein, "
+        "but of nitrogen. Total nitrogen in the sample is measured and then converted to crude protein "
+        "with a factor appropriate to the feed type. In forage evaluation, crude protein is one of the "
+        "core nutrient tests used to characterize feed value."
+    ),
+    interpretation=(
+        "Use crude protein as a basic indicator of forage protein supply, while remembering that it is "
+        "a nitrogen-based estimate rather than a direct measure of true protein composition."
+    ),
+    caveat=(
+        "WardGuide notes that crude protein alone does not fully describe protein nutrition. In some "
+        "feeding contexts, especially ruminant systems, soluble protein, undegradable protein, heat "
+        "damage, and other protein fractions may also matter. When reported from NIRS, interpretation "
+        "should also consider calibration and method limits."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Protein",
+            anchor="protein",
+            page_hint=19,
+            source_url=f"{WARD_GUIDE_HTML}#protein",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+ACID_DETERGENT_FIBER_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Acid Detergent Fiber (ADF) is the least digestible portion of a feed and indicates forage indigestibility."
+    ),
+    detail=(
+        "WardGuide describes ADF as the fraction containing cellulose, lignin, and pectin, but not "
+        "hemicellulose. It is used to help predict the energy and digestibility of a feed. As ADF "
+        "increases, digestibility and energy value generally decrease; as ADF decreases, digestibility "
+        "and energy value generally increase."
+    ),
+    interpretation=(
+        "ADF is commonly used as a practical indicator of forage quality because it is inversely related "
+        "to digestibility and energy value."
+    ),
+    caveat=(
+        "WardGuide notes that ADF is also used in calculating relative feed value and relative forage "
+        "quality, so it should be interpreted as part of the broader forage-quality picture rather than "
+        "in isolation. When estimated by NIRS, ADF should also be viewed in light of method calibration."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Acid Detergent Fiber (ADF)",
+            anchor="acid-detergent-fiber-adf",
+            page_hint=20,
+            source_url=f"{WARD_GUIDE_HTML}#acid-detergent-fiber-adf",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+NEUTRAL_DETERGENT_FIBER_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Neutral Detergent Fiber (NDF) estimates the total cell wall fraction and is commonly used as an indicator of intake potential."
+    ),
+    detail=(
+        "WardGuide treats NDF as a core fiber measurement used in forage evaluation. NDF represents the "
+        "plant cell wall fraction and is widely used because it helps describe bulkiness and expected intake "
+        "limitations of forage."
+    ),
+    interpretation=(
+        "Higher NDF values generally indicate a bulkier forage that may limit intake, while lower NDF values "
+        "generally indicate greater intake potential."
+    ),
+    caveat=(
+        "NDF is valuable, but it does not by itself describe digestibility or total feed value. It is most "
+        "useful when interpreted together with ADF, energy estimates, and other forage-quality measures. "
+        "When estimated by NIRS, interpretation should also consider method fit and calibration."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Neutral Detergent Fiber (NDF)",
+            anchor="neutral-detergent-fiber-ndf",
+            page_hint=21,
+            source_url=f"{WARD_GUIDE_HTML}#neutral-detergent-fiber-ndf",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+TOTAL_DIGESTIBLE_NUTRIENTS_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Total Digestible Nutrients (TDN) is a traditional energy-related measure used to estimate feed value."
+    ),
+    detail=(
+        "WardGuide describes TDN as the sum of digestible crude protein, digestible nitrogen-free extract, "
+        "digestible crude fiber, and digestible ether extract, with fat contributing more energy than the other "
+        "fractions. TDN is used to predict energy values of feed for beef cattle, dairy cattle, sheep, and goats."
+    ),
+    interpretation=(
+        "TDN is a practical summary estimate of forage energy value and is often used in ration evaluation for ruminants."
+    ),
+    caveat=(
+        "WardGuide notes that TDN can be estimated in more than one way. Values derived from full proximate analysis "
+        "are generally more informative than simpler estimates based only on ADF or crude fiber. When reported from "
+        "NIRS-based forage analysis, interpretation should include the underlying method context."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Total Digestible Nutrients (TDN)",
+            anchor="total-digestible-nutrients-tdn",
+            page_hint=24,
+            source_url=f"{WARD_GUIDE_HTML}#total-digestible-nutrients-tdn",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+RFV_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Relative Feed Value (RFV) is an index used to compare forage quality."
+    ),
+    detail=(
+        "WardGuide presents RFV as a forage quality index derived from fiber-based estimates of intake "
+        "and digestibility. It is commonly used as a quick comparative measure for hay and forage quality."
+    ),
+    interpretation=(
+        "Higher RFV generally indicates higher quality forage in comparative terms."
+    ),
+    caveat=(
+        "RFV is a comparative index, not a complete nutritional description. It is useful for ranking forages, "
+        "but it should not replace full ration interpretation. When RFV is derived from NIRS-estimated forage traits, "
+        "the underlying method context also matters."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Relative Feed Value (RFV)",
+            anchor="relative-feed-value-rfv",
+            page_hint=27,
+            source_url=f"{WARD_GUIDE_HTML}#relative-feed-value-rfv",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 7",
+            table_title="Relative Forage Quality Suggested for Different Cattle Types",
+            page_hint=28,
+            source_url=f"{WARD_GUIDE_HTML}#table-7",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+RFQ_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Relative Forage Quality (RFQ) is a forage quality index intended to improve on RFV by incorporating fiber digestibility."
+    ),
+    detail=(
+        "WardGuide includes RFQ as a comparative forage-quality measure that builds on the older RFV concept. "
+        "RFQ is intended to provide a more complete estimate of forage value by including digestibility-related information."
+    ),
+    interpretation=(
+        "Higher RFQ generally indicates better forage quality in comparative terms, especially when digestibility differences matter."
+    ),
+    caveat=(
+        "Like RFV, RFQ is still an index rather than a full nutritional profile. It is best used for comparison and screening, "
+        "with full ration formulation based on the broader nutrient context. When derived from NIRS-estimated values, "
+        "interpretation should include the NIRS method context."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Relative Forage Quality (RFQ)",
+            anchor="relative-forage-quality-rfq",
+            page_hint=28,
+            source_url=f"{WARD_GUIDE_HTML}#relative-forage-quality-rfq",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 7",
+            table_title="Relative Forage Quality Suggested for Different Cattle Types",
+            page_hint=28,
+            source_url=f"{WARD_GUIDE_HTML}#table-7",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+SOLUBLE_PROTEIN_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Soluble protein estimates the protein fraction that is readily degraded and available to rumen microbes."
+    ),
+    detail=(
+        "WardGuide explains that soluble protein is particularly relevant in ruminant feeding because it reflects "
+        "the protein fraction that will feed rumen microbes. It is part of the broader partitioning of crude protein "
+        "into nutritionally meaningful fractions."
+    ),
+    interpretation=(
+        "Soluble protein is most useful in ration balancing for ruminants, especially when considering rumen degradable protein."
+    ),
+    caveat=(
+        "This measure is most meaningful in ruminant nutrition contexts and should be interpreted alongside other protein fractions. "
+        "If reported from an NIRS workflow, method limitations should also be considered."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soluble Protein",
+            anchor="soluble-protein",
+            page_hint=19,
+            source_url=f"{WARD_GUIDE_HTML}#soluble-protein",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+NPN_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Non-Protein Nitrogen (NPN) represents nitrogen that is not present as true protein."
+    ),
+    detail=(
+        "WardGuide describes non-protein nitrogen as a nitrogen source that can be utilized by rumen microbes, "
+        "with urea being a common example. In ruminant systems, this nitrogen can contribute to microbial protein "
+        "production when the diet is balanced appropriately."
+    ),
+    interpretation=(
+        "NPN is mainly relevant in ruminant feeding systems where microbial utilization of nitrogen is part of ration design."
+    ),
+    caveat=(
+        "NPN should not be interpreted the same way as true protein. Its usefulness depends strongly on animal type and diet context. "
+        "Where NIRS is used in the reporting workflow, interpretation should also account for method limitations."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Non-Protein Nitrogen (NPN)",
+            anchor="non-protein-nitrogen-npn",
+            page_hint=19,
+            source_url=f"{WARD_GUIDE_HTML}#non-protein-nitrogen-npn",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+ADIP_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Damaged Protein or Acid Detergent Insoluble Protein (ADIP) estimates protein tied up in less available, heat-damaged forms."
+    ),
+    detail=(
+        "WardGuide explains that heating under poor storage conditions can cause proteins to bind to lignin and other feed components, "
+        "reducing their nutritional availability. ADIP is used to help identify heat-damaged protein and determine whether crude protein "
+        "should be adjusted for ration work."
+    ),
+    interpretation=(
+        "ADIP is especially useful when evaluating stored forages or feeds where heat damage may have reduced usable protein value."
+    ),
+    caveat=(
+        "A crude protein value may overstate nutritionally available protein if ADIP is elevated, so these values should be interpreted together. "
+        "Because this kind of measure may require stronger analytical specificity, any NIRS-based context should be interpreted cautiously."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Damaged Protein or Acid Detergent Insoluble Protein (ADIP)",
+            anchor="damaged-protein-or-acid-detergent-insoluble-protein-adip",
+            page_hint=19,
+            source_url=f"{WARD_GUIDE_HTML}#damaged-protein-or-acid-detergent-insoluble-protein-adip",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+    ),
+)
+
+NFC_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Non-fiber carbohydrates (NFC) estimate the rapidly available carbohydrate fraction not contained in the fiber pool."
+    ),
+    detail=(
+        "In forage analysis, NFC is used as a summary carbohydrate measure complementary to fiber fractions. It helps describe "
+        "the more readily available energy portion of the feed after fiber, protein, fat, and ash are considered."
+    ),
+    interpretation=(
+        "Interpret NFC together with fiber, starch, water-soluble carbohydrates, and energy measures rather than as an isolated value."
+    ),
+    caveat=(
+        "When reported through NIRS, NFC should be interpreted as a modeled forage-quality estimate whose reliability depends on calibration quality."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+STARCH_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Starch is an important energy-related carbohydrate fraction in forage and feed evaluation."
+    ),
+    detail=(
+        "Starch is commonly interpreted as part of the non-fiber carbohydrate and energy profile of a feed, especially in feeds where grain content "
+        "or rapidly available carbohydrate supply matters."
+    ),
+    interpretation=(
+        "Interpret starch in relation to NFC, fiber, digestibility, and animal feeding goals."
+    ),
+    caveat=(
+        "When reported from NIRS, starch is a modeled estimate and should be interpreted with the underlying method context in mind."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+WSC_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Water-soluble carbohydrates (WSC) estimate the readily soluble sugar fraction of the forage."
+    ),
+    detail=(
+        "WSC helps describe the quickly available carbohydrate component that can influence fermentation, palatability, and ration behavior."
+    ),
+    interpretation=(
+        "Interpret WSC together with starch, NFC, fiber fractions, and the intended feeding context."
+    ),
+    caveat=(
+        "When estimated by NIRS, WSC should be read as a method-dependent forage-quality estimate rather than as a fully direct measurement."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+FRUCTAN_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Fructans are storage carbohydrates that contribute to the soluble carbohydrate profile of some forages."
+    ),
+    detail=(
+        "Fructans are part of the rapidly available carbohydrate pool and can be important in understanding forage sugar composition."
+    ),
+    interpretation=(
+        "Interpret fructans together with WSC, starch, and overall forage carbohydrate composition."
+    ),
+    caveat=(
+        "When reported from NIRS, fructan values are calibration-dependent estimates and should be interpreted with method context."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+NEL_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Net energy for lactation (NEL) is an energy estimate used in ration planning for lactating animals."
+    ),
+    detail=(
+        "NEL is one of the practical energy values used to summarize how much useful energy a feed can provide in a lactation context."
+    ),
+    interpretation=(
+        "Interpret NEL as part of the broader energy profile, together with digestibility, TDN, fiber fractions, and animal class."
+    ),
+    caveat=(
+        "When derived through NIRS-based forage analysis, NEL should be interpreted as a modeled energy estimate."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+NEM_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Net energy for maintenance (NEM) estimates the energy value of feed for maintenance requirements."
+    ),
+    detail=(
+        "NEM is used in forage and ration interpretation to estimate the portion of feed energy available for maintenance functions."
+    ),
+    interpretation=(
+        "Interpret NEM with other energy and digestibility measures rather than by itself."
+    ),
+    caveat=(
+        "When derived from NIRS-based forage analysis, NEM should be treated as a modeled estimate dependent on the calibration workflow."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+NEG_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Net energy for gain (NEG) estimates the feed energy available for weight gain."
+    ),
+    detail=(
+        "NEG is used to interpret the productive energy value of feed in growth and gain settings."
+    ),
+    interpretation=(
+        "Interpret NEG in the context of the broader energy profile, animal class, and feeding objective."
+    ),
+    caveat=(
+        "When reported through NIRS, NEG should be interpreted as a derived estimate rather than a direct chemical measurement."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+ASH_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Ash represents the total mineral residue remaining after combustion of the feed."
+    ),
+    detail=(
+        "Ash is used as a broad measure of total mineral content and can help interpret whether a feed sample contains more or less total mineral residue."
+    ),
+    interpretation=(
+        "Interpret ash with the rest of the nutrient profile, especially when comparing feeds or looking for unusual mineral concentration patterns."
+    ),
+    caveat=(
+        "Ash is a broad summary measurement and does not identify which specific minerals are responsible for the total residue. "
+        "When estimated through NIRS, it remains method-dependent."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+NDFD48_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "NDF digestibility at 48 hours estimates how digestible the fiber fraction is over a fixed incubation period."
+    ),
+    detail=(
+        "This variable helps refine forage-quality interpretation by going beyond total fiber amount and estimating the digestibility of that fiber fraction."
+    ),
+    interpretation=(
+        "Interpret NDF digestibility together with NDF, ADF, RFQ, and broader energy measures."
+    ),
+    caveat=(
+        "Digestibility-derived variables are especially method-dependent and should be interpreted carefully when estimated through NIRS."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+IVTDMD48_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "In vitro true digestibility at 48 hours estimates the digestible portion of the feed under a standardized incubation framework."
+    ),
+    detail=(
+        "This digestibility measure is used to help estimate the feeding value of forage beyond simple concentration-based nutrient measures."
+    ),
+    interpretation=(
+        "Interpret IVTDMD together with fiber fractions, energy metrics, and forage-quality indices."
+    ),
+    caveat=(
+        "Digestibility estimates are model-sensitive and should be interpreted in light of the analytical method used."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+FAT_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Crude fat estimates the lipid fraction of the feed and contributes to its energy profile."
+    ),
+    detail=(
+        "Fat is one of the standard compositional measures used in feed and forage evaluation and contributes disproportionately to energy value."
+    ),
+    interpretation=(
+        "Interpret fat as part of the broader nutrient and energy profile rather than as a stand-alone number."
+    ),
+    caveat=(
+        "When reported through NIRS, crude fat should be interpreted as a method-dependent estimate."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+LIGNIN_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "Lignin is a structural component associated with reduced fiber digestibility."
+    ),
+    detail=(
+        "Lignin contributes to plant structural rigidity and is commonly interpreted as part of the indigestible or less digestible fiber framework."
+    ),
+    interpretation=(
+        "Interpret lignin together with ADF, NDF, digestibility measures, and forage maturity."
+    ),
+    caveat=(
+        "Because lignin is closely tied to digestibility and maturity, it is best interpreted comparatively and with awareness of method context."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            table_number="Table 9",
+            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            page_hint=29,
+            source_url=f"{WARD_GUIDE_HTML}#table-9",
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------
+# Soil biomass / PLFA references
+# ---------------------------------------------------------------------
 
 TOTAL_BIOMASS_REFERENCE = VariableReferenceBundle(
     short_note=(
@@ -584,12 +1861,29 @@ TOTAL_BIOMASS_REFERENCE = VariableReferenceBundle(
             source_url=f"{WARD_GUIDE_HTML}#plfa",
         ),
         ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            section_title="Soil Microorganisms",
-            anchor="soil-microorganisms",
-            page_hint=79,
-            source_url=f"{WARD_GUIDE_HTML}#soil-microorganisms",
+            guide_key="ward_report",
+            guide_label=WARD_BIOLOGICAL_REPORT_LABEL,
+            section_title="Total Biomass and Diversity Ratings",
+            anchor="diversity-index-ratings",
+            page_hint=2,
+            source_url=f"{WARD_BIOLOGICAL_REPORT_HTML}#diversity-index-ratings",
+        ),
+    ),
+    thresholds=InterpretationInfo(
+        unit_label="ng/g",
+        method_note=(
+            f"Ward PLFA total biomass rating scale from the {WARD_BIOLOGICAL_REPORT_DATE} "
+            "Ward Biological Report. These categories are method-specific to Ward's PLFA workflow."
+        ),
+        bands=(
+            InterpretationBand(label="Very Poor", min_value=0, max_value=500),
+            InterpretationBand(label="Poor", min_value=500, max_value=1000),
+            InterpretationBand(label="Slightly Below Average", min_value=1000, max_value=1500),
+            InterpretationBand(label="Average", min_value=1500, max_value=2500),
+            InterpretationBand(label="Slightly Above Average", min_value=2500, max_value=3000),
+            InterpretationBand(label="Good", min_value=3000, max_value=3500),
+            InterpretationBand(label="Very Good", min_value=3500, max_value=4000),
+            InterpretationBand(label="Excellent", min_value=4000, max_value=None),
         ),
     ),
 )
@@ -668,6 +1962,60 @@ FUNGI_BIOMASS_REFERENCE = VariableReferenceBundle(
     ),
 )
 
+DIVERSITY_INDEX_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "The diversity index summarizes how broadly distributed the living PLFA signal is across microbial groups."
+    ),
+    detail=(
+        "In Ward's PLFA reporting, the diversity index is used alongside total biomass to describe "
+        "the breadth of the living microbial community. A higher index generally reflects a more "
+        "evenly represented or more diverse microbial community profile within Ward's analytical framework."
+    ),
+    interpretation=(
+        "Higher diversity index values are generally associated with broader microbial representation. "
+        "Ward's biological report provides interpretation bands from Very Poor through Excellent."
+    ),
+    caveat=(
+        "These thresholds are specific to Ward's PLFA extraction and analytical method and should be "
+        "used comparatively within that reporting framework."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_report",
+            guide_label=WARD_BIOLOGICAL_REPORT_LABEL,
+            section_title="Total Biomass and Diversity Ratings",
+            anchor="diversity-index-ratings",
+            page_hint=2,
+            source_url=f"{WARD_BIOLOGICAL_REPORT_HTML}#diversity-index-ratings",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="PLFA",
+            anchor="plfa",
+            page_hint=114,
+            source_url=f"{WARD_GUIDE_HTML}#plfa",
+        ),
+    ),
+    thresholds=InterpretationInfo(
+        unit_label="index",
+        method_note=(
+            f"Ward PLFA diversity rating scale from the {WARD_BIOLOGICAL_REPORT_DATE} "
+            "Ward Biological Report. These categories are method-specific to Ward's PLFA workflow."
+        ),
+        bands=(
+            InterpretationBand(label="Very Poor", min_value=0, max_value=1.0),
+            InterpretationBand(label="Poor", min_value=1.0, max_value=1.1),
+            InterpretationBand(label="Slightly Below Average", min_value=1.1, max_value=1.2),
+            InterpretationBand(label="Average", min_value=1.2, max_value=1.3),
+            InterpretationBand(label="Slightly Above Average", min_value=1.3, max_value=1.4),
+            InterpretationBand(label="Good", min_value=1.4, max_value=1.5),
+            InterpretationBand(label="Very Good", min_value=1.5, max_value=1.6),
+            InterpretationBand(label="Excellent", min_value=1.6, max_value=None),
+        ),
+    ),
+)
+
 FUNGI_BACTERIA_REFERENCE = VariableReferenceBundle(
     short_note=(
         "The fungi-to-bacteria ratio compares the relative balance of fungal and bacterial biomass."
@@ -704,6 +2052,118 @@ FUNGI_BACTERIA_REFERENCE = VariableReferenceBundle(
             page_hint=79,
             source_url=f"{WARD_GUIDE_HTML}#soil-microorganisms",
         ),
+        ReferenceInfo(
+            guide_key="ward_report",
+            guide_label=WARD_BIOLOGICAL_REPORT_LABEL,
+            section_title="Fungi:Bacteria Ratings",
+            anchor="fungi-bacteria-ratings",
+            page_hint=8,
+            source_url=f"{WARD_BIOLOGICAL_REPORT_HTML}#fungi-bacteria-ratings",
+        ),
+    ),
+    thresholds=None,
+)
+
+PREDATOR_PREY_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "The predator-to-prey ratio compares predator biomass, typically protozoa, to prey biomass, typically bacteria."
+    ),
+    detail=(
+        "Ward's PLFA biological report includes predator:prey as a community-structure indicator. "
+        "It is used to characterize the balance between microbial grazers and the bacterial prey base."
+    ),
+    interpretation=(
+        "Higher predator:prey values indicate greater predator presence relative to prey. "
+        "Ward's report provides method-specific interpretation bands from Very Poor through Excellent."
+    ),
+    caveat=(
+        "This ratio should be interpreted comparatively within Ward's PLFA framework and not as a universal "
+        "stand-alone indicator of soil function."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_report",
+            guide_label=WARD_BIOLOGICAL_REPORT_LABEL,
+            section_title="Predator:Prey Ratings",
+            anchor="predator-prey-ratings",
+            page_hint=4,
+            source_url=f"{WARD_BIOLOGICAL_REPORT_HTML}#predator-prey-ratings",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="PLFA",
+            anchor="plfa",
+            page_hint=114,
+            source_url=f"{WARD_GUIDE_HTML}#plfa",
+        ),
+    ),
+    thresholds=InterpretationInfo(
+        unit_label="ratio",
+        method_note=(
+            f"Ward PLFA predator:prey rating scale from the {WARD_BIOLOGICAL_REPORT_DATE} "
+            "Ward Biological Report. These categories are method-specific to Ward's PLFA workflow."
+        ),
+        bands=(
+            InterpretationBand(label="Very Poor", min_value=0, max_value=0.05),
+            InterpretationBand(label="Poor", min_value=0.05, max_value=0.10),
+            InterpretationBand(label="Slightly Below Average", min_value=0.10, max_value=0.15),
+            InterpretationBand(label="Average", min_value=0.15, max_value=0.20),
+            InterpretationBand(label="Slightly Above Average", min_value=0.20, max_value=0.25),
+            InterpretationBand(label="Good", min_value=0.25, max_value=0.30),
+            InterpretationBand(label="Very Good", min_value=0.30, max_value=0.35),
+            InterpretationBand(label="Excellent", min_value=0.35, max_value=None),
+        ),
+    ),
+)
+
+GRAM_POS_GRAM_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "The Gram(+):Gram(-) ratio summarizes the relative dominance of Gram-positive and Gram-negative bacteria."
+    ),
+    detail=(
+        "Ward's PLFA biological report uses the Gram(+):Gram(-) ratio to characterize the structure of the bacterial "
+        "community, ranging from Gram(-)-dominated to strongly Gram(+)-dominated."
+    ),
+    interpretation=(
+        "Values near the middle of the scale reflect a more balanced bacterial community, while low or high values "
+        "indicate stronger dominance by one group."
+    ),
+    caveat=(
+        "These thresholds are specific to Ward's PLFA method and should be interpreted comparatively within that framework."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_report",
+            guide_label=WARD_BIOLOGICAL_REPORT_LABEL,
+            section_title="Gram (+):Gram (-) Ratings",
+            anchor="gram-pos-gram-neg-ratings",
+            page_hint=6,
+            source_url=f"{WARD_BIOLOGICAL_REPORT_HTML}#gram-pos-gram-neg-ratings",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="PLFA",
+            anchor="plfa",
+            page_hint=114,
+            source_url=f"{WARD_GUIDE_HTML}#plfa",
+        ),
+    ),
+    thresholds=InterpretationInfo(
+        unit_label="ratio",
+        method_note=(
+            f"Ward PLFA Gram(+):Gram(-) rating scale from the {WARD_BIOLOGICAL_REPORT_DATE} "
+            "Ward Biological Report. These categories are method-specific to Ward's PLFA workflow."
+        ),
+        bands=(
+            InterpretationBand(label="Gram (-) Dominated", min_value=0, max_value=0.5),
+            InterpretationBand(label="Slightly Gram (-) Dominated", min_value=0.5, max_value=1.0),
+            InterpretationBand(label="Balanced Bacterial Community", min_value=1.0, max_value=2.0),
+            InterpretationBand(label="Slightly Gram(+) Dominated", min_value=2.0, max_value=3.0),
+            InterpretationBand(label="Gram(+) Dominated", min_value=3.0, max_value=4.0),
+            InterpretationBand(label="Very Gram(+) Dominated", min_value=4.0, max_value=None),
+        ),
     ),
 )
 
@@ -736,17 +2196,162 @@ MYCORRHIZAE_BIOMASS_REFERENCE = VariableReferenceBundle(
     ),
 )
 
+PLFA_FUNCTIONAL_GROUP_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "These PLFA functional-group biomass values estimate the relative size of specific living microbial subgroups within the soil community."
+    ),
+    detail=(
+        "WardGuide explains that PLFA analysis uses membrane lipids from living organisms to estimate both total biomass "
+        "and biomass of selected microbial groups. Functional-group values such as actinobacteria, rhizobia, saprophytes, "
+        "and undifferentiated biomass are best understood as subgroup components of the broader PLFA-measured living community."
+    ),
+    interpretation=(
+        "Interpret these subgroup biomass values comparatively across treatments, dates, and management systems. They are most "
+        "useful for detecting shifts in community composition rather than as stand-alone targets."
+    ),
+    caveat=(
+        "Ward's uploaded materials provide stronger support for general PLFA group interpretation than for highly specific threshold "
+        "cutoffs for each subgroup. Use these variables as comparative indicators within the same analytical framework."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="PLFA",
+            anchor="plfa",
+            page_hint=114,
+            source_url=f"{WARD_GUIDE_HTML}#plfa",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Microorganisms",
+            anchor="soil-microorganisms",
+            page_hint=79,
+            source_url=f"{WARD_GUIDE_HTML}#soil-microorganisms",
+        ),
+    ),
+    thresholds=None,
+)
+
+PLFA_STRESS_REFERENCE = VariableReferenceBundle(
+    short_note=(
+        "These PLFA stress and membrane-structure ratios are comparative indicators of shifts in microbial physiology and community condition."
+    ),
+    detail=(
+        "Ward's PLFA framework includes fatty-acid ratios that are commonly used as comparative indicators of stress response, "
+        "membrane composition, and broad changes in microbial community condition. Ratios such as precursor-to-cyclopropyl forms "
+        "and saturated-to-unsaturated relationships are generally interpreted as relative indicators rather than direct measures of a single process."
+    ),
+    interpretation=(
+        "Interpret these ratios comparatively across treatments and sampling dates, and alongside total biomass, community structure, "
+        "and site conditions such as moisture, residue inputs, and management."
+    ),
+    caveat=(
+        "These are method-specific comparative ratios. Ward's uploaded materials support PLFA-based community interpretation, but they do "
+        "not provide strong universal threshold categories for these specific stress indicators. Avoid overinterpreting small differences."
+    ),
+    references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="PLFA",
+            anchor="plfa",
+            page_hint=114,
+            source_url=f"{WARD_GUIDE_HTML}#plfa",
+        ),
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Soil Microorganisms",
+            anchor="soil-microorganisms",
+            page_hint=79,
+            source_url=f"{WARD_GUIDE_HTML}#soil-microorganisms",
+        ),
+    ),
+    thresholds=None,
+)
+
+CA_NIR_REFERENCE = combine_reference_bundles(CALCIUM_REFERENCE, NIRS_REFERENCE)
+P_NIR_REFERENCE = combine_reference_bundles(PHOSPHORUS_REFERENCE, NIRS_REFERENCE)
+K_NIR_REFERENCE = combine_reference_bundles(POTASSIUM_REFERENCE, NIRS_REFERENCE)
+MG_NIR_REFERENCE = combine_reference_bundles(MAGNESIUM_REFERENCE, NIRS_REFERENCE)
+
 # ---------------------------------------------------------------------
 # Master lookup
 # ---------------------------------------------------------------------
 
 LAB_REFERENCES = {
-    # Soil chemistry
+    # Soil chemistry: generic keys
     "phosphorus": PHOSPHORUS_REFERENCE,
     "potassium": POTASSIUM_REFERENCE,
     "organic_matter": ORGANIC_MATTER_REFERENCE,
     "cec": CEC_REFERENCE,
     "ph": PH_REFERENCE,
+    "buffer_ph": BUFFER_PH_REFERENCE,
+    "salinity": SALINITY_REFERENCE,
+    "excess_lime": EXCESS_LIME_REFERENCE,
+    "nitrate": NITRATE_REFERENCE,
+    "sulfur": SULFUR_REFERENCE,
+    "calcium": CALCIUM_REFERENCE,
+    "magnesium": MAGNESIUM_REFERENCE,
+    "sodium": SODIUM_REFERENCE,
+    "zinc": ZINC_REFERENCE,
+    "iron": IRON_REFERENCE,
+    "manganese": MANGANESE_REFERENCE,
+    "copper": COPPER_REFERENCE,
+    "base_saturation": BASE_SATURATION_REFERENCE,
+    "water_stable_aggregates": WATER_STABLE_AGGREGATES_REFERENCE,
+    "water_stable_aggregates_mod": WATER_STABLE_AGGREGATES_REFERENCE,
+
+    # Soil chemistry: exact table variable keys
+    "soil_ph_1_1": PH_REFERENCE,
+    "buffer_ph": BUFFER_PH_REFERENCE,
+    "ec_1_1": SALINITY_REFERENCE,
+    "excess_lime": EXCESS_LIME_REFERENCE,
+    "organic_matter_loi_pct": ORGANIC_MATTER_REFERENCE,
+    "olsen_p_ppm_p": PHOSPHORUS_REFERENCE,
+    "potassium_ppm_k": POTASSIUM_REFERENCE,
+    "sulfate_s_ppm_s": SULFUR_REFERENCE,
+    "nitrate_n_ppm": NITRATE_REFERENCE,
+    "zinc_ppm_zn": ZINC_REFERENCE,
+    "iron_ppm_fe": IRON_REFERENCE,
+    "manganese_ppm_mn": MANGANESE_REFERENCE,
+    "copper_ppm_cu": COPPER_REFERENCE,
+    "calcium_ppm_ca": CALCIUM_REFERENCE,
+    "magnesium_ppm_mg": MAGNESIUM_REFERENCE,
+    "sodium_ppm_na": SODIUM_REFERENCE,
+    "cec_meq_100g": CEC_REFERENCE,
+    "cec_sum_of_cations_me_100g": CEC_REFERENCE,
+    "pcth_sat": BASE_SATURATION_REFERENCE,
+    "pctk_sat": BASE_SATURATION_REFERENCE,
+    "pctca_sat": BASE_SATURATION_REFERENCE,
+    "pctmg_sat": BASE_SATURATION_REFERENCE,
+    "pctna_sat": BASE_SATURATION_REFERENCE,
+
+    # Soil chemistry / recommendations section
+    "yg_1": None,
+    "nitrogen_rec": NITRATE_REFERENCE,
+    "p2o5_rec": PHOSPHORUS_REFERENCE,
+    "k2o_rec": POTASSIUM_REFERENCE,
+    "sulfur_rec": SULFUR_REFERENCE,
+    "zinc_rec": ZINC_REFERENCE,
+    "magnesium_rec": MAGNESIUM_REFERENCE,
+    "iron_rec": IRON_REFERENCE,
+    "manganese_rec": MANGANESE_REFERENCE,
+    "copper_rec": COPPER_REFERENCE,
+
+    # Soil chemistry / soil health & water extract
+    "h2o_no3_n": NITRATE_REFERENCE,
+    "h2o_nh4_n": None,
+    "total_n_h2o_ppm_n": None,
+    "organic_c_h2o_ppm": WEOC_REFERENCE,
+    "organic_n_h2o_ppm": WEON_REFERENCE,
+    "organic_c_n_h2o": ORGANIC_CN_REFERENCE,
+    "co2_soil_respiration": SOIL_RESPIRATION_REFERENCE,
+    "microbially_active_carbon_pctma": MAC_REFERENCE,
+    "organic_nitrogen_release_ppm_n": None,
+    "organic_nitrogen_reserve_ppm_n": None,
 
     # Soil biology / soil health
     "soil_respiration": SOIL_RESPIRATION_REFERENCE,
@@ -756,15 +2361,59 @@ LAB_REFERENCES = {
     "soil_health_score": SOIL_HEALTH_SCORE_REFERENCE,
     "organic_cn": ORGANIC_CN_REFERENCE,
 
+    # Soil biomass / PLFA generic bundles
+    "plfa_functional_group": PLFA_FUNCTIONAL_GROUP_REFERENCE,
+    "plfa_stress": PLFA_STRESS_REFERENCE,
+
     # Soil biomass
     "total_biomass": TOTAL_BIOMASS_REFERENCE,
     "bacteria_biomass": BACTERIA_BIOMASS_REFERENCE,
     "fungi_biomass": FUNGI_BIOMASS_REFERENCE,
+    "diversity_index": DIVERSITY_INDEX_REFERENCE,
     "fungi_bacteria": FUNGI_BACTERIA_REFERENCE,
+    "predator_prey": PREDATOR_PREY_REFERENCE,
+    "gram_pos_gram": GRAM_POS_GRAM_REFERENCE,
     "mycorrhizae_biomass": MYCORRHIZAE_BIOMASS_REFERENCE,
 
+    # Soil biomass / PLFA subgroup keys
+    "actinobacteria_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
+    "rhizobia_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
+    "saprophytes_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
+    "undifferentiated_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
+
+    # Soil biomass / PLFA stress keys
+    "pre_16_1w7c_cy17_0": PLFA_STRESS_REFERENCE,
+    "pre_18_1w7c_cy19_0": PLFA_STRESS_REFERENCE,
+    "sat_unsat": PLFA_STRESS_REFERENCE,
+    "mono_poly": PLFA_STRESS_REFERENCE,
+
     # NIR / forage
-    "crude_protein_pct_db": CRUDE_PROTEIN_REFERENCE,
-    "rfv": RFV_REFERENCE,
     "nirs": NIRS_REFERENCE,
+    "crude_protein_pct_db": CRUDE_PROTEIN_REFERENCE,
+    "adf_pct_db": ACID_DETERGENT_FIBER_REFERENCE,
+    "ndf_pct_db": NEUTRAL_DETERGENT_FIBER_REFERENCE,
+    "tdn_pct_db": TOTAL_DIGESTIBLE_NUTRIENTS_REFERENCE,
+    "rfv": RFV_REFERENCE,
+    "rfq": RFQ_REFERENCE,
+    "soluble_protein": SOLUBLE_PROTEIN_REFERENCE,
+    "npn": NPN_REFERENCE,
+    "adip": ADIP_REFERENCE,
+
+    # NIR extra keys used in the NIR table definitions
+    "nfc_pct_db": NFC_REFERENCE,
+    "starch_pct_db": STARCH_REFERENCE,
+    "wsc_pct_db": WSC_REFERENCE,
+    "fructan_pct_db": FRUCTAN_REFERENCE,
+    "nel_pct_db": NEL_REFERENCE,
+    "nem_pct_db": NEM_REFERENCE,
+    "neg_pct_db": NEG_REFERENCE,
+    "ash_pct_db": ASH_REFERENCE,
+    "ca_pct_db": CA_NIR_REFERENCE,
+    "p_pct_db": P_NIR_REFERENCE,
+    "k_pct_db": K_NIR_REFERENCE,
+    "mg_pct_db": MG_NIR_REFERENCE,
+    "ndfd48_pctndf_db": NDFD48_REFERENCE,
+    "ivtdmd48_pctndf_db": IVTDMD48_REFERENCE,
+    "fat_pct_db": FAT_REFERENCE,
+    "lignin_pct_db": LIGNIN_REFERENCE,
 }

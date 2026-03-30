@@ -316,21 +316,21 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Gram+ Biomass (ng/g)",
                 candidates=("gram_pos_biomass", "gram_pos_ng_per_g", "gram_positive_ng_per_g"),
                 note="Gram-positive bacterial biomass (ng/g).",
-                reference_key=None,
+                reference_key="gram_pos_gram",
             ),
             VariableSpec(
                 key="gram_neg_biomass",
                 label="Gram− Biomass (ng/g)",
                 candidates=("gram_biomass", "gram_neg_biomass", "gram_neg_ng_per_g", "gram_negative_ng_per_g"),
                 note="Gram-negative bacterial biomass (ng/g).",
-                reference_key=None,
+                reference_key="gram_pos_gram",
             ),
             VariableSpec(
                 key="protozoan_biomass",
                 label="Protozoan Biomass (ng/g)",
                 candidates=("protozoa_biomass", "protozoan_biomass", "protozoan_ng_per_g"),
                 note="Protozoan biomass (ng/g).",
-                reference_key=None,
+                reference_key="predator_prey",
             ),
             VariableSpec(
                 key="saprophytes_biomass",
@@ -358,7 +358,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Diversity Index",
                 candidates=("diversity_index",),
                 note="PLFA diversity index (unitless).",
-                reference_key=None,
+                reference_key="diversity_index",
             ),
             VariableSpec(
                 key="pre_16_1w7c_cy17_0",
@@ -400,14 +400,14 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Predator : Prey",
                 candidates=("predator_prey", "predator_pre", "predator_prey_ratio"),
                 note="Often expressed as protozoa:bacteria; interpret in context.",
-                reference_key=None,
+                reference_key="predator_prey",
             ),
             VariableSpec(
                 key="gram_pos_gram",
                 label="Gram+ : Gram−",
                 candidates=("gram_pos_gram", "gram_pos_neg", "gram_pos_gram_neg", "gram_pos_to_neg"),
                 note="Ratio of Gram+ to Gram− bacterial biomass (unitless).",
-                reference_key=None,
+                reference_key="gram_pos_gram",
             ),
         ],
     },
@@ -648,10 +648,6 @@ def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str])
             )
             record[clean_col] = _coerce_numeric(raw_value)
 
-        # Minimal targeted fix:
-        # Ward sometimes leaves Rhizobia % Biomass blank when Rhizobia ng/g is
-        # below detection / effectively zero. In that case, treat the missing
-        # percentage as 0.0 rather than NA.
         if record.get("rhizobia_biomass") == 0.0 and record.get("rhizobia_pct") is None:
             record["rhizobia_pct"] = 0.0
 

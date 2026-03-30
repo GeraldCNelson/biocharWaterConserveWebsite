@@ -48,6 +48,11 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "ADF Dry Basis",
             "ADF (Dry Basis, %)",
         ),
+        note=(
+            "Acid Detergent Fiber is the least digestible portion of a feed and is inversely "
+            "related to digestibility and energy value."
+        ),
+        reference_key="adf_pct_db",
     ),
     LabVarSpec(
         key="ndf_pct_db",
@@ -59,6 +64,11 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "NDF Dry Basis",
             "NDF (Dry Basis, %)",
         ),
+        note=(
+            "Neutral Detergent Fiber estimates the total cell wall fraction and is commonly used "
+            "as an indicator of intake potential."
+        ),
+        reference_key="ndf_pct_db",
     ),
     LabVarSpec(
         key="tdn_pct_db",
@@ -70,6 +80,8 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "Total Digestible Nutrients Dry Basis",
             "Total Digestible Nutrients (Dry Basis, %)",
         ),
+        note="Total Digestible Nutrients is a traditional energy-related measure used to estimate feed value.",
+        reference_key="tdn_pct_db",
     ),
     LabVarSpec(
         key="rfv",
@@ -84,37 +96,77 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="nfc_pct_db",
         label="Non-Fiber Carbohydrates (Dry Basis, %)",
-        candidates=("nfc_pct_db",),
+        candidates=(
+            "nfc_pct_db",
+            "NFC Dry Basis",
+            "NFC Dry Basis (%)",
+            "Non-Fiber Carbohydrates Dry Basis",
+            "Non-Fiber Carbohydrates (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="starch_pct_db",
         label="Starch (Dry Basis, %)",
-        candidates=("starch_pct_db",),
+        candidates=(
+            "starch_pct_db",
+            "Starch Dry Basis",
+            "Starch Dry Basis (%)",
+            "Starch (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="wsc_pct_db",
         label="Water-Soluble Carbohydrates (Dry Basis, %)",
-        candidates=("wsc_pct_db",),
+        candidates=(
+            "wsc_pct_db",
+            "WSC Dry Basis",
+            "WSC Dry Basis (%)",
+            "Water-Soluble Carbohydrates Dry Basis",
+            "Water-Soluble Carbohydrates (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="fructan_pct_db",
         label="Fructans (Dry Basis, %)",
-        candidates=("fructan_pct_db",),
+        candidates=(
+            "fructan_pct_db",
+            "Fructan Dry Basis",
+            "Fructan Dry Basis (%)",
+            "Fructans (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="nel_pct_db",
         label="Net Energy for Lactation (Dry Basis, %)",
-        candidates=("nel_pct_db",),
+        candidates=(
+            "nel_pct_db",
+            "NEL Dry Basis",
+            "NEL Dry Basis (%)",
+            "Net Energy for Lactation Dry Basis",
+            "Net Energy for Lactation (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="nem_pct_db",
         label="Net Energy for Maintenance (Dry Basis, %)",
-        candidates=("nem_pct_db",),
+        candidates=(
+            "nem_pct_db",
+            "NEM Dry Basis",
+            "NEM Dry Basis (%)",
+            "Net Energy for Maintenance Dry Basis",
+            "Net Energy for Maintenance (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="neg_pct_db",
         label="Net Energy for Gain (Dry Basis, %)",
-        candidates=("neg_pct_db",),
+        candidates=(
+            "neg_pct_db",
+            "NEG Dry Basis",
+            "NEG Dry Basis (%)",
+            "Net Energy for Gain Dry Basis",
+            "Net Energy for Gain (Dry Basis, %)",
+        ),
     ),
 ]
 
@@ -122,27 +174,56 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="ash_pct_db",
         label="Ash (Dry Basis, %)",
-        candidates=("ash_pct_db",),
+        candidates=(
+            "ash_pct_db",
+            "Ash Dry Basis",
+            "Ash Dry Basis (%)",
+            "Ash (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="ca_pct_db",
         label="Calcium (Dry Basis, %)",
-        candidates=("ca_pct_db", "Ca_pct_db"),
+        candidates=(
+            "ca_pct_db",
+            "Ca_pct_db",
+            "Calcium Dry Basis",
+            "Calcium Dry Basis (%)",
+            "Calcium (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="p_pct_db",
         label="Phosphorus (Dry Basis, %)",
-        candidates=("p_pct_db", "P_pct_db"),
+        candidates=(
+            "p_pct_db",
+            "P_pct_db",
+            "Phosphorus Dry Basis",
+            "Phosphorus Dry Basis (%)",
+            "Phosphorus (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="k_pct_db",
         label="Potassium (Dry Basis, %)",
-        candidates=("k_pct_db", "K_pct_db"),
+        candidates=(
+            "k_pct_db",
+            "K_pct_db",
+            "Potassium Dry Basis",
+            "Potassium Dry Basis (%)",
+            "Potassium (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="mg_pct_db",
         label="Magnesium (Dry Basis, %)",
-        candidates=("mg_pct_db", "Mg_pct_db"),
+        candidates=(
+            "mg_pct_db",
+            "Mg_pct_db",
+            "Magnesium Dry Basis",
+            "Magnesium Dry Basis (%)",
+            "Magnesium (Dry Basis, %)",
+        ),
     ),
 ]
 
@@ -150,27 +231,50 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="ndfd48_pctndf_db",
         label="NDF Digestibility at 48h (% of NDF)",
-        candidates=("ndfd48_pctndf_db",),
+        candidates=(
+            "ndfd48_pctndf_db",
+            "NDFD48 %NDF DB",
+            "NDF Digestibility at 48h",
+            "NDF Digestibility at 48h (% of NDF)",
+        ),
     ),
     LabVarSpec(
         key="ivtdmd48_pctndf_db",
         label="In Vitro True Digestibility (48h, % of NDF)",
-        candidates=("ivtdmd48_pctndf_db",),
+        candidates=(
+            "ivtdmd48_pctndf_db",
+            "IVTDMD48 %NDF DB",
+            "In Vitro True Digestibility 48h",
+            "In Vitro True Digestibility (48h, % of NDF)",
+        ),
     ),
     LabVarSpec(
         key="fat_pct_db",
         label="Crude Fat (Dry Basis, %)",
-        candidates=("fat_pct_db",),
+        candidates=(
+            "fat_pct_db",
+            "Fat Dry Basis",
+            "Fat Dry Basis (%)",
+            "Crude Fat Dry Basis",
+            "Crude Fat (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
         key="lignin_pct_db",
         label="Lignin (Dry Basis, %)",
-        candidates=("lignin_pct_db",),
+        candidates=(
+            "lignin_pct_db",
+            "Lignin Dry Basis",
+            "Lignin Dry Basis (%)",
+            "Lignin (Dry Basis, %)",
+        ),
     ),
     LabVarSpec(
-        key="RFQ",
+        key="rfq",
         label="Relative Forage Quality (RFQ)",
-        candidates=("RFQ", "rfq"),
+        candidates=("rfq", "RFQ", "Relative Forage Quality"),
+        note="Relative Forage Quality is a forage quality index intended to improve on RFV by incorporating digestibility.",
+        reference_key="rfq",
     ),
 ]
 
@@ -196,6 +300,7 @@ def _pick_first_existing(df: pd.DataFrame, candidates: Sequence[str]) -> Optiona
             if low == str(c).strip().lower():
                 return c
     return None
+
 
 def _parse_date_any(x: Any) -> Optional[pd.Timestamp]:
     if x is None:
@@ -400,7 +505,6 @@ def _build_nir_table_payload(
     variables: Sequence[LabVarSpec],
     extra_event_csvs: Optional[List[Path]] = None,
 ) -> Dict[str, Any]:
-    # IMPORTANT: don't reuse a loop var name across different types (mypy hates that)
     for event_path in (extra_event_csvs or []):
         extra = load_single_event_csv(Path(event_path))
         df = pd.concat([df, extra], ignore_index=True)
@@ -459,7 +563,6 @@ def _build_nir_table_payload(
             if strip in table_for_var and period_key in table_for_var[strip]:
                 table_for_var[strip][period_key] = None if pd.isna(val) else float(val)
 
-        # ratio rows
         for period in periods:
             k = period["key"]
             s1 = table_for_var["STRIP 1"][k]
@@ -516,17 +619,17 @@ def build_nir_tables(
             },
             {
                 "key": "nir_set2",
-                "label": "Set 2: Fiber & Digestibility",
+                "label": "Set 2: Carbohydrates & Net Energy",
                 **build_nir_set2_table(ward_master_csv, extra_event_csvs=extra_event_csvs),
             },
             {
                 "key": "nir_set3",
-                "label": "Set 3: Energy Metrics",
+                "label": "Set 3: Ash & Mineral Content",
                 **build_nir_set3_table(ward_master_csv, extra_event_csvs=extra_event_csvs),
             },
             {
                 "key": "nir_set4",
-                "label": "Set 4: Additional Indicators",
+                "label": "Set 4: Digestibility, Fat, Lignin & RFQ",
                 **build_nir_set4_table(ward_master_csv, extra_event_csvs=extra_event_csvs),
             },
         ],

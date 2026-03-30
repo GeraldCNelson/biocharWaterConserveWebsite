@@ -17,6 +17,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 DATA_RAW_DIR = BASE_DIR / "data-raw"
 DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
+STATIC_DIR = BASE_DIR / "static"
+
+WARD_DOCX_DIR = DATA_PROCESSED_DIR / "ward-docx"
+WARD_HTML_DIR = DATA_PROCESSED_DIR / "ward-html"
+WARD_PDF_DIR = DATA_RAW_DIR / "ward-pdf"
+WARD_MEDIA_DIR = STATIC_DIR / "lab_reference_media"
+
+DOWNLOADS_BASE_DIR = DATA_PROCESSED_DIR / "downloads"
+LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
+WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 # Parquet layout
 PARQUET_DIR = DATA_PROCESSED_DIR / "parquet"
@@ -60,3 +70,8 @@ FERTILIZER_CSV = MANAGEMENT_PROCESSED_DIR / "fertilizer_clean.csv"
 DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
 WEATHER_DOWNLOADS_DIR = DOWNLOADS_DIR / "weather"
+
+WARD_HTML_DIR = BASE_DIR / "data-processed" / "ward-html"
+
+WARD_BIOLOGICAL_REPORT_HTML_FILE = WARD_HTML_DIR / "ward-biological-report.html"
+WARD_BIOLOGICAL_REPORT_DOCX_FILE = BASE_DIR / "data-processed" / "ward-docx" / "Biological 2024-11-05.docx"

@@ -14,7 +14,7 @@ Full ETL including growing-season (gseason) summaries:
   - Convert VWC fractions → percent (×100) deterministically
   - Convert soil temperature (°C → °F) deterministically
   - Apply site-specific value bounds (centralized in thresholds.py) + produce a report
-  - Compute SWC cylinder volumes & logger‐ratios
+  - Compute SWC cylinder volumes & logger-ratios
   - Compute ΔT (biochar − control) and ΔSWC volumes (biochar − control)
   - Resample to 15 min / hourly / daily / monthly; write Parquet + Parquet_ratios
   - Build DEFAULT gseason summaries from daily data (with cross-year support)
@@ -39,41 +39,46 @@ instead of flattening everything into one continuous naive 15-minute sequence.
 
 from __future__ import annotations
 
-import os
 import csv
-import math
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple, cast
+import math
+import os
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 from pandas import Series
 
-from biochar_app.config import LOGGER_LOCATIONS, SENSOR_DEPTH_VALUES
-from biochar_app.scripts.get_weather_data import fetch_weather_data
-from biochar_app.scripts.config import (
-    DATA_RAW_DIR,
-    PARQUET_DIR,
-    LOGGER_DOWNLOADS_DIR,
-    WEATHER_DOWNLOADS_DIR,
-    YEARS,
-    STRIPS,
-    LOGGER_LOCATIONS,
-    GRANULARITIES,
-    UNIT_CONVERSIONS,
-    cylinder_volume_m3,
-    DEFAULT_GSEASON_PERIODS,
-    COLLECT_PERIOD,
-    COAG_STATION,
+from biochar_app.config import SENSOR_DEPTH_VALUES
+from biochar_app.config.core import (
     COAGMET_VARIABLE_MAP,
+    COAG_STATION,
+    COLLECT_PERIOD,
+    DEFAULT_GSEASON_PERIODS,
     DEFAULT_TIMEZONE,
-    DEFAULT_UNITS,
-    DEFAULT_BAD_VALUE_THRESHOLD,
+    GRANULARITIES,
+    LOGGER_LOCATIONS,
+    STRIPS,
+    YEARS,
+    cylinder_volume_m3,
 )
-
-from biochar_app.scripts.type_utils import NAN, df_agg, POS_INF, NEG_INF
-from biochar_app.config.thresholds import apply_value_bounds as enforce_value_bounds
+from biochar_app.config.paths import (
+    DATA_RAW_DIR,
+    LOGGER_DOWNLOADS_DIR,
+    PARQUET_DIR,
+    WEATHER_DOWNLOADS_DIR,
+)
+from biochar_app.config.thresholds import (
+    DEFAULT_BAD_VALUE_THRESHOLD,
+    apply_value_bounds as enforce_value_bounds,
+)
+from biochar_app.config.units import (
+    DEFAULT_UNITS,
+    UNIT_CONVERSIONS,
+)
+from biochar_app.scripts.get_weather_data import fetch_weather_data
+from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -110,6 +115,31 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
 LOGGER_FIXED_STANDARD_TZ = "Etc/GMT+7"
 
 
+# ---------------------------------------------------------------------------
+# Timezone helpers
+# ---------------------------------------------------------------------------
+
+def tz_name(tz_like: Any) -> str:
+    """
+    Return a pandas-friendly timezone name string.
+
+    Supports:
+      - ZoneInfo objects (uses .key)
+      - strings
+      - fallback to str(...)
+    """
+    if hasattr(tz_like, "key"):
+        key = getattr(tz_like, "key")
+        if isinstance(key, str) and key:
+            return key
+    if isinstance(tz_like, str):
+        return tz_like
+    return str(tz_like)
+
+
+DEFAULT_TIMEZONE_NAME = tz_name(DEFAULT_TIMEZONE)
+
+
 def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
     """
     Apply piecewise clock corrections (add minutes) to a naive timestamp series.
@@ -128,10 +158,10 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
 
 
 def apply_logger_seasonal_civil_time(
-        ts: pd.Series,
-        *,
-        fixed_tz: str = LOGGER_FIXED_STANDARD_TZ,
-        local_tz: str = DEFAULT_TIMEZONE,
+    ts: pd.Series,
+    *,
+    fixed_tz: str = LOGGER_FIXED_STANDARD_TZ,
+    local_tz: Any = DEFAULT_TIMEZONE,
 ) -> pd.Series:
     """
     Convert corrected logger timestamps from a fixed MST base into America/Denver
@@ -149,7 +179,7 @@ def apply_logger_seasonal_civil_time(
     s_fixed = s.dt.tz_localize(fixed_tz)
 
     # Then convert to America/Denver civil time
-    return s_fixed.dt.tz_convert(local_tz)
+    return s_fixed.dt.tz_convert(tz_name(local_tz))
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +235,7 @@ def normalize_logger_timestamp_series(ts: Series) -> Series:
     return pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S", errors="coerce")
 
 
-def normalize_weather_timestamp_series(ts: pd.Series, tz: str = "America/Denver") -> pd.Series:
+def normalize_weather_timestamp_series(ts: pd.Series, tz: Any = DEFAULT_TIMEZONE) -> pd.Series:
     """
     Normalize CoAgMet timestamps:
       - parse
@@ -213,12 +243,13 @@ def normalize_weather_timestamp_series(ts: pd.Series, tz: str = "America/Denver"
       - convert any tz-aware to tz
       - drop tz info (timezone-naive)
     """
+    tz_str = tz_name(tz)
     s = pd.to_datetime(ts, errors="coerce")
 
     if s.dt.tz is None:
-        s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
+        s = s.dt.tz_localize(tz_str, ambiguous="NaT", nonexistent="shift_forward")
     else:
-        s = s.dt.tz_convert(tz)
+        s = s.dt.tz_convert(tz_str)
 
     return s.dt.tz_localize(None)
 
@@ -231,7 +262,7 @@ def make_timestamp_column_naive(df_in: pd.DataFrame, col: str = "timestamp") -> 
     if col in df_out.columns:
         try:
             if isinstance(df_out[col].dtype, pd.DatetimeTZDtype):
-                df_out[col] = df_out[col].dt.tz_convert(DEFAULT_TIMEZONE).dt.tz_localize(None)
+                df_out[col] = df_out[col].dt.tz_convert(DEFAULT_TIMEZONE_NAME).dt.tz_localize(None)
         except Exception:
             pass
     return df_out
@@ -243,7 +274,7 @@ def make_datetimeindex_naive(df_in: pd.DataFrame, copy: bool = True) -> pd.DataF
     """
     df = df_in.copy() if copy else df_in
     if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
-        df.index = df.index.tz_convert(DEFAULT_TIMEZONE).tz_localize(None)
+        df.index = df.index.tz_convert(DEFAULT_TIMEZONE_NAME).tz_localize(None)
     return df
 
 
@@ -445,7 +476,11 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     return merged.reset_index()
 
 
-def replace_bad_values(df_in: pd.DataFrame, threshold: float = DEFAULT_BAD_VALUE_THRESHOLD, copy: bool = True) -> pd.DataFrame:
+def replace_bad_values(
+    df_in: pd.DataFrame,
+    threshold: float = DEFAULT_BAD_VALUE_THRESHOLD,
+    copy: bool = True,
+) -> pd.DataFrame:
     df = df_in.copy() if copy else df_in
     for col_name in df.columns:
         if col_name == "timestamp":
@@ -963,6 +998,7 @@ def generate_summaries(years: List[int]) -> None:
 
             agg_map = {col: "sum" if col.startswith("precip") else "mean" for col in dfw_clean.columns}
             dfr = dfw_clean.resample(code).agg(cast(Any, agg_map)).round(3).reset_index()
+            dfr = make_timestamp_column_naive(dfr, col="timestamp")
             fn = f"{year}_{freq}.parquet"
             dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
             logger.info(f"✅ Weather {freq} for {year}")
@@ -971,9 +1007,9 @@ def generate_summaries(years: List[int]) -> None:
                 dfw_15min_for_zip = dfr
 
         if dfw_15min_for_zip is not None:
-            start_ts = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE)
-            year_end = pd.Timestamp(f"{year}-12-31 23:59", tz=DEFAULT_TIMEZONE)
-            now_ts = pd.Timestamp.now(tz=DEFAULT_TIMEZONE).floor("min")
+            start_ts = pd.Timestamp(f"{year}-01-01 00:00", tz=DEFAULT_TIMEZONE_NAME)
+            year_end = pd.Timestamp(f"{year}-12-31 23:59", tz=DEFAULT_TIMEZONE_NAME)
+            now_ts = pd.Timestamp.now(tz=DEFAULT_TIMEZONE_NAME).floor("min")
             end_ts = min(year_end, now_ts)
 
             start_iso = ts_to_iso_minute(start_ts)
@@ -1007,6 +1043,7 @@ def resolve_target_year(cli_year: Optional[int] = None) -> int:
     except Exception:
         return int(datetime.now().year)
 
+
 def safe_series_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd.Series:
     """
     Compute num / denom but avoid blow-ups when denom ≈ 0.
@@ -1031,12 +1068,11 @@ def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     For VWC/EC compute (S1/S2) and (S3/S4) per depth and logger location.
     Also compute SWC ratios using SWC_vol_gal_* columns if present.
     """
-
     df = df_in.copy() if copy else df_in
     pairings = [("S1", "S2"), ("S3", "S4")]
-    RATIO_VARS = ["VWC", "EC"]
+    ratio_vars = ["VWC", "EC"]
 
-    for var in RATIO_VARS:
+    for var in ratio_vars:
         for s1, s2 in pairings:
             for loc in LOGGER_LOCATIONS:
                 for d in SENSOR_DEPTH_VALUES:
@@ -1066,4 +1102,3 @@ def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
 if __name__ == "__main__":
     os.makedirs(PARQUET_DIR, exist_ok=True)
     generate_summaries(YEARS)
-

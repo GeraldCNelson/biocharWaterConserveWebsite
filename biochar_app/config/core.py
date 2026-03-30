@@ -13,6 +13,9 @@ from __future__ import annotations
 import datetime
 from math import pi
 
+from zoneinfo import ZoneInfo
+import os
+
 # ---------------------------------------------------------------------
 # Experiment structure
 # ---------------------------------------------------------------------
@@ -233,3 +236,6 @@ def cylinder_volume_m3(length_cm: float = SWC_CYLINDER_LENGTH_CM,
     h = length_cm / 100.0
     r = radius_cm / 100.0
     return pi * r * r * h
+
+LOGGER_TIMEZONE = "America/Denver"  # semantic only, do NOT apply tzinfo
+DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))

@@ -86,6 +86,11 @@ from biochar_app.config.units import (
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
     PARQUET_DIR,
+    DOWNLOADS_BASE_DIR,
+    LOGGER_DOWNLOADS_DIR,
+    WARD_HTML_DIR,
+    WARD_PDF_DIR,
+    WEATHER_DOWNLOADS_DIR,
 )
 from biochar_app.scripts.markdown_config import build_markdown_mapping
 
@@ -103,6 +108,19 @@ from biochar_app.scripts.tables.tables_nir import (
 
 logger = logging.getLogger(__name__)
 
+def get_latest_ward_html(pattern: str) -> Path:
+    matches = sorted(WARD_HTML_DIR.glob(pattern), reverse=True)
+    if not matches:
+        raise HTTPException(status_code=404, detail=f"No Ward HTML file found for pattern: {pattern}")
+    return matches[0]
+
+
+def get_latest_ward_pdf(pattern: str) -> Path:
+    matches = sorted(WARD_PDF_DIR.glob(pattern), reverse=True)
+    if not matches:
+        raise HTTPException(status_code=404, detail=f"No Ward PDF file found for pattern: {pattern}")
+    return matches[0]
+
 # ---- Paths ----
 main_router = APIRouter()
 api_router = APIRouter(prefix="/api")
@@ -115,11 +133,23 @@ templates = Jinja2Templates(
 # ---------------------------------------------------------------------------
 # Bulk download directories (must match etl.py)
 # ---------------------------------------------------------------------------
-DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
-LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
-WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
+# DOWNLOADS_BASE_DIR = Path(PARQUET_DIR).parent / "downloads"
+# LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
+# WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
-LAB_REF_DIR = Path(__file__).resolve().parents[1] / "data-processed" / "ward-html"
+# BASE_DIR = Path(__file__).resolve().parents[1]
+#
+# DATA_RAW_DIR = BASE_DIR / "data-raw"
+# DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
+# STATIC_DIR = BASE_DIR / "static"
+#
+# LAB_REF_DIR = DATA_PROCESSED_DIR / "ward-html"
+# WARD_PDF_DIR = DATA_RAW_DIR / "ward-pdf"
+# LAB_REF_MEDIA_DIR = STATIC_DIR / "lab_reference_media"
+#
+# DOWNLOADS_BASE_DIR = DATA_PROCESSED_DIR / "downloads"
+# LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
+# WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 _LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
 
@@ -1051,11 +1081,38 @@ async def api_get_lab_table(table_key: str):
 
 @main_router.get("/lab-references/ward-guide", response_class=HTMLResponse)
 async def ward_guide():
-    file_path = LAB_REF_DIR / "ward_guide.html"
+    file_path = WARD_HTML_DIR / "ward_guide_20211118.html"
     return file_path.read_text(encoding="utf-8")
 
 
 @main_router.get("/lab-references/soil-health-guide", response_class=HTMLResponse)
 async def soil_health_guide():
-    file_path = LAB_REF_DIR / "soil_health_guide.html"
+    file_path = WARD_HTML_DIR / "ward_soil_health_guide_final_may.html"
+    return file_path.read_text(encoding="utf-8")
+
+
+@main_router.get("/lab-references/ward-biological-report", response_class=HTMLResponse)
+async def ward_biological_report():
+    file_path = get_latest_ward_html("ward_biological_report_*.html")
+    return file_path.read_text(encoding="utf-8")
+
+
+@main_router.get("/lab-references/ward-biological-report/pdf")
+async def ward_biological_report_pdf():
+    file_path = get_latest_ward_pdf("Biological *.pdf")
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=file_path.name,
+    )
+
+@main_router.get("/lab-references/ward-nirs-report", response_class=HTMLResponse)
+async def ward_nirs_report():
+    file_path = get_latest_ward_html("ward_nirs_report_*.html")
+    return file_path.read_text(encoding="utf-8")
+
+
+@main_router.get("/lab-references/ward-soil-sha-report", response_class=HTMLResponse)
+async def ward_soil_sha_report():
+    file_path = get_latest_ward_html("ward_soil_sha_report_*.html")
     return file_path.read_text(encoding="utf-8")

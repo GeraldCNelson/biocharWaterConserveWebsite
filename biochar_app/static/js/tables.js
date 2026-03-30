@@ -35,8 +35,6 @@ function appendTextWithLinks(parentEl, text) {
   const raw = safeStr(text, "");
   if (!raw) return;
 
-  // Basic URL matcher: stop at whitespace or common closing punctuation.
-  // (We intentionally keep it conservative.)
   const urlRe = /(https?:\/\/[^\s<>"'()]+)(?=[\s<>"'()]|$)/g;
 
   let last = 0;
@@ -46,12 +44,10 @@ function appendTextWithLinks(parentEl, text) {
     const start = m.index;
     const url = m[1];
 
-    // preceding text
     if (start > last) {
       parentEl.appendChild(document.createTextNode(raw.slice(last, start)));
     }
 
-    // link
     const a = document.createElement("a");
     a.href = url;
     a.textContent = url;
@@ -62,7 +58,6 @@ function appendTextWithLinks(parentEl, text) {
     last = start + url.length;
   }
 
-  // trailing text
   if (last < raw.length) {
     parentEl.appendChild(document.createTextNode(raw.slice(last)));
   }
@@ -75,7 +70,6 @@ function appendTextWithLinks(parentEl, text) {
 function normalizeOneSet(s, idx = 0, totalSets = null) {
   const set = isObject(s) ? s : {};
 
-  // Pull raw label from backend (do NOT mutate it yet)
   const rawLabel =
     safeStr(set.label, "") ||
     safeStr(set.title, "") ||
@@ -83,10 +77,6 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
   const isAlreadyNumbered = /^\s*set\s*\d+\s*:/i.test(rawLabel);
 
-  // Decide whether to auto-number:
-  // - If backend already numbered → keep it
-  // - If multiple sets exist → add "Set X:"
-  // - If only one set → leave unnumbered
   const shouldNumber =
     !isAlreadyNumbered &&
     (totalSets === null || totalSets > 1);
@@ -101,9 +91,6 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
 
-  // Normalize {key,label} items (periods/variables).
-  // - If entry is a string/number, treat it as both key and label.
-  // - If entry is an object, preserve it but ensure it has key/label.
   function normalizeKeyLabelItem(x) {
     if (x === null || x === undefined) return null;
 
@@ -125,7 +112,6 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
       if (!k && !lbl) return null;
 
-      // Preserve any extra fields (e.g., note, unit, etc.)
       return { ...x, key: k || lbl, label: lbl || k };
     }
 
@@ -146,7 +132,6 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
   const rowLabels = isObject(set.rowLabels) ? set.rowLabels : {};
   const data = isObject(set.data) ? set.data : {};
 
-  // IMPORTANT: support both "note" and "notes" from backend
   const note = safeStr(set.note, "") || safeStr(set["notes"], "");
 
   return {
@@ -172,7 +157,6 @@ export function normalizePayload(raw) {
 
   const title = safeStr(raw.title, "") || safeStr(raw.label, "");
 
-  // Multi-set (preferred)
   if (Array.isArray(raw.sets)) {
     return {
       title,
@@ -180,12 +164,10 @@ export function normalizePayload(raw) {
     };
   }
 
-  // Legacy wrapper: { set: { ... } }
   if (isObject(raw.set)) {
     const set = normalizeOneSet(
       {
         ...raw.set,
-        // If a legacy wrapper doesn't provide a set label, fall back to the payload title
         label: safeStr(raw.set.label, "") || safeStr(raw.set.title, "") || title || "Set 1",
       },
       0,
@@ -194,7 +176,6 @@ export function normalizePayload(raw) {
     return { title, sets: [set] };
   }
 
-  // Legacy single-set payload
   const looksSingleSet =
     Array.isArray(raw.periods) &&
     Array.isArray(raw.variables) &&
@@ -220,7 +201,6 @@ export function normalizePayload(raw) {
     return { title, sets: [set] };
   }
 
-  // Unknown shape
   return { title, sets: [] };
 }
 
@@ -237,12 +217,6 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
   const rowLabels = isObject(setPayload.rowLabels) ? setPayload.rowLabels : {};
   const data = isObject(setPayload.data) ? setPayload.data : {};
 
-  // NOTE:
-  // We intentionally DO NOT inject set-level notes here anymore,
-  // because the tab renderer can place the shared note once at the top.
-  // (This prevents duplicate "Rows: ... Columns: ..." text.)
-
-  // STRICT: variables must be provided by backend (or by set builder).
   if (variables.length === 0) {
     const dataKeys = isObject(data) ? Object.keys(data) : [];
     const diag = {
@@ -284,7 +258,7 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
         rows,
         rowLabels,
         data,
-        variables, // keep full normalized variable metadata available
+        variables,
       },
       varKey,
       varLabel,
@@ -295,8 +269,6 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
   }
 }
 
-// Small helper for safe inline JSON display in HTML warnings.
-
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -306,14 +278,21 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
-/**
- * Build a single variable table.
- * Expects:
- *   periods: [{key,label}, ...]
- *   rows: [rowKey, ...]
- *   rowLabels: {rowKey: label}
- *   data: { varKey: { rowKey: { periodKey: value|null } } }
- */
+function formatBandRange(band) {
+  const hasMin = band["min_value"] !== null && band["min_value"] !== undefined;
+  const hasMax = band["max_value"] !== null && band["max_value"] !== undefined;
+
+  if (hasMin && hasMax) {
+    return `${band["min_value"]} to < ${band["max_value"]}`;
+  }
+  if (hasMin) {
+    return `≥ ${band["min_value"]}`;
+  }
+  if (hasMax) {
+    return `< ${band["max_value"]}`;
+  }
+  return "";
+}
 
 function openReferenceModal(variable) {
   if (!variable || !variable["reference"]) return;
@@ -331,6 +310,8 @@ function openReferenceModal(variable) {
 
   const ref = variable["reference"];
   const refs = Array.isArray(ref["references"]) ? ref["references"] : [];
+  const thresholds = isObject(ref["thresholds"]) ? ref["thresholds"] : null;
+  const bands = Array.isArray(thresholds?.["bands"]) ? thresholds["bands"] : [];
 
   let html = "";
 
@@ -348,6 +329,30 @@ function openReferenceModal(variable) {
 
   if (ref["caveat"]) {
     html += `<p><strong>Caution:</strong> ${escapeHtml(ref["caveat"])}</p>`;
+  }
+
+  if (bands.length > 0) {
+    html += `<hr><h6>Interpretation ranges</h6>`;
+
+    if (thresholds["method_note"]) {
+      html += `<p class="text-muted mb-2">${escapeHtml(thresholds["method_note"])}</p>`;
+    }
+
+    if (thresholds["unit_label"]) {
+      html += `<p class="mb-2"><strong>Units:</strong> ${escapeHtml(thresholds["unit_label"])}</p>`;
+    }
+
+    html += `<div class="table-responsive"><table class="table table-sm table-bordered table-striped">`;
+    html += `<thead><tr><th>Category</th><th>Range</th></tr></thead><tbody>`;
+
+    for (const band of bands) {
+      html += `<tr>
+        <td>${escapeHtml(safeStr(band["label"], ""))}</td>
+        <td>${escapeHtml(formatBandRange(band))}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table></div>`;
   }
 
   if (refs.length > 0) {
@@ -395,23 +400,17 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     return div;
   }
 
-  // Look up the full variable metadata from the normalized set payload
   const variable =
     Array.isArray(setPayload.variables)
       ? setPayload.variables.find((v) => safeStr(v.key, "") === safeStr(variableKey, ""))
       : null;
 
   console.log("TABLE VARIABLE DEBUG:", variableKey, variable);
-  // ----------------------------
-  // Helpers
-  // ----------------------------
+
   const norm = (s) => String(s ?? "").trim().toLowerCase();
 
-  // Accept a few common ratio-row spellings just in case payload differs
   const isRatioRowKey = (rowKey) => {
     const k = norm(rowKey).replace(/\s+/g, "");
-
-    // handle both display labels and backend row keys
     return (
       k === "s1/s2" ||
       k === "s3/s4" ||
@@ -423,16 +422,12 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
   };
 
   const looksNumeric = (s) => {
-    // Allows: 1, -1, 1.23, .5, 1e-3, -2.4E+2
     return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s);
   };
 
   const formatValue = (v, rowKey) => {
     if (v === null || v === undefined) return "";
 
-    // Strings can be:
-    // - real text like "ALL PREY" -> preserve
-    // - numeric strings like "0.96875" -> treat as number (esp for ratio rows)
     if (typeof v === "string") {
       const s = v.trim();
       if (!s) return "";
@@ -443,12 +438,11 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
       if (looksNumeric(s)) {
         const numFromString = Number(s);
         if (Number.isFinite(numFromString)) {
-          v = numFromString; // fall through to numeric formatting
+          v = numFromString;
         } else {
           return "";
         }
       } else {
-        // Non-numeric string like "ALL PREY" -> preserve
         return s;
       }
     }
@@ -456,25 +450,19 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     const num = typeof v === "number" ? v : Number(v);
     if (!Number.isFinite(num)) return "";
 
-    // Always format ratio rows to 3 decimals
     if (isRatioRowKey(rowKey)) {
       return num.toFixed(3);
     }
 
-    // Non-ratio: keep natural display
     if (Math.abs(num - Math.round(num)) < 1e-12) return String(Math.round(num));
     return String(Number(num.toPrecision(6)));
   };
 
   const prettyTitle = variableLabel || variableKey;
 
-  // ----------------------------
-  // Build DOM
-  // ----------------------------
   const wrapper = document.createElement("div");
   wrapper.className = "mb-4";
 
-  // Variable heading (with optional reference indicator)
   const h6 = document.createElement("h6");
   h6.className = "mt-3 mb-2 fw-bold d-flex align-items-center gap-2";
 
@@ -495,12 +483,10 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     refBadge.setAttribute("aria-label", `More information about ${prettyTitle}`);
     refBadge.style.cursor = "pointer";
 
-    // Basic browser tooltip
     if (variable?.["reference"]?.["short_note"]) {
       refBadge.setAttribute("title", variable["reference"]["short_note"]);
     }
 
-    // Click stub for future modal hookup
     refBadge.addEventListener("click", () => {
       openReferenceModal(variable);
     });
@@ -510,7 +496,6 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
 
   wrapper.appendChild(h6);
 
-  // Variable note directly under heading
   const noteText = safeStr(variableNote, "") || safeStr(variable?.note, "");
   if (noteText) {
     const p = document.createElement("p");
@@ -525,7 +510,6 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
   const table = document.createElement("table");
   table.className = "table table-sm table-striped table-bordered";
 
-  // Header
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
@@ -541,7 +525,6 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
   thead.appendChild(trh);
   table.appendChild(thead);
 
-  // Body
   const tbody = document.createElement("tbody");
 
   for (const rowKey of rows) {

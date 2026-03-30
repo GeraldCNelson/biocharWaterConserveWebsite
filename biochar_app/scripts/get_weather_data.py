@@ -53,13 +53,19 @@ from io import StringIO
 import pandas as pd
 import requests
 
-from biochar_app.scripts.config import (
+from biochar_app.config.core import (
     COLLECT_PERIOD,
     COAG_STATION,
     COAGMET_VARIABLE_MAP,
     DEFAULT_TIMEZONE,
+)
+
+from biochar_app.config.units import (
     DEFAULT_UNITS,
-    PARQUET_DIR,  # used to detect whether logger data exists for the year
+)
+
+from biochar_app.config.paths import (
+    PARQUET_DIR,
 )
 
 
