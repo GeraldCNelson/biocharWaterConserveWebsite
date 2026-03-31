@@ -81,6 +81,8 @@ biochar_app/data-processed/**
 !biochar_app/data-processed/lab-tests/**
 !biochar_app/data-processed/management/
 !biochar_app/data-processed/management/**
+!biochar_app/data-processed/ward-html/
+!biochar_app/data-processed/ward-html/**
 
 ############################
 # Processed data we still ignore
