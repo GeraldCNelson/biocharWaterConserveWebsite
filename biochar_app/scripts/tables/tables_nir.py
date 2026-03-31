@@ -1,4 +1,3 @@
-# biochar_app/scripts/tables_nir.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -103,6 +102,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Non-Fiber Carbohydrates Dry Basis",
             "Non-Fiber Carbohydrates (Dry Basis, %)",
         ),
+        reference_key="nfc_pct_db",
     ),
     LabVarSpec(
         key="starch_pct_db",
@@ -113,6 +113,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Starch Dry Basis (%)",
             "Starch (Dry Basis, %)",
         ),
+        reference_key="starch_pct_db",
     ),
     LabVarSpec(
         key="wsc_pct_db",
@@ -124,6 +125,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Water-Soluble Carbohydrates Dry Basis",
             "Water-Soluble Carbohydrates (Dry Basis, %)",
         ),
+        reference_key="wsc_pct_db",
     ),
     LabVarSpec(
         key="fructan_pct_db",
@@ -134,6 +136,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Fructan Dry Basis (%)",
             "Fructans (Dry Basis, %)",
         ),
+        reference_key="fructan_pct_db",
     ),
     LabVarSpec(
         key="nel_pct_db",
@@ -145,6 +148,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Lactation Dry Basis",
             "Net Energy for Lactation (Dry Basis, %)",
         ),
+        reference_key="nel_pct_db",
     ),
     LabVarSpec(
         key="nem_pct_db",
@@ -156,6 +160,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Maintenance Dry Basis",
             "Net Energy for Maintenance (Dry Basis, %)",
         ),
+        reference_key="nem_pct_db",
     ),
     LabVarSpec(
         key="neg_pct_db",
@@ -167,6 +172,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Gain Dry Basis",
             "Net Energy for Gain (Dry Basis, %)",
         ),
+        reference_key="neg_pct_db",
     ),
 ]
 
@@ -180,6 +186,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Ash Dry Basis (%)",
             "Ash (Dry Basis, %)",
         ),
+        reference_key="ash_pct_db",
     ),
     LabVarSpec(
         key="ca_pct_db",
@@ -191,6 +198,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Calcium Dry Basis (%)",
             "Calcium (Dry Basis, %)",
         ),
+        reference_key="ca_pct_db",
     ),
     LabVarSpec(
         key="p_pct_db",
@@ -202,6 +210,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Phosphorus Dry Basis (%)",
             "Phosphorus (Dry Basis, %)",
         ),
+        reference_key="p_pct_db",
     ),
     LabVarSpec(
         key="k_pct_db",
@@ -213,6 +222,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Potassium Dry Basis (%)",
             "Potassium (Dry Basis, %)",
         ),
+        reference_key="k_pct_db",
     ),
     LabVarSpec(
         key="mg_pct_db",
@@ -224,6 +234,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Magnesium Dry Basis (%)",
             "Magnesium (Dry Basis, %)",
         ),
+        reference_key="mg_pct_db",
     ),
 ]
 
@@ -237,16 +248,19 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
             "NDF Digestibility at 48h",
             "NDF Digestibility at 48h (% of NDF)",
         ),
+        reference_key="ndfd48_pctndf_db",
     ),
     LabVarSpec(
         key="ivtdmd48_pctndf_db",
-        label="In Vitro True Digestibility (48h, % of NDF)",
+        label="In Vitro True Digestibility at 48 hours (%)",
         candidates=(
             "ivtdmd48_pctndf_db",
-            "IVTDMD48 %NDF DB",
-            "In Vitro True Digestibility 48h",
-            "In Vitro True Digestibility (48h, % of NDF)",
+            "IVTDMD 48 hr (in vitro true digestibility), %",
+            "IVTDMD 48 hr",
+            "In Vitro True Digestibility",
+            "In Vitro True Digestibility at 48h (%)",
         ),
+        reference_key="ivtdmd48_pctndf_db",
     ),
     LabVarSpec(
         key="fat_pct_db",
@@ -258,6 +272,7 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
             "Crude Fat Dry Basis",
             "Crude Fat (Dry Basis, %)",
         ),
+        reference_key="fat_pct_db",
     ),
     LabVarSpec(
         key="lignin_pct_db",
@@ -268,6 +283,7 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
             "Lignin Dry Basis (%)",
             "Lignin (Dry Basis, %)",
         ),
+        reference_key="lignin_pct_db",
     ),
     LabVarSpec(
         key="rfq",

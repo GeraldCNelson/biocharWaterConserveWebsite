@@ -91,7 +91,7 @@ PHOSPHORUS_REFERENCE = VariableReferenceBundle(
             table_number="Table 18",
             table_title="Sufficiency Ranges for Phosphorus Soil Tests",
             page_hint=38,
-            source_url=f"{WARD_GUIDE_HTML}#table-18",
+            source_url=f"{WARD_GUIDE_HTML}#table-18-sufficiency-ranges-for-phosphorus-soil-tests",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -102,7 +102,7 @@ PHOSPHORUS_REFERENCE = VariableReferenceBundle(
                 "and Olsen P Soil Tests"
             ),
             page_hint=99,
-            source_url=f"{WARD_GUIDE_HTML}#table-60",
+            source_url=f"{WARD_GUIDE_HTML}#table-60-phosphorus-sufficiency-levels-for-mehlich-p-3-bray-p-1-and-olsen-p-soil-tests",
         ),
     ),
     thresholds=None,
@@ -140,7 +140,7 @@ POTASSIUM_REFERENCE = VariableReferenceBundle(
             table_number="Table 21",
             table_title="Sufficiency Ranges for Soil Potassium Test",
             page_hint=40,
-            source_url=f"{WARD_GUIDE_HTML}#table-21",
+            source_url=f"{WARD_GUIDE_HTML}#table-21-sufficiency-ranges-for-soil-potassium-test",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -148,7 +148,7 @@ POTASSIUM_REFERENCE = VariableReferenceBundle(
             table_number="Table 61",
             table_title="Percent Sufficiency of Soil K Tests",
             page_hint=100,
-            source_url=f"{WARD_GUIDE_HTML}#table-61",
+            source_url=f"{WARD_GUIDE_HTML}#table-61-percent-sufficiency-of-soil-k-tests",
         ),
     ),
     thresholds=None,
@@ -245,7 +245,7 @@ PH_REFERENCE = VariableReferenceBundle(
             table_number="Table 37",
             table_title="1:1 pH Rating",
             page_hint=55,
-            source_url=f"{WARD_GUIDE_HTML}#table-37",
+            source_url=f"{WARD_GUIDE_HTML}#table-37-11-ph-rating",
         ),
     ),
 )
@@ -830,7 +830,7 @@ SOIL_RESPIRATION_REFERENCE = VariableReferenceBundle(
             table_number="Table 66",
             table_title="Soil Respiration Ranking Table",
             page_hint=113,
-            source_url=f"{WARD_GUIDE_HTML}#table-66",
+            source_url=f"{WARD_GUIDE_HTML}#table-66-soil-respiration-ranking-table",
         ),
     ),
     thresholds=InterpretationInfo(
@@ -1024,7 +1024,7 @@ ORGANIC_CN_REFERENCE = VariableReferenceBundle(
             table_number="Table 68",
             table_title="Organic C:N Ratio Ranking Table",
             page_hint=114,
-            source_url=f"{WARD_GUIDE_HTML}#table-68",
+            source_url=f"{WARD_GUIDE_HTML}#table-68-organic-cn-ration-ranking-table",
         ),
     ),
     thresholds=None,
@@ -1065,14 +1065,6 @@ NIRS_REFERENCE = VariableReferenceBundle(
             anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
         ),
     ),
 )
@@ -1262,7 +1254,7 @@ RFV_REFERENCE = VariableReferenceBundle(
             table_number="Table 7",
             table_title="Relative Forage Quality Suggested for Different Cattle Types",
             page_hint=28,
-            source_url=f"{WARD_GUIDE_HTML}#table-7",
+            source_url=f"{WARD_GUIDE_HTML}#table-7-relative-forage-quality-suggested-for-different-cattle-types",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -1306,7 +1298,7 @@ RFQ_REFERENCE = VariableReferenceBundle(
             table_number="Table 7",
             table_title="Relative Forage Quality Suggested for Different Cattle Types",
             page_hint=28,
-            source_url=f"{WARD_GUIDE_HTML}#table-7",
+            source_url=f"{WARD_GUIDE_HTML}#table-7-relative-forage-quality-suggested-for-different-cattle-types",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
@@ -1450,30 +1442,26 @@ NFC_REFERENCE = VariableReferenceBundle(
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
-        ),
     ),
 )
 
 STARCH_REFERENCE = VariableReferenceBundle(
     short_note=(
-        "Starch is an important energy-related carbohydrate fraction in forage and feed evaluation."
+        "Starch is a rapidly available carbohydrate and an important energy indicator in feed evaluation."
     ),
     detail=(
-        "Starch is commonly interpreted as part of the non-fiber carbohydrate and energy profile of a feed, especially in feeds where grain content "
-        "or rapidly available carbohydrate supply matters."
+        "WardGuide describes total starch as a measurement of starch in feed and notes that starch is "
+        "a rapidly available carbohydrate. High-starch feeds are generally high-energy feeds such as "
+        "cereal grains, corn, and corn silage."
     ),
     interpretation=(
-        "Interpret starch in relation to NFC, fiber, digestibility, and animal feeding goals."
+        "Interpret starch in relation to NFC, fiber, digestibility, total energy profile, and animal "
+        "feeding goals."
     ),
     caveat=(
-        "When reported from NIRS, starch is a modeled estimate and should be interpreted with the underlying method context in mind."
+        "WardGuide notes that high-starch diets can increase bloat risk in feedlot steers. When starch "
+        "is reported from NIRS, it remains a modeled estimate and should be interpreted with method "
+        "context in mind."
     ),
     references=(
         ReferenceInfo(
@@ -1483,14 +1471,6 @@ STARCH_REFERENCE = VariableReferenceBundle(
             anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
         ),
     ),
 )
@@ -1517,14 +1497,6 @@ WSC_REFERENCE = VariableReferenceBundle(
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
-        ),
     ),
 )
 
@@ -1550,14 +1522,6 @@ FRUCTAN_REFERENCE = VariableReferenceBundle(
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
-        ),
     ),
 )
 
@@ -1566,7 +1530,8 @@ NEL_REFERENCE = VariableReferenceBundle(
         "Net energy for lactation (NEL) is an energy estimate used in ration planning for lactating animals."
     ),
     detail=(
-        "NEL is one of the practical energy values used to summarize how much useful energy a feed can provide in a lactation context."
+        "WardGuide places NEL within the net energy framework and defines NEl as net energy of lactation "
+        "calculated from ADF."
     ),
     interpretation=(
         "Interpret NEL as part of the broader energy profile, together with digestibility, TDN, fiber fractions, and animal class."
@@ -1578,18 +1543,18 @@ NEL_REFERENCE = VariableReferenceBundle(
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
-            section_title="Near-Infrared Spectroscopy (NIRS)",
-            anchor="near-infrared-spectroscopy-nirs",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+            section_title="Net Energy (NE)",
+            anchor="net-energy-ne",
+            page_hint=25,
+            source_url=f"{WARD_GUIDE_HTML}#net-energy-ne",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
     ),
 )
@@ -1599,15 +1564,25 @@ NEM_REFERENCE = VariableReferenceBundle(
         "Net energy for maintenance (NEM) estimates the energy value of feed for maintenance requirements."
     ),
     detail=(
-        "NEM is used in forage and ration interpretation to estimate the portion of feed energy available for maintenance functions."
+        "WardGuide places NEM within the net energy framework and defines NEm as the net energy value "
+        "of feeds for maintenance calculated from TDN."
     ),
     interpretation=(
         "Interpret NEM with other energy and digestibility measures rather than by itself."
     ),
     caveat=(
-        "When derived from NIRS-based forage analysis, NEM should be treated as a modeled estimate dependent on the calibration workflow."
+        "When derived from NIRS-based forage analysis, NEM should be treated as a modeled estimate dependent "
+        "on the calibration workflow."
     ),
     references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Net Energy (NE)",
+            anchor="net-energy-ne",
+            page_hint=25,
+            source_url=f"{WARD_GUIDE_HTML}#net-energy-ne",
+        ),
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
@@ -1615,14 +1590,6 @@ NEM_REFERENCE = VariableReferenceBundle(
             anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
         ),
     ),
 )
@@ -1632,7 +1599,8 @@ NEG_REFERENCE = VariableReferenceBundle(
         "Net energy for gain (NEG) estimates the feed energy available for weight gain."
     ),
     detail=(
-        "NEG is used to interpret the productive energy value of feed in growth and gain settings."
+        "WardGuide places NEG within the net energy framework and defines NEg as the net energy value "
+        "of feeds for the deposition of body tissue, growth, or gain calculated from TDN."
     ),
     interpretation=(
         "Interpret NEG in the context of the broader energy profile, animal class, and feeding objective."
@@ -1644,18 +1612,18 @@ NEG_REFERENCE = VariableReferenceBundle(
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
-            section_title="Near-Infrared Spectroscopy (NIRS)",
-            anchor="near-infrared-spectroscopy-nirs",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
+            section_title="Net Energy (NE)",
+            anchor="net-energy-ne",
+            page_hint=25,
+            source_url=f"{WARD_GUIDE_HTML}#net-energy-ne",
         ),
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
+            section_title="Near-Infrared Spectroscopy (NIRS)",
+            anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
+            source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
     ),
 )
@@ -1683,31 +1651,32 @@ ASH_REFERENCE = VariableReferenceBundle(
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
-        ),
     ),
 )
 
 NDFD48_REFERENCE = VariableReferenceBundle(
     short_note=(
-        "NDF digestibility at 48 hours estimates how digestible the fiber fraction is over a fixed incubation period."
+        "NDF digestibility at 48 hours estimates how much of the neutral detergent fiber fraction is digested during a 48-hour in vitro incubation."
     ),
     detail=(
-        "This variable helps refine forage-quality interpretation by going beyond total fiber amount and estimating the digestibility of that fiber fraction."
+        "University of Wisconsin forage guidance explains that in vitro NDF digestibility is measured by incubating forage in buffer and live rumen fluid under anaerobic conditions. "
+        "The 48-hour value is typically higher than the 30-hour value because the incubation is longer, and 48-hour assays are often considered more repeatable in the laboratory."
     ),
     interpretation=(
-        "Interpret NDF digestibility together with NDF, ADF, RFQ, and broader energy measures."
+        "Interpret 48-hour NDF digestibility together with NDF, ADF, RFQ, and broader energy measures. Higher NDF digestibility is associated with better forage utilization and can influence intake potential and energy prediction."
     ),
     caveat=(
-        "Digestibility-derived variables are especially method-dependent and should be interpreted carefully when estimated through NIRS."
+        "Thirty-hour and 48-hour NDF digestibility values are related but not directly interchangeable. Differences vary by forage type, so incubation time and laboratory method should be noted when comparing values."
     ),
     references=(
+        ReferenceInfo(
+            guide_key="ward_guide",
+            guide_label="WardGuide",
+            section_title="Neutral Detergent Fiber (NDF)",
+            anchor="neutral-detergent-fiber-ndf",
+            page_hint=21,
+            source_url=f"{WARD_GUIDE_HTML}#neutral-detergent-fiber-ndf",
+        ),
         ReferenceInfo(
             guide_key="ward_guide",
             guide_label="WardGuide",
@@ -1715,30 +1684,34 @@ NDFD48_REFERENCE = VariableReferenceBundle(
             anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
         ),
     ),
 )
 
 IVTDMD48_REFERENCE = VariableReferenceBundle(
     short_note=(
-        "In vitro true digestibility at 48 hours estimates the digestible portion of the feed under a standardized incubation framework."
+        "In vitro true digestibility at 48 hours (IVTDMD) estimates the total digestible portion "
+        "of forage using a standardized laboratory simulation of rumen digestion."
     ),
     detail=(
-        "This digestibility measure is used to help estimate the feeding value of forage beyond simple concentration-based nutrient measures."
+        "IVTDMD is measured by incubating forage samples in rumen fluid for approximately 48 hours "
+        "to simulate digestion in a ruminant animal. It represents the proportion of total dry matter "
+        "that is digestible.\n\n"
+        "This metric is closely related to NDF digestibility (NDFD). Both values are derived from the "
+        "same laboratory procedure: NDFD expresses digestibility as a percentage of fiber (NDF), while "
+        "IVTDMD expresses digestibility as a percentage of total dry matter.\n\n"
+        "Higher IVTDMD values indicate greater forage digestibility, which is generally associated with "
+        "higher energy availability, improved intake, and better animal performance."
     ),
     interpretation=(
-        "Interpret IVTDMD together with fiber fractions, energy metrics, and forage-quality indices."
+        "Interpret IVTDMD together with NDF, NDF digestibility (NDFD), and energy-related metrics such "
+        "as TDN or RFQ. High IVTDMD combined with moderate or low fiber content typically indicates "
+        "high-quality forage."
     ),
     caveat=(
-        "Digestibility estimates are model-sensitive and should be interpreted in light of the analytical method used."
+        "IVTDMD and NDFD are derived from the same laboratory digestion process but represent different "
+        "expressions of digestibility (total dry matter vs. fiber fraction). These values should be "
+        "interpreted together rather than interchangeably."
     ),
     references=(
         ReferenceInfo(
@@ -1750,12 +1723,12 @@ IVTDMD48_REFERENCE = VariableReferenceBundle(
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
         ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
+            guide_key="uw_extension",
+            guide_label="University of Wisconsin Extension",
+            section_title="In Vitro NDF Digestibility of Forages: The 30 vs. 48 Hour Debate",
+            anchor=None,
+            page_hint=None,
+            source_url="https://fyi.extension.wisc.edu/forage/in-vitro-ndf-digestibility-of-forages-the-30-vs-48-hour-debate/",
         ),
     ),
 )
@@ -1782,14 +1755,6 @@ FAT_REFERENCE = VariableReferenceBundle(
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
         ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
-        ),
     ),
 )
 
@@ -1814,14 +1779,6 @@ LIGNIN_REFERENCE = VariableReferenceBundle(
             anchor="near-infrared-spectroscopy-nirs",
             page_hint=29,
             source_url=f"{WARD_GUIDE_HTML}#near-infrared-spectroscopy-nirs",
-        ),
-        ReferenceInfo(
-            guide_key="ward_guide",
-            guide_label="WardGuide",
-            table_number="Table 9",
-            table_title="NIR Recommended and Wet Chemistry Required Tests",
-            page_hint=29,
-            source_url=f"{WARD_GUIDE_HTML}#table-9",
         ),
     ),
 )
@@ -2282,7 +2239,9 @@ MG_NIR_REFERENCE = combine_reference_bundles(MAGNESIUM_REFERENCE, NIRS_REFERENCE
 # ---------------------------------------------------------------------
 
 LAB_REFERENCES = {
+    # -----------------------------------------------------------------
     # Soil chemistry: generic keys
+    # -----------------------------------------------------------------
     "phosphorus": PHOSPHORUS_REFERENCE,
     "potassium": POTASSIUM_REFERENCE,
     "organic_matter": ORGANIC_MATTER_REFERENCE,
@@ -2304,11 +2263,11 @@ LAB_REFERENCES = {
     "water_stable_aggregates": WATER_STABLE_AGGREGATES_REFERENCE,
     "water_stable_aggregates_mod": WATER_STABLE_AGGREGATES_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil chemistry: exact table variable keys
+    # -----------------------------------------------------------------
     "soil_ph_1_1": PH_REFERENCE,
-    "buffer_ph": BUFFER_PH_REFERENCE,
     "ec_1_1": SALINITY_REFERENCE,
-    "excess_lime": EXCESS_LIME_REFERENCE,
     "organic_matter_loi_pct": ORGANIC_MATTER_REFERENCE,
     "olsen_p_ppm_p": PHOSPHORUS_REFERENCE,
     "potassium_ppm_k": POTASSIUM_REFERENCE,
@@ -2329,7 +2288,9 @@ LAB_REFERENCES = {
     "pctmg_sat": BASE_SATURATION_REFERENCE,
     "pctna_sat": BASE_SATURATION_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil chemistry / recommendations section
+    # -----------------------------------------------------------------
     "yg_1": None,
     "nitrogen_rec": NITRATE_REFERENCE,
     "p2o5_rec": PHOSPHORUS_REFERENCE,
@@ -2341,7 +2302,9 @@ LAB_REFERENCES = {
     "manganese_rec": MANGANESE_REFERENCE,
     "copper_rec": COPPER_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil chemistry / soil health & water extract
+    # -----------------------------------------------------------------
     "h2o_no3_n": NITRATE_REFERENCE,
     "h2o_nh4_n": None,
     "total_n_h2o_ppm_n": None,
@@ -2353,7 +2316,9 @@ LAB_REFERENCES = {
     "organic_nitrogen_release_ppm_n": None,
     "organic_nitrogen_reserve_ppm_n": None,
 
+    # -----------------------------------------------------------------
     # Soil biology / soil health
+    # -----------------------------------------------------------------
     "soil_respiration": SOIL_RESPIRATION_REFERENCE,
     "weoc": WEOC_REFERENCE,
     "weon": WEON_REFERENCE,
@@ -2361,11 +2326,15 @@ LAB_REFERENCES = {
     "soil_health_score": SOIL_HEALTH_SCORE_REFERENCE,
     "organic_cn": ORGANIC_CN_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil biomass / PLFA generic bundles
+    # -----------------------------------------------------------------
     "plfa_functional_group": PLFA_FUNCTIONAL_GROUP_REFERENCE,
     "plfa_stress": PLFA_STRESS_REFERENCE,
 
-    # Soil biomass
+    # -----------------------------------------------------------------
+    # Soil biomass / PLFA main keys
+    # -----------------------------------------------------------------
     "total_biomass": TOTAL_BIOMASS_REFERENCE,
     "bacteria_biomass": BACTERIA_BIOMASS_REFERENCE,
     "fungi_biomass": FUNGI_BIOMASS_REFERENCE,
@@ -2375,19 +2344,25 @@ LAB_REFERENCES = {
     "gram_pos_gram": GRAM_POS_GRAM_REFERENCE,
     "mycorrhizae_biomass": MYCORRHIZAE_BIOMASS_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil biomass / PLFA subgroup keys
+    # -----------------------------------------------------------------
     "actinobacteria_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
     "rhizobia_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
     "saprophytes_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
     "undifferentiated_biomass": PLFA_FUNCTIONAL_GROUP_REFERENCE,
 
+    # -----------------------------------------------------------------
     # Soil biomass / PLFA stress keys
+    # -----------------------------------------------------------------
     "pre_16_1w7c_cy17_0": PLFA_STRESS_REFERENCE,
     "pre_18_1w7c_cy19_0": PLFA_STRESS_REFERENCE,
     "sat_unsat": PLFA_STRESS_REFERENCE,
     "mono_poly": PLFA_STRESS_REFERENCE,
 
-    # NIR / forage
+    # -----------------------------------------------------------------
+    # NIR / forage primary keys
+    # -----------------------------------------------------------------
     "nirs": NIRS_REFERENCE,
     "crude_protein_pct_db": CRUDE_PROTEIN_REFERENCE,
     "adf_pct_db": ACID_DETERGENT_FIBER_REFERENCE,
@@ -2399,7 +2374,9 @@ LAB_REFERENCES = {
     "npn": NPN_REFERENCE,
     "adip": ADIP_REFERENCE,
 
+    # -----------------------------------------------------------------
     # NIR extra keys used in the NIR table definitions
+    # -----------------------------------------------------------------
     "nfc_pct_db": NFC_REFERENCE,
     "starch_pct_db": STARCH_REFERENCE,
     "wsc_pct_db": WSC_REFERENCE,

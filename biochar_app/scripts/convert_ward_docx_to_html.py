@@ -113,6 +113,19 @@ img {
   height: auto;
 }
 
+.lab-reference-content img.lab-ref-image-inline {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35em auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -141,10 +154,6 @@ caption, figcaption {
 }
 """.strip()
 
-# Keep a consistent structure:
-#   ward_<document_type>_<yyyymmdd>.html
-# or, when no date is available in the filename,
-#   ward_<document_type>_<descriptive_suffix>.html
 OUTPUT_NAME_MAP: Dict[str, str] = {
     "WardGuide-Master-20211118.docx": "ward_guide_20211118.html",
     "Ward-SHA-Guide-FINAL-May.docx": "ward_soil_health_guide_final_may.html",
@@ -207,6 +216,22 @@ IMAGE_REPLACEMENTS: Dict[str, list[dict[str, object]]] = {
     ],
 }
 
+# Decorative / section-divider images that should not dominate the rendered page.
+DECORATIVE_IMAGE_BASENAMES: Dict[str, set[str]] = {
+    "ward_guide_20211118.html": {
+        "image3.png",     # Ward Lab header
+        "image29.jpeg",   # NIRS pipette image in heading area
+        "image120.jpeg",  # FEED TESTING header graphic
+        "image300.jpeg",  # transition / decorative full-page pipette image
+        "image440.jpeg",  # SOIL TESTING header graphic
+        "image610.jpeg"   # Mountain and field scenary
+        "image640.jpeg",  # PLANT TESTING header graphic
+        "image690.jpeg",  # Holding soil
+        "image720.jpeg",  # WATER header graphic
+        "image740.jpeg",  # End graphic
+    },
+}
+
 BLOCK_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "strong"]
 
 BIOLOGICAL_REPORT_OUTPUTS = {
@@ -222,7 +247,7 @@ BIOLOGICAL_REPORT_OUTPUTS = {
 def slugify(text: str) -> str:
     text = text.strip().lower()
     text = text.replace("&", " and ")
-    text = re.sub(r"[^a-z0-9\s:()\-]", "", text)
+    text = re.sub(r"[^a-z0-9\s:()\\-]", "", text)
     text = text.replace(":", "")
     text = text.replace("(", "").replace(")", "")
     text = re.sub(r"\s+", "-", text)
@@ -630,15 +655,10 @@ def rewrite_image_paths(soup: BeautifulSoup, media_url_prefix: str) -> None:
 
         src = src.strip()
 
-        # Leave already-correct web paths alone
         if src.startswith("/static/") or src.startswith("http://") or src.startswith("https://"):
-            if img.has_attr("style"):
-                img["style"] = "max-width: 100%; height: auto;"
-            else:
-                img["style"] = "max-width: 100%; height: auto;"
+            img["style"] = "max-width: 100%; height: auto;"
             continue
 
-        # Pandoc relative media paths
         if src.startswith("media/"):
             img["src"] = f"{media_url_prefix}/{src}"
             img["style"] = "max-width: 100%; height: auto;"
@@ -649,7 +669,6 @@ def rewrite_image_paths(soup: BeautifulSoup, media_url_prefix: str) -> None:
             img["style"] = "max-width: 100%; height: auto;"
             continue
 
-        # Absolute local filesystem path containing /media/
         normalized_src = src.replace("\\", "/")
         media_marker = "/media/"
         marker_index = normalized_src.rfind(media_marker)
@@ -685,6 +704,107 @@ def _remove_empty_ancestors(start_tag: Tag | None) -> None:
 
         current.decompose()
         current = parent
+
+
+def _paragraph_text_without_images(tag: Tag) -> str:
+    text_parts: list[str] = []
+    for child in tag.children:
+        if isinstance(child, NavigableString):
+            text_parts.append(str(child))
+        elif isinstance(child, Tag) and child.name != "img":
+            text_parts.append(child.get_text(" ", strip=True))
+    return normalize_text(" ".join(text_parts))
+
+
+def _is_probable_page_footer_or_header(text: str) -> bool:
+    if not text:
+        return False
+
+    patterns = [
+        r"[›»]\s*\d+\s*$",                     # "Fertilizer Recommendations › 35"
+        r"^\d+\s*[‹›»]?\s*$",                  # bare page number
+        r"^[a-z0-9 ,&()\/\-\']+\s+[›»]\s*\d+$",
+        r"^[a-z][a-z0-9 ,&()\/\-\']{3,}\s+\d+$",
+    ]
+    return any(re.search(p, text, flags=re.IGNORECASE) for p in patterns)
+
+
+def remove_images_inside_headings(soup: BeautifulSoup) -> None:
+    for heading in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
+        if not isinstance(heading, Tag):
+            continue
+
+        for img in heading.find_all("img"):
+            if isinstance(img, Tag):
+                img.decompose()
+
+
+def remove_page_header_footer_paragraphs(soup: BeautifulSoup) -> None:
+    for p in soup.find_all("p"):
+        if not isinstance(p, Tag):
+            continue
+
+        text = normalize_text(p.get_text(" ", strip=True))
+        if not text:
+            continue
+
+        if _is_probable_page_footer_or_header(text):
+            p.decompose()
+
+
+def remove_decorative_transition_images(soup: BeautifulSoup, output_name: str) -> None:
+    decorative = DECORATIVE_IMAGE_BASENAMES.get(output_name, set())
+    if not decorative:
+        return
+
+    for img in list(soup.find_all("img")):
+        if not isinstance(img, Tag):
+            continue
+
+        src = img.get("src")
+        if not isinstance(src, str):
+            continue
+
+        basename = _basename_from_src(src)
+        if basename not in decorative:
+            continue
+
+        print(f"🗑 Removing decorative image: {basename} ({src})")
+
+        parent = img.parent if isinstance(img.parent, Tag) else None
+
+        if isinstance(parent, Tag) and parent.name == "p":
+            extra_text = _paragraph_text_without_images(parent)
+            if not extra_text:
+                parent.decompose()
+                continue
+
+        img.decompose()
+        _remove_empty_ancestors(parent)
+
+def normalize_image_classes(soup: BeautifulSoup) -> None:
+    for img in soup.find_all("img"):
+        if not isinstance(img, Tag):
+            continue
+
+        parent = img.parent if isinstance(img.parent, Tag) else None
+        parent_name = parent.name if isinstance(parent, Tag) else ""
+
+        existing_classes = img.get("class", [])
+        if isinstance(existing_classes, str):
+            classes = [existing_classes]
+        else:
+            classes = list(existing_classes)
+
+        if parent_name in {"th", "td", "span", "a"}:
+            if "lab-ref-image-inline" not in classes:
+                classes.append("lab-ref-image-inline")
+        else:
+            if "lab-ref-image-figure" not in classes:
+                classes.append("lab-ref-image-figure")
+
+        img["class"] = classes
+        img["style"] = "max-width: 100%; height: auto;"
 
 
 def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
@@ -728,6 +848,7 @@ def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
                 if not isinstance(img, Tag):
                     continue
 
+                    src = img.get("src")
                 src = img.get("src")
                 if not isinstance(src, str):
                     continue
@@ -737,8 +858,8 @@ def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
                     print(f"    ↪ Found image: {src}")
                     img["src"] = replacement_src
                     img["style"] = "max-width: 100%; height: auto;"
-                    print(f"    ✅ Replaced with: {replacement_src}")
                     replaced = True
+                    print(f"    ✅ Replaced with: {replacement_src}")
                     break
 
             if not replaced:
@@ -804,16 +925,28 @@ def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
 def cleanup_html(soup: BeautifulSoup, output_name: str) -> None:
     inject_css(soup)
     wrap_body_content(soup)
+    rewrite_image_paths(
+        soup,
+        f"/static/lab_reference_media/{output_name.replace('.html', '')}"
+    )
+
+    # HTML cleanup / presentation cleanup
+    remove_images_inside_headings(soup)
+    remove_page_header_footer_paragraphs(soup)
+    remove_decorative_transition_images(soup, output_name)
+    normalize_image_classes(soup)
+
+    # Anchors / structure
     add_heading_ids(soup)
     add_explicit_named_anchors(soup, output_name)
     add_biological_report_anchors(soup, output_name)
     replace_word_bookmark_ids_with_table_ids(soup)
     add_table_ids_from_captions(soup)
-    rewrite_image_paths(
-        soup,
-        f"/static/lab_reference_media/{output_name.replace('.html', '')}"
-    )
+
+    # Manual image fixes
     apply_image_replacements(soup, output_name)
+
+    # Final cleanup
     remove_empty_paragraphs(soup)
 
 
@@ -884,7 +1017,6 @@ def main() -> int:
             print(f"❌ Pandoc failed for {docx_path.name}: {err or e}")
         except Exception as e:
             print(f"❌ Failed to convert {docx_path.name}: {e}")
-
 
     return 0
 
