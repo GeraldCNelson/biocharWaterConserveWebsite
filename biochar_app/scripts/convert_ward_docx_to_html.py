@@ -254,6 +254,12 @@ def slugify(text: str) -> str:
     text = re.sub(r"-{2,}", "-", text)
     return text.strip("-")
 
+def to_snake_case_filename(text: str) -> str:
+    text = text.strip().lower()
+    text = text.replace("&", " and ")
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text)
+    return text.strip("_")
 
 def unique_slug(base: str, seen: set[str]) -> str:
     slug = base or "section"
@@ -951,10 +957,15 @@ def cleanup_html(soup: BeautifulSoup, output_name: str) -> None:
 
 
 def output_name_for_docx(docx_name: str) -> str:
+    # Use explicit mapping if provided
     if docx_name in OUTPUT_NAME_MAP:
-        return OUTPUT_NAME_MAP[docx_name]
+        mapped = OUTPUT_NAME_MAP[docx_name]
+        stem = Path(mapped).stem
+        return f"{to_snake_case_filename(stem)}.html"
 
-    return f"{slugify(Path(docx_name).stem)}.html"
+    # Otherwise derive from filename
+    stem = Path(docx_name).stem
+    return f"{to_snake_case_filename(stem)}.html"
 
 
 def convert_docx_to_html(docx_path: Path, media_dir: Path) -> str:

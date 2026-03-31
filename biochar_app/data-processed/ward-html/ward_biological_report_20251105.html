@@ -1,0 +1,1964 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<meta content="pandoc" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>Biological 2025-11-05</title>
+<style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+<style>body {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 18px;
+  line-height: 1.32;
+}
+
+.lab-reference-content {
+  font-size: 1rem;
+}
+
+.lab-reference-content h1,
+.lab-reference-content h2,
+.lab-reference-content h3,
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  scroll-margin-top: 90px;
+  line-height: 1.15;
+}
+
+.lab-reference-content h1 {
+  margin: 0.7em 0 0.2em;
+}
+
+.lab-reference-content h2,
+.lab-reference-content h3 {
+  margin: 0.55em 0 0.18em;
+}
+
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  margin: 0.45em 0 0.15em;
+}
+
+.lab-reference-content p,
+.lab-reference-content ul,
+.lab-reference-content ol {
+  margin: 0.16em 0;
+}
+
+.lab-reference-content hr {
+  margin: 0.6em 0;
+}
+
+blockquote {
+  margin: 0.22em 0 0.4em 1rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid #d9d9d9;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-inline {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35em auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0 0.7em;
+}
+
+th, td {
+  border: 1px solid #d0d0d0;
+  padding: 0.32em 0.42em;
+  vertical-align: top;
+}
+
+caption, figcaption {
+  font-style: italic;
+  margin-top: 0.2em;
+}
+
+.lab-ref-anchor {
+  display: block;
+  position: relative;
+  top: -90px;
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}</style></head>
+<body><span class="lab-ref-anchor" id="gram-pos-gram-neg-ratings"></span><div class="lab-reference-content">
+<h1 id="biological-analysis-report">Biological Analysis Report</h1>
+<table>
+<colgroup>
+<col style="width: 51%"/>
+<col style="width: 39%"/>
+<col style="width: 9%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Account ID: 602314</strong></p>
+</blockquote></th>
+<th style="text-align: right;"><strong>Report Type:</strong></th>
+<th style="text-align: center;"><blockquote>
+<p>PLFA Soil</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td style="text-align: right;"><strong>Invoice Number:</strong></td>
+<td style="text-align: center;">1509457</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>MICHAEL LOBATO</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Received:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/3/2025</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>1066 19 1/2 RD</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Reported:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/5/2025</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h4 id="fruita-co-81521">FRUITA, CO 81521</h4>
+<blockquote>
+<p><strong>Lab ID:</strong> 58054</p>
+<p><strong>Results For:</strong> CSU FRUITA <strong>Location:</strong> N1 &amp; N2 <strong>Sample ID:</strong> STRIP 1</p>
+</blockquote>
+<h1 id="functional-group-biomass">Functional Group Biomass</h1>
+<h3 id="your-results">Your Results:</h3>
+<blockquote>
+<p>Total Living Microbial Biomass <strong>7345 ng/g</strong></p>
+</blockquote>
+<h1 id="functional-group-diversity">Functional Group Diversity</h1>
+<h3 id="your-results-1">Your Results:</h3>
+<blockquote>
+<p>Functional Group Diversity Index <strong>2.36</strong></p>
+</blockquote>
+<table style="width:55%;">
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 20%"/>
+<col style="width: 10%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Functional Group</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Biomass, ng/g</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Percent</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Total Bacteria</p>
+</blockquote></td>
+<td><blockquote>
+<p>3383.30</p>
+</blockquote></td>
+<td><blockquote>
+<p>46.06%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Gram (+)</p>
+</blockquote></td>
+<td><blockquote>
+<p>1450.48</p>
+</blockquote></td>
+<td><blockquote>
+<p>19.75%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Actinomycetes</p>
+</blockquote></td>
+<td><blockquote>
+<p>809.18</p>
+</blockquote></td>
+<td><blockquote>
+<p>11.02%</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p>Functional Group Total Results</p>
+<h5 id="total-bacteria"> Total Bacteria</h5>
+<table>
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 12%"/>
+<col style="width: 31%"/>
+<col style="width: 31%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>Gram (-)</p>
+</blockquote></th>
+<th><blockquote>
+<p>1932.81</p>
+</blockquote></th>
+<th><blockquote>
+<p>26.31%</p>
+</blockquote></th>
+<th><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image3.png" style="max-width: 100%; height: auto;"/> Total Fungi</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Rhizobia</p>
+</blockquote></td>
+<td><blockquote>
+<p>&lt; 0.01</p>
+</blockquote></td>
+<td><blockquote>
+<p>0%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image4.png" style="max-width: 100%; height: auto;"/> Protozoan</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Total Fungi</p>
+</blockquote></td>
+<td><blockquote>
+<p>1183.67</p>
+</blockquote></td>
+<td><blockquote>
+<p>16.12%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image5.png" style="max-width: 100%; height: auto;"/> Undiﬀerentiated</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Arbuscular Mycorrhizal</p>
+</blockquote></td>
+<td><blockquote>
+<p>268.61</p>
+</blockquote></td>
+<td><blockquote>
+<p>3.66%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Saprophytes</p>
+</blockquote></td>
+<td><blockquote>
+<p>915.05</p>
+</blockquote></td>
+<td><blockquote>
+<p>12.46%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Protozoan</p>
+</blockquote></td>
+<td><blockquote>
+<p>164.85</p>
+</blockquote></td>
+<td><blockquote>
+<p>2.24%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Undifferentiated</p>
+</blockquote></td>
+<td><blockquote>
+<p>2613.11</p>
+</blockquote></td>
+<td><blockquote>
+<p>35.58%</p>
+</blockquote></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h1 id="community-composition-ratios">Community Composition Ratios</h1>
+<blockquote>
+<p>All ratios should be looked at separately, but should also be taken into context and compared with one another to better understand the big picture. These are general guidelines and statements regarding soil microbial communities. In addition, the scales and ranges presented here are specific for the type of extraction and analytical methods used for PLFA analysis at Ward Laboratories, Inc. They will not necessarily reflect ranges derived from other methods of analysis or the literature. The scales can and should be adjusted slightly depending on the time of year and conditions at sampling along with the climate and soil type of specific regions where comparisons are being made. Conditions such as time of year, past and present crop, moisture, pH, and fertility should be noted or measured close to sampling for PLFA analysis for a more in depth interpretation of results.</p>
+</blockquote>
+<h2 id="fungi-bacteria">Fungi : Bacteria</h2>
+<h3 id="your-results-2">Your Results:</h3>
+<blockquote>
+<p>Fungi:Bacteria <strong>0.35</strong></p>
+<p>Rating: <strong>Very Good (0.3+ -&gt; 0.35)</strong></p>
+<p>Bacteria tend to dominate in systems with fewer organic inputs or residues possibly leading to a lower C:N ratio. In addition, bacteria can be more prominent in the early spring or late fall as soil temperatures are usually cooler and vegetation is less active or absent. Dry conditions, slightly alkaline to alkaline pH values, or increased land disturbance through prolonged and extensive tillage, grazing, or compaction may also favor bacteria. While bacteria are important and needed in the soil ecosystem, fungi are desired and more often considered indicators of good soil health. Increased use of cover crops and/or other organic inputs and less soil disturbance should help the soil support more fungi. Adjustments to pH may also be recommended in some more extreme circumstances.</p>
+</blockquote>
+<span class="lab-ref-anchor" id="diversity-index-ratings"></span><h6 id="scale-rating">Scale Rating</h6>
+<blockquote>
+<p>0.05+ -&gt; 0.1 Poor</p>
+<p>0.15+ -&gt; 0.2 Average</p>
+<p>0.25+ -&gt; 0.3 Good</p>
+<p>&gt; 0.35+ Excellent</p>
+</blockquote>
+<h2 id="predator-prey">Predator : Prey</h2>
+<h3 id="your-results-3">Your Results:</h3>
+<blockquote>
+<p>Predator:Prey <strong>0.05</strong></p>
+<p>Rating: <strong>Excellent (&gt; 0.02+)</strong></p>
+<p>This ratio is also expressed as protozoa to bacteria. Protozoa feed on bacteria which helps release nutrients, especially nitrogen. A higher ratio indicates an active community where base level nutrients are sufficient to support higher trophic levels or predators. However, this ratio will always be a relatively low number because the prey will greatly outnumber the predators.</p>
+</blockquote>
+<span class="lab-ref-anchor" id="fungi-bacteria-ratings"></span><h6 id="scale-rating-1">Scale Rating</h6>
+<blockquote>
+<p>0.002+ -&gt; 0.005 Poor</p>
+<p>0.008+ -&gt; 0.01 Average</p>
+<p>0.013+ -&gt; 0.016 Good</p>
+<p><strong>Gram (+) : Gram (-)</strong></p>
+</blockquote>
+<h3 id="your-results-4">Your Results:</h3>
+<blockquote>
+<p>Gram(+):Gram(-) <strong>0.75</strong></p>
+<p>Rating:<strong>Slightly Gram (-) Dominated (0.5+ -&gt; 1)</strong></p>
+<p>Gram (+) bacteria typically dominate early in the growing season and/or following a fallow period. They also survive better under certain environmental conditions or stressors such as drought or extreme temperatures due to their ability to form spores. Therefore, it is common to see higher values when the community is coming out of dormancy or is stressed. These values will typically begin to approach those of a more balanced bacterial community as the soil conditions become more favorable throughout the growing season. A gram (-) dominated soil may be due to anaerobic conditions or other stressors such as pesticide application or heavy metal contamination.</p>
+</blockquote>
+<span class="lab-ref-anchor" id="predator-prey-ratings"></span><h6 id="scale-rating-2">Scale Rating</h6>
+<blockquote>
+<p>2+ -&gt; 3 Slightly Gram (+) Dominated</p>
+<p>&gt; 4+ Very Gram (+) Dominated</p>
+</blockquote>
+<h1 id="stress-and-community-activity-ratios">Stress and Community Activity Ratios</h1>
+<h2 id="saturated-unsaturated">Saturated : Unsaturated</h2>
+<h3 id="your-results-5">Your Results:</h3>
+<blockquote>
+<p>Saturated:Unsaturated <strong>1.24</strong></p>
+</blockquote>
+<h2 id="monounsaturated-polyunsaturated">Monounsaturated : Polyunsaturated</h2>
+<blockquote>
+<p><strong>Your Results:</strong> Monounsaturated:Polyunsaturated <strong>13.26</strong></p>
+<p><strong>Pre 16:1w7c : cy17:0 - Pre 18:1w7c : cy19:0</strong></p>
+</blockquote>
+<table style="width:40%;">
+<colgroup>
+<col style="width: 26%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Your Results:</strong></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pre 16:1w7c:cy17:0</td>
+<td style="text-align: right;"><strong>3.56</strong></td>
+</tr>
+<tr>
+<td>Pre 18:1w7c:cy19:0</td>
+<td style="text-align: right;"><strong>2.29</strong></td>
+</tr>
+</tbody>
+</table>
+<h1 id="biological-analysis-report-1">Biological Analysis Report</h1>
+<table>
+<colgroup>
+<col style="width: 51%"/>
+<col style="width: 39%"/>
+<col style="width: 9%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Account ID: 602314</strong></p>
+</blockquote></th>
+<th style="text-align: right;"><strong>Report Type:</strong></th>
+<th style="text-align: center;"><blockquote>
+<p>PLFA Soil</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td style="text-align: right;"><strong>Invoice Number:</strong></td>
+<td style="text-align: center;">1509457</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>MICHAEL LOBATO</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Received:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/3/2025</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>1066 19 1/2 RD</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Reported:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/5/2025</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h4 id="fruita-co-81521-1">FRUITA, CO 81521</h4>
+<blockquote>
+<p><strong>Lab ID:</strong> 58055</p>
+</blockquote>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 28%"/>
+<col style="width: 8%"/>
+<col style="width: 1%"/>
+<col style="width: 3%"/>
+<col style="width: 7%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 9%"/>
+<col style="width: 6%"/>
+</colgroup>
+<thead>
+<tr>
+<th colspan="2"><blockquote>
+<p><strong>Results For:</strong> CSU FRUITA</p>
+<p><strong>Functional Group Biomass</strong></p>
+</blockquote></th>
+<th></th>
+<th></th>
+<th colspan="2"><blockquote>
+<p><strong>Location</strong></p>
+</blockquote></th>
+<th colspan="4"><blockquote>
+<p>N1 &amp; N2</p>
+</blockquote></th>
+<th colspan="4"></th>
+<th colspan="4"></th>
+<th colspan="3"><blockquote>
+<p><strong>Sample ID:</strong></p>
+</blockquote></th>
+<th><blockquote>
+
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p>Total Living Microbial Biomass <strong>6521 ng/g</strong></p>
+</blockquote></td>
+<td></td>
+<td><strong>0</strong></td>
+<td colspan="2"></td>
+<td colspan="4"><blockquote>
+<p><strong>1,500</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4" style="text-align: right;"><strong>3,000</strong></td>
+<td colspan="3"></td>
+<td><blockquote>
+<p><strong>4,500</strong></p>
+</blockquote></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Functional Group Diversity</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="3"></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3" style="text-align: center;"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Functional Group Diversity Index</p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.33</strong></p>
+</blockquote></td>
+<td colspan="2"><blockquote>
+<p><strong>0.0 0.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.2 0.3 0.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.5</strong></p>
+</blockquote></td>
+<td><strong>0.6</strong></td>
+<td><blockquote>
+<p><strong>0.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.0</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.2</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.5</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.6</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.0 2.1 2.2 2.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.4 2.5 2.6</strong></p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><strong>:</strong></p>
+<h1 id="functional-group-total-results">Functional Group Total Results</h1>
+<table style="width:54%;">
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 20%"/>
+<col style="width: 10%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Functional Group</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Biomass, ng/g</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Percent</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Total Bacteria</p>
+</blockquote></td>
+<td><blockquote>
+<p>2832.96</p>
+</blockquote></td>
+<td><blockquote>
+<p>43.44%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Gram (+)</p>
+</blockquote></td>
+<td><blockquote>
+<p>1162.15</p>
+</blockquote></td>
+<td><blockquote>
+<p>17.82%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Actinomycetes</p>
+</blockquote></td>
+<td><blockquote>
+<p>651.03</p>
+</blockquote></td>
+<td><blockquote>
+<p>9.98%</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image2.png" style="max-width: 100%; height: auto;"/></p>
+<h5 id="total-bacteria-1">Total Bacteria</h5>
+<h5 id="section"></h5>
+<table>
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 13%"/>
+<col style="width: 31%"/>
+<col style="width: 31%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>Gram (-)</p>
+</blockquote></th>
+<th><blockquote>
+<p>1670.80</p>
+</blockquote></th>
+<th><blockquote>
+<p>25.62%</p>
+</blockquote></th>
+<th><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image3.png" style="max-width: 100%; height: auto;"/> Total Fungi</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Rhizobia</p>
+</blockquote></td>
+<td><blockquote>
+<p>&lt; 0.01</p>
+</blockquote></td>
+<td><blockquote>
+<p>0%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image4.png" style="max-width: 100%; height: auto;"/> Protozoan</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Total Fungi</p>
+</blockquote></td>
+<td><blockquote>
+<p>965.72</p>
+</blockquote></td>
+<td><blockquote>
+<p>14.81%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image5.png" style="max-width: 100%; height: auto;"/> Undiﬀerentiated</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Arbuscular Mycorrhizal</p>
+</blockquote></td>
+<td><blockquote>
+<p>252.15</p>
+</blockquote></td>
+<td><blockquote>
+<p>3.87%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Saprophytes</p>
+</blockquote></td>
+<td><blockquote>
+<p>713.57</p>
+</blockquote></td>
+<td><blockquote>
+<p>10.94%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Protozoan</p>
+</blockquote></td>
+<td><blockquote>
+<p>155.37</p>
+</blockquote></td>
+<td><blockquote>
+<p>2.38%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Undifferentiated</p>
+</blockquote></td>
+<td><blockquote>
+<p>2567.40</p>
+</blockquote></td>
+<td><blockquote>
+<p>39.37%</p>
+</blockquote></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h1 id="community-composition-ratios-1">Community Composition Ratios</h1>
+<blockquote>
+<p>All ratios should be looked at separately, but should also be taken into context and compared with one another to better understand the big picture. These are general guidelines and statements regarding soil microbial communities. In addition, the scales and ranges presented here are specific for the type of extraction and analytical methods used for PLFA analysis at Ward Laboratories, Inc. They will not necessarily reflect ranges derived from other methods of analysis or the literature. The scales can and should be adjusted slightly depending on the time of year and conditions at sampling along with the climate and soil type of specific regions where comparisons are being made. Conditions such as time of year, past and present crop, moisture, pH, and fertility should be noted or measured close to sampling for PLFA analysis for a more in depth interpretation of results.</p>
+</blockquote>
+<h2 id="fungi-bacteria-1">Fungi : Bacteria</h2>
+<h3 id="your-results-6">Your Results:</h3>
+<blockquote>
+<p>Fungi:Bacteria <strong>0.34</strong></p>
+<p>Rating: <strong>Very Good (0.3+ -&gt; 0.35)</strong></p>
+<p>Bacteria tend to dominate in systems with fewer organic inputs or residues possibly leading to a lower C:N ratio. In addition, bacteria can be more prominent in the early spring or late fall as soil temperatures are usually cooler and vegetation is less active or absent. Dry conditions, slightly alkaline to alkaline pH values, or increased land disturbance through prolonged and extensive tillage, grazing, or compaction may also favor bacteria. While bacteria are important and needed in the soil ecosystem, fungi are desired and more often considered indicators of good soil health. Increased use of cover crops and/or other organic inputs and less soil disturbance should help the soil support more fungi. Adjustments to pH may also be recommended in some more extreme circumstances.</p>
+</blockquote>
+<h6 id="scale-rating-3">Scale Rating</h6>
+<blockquote>
+<p>0.05+ -&gt; 0.1 Poor</p>
+<p>0.15+ -&gt; 0.2 Average</p>
+<p>0.25+ -&gt; 0.3 Good</p>
+<p>&gt; 0.35+ Excellent</p>
+</blockquote>
+<h2 id="predator-prey-1">Predator : Prey</h2>
+<h3 id="your-results-7">Your Results:</h3>
+<blockquote>
+<p>Predator:Prey <strong>0.05</strong></p>
+<p>Rating: <strong>Excellent (&gt; 0.02+)</strong></p>
+<p>This ratio is also expressed as protozoa to bacteria. Protozoa feed on bacteria which helps release nutrients, especially nitrogen. A higher ratio indicates an active community where base level nutrients are sufficient to support higher trophic levels or predators. However, this ratio will always be a relatively low number because the prey will greatly outnumber the predators.</p>
+</blockquote>
+<h6 id="scale-rating-4">Scale Rating</h6>
+<blockquote>
+<p>0.002+ -&gt; 0.005 Poor</p>
+<p>0.008+ -&gt; 0.01 Average</p>
+<p>0.013+ -&gt; 0.016 Good</p>
+<p><strong>Gram (+) : Gram (-)</strong></p>
+</blockquote>
+<h3 id="your-results-8">Your Results:</h3>
+<blockquote>
+<p>Gram(+):Gram(-) <strong>0.70</strong></p>
+<p>Rating:<strong>Slightly Gram (-) Dominated (0.5+ -&gt; 1)</strong></p>
+<p>Gram (+) bacteria typically dominate early in the growing season and/or following a fallow period. They also survive better under certain environmental conditions or stressors such as drought or extreme temperatures due to their ability to form spores. Therefore, it is common to see higher values when the community is coming out of dormancy or is stressed. These values will typically begin to approach those of a more balanced bacterial community as the soil conditions become more favorable throughout the growing season. A gram (-) dominated soil may be due to anaerobic conditions or other stressors such as pesticide application or heavy metal contamination.</p>
+</blockquote>
+<h6 id="scale-rating-5">Scale Rating</h6>
+<blockquote>
+<p>2+ -&gt; 3 Slightly Gram (+) Dominated</p>
+<p>&gt; 4+ Very Gram (+) Dominated</p>
+</blockquote>
+<h1 id="stress-and-community-activity-ratios-1">Stress and Community Activity Ratios</h1>
+<h2 id="saturated-unsaturated-1">Saturated : Unsaturated</h2>
+<h3 id="your-results-9">Your Results:</h3>
+<blockquote>
+<p>Saturated:Unsaturated <strong>1.34</strong></p>
+</blockquote>
+<h2 id="monounsaturated-polyunsaturated-1">Monounsaturated : Polyunsaturated</h2>
+<blockquote>
+<p><strong>Your Results:</strong> Monounsaturated:Polyunsaturated <strong>11.22</strong></p>
+<p><strong>Pre 16:1w7c : cy17:0 - Pre 18:1w7c : cy19:0</strong></p>
+</blockquote>
+<table style="width:40%;">
+<colgroup>
+<col style="width: 26%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Your Results:</strong></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pre 16:1w7c:cy17:0</td>
+<td style="text-align: right;"><strong>3.35</strong></td>
+</tr>
+<tr>
+<td>Pre 18:1w7c:cy19:0</td>
+<td style="text-align: right;"><strong>2.47</strong></td>
+</tr>
+</tbody>
+</table>
+<h1 id="biological-analysis-report-2">Biological Analysis Report</h1>
+<table>
+<colgroup>
+<col style="width: 51%"/>
+<col style="width: 39%"/>
+<col style="width: 9%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Account ID: 602314</strong></p>
+</blockquote></th>
+<th style="text-align: right;"><strong>Report Type:</strong></th>
+<th style="text-align: center;"><blockquote>
+<p>PLFA Soil</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td style="text-align: right;"><strong>Invoice Number:</strong></td>
+<td style="text-align: center;">1509457</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>MICHAEL LOBATO</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Received:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/3/2025</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>1066 19 1/2 RD</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Reported:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/5/2025</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h4 id="fruita-co-81521-2">FRUITA, CO 81521</h4>
+<blockquote>
+<p><strong>Lab ID:</strong> 58056</p>
+</blockquote>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 28%"/>
+<col style="width: 9%"/>
+<col style="width: 1%"/>
+<col style="width: 3%"/>
+<col style="width: 7%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 9%"/>
+<col style="width: 6%"/>
+</colgroup>
+<thead>
+<tr>
+<th colspan="2"><blockquote>
+<p><strong>Results For:</strong> CSU FRUITA</p>
+<p><strong>Functional Group Biomass</strong></p>
+</blockquote></th>
+<th></th>
+<th></th>
+<th colspan="2"><blockquote>
+<p><strong>Location</strong></p>
+</blockquote></th>
+<th colspan="4"><blockquote>
+<p>N1 &amp; N2</p>
+</blockquote></th>
+<th colspan="4"></th>
+<th colspan="4"></th>
+<th colspan="3"><blockquote>
+<p><strong>Sample ID:</strong></p>
+</blockquote></th>
+<th><blockquote>
+
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p>Total Living Microbial Biomass <strong>5983 ng/g</strong></p>
+</blockquote></td>
+<td></td>
+<td><strong>0</strong></td>
+<td colspan="2"></td>
+<td colspan="4"><blockquote>
+<p><strong>1,500</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4" style="text-align: right;"><strong>3,000</strong></td>
+<td colspan="3"></td>
+<td><blockquote>
+<p><strong>4,500</strong></p>
+</blockquote></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Functional Group Diversity</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="3"></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3" style="text-align: center;"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Functional Group Diversity Index</p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.42</strong></p>
+</blockquote></td>
+<td colspan="2"><blockquote>
+<p><strong>0.0 0.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.2 0.3 0.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.5</strong></p>
+</blockquote></td>
+<td><strong>0.6</strong></td>
+<td><blockquote>
+<p><strong>0.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.0</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.2</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.5</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.6</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.0 2.1 2.2 2.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.4 2.5 2.6</strong></p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><strong>:</strong></p>
+<h1 id="functional-group-total-results-1">Functional Group Total Results</h1>
+<table style="width:55%;">
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 20%"/>
+<col style="width: 10%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Functional Group</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Biomass, ng/g</strong></p>
+</blockquote></th>
+<th style="text-align: right;"><strong>Percent</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Total Bacteria</p>
+</blockquote></td>
+<td><blockquote>
+<p>2927.97</p>
+</blockquote></td>
+<td style="text-align: right;">48.94%</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Gram (+)</p>
+</blockquote></td>
+<td><blockquote>
+<p>1176.55</p>
+</blockquote></td>
+<td style="text-align: right;">19.66%</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Actinomycetes</p>
+</blockquote></td>
+<td><blockquote>
+<p>633.61</p>
+</blockquote></td>
+<td style="text-align: right;">10.59%</td>
+</tr>
+</tbody>
+</table>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image2.png" style="max-width: 100%; height: auto;"/></p>
+<h5 id="total-bacteria-2">Total Bacteria</h5>
+<h5 id="section-1"></h5>
+<table>
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 13%"/>
+<col style="width: 31%"/>
+<col style="width: 31%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>Gram (-)</p>
+</blockquote></th>
+<th><blockquote>
+<p>1751.42</p>
+</blockquote></th>
+<th><blockquote>
+<p>29.27%</p>
+</blockquote></th>
+<th><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image3.png" style="max-width: 100%; height: auto;"/> Total Fungi</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Rhizobia</p>
+</blockquote></td>
+<td><blockquote>
+<p>&lt; 0.01</p>
+</blockquote></td>
+<td><blockquote>
+<p>0%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image4.png" style="max-width: 100%; height: auto;"/> Protozoan</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Total Fungi</p>
+</blockquote></td>
+<td><blockquote>
+<p>1046.01</p>
+</blockquote></td>
+<td><blockquote>
+<p>17.48%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image5.png" style="max-width: 100%; height: auto;"/> Undiﬀerentiated</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Arbuscular Mycorrhizal</p>
+</blockquote></td>
+<td><blockquote>
+<p>279.12</p>
+</blockquote></td>
+<td><blockquote>
+<p>4.67%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Saprophytes</p>
+</blockquote></td>
+<td><blockquote>
+<p>766.89</p>
+</blockquote></td>
+<td><blockquote>
+<p>12.82%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Protozoan</p>
+</blockquote></td>
+<td><blockquote>
+<p>207.31</p>
+</blockquote></td>
+<td><blockquote>
+<p>3.46%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Undifferentiated</p>
+</blockquote></td>
+<td><blockquote>
+<p>1801.93</p>
+</blockquote></td>
+<td><blockquote>
+<p>30.12%</p>
+</blockquote></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h1 id="community-composition-ratios-2">Community Composition Ratios</h1>
+<blockquote>
+<p>All ratios should be looked at separately, but should also be taken into context and compared with one another to better understand the big picture. These are general guidelines and statements regarding soil microbial communities. In addition, the scales and ranges presented here are specific for the type of extraction and analytical methods used for PLFA analysis at Ward Laboratories, Inc. They will not necessarily reflect ranges derived from other methods of analysis or the literature. The scales can and should be adjusted slightly depending on the time of year and conditions at sampling along with the climate and soil type of specific regions where comparisons are being made. Conditions such as time of year, past and present crop, moisture, pH, and fertility should be noted or measured close to sampling for PLFA analysis for a more in depth interpretation of results.</p>
+</blockquote>
+<h2 id="fungi-bacteria-2">Fungi : Bacteria</h2>
+<h3 id="your-results-10">Your Results:</h3>
+<blockquote>
+<p>Fungi:Bacteria <strong>0.36</strong></p>
+<p>Rating: <strong>Excellent (&gt; 0.35+)</strong></p>
+<p>Bacteria tend to dominate in systems with fewer organic inputs or residues possibly leading to a lower C:N ratio. In addition, bacteria can be more prominent in the early spring or late fall as soil temperatures are usually cooler and vegetation is less active or absent. Dry conditions, slightly alkaline to alkaline pH values, or increased land disturbance through prolonged and extensive tillage, grazing, or compaction may also favor bacteria. While bacteria are important and needed in the soil ecosystem, fungi are desired and more often considered indicators of good soil health. Increased use of cover crops and/or other organic inputs and less soil disturbance should help the soil support more fungi. Adjustments to pH may also be recommended in some more extreme circumstances.</p>
+</blockquote>
+<h6 id="scale-rating-6">Scale Rating</h6>
+<blockquote>
+<p>0.05+ -&gt; 0.1 Poor</p>
+<p>0.15+ -&gt; 0.2 Average</p>
+<p>0.25+ -&gt; 0.3 Good</p>
+</blockquote>
+<h2 id="predator-prey-2">Predator : Prey</h2>
+<h3 id="your-results-11">Your Results:</h3>
+<blockquote>
+<p>Predator:Prey <strong>0.07</strong></p>
+<p>Rating: <strong>Excellent (&gt; 0.02+)</strong></p>
+<p>This ratio is also expressed as protozoa to bacteria. Protozoa feed on bacteria which helps release nutrients, especially nitrogen. A higher ratio indicates an active community where base level nutrients are sufficient to support higher trophic levels or predators. However, this ratio will always be a relatively low number because the prey will greatly outnumber the predators.</p>
+</blockquote>
+<h6 id="scale-rating-7">Scale Rating</h6>
+<blockquote>
+<p>0.002+ -&gt; 0.005 Poor</p>
+<p>0.008+ -&gt; 0.01 Average</p>
+<p>0.013+ -&gt; 0.016 Good</p>
+<p><strong>Gram (+) : Gram (-)</strong></p>
+</blockquote>
+<h3 id="your-results-12">Your Results:</h3>
+<blockquote>
+<p>Gram(+):Gram(-) <strong>0.67</strong></p>
+<p>Rating:<strong>Slightly Gram (-) Dominated (0.5+ -&gt; 1)</strong></p>
+<p>Gram (+) bacteria typically dominate early in the growing season and/or following a fallow period. They also survive better under certain environmental conditions or stressors such as drought or extreme temperatures due to their ability to form spores. Therefore, it is common to see higher values when the community is coming out of dormancy or is stressed. These values will typically begin to approach those of a more balanced bacterial community as the soil conditions become more favorable throughout the growing season. A gram (-) dominated soil may be due to anaerobic conditions or other stressors such as pesticide application or heavy metal contamination.</p>
+</blockquote>
+<h6 id="scale-rating-8">Scale Rating</h6>
+<blockquote>
+<p>2+ -&gt; 3 Slightly Gram (+) Dominated</p>
+<p>&gt; 4+ Very Gram (+) Dominated</p>
+</blockquote>
+<h1 id="stress-and-community-activity-ratios-2">Stress and Community Activity Ratios</h1>
+<h2 id="saturated-unsaturated-2">Saturated : Unsaturated</h2>
+<h3 id="your-results-13">Your Results:</h3>
+<blockquote>
+<p>Saturated:Unsaturated <strong>1.24</strong></p>
+</blockquote>
+<h2 id="monounsaturated-polyunsaturated-2">Monounsaturated : Polyunsaturated</h2>
+<blockquote>
+<p><strong>Your Results:</strong> Monounsaturated:Polyunsaturated <strong>12.11</strong></p>
+<p><strong>Pre 16:1w7c : cy17:0 - Pre 18:1w7c : cy19:0</strong></p>
+</blockquote>
+<table style="width:40%;">
+<colgroup>
+<col style="width: 26%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Your Results:</strong></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pre 16:1w7c:cy17:0</td>
+<td style="text-align: right;"><strong>3.64</strong></td>
+</tr>
+<tr>
+<td>Pre 18:1w7c:cy19:0</td>
+<td style="text-align: right;"><strong>2.39</strong></td>
+</tr>
+</tbody>
+</table>
+<h1 id="biological-analysis-report-3">Biological Analysis Report</h1>
+<table>
+<colgroup>
+<col style="width: 51%"/>
+<col style="width: 39%"/>
+<col style="width: 9%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Account ID: 602314</strong></p>
+</blockquote></th>
+<th style="text-align: right;"><strong>Report Type:</strong></th>
+<th style="text-align: center;"><blockquote>
+<p>PLFA Soil</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td style="text-align: right;"><strong>Invoice Number:</strong></td>
+<td style="text-align: center;">1509457</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>MICHAEL LOBATO</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Received:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/3/2025</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>1066 19 1/2 RD</p>
+</blockquote></td>
+<td style="text-align: right;"><strong>Date Reported:</strong></td>
+<td style="text-align: center;"><blockquote>
+<p>11/5/2025</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h4 id="fruita-co-81521-3">FRUITA, CO 81521</h4>
+<blockquote>
+<p><strong>Lab ID:</strong> 58057</p>
+</blockquote>
+<table>
+<colgroup>
+<col style="width: 28%"/>
+<col style="width: 8%"/>
+<col style="width: 1%"/>
+<col style="width: 3%"/>
+<col style="width: 7%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 2%"/>
+<col style="width: 3%"/>
+<col style="width: 1%"/>
+<col style="width: 2%"/>
+<col style="width: 9%"/>
+<col style="width: 6%"/>
+</colgroup>
+<thead>
+<tr>
+<th colspan="2"><blockquote>
+<p><strong>Results For:</strong> CSU FRUITA</p>
+<p><strong>Functional Group Biomass</strong></p>
+</blockquote></th>
+<th></th>
+<th></th>
+<th colspan="2"><blockquote>
+<p><strong>Location</strong></p>
+</blockquote></th>
+<th colspan="4"><blockquote>
+<p>N1 &amp; N2</p>
+</blockquote></th>
+<th colspan="4"></th>
+<th colspan="4"></th>
+<th colspan="3"><blockquote>
+<p><strong>Sample ID:</strong></p>
+</blockquote></th>
+<th><blockquote>
+
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p>Total Living Microbial Biomass <strong>4913 ng/g</strong></p>
+</blockquote></td>
+<td></td>
+<td><strong>0</strong></td>
+<td colspan="2"></td>
+<td colspan="4"><blockquote>
+<p><strong>1,500</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4" style="text-align: right;"><strong>3,000</strong></td>
+<td colspan="3"></td>
+<td><blockquote>
+<p><strong>4,500</strong></p>
+</blockquote></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Functional Group Diversity</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="4"></td>
+<td colspan="3"></td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2"><blockquote>
+<p><strong>Your Results:</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+<td colspan="2"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="4"><blockquote>
+<p><strong>Average</strong></p>
+</blockquote></td>
+<td colspan="4"></td>
+<td colspan="3" style="text-align: center;"><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Functional Group Diversity Index</p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.32</strong></p>
+</blockquote></td>
+<td colspan="2"><blockquote>
+<p><strong>0.0 0.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.2 0.3 0.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.5</strong></p>
+</blockquote></td>
+<td><strong>0.6</strong></td>
+<td><blockquote>
+<p><strong>0.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>0.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.0</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.1</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.2</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.4</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.5</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.6</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.7</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>.8</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>1.9</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.0 2.1 2.2 2.3</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>2.4 2.5 2.6</strong></p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><strong>:</strong></p>
+<h1 id="functional-group-total-results-2">Functional Group Total Results</h1>
+<table style="width:55%;">
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 20%"/>
+<col style="width: 10%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Functional Group</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Biomass, ng/g</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Percent</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Total Bacteria</p>
+</blockquote></td>
+<td><blockquote>
+<p>2222.11</p>
+</blockquote></td>
+<td><blockquote>
+<p>45.23%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Gram (+)</p>
+</blockquote></td>
+<td><blockquote>
+<p>890.96</p>
+</blockquote></td>
+<td><blockquote>
+<p>18.13%</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Actinomycetes</p>
+</blockquote></td>
+<td><blockquote>
+<p>491.62</p>
+</blockquote></td>
+<td><blockquote>
+<p>10.01%</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image2.png" style="max-width: 100%; height: auto;"/></p>
+<h5 id="total-bacteria-3">Total Bacteria</h5>
+<h5 id="section-2"></h5>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 23%"/>
+<col style="width: 12%"/>
+<col style="width: 31%"/>
+<col style="width: 31%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>Gram (-)</p>
+</blockquote></th>
+<th><blockquote>
+<p>1331.14</p>
+</blockquote></th>
+<th><blockquote>
+<p>27.09%</p>
+</blockquote></th>
+<th><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image3.png" style="max-width: 100%; height: auto;"/> Total Fungi</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Rhizobia</p>
+</blockquote></td>
+<td><blockquote>
+<p>&lt; 0.01</p>
+</blockquote></td>
+<td><blockquote>
+<p>0%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image4.png" style="max-width: 100%; height: auto;"/> Protozoan</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Total Fungi</p>
+</blockquote></td>
+<td><blockquote>
+<p>708.20</p>
+</blockquote></td>
+<td><blockquote>
+<p>14.41%</p>
+</blockquote></td>
+<td><blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_biological_report_20251105/media/image5.png" style="max-width: 100%; height: auto;"/> Undiﬀerentiated</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Arbuscular Mycorrhizal</p>
+</blockquote></td>
+<td><blockquote>
+<p>187.31</p>
+</blockquote></td>
+<td><blockquote>
+<p>3.81%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Saprophytes</p>
+</blockquote></td>
+<td><blockquote>
+<p>520.89</p>
+</blockquote></td>
+<td><blockquote>
+<p>10.6%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Protozoan</p>
+</blockquote></td>
+<td><blockquote>
+<p>111.83</p>
+</blockquote></td>
+<td><blockquote>
+<p>2.28%</p>
+</blockquote></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Undifferentiated</p>
+</blockquote></td>
+<td><blockquote>
+<p>1871.07</p>
+</blockquote></td>
+<td><blockquote>
+<p>38.08%</p>
+</blockquote></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h1 id="community-composition-ratios-3">Community Composition Ratios</h1>
+<blockquote>
+<p>All ratios should be looked at separately, but should also be taken into context and compared with one another to better understand the big picture. These are general guidelines and statements regarding soil microbial communities. In addition, the scales and ranges presented here are specific for the type of extraction and analytical methods used for PLFA analysis at Ward Laboratories, Inc. They will not necessarily reflect ranges derived from other methods of analysis or the literature. The scales can and should be adjusted slightly depending on the time of year and conditions at sampling along with the climate and soil type of specific regions where comparisons are being made. Conditions such as time of year, past and present crop, moisture, pH, and fertility should be noted or measured close to sampling for PLFA analysis for a more in depth interpretation of results.</p>
+</blockquote>
+<h2 id="fungi-bacteria-3">Fungi : Bacteria</h2>
+<h3 id="your-results-14">Your Results:</h3>
+<blockquote>
+<p>Fungi:Bacteria <strong>0.32</strong></p>
+<p>Rating: <strong>Very Good (0.3+ -&gt; 0.35)</strong></p>
+<p>Bacteria tend to dominate in systems with fewer organic inputs or residues possibly leading to a lower C:N ratio. In addition, bacteria can be more prominent in the early spring or late fall as soil temperatures are usually cooler and vegetation is less active or absent. Dry conditions, slightly alkaline to alkaline pH values, or increased land disturbance through prolonged and extensive tillage, grazing, or compaction may also favor bacteria. While bacteria are important and needed in the soil ecosystem, fungi are desired and more often considered indicators of good soil health. Increased use of cover crops and/or other organic inputs and less soil disturbance should help the soil support more fungi. Adjustments to pH may also be recommended in some more extreme circumstances.</p>
+</blockquote>
+<h6 id="scale-rating-9">Scale Rating</h6>
+<blockquote>
+<p>0.05+ -&gt; 0.1 Poor</p>
+<p>0.15+ -&gt; 0.2 Average</p>
+<p>0.25+ -&gt; 0.3 Good</p>
+<p>&gt; 0.35+ Excellent</p>
+</blockquote>
+<h2 id="predator-prey-3">Predator : Prey</h2>
+<h3 id="your-results-15">Your Results:</h3>
+<blockquote>
+<p>Predator:Prey <strong>0.05</strong></p>
+<p>Rating: <strong>Excellent (&gt; 0.02+)</strong></p>
+<p>This ratio is also expressed as protozoa to bacteria. Protozoa feed on bacteria which helps release nutrients, especially nitrogen. A higher ratio indicates an active community where base level nutrients are sufficient to support higher trophic levels or predators. However, this ratio will always be a relatively low number because the prey will greatly outnumber the predators.</p>
+</blockquote>
+<h6 id="scale-rating-10">Scale Rating</h6>
+<blockquote>
+<p>0.002+ -&gt; 0.005 Poor</p>
+<p>0.008+ -&gt; 0.01 Average</p>
+<p>0.013+ -&gt; 0.016 Good</p>
+<p><strong>Gram (+) : Gram (-)</strong></p>
+</blockquote>
+<h3 id="your-results-16">Your Results:</h3>
+<blockquote>
+<p>Gram(+):Gram(-) <strong>0.67</strong></p>
+<p>Rating:<strong>Slightly Gram (-) Dominated (0.5+ -&gt; 1)</strong></p>
+<p>Gram (+) bacteria typically dominate early in the growing season and/or following a fallow period. They also survive better under certain environmental conditions or stressors such as drought or extreme temperatures due to their ability to form spores. Therefore, it is common to see higher values when the community is coming out of dormancy or is stressed. These values will typically begin to approach those of a more balanced bacterial community as the soil conditions become more favorable throughout the growing season. A gram (-) dominated soil may be due to anaerobic conditions or other stressors such as pesticide application or heavy metal contamination.</p>
+</blockquote>
+<h6 id="scale-rating-11">Scale Rating</h6>
+<blockquote>
+<p>2+ -&gt; 3 Slightly Gram (+) Dominated</p>
+<p>&gt; 4+ Very Gram (+) Dominated</p>
+</blockquote>
+<h1 id="stress-and-community-activity-ratios-3">Stress and Community Activity Ratios</h1>
+<h2 id="saturated-unsaturated-3">Saturated : Unsaturated</h2>
+<h3 id="your-results-17">Your Results:</h3>
+<blockquote>
+<p>Saturated:Unsaturated <strong>1.30</strong></p>
+</blockquote>
+<h2 id="monounsaturated-polyunsaturated-3">Monounsaturated : Polyunsaturated</h2>
+<blockquote>
+<p><strong>Your Results:</strong> Monounsaturated:Polyunsaturated <strong>11.67</strong></p>
+<p><strong>Pre 16:1w7c : cy17:0 - Pre 18:1w7c : cy19:0</strong></p>
+</blockquote>
+<table style="width:40%;">
+<colgroup>
+<col style="width: 26%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Your Results:</strong></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pre 16:1w7c:cy17:0</td>
+<td style="text-align: right;"><strong>3.44</strong></td>
+</tr>
+<tr>
+<td>Pre 18:1w7c:cy19:0</td>
+<td style="text-align: right;"><strong>2.26</strong></td>
+</tr>
+</tbody>
+</table>
+</div></body>
+</html>

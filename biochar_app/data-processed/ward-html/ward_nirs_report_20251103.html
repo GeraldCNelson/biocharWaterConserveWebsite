@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<meta content="pandoc" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>Hay_NIRS_2025-11-03</title>
+<style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+<style>body {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 18px;
+  line-height: 1.32;
+}
+
+.lab-reference-content {
+  font-size: 1rem;
+}
+
+.lab-reference-content h1,
+.lab-reference-content h2,
+.lab-reference-content h3,
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  scroll-margin-top: 90px;
+  line-height: 1.15;
+}
+
+.lab-reference-content h1 {
+  margin: 0.7em 0 0.2em;
+}
+
+.lab-reference-content h2,
+.lab-reference-content h3 {
+  margin: 0.55em 0 0.18em;
+}
+
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  margin: 0.45em 0 0.15em;
+}
+
+.lab-reference-content p,
+.lab-reference-content ul,
+.lab-reference-content ol {
+  margin: 0.16em 0;
+}
+
+.lab-reference-content hr {
+  margin: 0.6em 0;
+}
+
+blockquote {
+  margin: 0.22em 0 0.4em 1rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid #d9d9d9;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-inline {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35em auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0 0.7em;
+}
+
+th, td {
+  border: 1px solid #d0d0d0;
+  padding: 0.32em 0.42em;
+  vertical-align: top;
+}
+
+caption, figcaption {
+  font-style: italic;
+  margin-top: 0.2em;
+}
+
+.lab-ref-anchor {
+  display: block;
+  position: relative;
+  top: -90px;
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}</style></head>
+<body><div class="lab-reference-content">
+<p><strong>Account ID: 602314</strong></p>
+<blockquote>
+<p>MICHAEL LOBATO 1066 19 1/2 RD</p>
+
+</blockquote>
+<p><strong>Report Type:</strong> NIR <strong>Invoice Number:</strong> 1509418</p>
+<blockquote>
+<p><strong>Date Received:</strong> 11/3/2025 <strong>Date Reported:</strong> 11/5/2025</p>
+<p><strong>Lab ID:</strong> 12391</p>
+</blockquote>
+<p><strong>Results For:</strong> CSU FRUITA <strong>Sample ID:</strong> STRIP 1 <strong>Description:</strong> GRASS</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 17%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+<col style="width: 2%"/>
+<col style="width: 18%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+<th></th>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Moisture, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>4.19</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p><strong>MICRONUTRIENTS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Dry Matter, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>95.81</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>100.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Calcium, % Ca</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.51</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.53</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>PROTEIN</strong></p>
+</blockquote></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td></td>
+<td><blockquote>
+<p>Phosphorus, % P</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.17</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.18</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Crude Protein, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>8.0</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>8.4</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Potassium, % K</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.01</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.05</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Available Protein, % 8.0 8.4</p>
+</blockquote>
+<table style="width:49%;">
+<colgroup>
+<col style="width: 19%"/>
+<col style="width: 15%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>%</p>
+</blockquote></th>
+<th colspan="2"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p><strong>OTHER ANALYSIS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Fat, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>4.5</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>4.7</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Ash, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>10.01</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>10.45</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Account ID: 602314</strong></p>
+<blockquote>
+<p>MICHAEL LOBATO 1066 19 1/2 RD</p>
+
+</blockquote>
+<p><strong>Report Type:</strong> NIR <strong>Invoice Number:</strong> 1509418</p>
+<blockquote>
+<p><strong>Date Received:</strong> 11/3/2025 <strong>Date Reported:</strong> 11/5/2025</p>
+<p><strong>Lab ID:</strong> 12392</p>
+</blockquote>
+<p><strong>Results For:</strong> CSU FRUITA <strong>Sample ID:</strong> STRIP 2 <strong>Description:</strong> GRASS</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 17%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+<col style="width: 2%"/>
+<col style="width: 18%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+<th></th>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Moisture, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>3.86</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p><strong>MICRONUTRIENTS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Dry Matter, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>96.14</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>100.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Calcium, % Ca</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.48</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.50</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>PROTEIN</strong></p>
+</blockquote></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td></td>
+<td><blockquote>
+<p>Phosphorus, % P</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.20</p>
+</blockquote></td>
+<td style="text-align: center;">0.21</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Crude Protein, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>8.2</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>8.5</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Potassium, % K</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.27</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.32</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Available Protein, % 8.2 8.5</p>
+</blockquote>
+<table style="width:49%;">
+<colgroup>
+<col style="width: 19%"/>
+<col style="width: 15%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>%</p>
+</blockquote></th>
+<th colspan="2"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p><strong>OTHER ANALYSIS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Fat, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>4.4</p>
+</blockquote></td>
+<td style="text-align: center;">4.6</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Ash, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>10.53</p>
+</blockquote></td>
+<td style="text-align: center;">10.95</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Account ID: 602314</strong></p>
+<blockquote>
+<p>MICHAEL LOBATO 1066 19 1/2 RD</p>
+
+</blockquote>
+<p><strong>Report Type:</strong> NIR <strong>Invoice Number:</strong> 1509418</p>
+<blockquote>
+<p><strong>Date Received:</strong> 11/3/2025 <strong>Date Reported:</strong> 11/5/2025</p>
+<p><strong>Lab ID:</strong> 12393</p>
+</blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_nirs_report_20251103/media/image30.png" style="max-width: 100%; height: auto;"/><strong>Results For:</strong> CSU FRUITA <strong>Sample ID:</strong> STRIP 3 <strong>Description:</strong> GRASS</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 17%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+<col style="width: 2%"/>
+<col style="width: 18%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+<th></th>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Moisture, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>3.84</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p><strong>MICRONUTRIENTS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Dry Matter, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>96.16</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>100.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Calcium, % Ca</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.59</p>
+</blockquote></td>
+<td style="text-align: center;">0.61</td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>PROTEIN</strong></p>
+</blockquote></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td></td>
+<td><blockquote>
+<p>Phosphorus, % P</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.17</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.18</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Crude Protein, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>7.3</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>7.5</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Potassium, % K</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.02</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.06</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Available Protein, % 7.3 7.5</p>
+</blockquote>
+<table style="width:49%;">
+<colgroup>
+<col style="width: 19%"/>
+<col style="width: 15%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>%</p>
+</blockquote></th>
+<th colspan="2"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p><strong>OTHER ANALYSIS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Fat, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>3.9</p>
+</blockquote></td>
+<td style="text-align: center;">4.0</td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Ash, %</p>
+</blockquote></td>
+<td><blockquote>
+<p>12.39</p>
+</blockquote></td>
+<td style="text-align: center;">12.89</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Account ID: 602314</strong></p>
+<blockquote>
+<p>MICHAEL LOBATO 1066 19 1/2 RD</p>
+
+</blockquote>
+<p><strong>Report Type:</strong> NIR <strong>Invoice Number:</strong> 1509418</p>
+<blockquote>
+<p><strong>Date Received:</strong> 11/3/2025 <strong>Date Reported:</strong> 11/5/2025</p>
+<p><strong>Lab ID:</strong> 12394</p>
+</blockquote>
+<p><img class="lab-ref-image-figure" src="/static/lab_reference_media/ward_nirs_report_20251103/media/image40.png" style="max-width: 100%; height: auto;"/><strong>Results For:</strong> CSU FRUITA <strong>Sample ID:</strong> STRIP 4 <strong>Description:</strong> GRASS</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 17%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+<col style="width: 2%"/>
+<col style="width: 18%"/>
+<col style="width: 17%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+<th></th>
+<th><blockquote>
+<p><strong>Analysis</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>As Received</strong></p>
+</blockquote></th>
+<th style="text-align: center;"><blockquote>
+<p><strong>Dry Basis</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p>Moisture, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>4.24</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p><strong>MICRONUTRIENTS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Dry Matter, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>95.76</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>100.00</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Calcium, % Ca</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.50</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.52</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>PROTEIN</strong></p>
+</blockquote></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td></td>
+<td><blockquote>
+<p>Phosphorus, % P</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.16</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>0.17</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Crude Protein, %</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>7.3</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>7.6</p>
+</blockquote></td>
+<td></td>
+<td><blockquote>
+<p>Potassium, % K</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.04</p>
+</blockquote></td>
+<td style="text-align: center;"><blockquote>
+<p>1.09</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Available Protein, % 7.3 7.6</p>
+</blockquote>
+<table style="width:49%;">
+<colgroup>
+<col style="width: 19%"/>
+<col style="width: 15%"/>
+<col style="width: 13%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p>%</p>
+</blockquote></th>
+<th colspan="2"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><blockquote>
+<p><strong>OTHER ANALYSIS</strong></p>
+</blockquote></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Fat, %</p>
+</blockquote></td>
+<td style="text-align: right;">4.2</td>
+<td style="text-align: center;"><blockquote>
+<p>4.4</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Ash, %</p>
+</blockquote></td>
+<td style="text-align: right;">10.61</td>
+<td style="text-align: center;"><blockquote>
+<p>11.08</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+</div></body>
+</html>

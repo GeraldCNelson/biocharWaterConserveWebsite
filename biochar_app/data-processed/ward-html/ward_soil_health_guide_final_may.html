@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<meta content="pandoc" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>Ward-SHA-Guide-FINAL-May</title>
+<style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+<style>body {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 18px;
+  line-height: 1.32;
+}
+
+.lab-reference-content {
+  font-size: 1rem;
+}
+
+.lab-reference-content h1,
+.lab-reference-content h2,
+.lab-reference-content h3,
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  scroll-margin-top: 90px;
+  line-height: 1.15;
+}
+
+.lab-reference-content h1 {
+  margin: 0.7em 0 0.2em;
+}
+
+.lab-reference-content h2,
+.lab-reference-content h3 {
+  margin: 0.55em 0 0.18em;
+}
+
+.lab-reference-content h4,
+.lab-reference-content h5,
+.lab-reference-content h6 {
+  margin: 0.45em 0 0.15em;
+}
+
+.lab-reference-content p,
+.lab-reference-content ul,
+.lab-reference-content ol {
+  margin: 0.16em 0;
+}
+
+.lab-reference-content hr {
+  margin: 0.6em 0;
+}
+
+blockquote {
+  margin: 0.22em 0 0.4em 1rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid #d9d9d9;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-inline {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-reference-content img.lab-ref-image-figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.35em auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0 0.7em;
+}
+
+th, td {
+  border: 1px solid #d0d0d0;
+  padding: 0.32em 0.42em;
+  vertical-align: top;
+}
+
+caption, figcaption {
+  font-style: italic;
+  margin-top: 0.2em;
+}
+
+.lab-ref-anchor {
+  display: block;
+  position: relative;
+  top: -90px;
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}</style></head>
+<body><div class="lab-reference-content">
+<h1 id="soil-health-assessment-sha-guide-ward-laboratories-inc.">Soil Health Assessment (SHA) Guide Ward Laboratories Inc.</h1>
+<blockquote>
+<p>Ward Laboratories, Inc. is now offering a new Soil Health Assessment (SHA) package. This test combines the latest in soil science, ensuring that both soil fertility and soil health are viewed through a single test, helping farmers and researchers measure and manage soil health without compromising productivity. Microbial activity and food are evaluated to provide data that enhances operations while also evaluating nutrients in a manner that is widely accepted by Land Grant University correlations and calibrations.</p>
+<p>This new package also includes modified wet aggregate stability. With this addition, the new Soil Health Assessment offers <em><strong>two biological, one chemical and one physical</strong></em> indicator of soil health.</p>
+</blockquote>
+<h1 id="overview">Overview:</h1>
+<blockquote>
+<p><strong>Soil Respiration</strong></p>
+<p>All aerobic microbes produce CO2 through aerobic respiration, just as all aerobic life does. The more CO2 a soil produces is an indication of more microbial biomass. The respiration test measures the amount of CO2-C a soil can produce in a 24hr incubation period following a significant drying and rewetting event, simulating a rain event that stimulates microbial activity. This is important because it relates to a soil’s potential for microbial functions of a healthy soil such as nutrient cycling, soil aggregation, and crop residue decomposition. Other benefits are carbon sequestration, disease suppression, and plant growth stimulation.</p>
+<p>Soil respiration readings range from near zero to near 1000 ppm of CO2-C. However, many agricultural soils are currently degraded and do not read above 120 ppm CO2-C. In general, the higher the number the better, but it depends on the diversity of the cropping system. A soil with a very low score may exhibit symptoms of slow crop residue decomposition while crop residue may cycle very quickly in a soil with a high score. Correction of low CO2-C respiration includes planting cover crops after harvest or in-row seeding after crop canopy. Another management decision may include more crop diversity.</p>
+</blockquote>
+<h1 id="water-stable-aggregates">Water Stable Aggregates</h1>
+<blockquote>
+<p>The stability of soil aggregates (soil granules) is important from the standpoint of soil erosion and the movement of water and air in the soil. When aggregates are broken down by raindrop impact, the individual soil particles are more susceptible to movement by water and wind. Clay particles “seal” the surface soil macropores resulting in excessive runoff or ponding and crusting when dry.</p>
+<p>Organic matter and microbial activity are the soil constituents that helps maintain aggregate stability. The resins and scums produced by microbes help bind particles together to form water stable aggregates. The type of clay present will also influence soil aggregate stability. Iron oxides and calcium carbonate also act as binding agents.</p>
+<p>Farmers cannot control the types of clay or the inorganic binding agents present. However, by managing crop residue on the soil surface, using a crop rotation with a grass or legume, and by use of cover crops, water stable aggregates will increase. The optimal ranges are based on soil texture since soils higher in clay and silt will form more stable aggregates compared to sandier soils, so the value is specific to that soil type.</p>
+<p>By managing crop residue on the soil surface, using a crop rotation of 3 or more crops, and planting diverse cover crops; water stable aggregates will increase.</p>
+<p>Our water stable aggregate (mod) test measures water stable aggregates and large sand particles. We measure water stable aggregates from soil passing through a 2 mm sieve and held on a 1 mm sieve. An instrument dips the soil water 60 times per minute for 3 minutes. Soil remaining on a 0.25 mm sieve measures water stable aggregates. This method includes large sand particles (0.25 to 2 mm). Large sand particles do not seal macropores but maintain macropores for better infiltration. Sandy soils will naturally have a higher water stable aggregate (mod) value, unless the soil contains very fine sand (.05 to 0.25 mm dia.).</p>
+</blockquote>
+<h1 id="water-extractable-organic-carbon">Water Extractable Organic Carbon:</h1>
+<blockquote>
+<p>The water extractable organic carbon or WEOC is a measure of the organic carbon (sugars) or food that is most readily available to the microbes. The WEOC is a smaller fraction of the total soil organic matter (SOM). The size of this pool can reflect the quality, rather than just the quantity, of the organic matter present in your soil system. Generally, the higher the number the better because there is more food for the microbes, which drive nutrient cycling and other soil functions in the system. Root exudates supply much of these sugary type compounds.</p>
+<p>Another portion is from the saprophytic fungal-derived decomposition of larger organic chains of cellulose and other similar organic substances made up of long and branched polymerized sugar chains (crop residue).</p>
+<p>Water extractable carbon (WECO) is not necessarily a direct relationship to soil organic matter (SOM) content. We see soils with 2% SOM have over 400 ppm of WEOC and soils with 4% SOM have less than 200 ppm WEOC. However, it is more difficult to sustain a larger pool of WEOC without a moderate to high level of SOM. However, we want to have a good balance with water extractable organic nitrogen (WEON), as we will discuss later.</p>
+<p>Some stable ecosystem soils range as high as 800 ppm WECO, with most agricultural soils falling between 40 and 300 ppm WECO. Typically, native, and perennial systems have higher WEOC values compared to row crop systems. This does not mean, however, that row crop systems cannot achieve higher values for WEOC. Inputs such as manure, compost or cover crops can increase carbon loading and cycling leading to higher WEOC levels. There is less microbial activity in late fall and winter across many regions due to colder soil temperatures, and the carbon is allowed to build up in the system.</p>
+<p>WEOC values also range with soil temperature, in late fall/winter there is a dip in WEOC because microbes utilize WEOC faster than it is being resupplied to the soil.</p>
+<p>As we move into the growing season, plant roots begin to exude more carbon into the system, and we see a slow increase in WEOC until soils reach a steady state between carbon supply from the growing plants and crop residues and microbial consumption. When annual crops reach maturity in late summer to early fall there is a large carbon influx from the roots due to root sloughing and the eventual breakdown of the root system. The WEOC values will then slowly decline as soils cool or moisture becomes more limited, and the microbial activity slows to start the cycle over again through winter.</p>
+<p>Exactly when and how long each of these phases will last depends on your current soil health level, growing season, overall climate, and production system. Conventional row crop tillage systems cycle more WEOC than stable ecological systems.</p>
+</blockquote>
+<h1 id="microbially-active-carbon-mac">Microbially Active Carbon (%MAC):</h1>
+<blockquote>
+<p>Microbially active carbon or %MAC is how much of the WEOC pool was acted upon by the microbes measured as soil respiration. If this value is below 25% this tells you that WEOC is probably not the factor limiting your soil respiration. Perhaps it is the soil’s overall fertility, prolonged cold temps or drought that is limiting microbial biomass. On the other hand, if the</p>
+<p>%MAC value is above 80% this might tell you that WEOC could become limiting to microbial respiration soon and your management focus should be on introducing more carbon into the system. Ideally, we would like to see a %MAC value between 50 and 75% for most production systems. This generally tells you that the soil has a good balance of fertility and WEOC to support microbial biomass, but you are not limited by your WEOC pool. This value, however, should be taken into context and we still need to look at the respiration and WEOC individually to gain a better understanding of the overall status of your soil.</p>
+</blockquote>
+<h1 id="water-extractable-organic-nitrogen">Water Extractable Organic Nitrogen:</h1>
+<blockquote>
+<p>The water extractable organic nitrogen or WEON represents the pool of organic N that is available to the microbes. Think of organic N as amino acids and proteins, which are linked to the carbon or food that the microbes are eating. Much in the same way we measure protein</p>
+<p>in the foodstuff for livestock, the SHA is measuring the amount of protein available to the microbes. Feeding the microbes an N rich food source, such as manure or a low C:N ratio cover crop, allows them to better carry out many important functions in the soil that can benefit the crop and your pocketbook.</p>
+<p>One of these functions is N mineralization or the conversion of organic N into plant available forms such as nitrate and ammonium. In a healthy soil with greater biological function this can lead to a reduced need for synthetic N fertilizer.</p>
+<p>We have found soils to contain anywhere from 5 to 100 ppm WEON with most soils falling between 10 and 30 ppm. Remember that 30 ppm is equivalent to nearly 60 lbs of N to the acre at a 6- inch sample depth. As with the WEOC, the higher the value the better in most situations, but we do not want to disrupt the balance between WEOC and WEON.</p>
+</blockquote>
+<h1 id="organic-c-to-organic-n-ratio">Organic C to Organic N Ratio:</h1>
+<blockquote>
+<p>This is the balance between the WEOC and WEON and it is expressed as the C:N ratio on the SHA report. Organic C and organic N are intimately tied together, and both are required to help get the optimal function out of your soil system. A soil that has very high WEOC with little WEON has a lot of energy present for the microbes, but the quality or nutrition of that food is low. Think of an energy drink or feeding wheat straw to cattle. On the other hand, a soil with very low WEOC and high WEON has a lot of N available to the microbes but very little energy value to help carry out important functions. Think of multivitamins or feeding only a mineral supplement to cattle. All living things require a balance of energy and nutrition.</p>
+<p>It is very important to note that there are a lot of different C:N ratios discussed in agriculture. This particular C:N ratio is that of the water extract performed as part of the SHA. This ratio is not the same as the total C:N ratio of your soil or the manure or cover crop you are using or even the C:N ratio of the organic matter in your soil. Decomposition and breakdown by microbes reduces the C:N ratio of the starting material. For example, corn stover has a C:N ratio of nearly 60:1. On the other hand, SOM has a C:N ratio between 10:1 and 12:1. If the corn stover is going to become part of the soil organic matter the microbes have to break it down to a ratio of nearly 10:1.</p>
+<p>They achieve this by converting carbon in the corn stover into microbial biomass and by releasing most of the carbon as CO2 (remember soil respiration). The water extract on the SHA is measuring part of this transitional process between the initial breakdown of residues and the product of more stable SOM. The higher the starting C:N ratio generally the longer it</p>
+<p>takes to accomplish this goal. This is one reason why high carbon crop residue lasts longer in your fields than low carbon residue. We can use lower C:N ratio inputs such as manure and legume/brassica cover crops to help speed this process or we can use higher C:N ratio inputs to slow this process. We will discuss this more in another section below.</p>
+</blockquote>
+<h1 id="organic-n-to-inorganic-n-ratio">Organic N to Inorganic N Ratio:</h1>
+<blockquote>
+<p>Nitrogen in your soil is found in either the organic or inorganic form. Inorganic N is usually referred to as plant available N and is often in the form of nitrate and ammonium. On the other hand, organically bound N is typically only discussed within the collective context of soil organic matter. While it is true that organic matter contains a relatively large amount of organic N at nearly 1000 lbs for every 1% SOM, most of this N is relatively stable and hard to access by soil microbes, especially within a time frame that is helpful to the growing crop.</p>
+<p>More importantly, if we mine N from the SOM we must destroy the SOM. This is like trying to remove all the nails and screws that hold together your house, and to be successful, we must destroy much of the house. There is, however, a source of organic N that is in transition between plant and animal residues and stable SOM and that is the pool measured by the water extract on the SHA.</p>
+<p>Most agriculture systems are out of balance when it comes to the relative amount of organic and inorganic N present in the soil. Agricultural practices have focused on large additions of inorganic N as fertilizers to increase production and yield. While this system has undoubtedly worked to boost crop yields, it has come with many costs to both your soils and the environment, not to mention your pocketbook. Overall, it is not a very efficient system and a lot of the N applied never makes it into the crop. I am not, however, saying that we should collectively stop applying N fertilizer, but there is a better way to utilize what you are paying for in fertilizer and reduce the overall need for large N fertilizer applications.</p>
+<p>Soil systems that are highly dependent on N fertilizer additions will often exhibit a ratio below 1 between organic and inorganic N. This means that much of the N present in the soil exists as nitrate and ammonium. Microbes can utilize these sources of N, but this often results in N immobilization or tie up that is taking N from your growing crop. Soil management systems that focus on soil health and holistic management start to build an organic N pool that is greater than the residual inorganic N left in the soil. This is often done by varying crop rotations and the use of cover crops. In these systems, we start to see ratios climb above 2 and 3. I like to see the ratio above 5 and the higher the number the better.</p>
+<p>Remember that organic N, when balanced with organic C, is what helps fuel the biological system, which will in turn help feed the plants leading to a more efficient use of N.</p>
+</blockquote>
+<h1 id="organic-n-release">Organic N Release:</h1>
+<blockquote>
+<p>The organic N release is the overall N credit given to your soil based on the parameters listed above. If the C:N ratio is balanced, then the amount of credit given will be dependent on the soil respiration score and the size of the WEON pool. The higher the respiration the more microbes present in the soil and the greater the potential for activity and N mineralization.</p>
+<p>Furthermore, the higher the WEON the greater the potential for release because there is more N for the microbes to access. The organic N release credit on the SHA, however, will never be greater than the amount of N measured in the WEON pool regardless of the C:N ratio or the respiration score. This credit is subtracted from the recommended N needed to produce the next crop based on the crop and yield goals provided by the producer.</p>
+<p>The organic N release value is expressed in ppm, but this value can be converted to a credit shown in lbs per acre using the following equation:</p>
+<p><em><strong>Sample depth in inches * 0.3 * ppm value for organic N release = lbs of N</strong></em></p>
+</blockquote>
+<h5 id="released-per-acre">released per Acre</h5>
+<blockquote>
+<p>For example, a sample of a depth of 0-6 inches and an organic N release value of 30 ppm would be calculated as 6*0.3*30 = 54 lbs of N per A credit from the WEON pool. An 8-inch sample with the same</p>
+<p>30 ppm value would equal 72 lbs of N per A. Therefore, the SHA is measuring another N credit from your soil that the more conventional tests utilizing only nitrate or ammonium do not account for. In some cases, especially with soils that are deemed as unhealthy, this credit is minimal and may not have an impact on the amount of N fertilizer required. However, in very healthy and highly functioning biologically active soils this credit can have a real impact on crop production and reduced N fertility needs. In other words, some of the time, effort and money spent on making your soil better is paying you back with savings on N fertilizer.</p>
+</blockquote>
+<h1 id="organic-n-reserve">Organic N Reserve:</h1>
+<blockquote>
+<p>The organic N reserve is how much of the measured WEON pool is left following the credit given for organic N release. Don’t panic if you see a value of ‘0’ here. This simply tells you that you maximized your N credit from the WEON pool. A ‘0’ does tell us, however, that if you were able to increase the size of your WEON pool, that you would likely get a larger credit. On the other hand, if you have a number other than ‘0’ left in your reserve, then this tells you that if you had a larger microbial biomass (soil respiration) or a more balanced C:N ratio that you could likely get a higher credit on the release.</p>
+<p>The soil is constantly refilling this pool with organic N by the continued breakdown and cycling of plant and animal residues. Remember, however, that you can help this process</p>
+<p>based on your management decisions and the constant addition of fresh residues. It is a systems approach to building soil.</p>
+</blockquote>
+<h1 id="soil-health-score">Soil Health Score:</h1>
+<blockquote>
+<p>The soil health score is a calculation of soil respiration, WEOC, WEON, and water extractable C:N ratio measured by the SHA. The score provides the producer a quick reference regarding the health of a soil compared to other soils under different management systems. The score can range anywhere from zero to 50, but most soils do not score higher than 30. We like to see the score above 11, but 11 is simply a starting point. To get a better understanding of what your score is telling, you must make comparisons between different management systems and soil types within a climatic region.</p>
+<p>Regional constraints affect the soil health score as it does respiration. Using the same example from New Mexico and Iowa above, it would be unfair to say that a soil scoring a 11 from both regions would in fact mean that both producers are performing equally well regarding soil health using this test. A soil in New Mexico likely has a much lower soil health score potential due to environmental factors and differences in soil type whereas the soil in Iowa may have a much greater potential under the same management. The best way to determine your own potential is to find a soil in your immediate area that you believe is the poorest and one that you deem as the best.</p>
+</blockquote>
+<h5 id="we-would-encourage-you-to-look-beyond-yield-when-determining-the-poorest-and-the-best-soils-because-yield-is-not-necessarily-a-strong-indicator-of-soil-health.">We would encourage you to look beyond yield when determining the poorest and the best soils because yield is not necessarily a strong indicator of soil health.</h5>
+<blockquote>
+<p>Rather, focus on management and ecosystem type. Poor soil health soil is an often-tilled soil with a very narrow crop rotation while a good soil health is relatively undisturbed or native soil with a lot of diversity. Running a test or two from these soils along with your fields of interest will help provide you with potential range on the bottom and top end for your region. We hope that your soil will fall closer to the top end, but if it does not, it allows you to set some management goals with realistic expectations when it comes to what you can achieve on your own operation using the SHA.</p>
+</blockquote>
+<h1 id="cover-crop-recommendation">Cover Crop Recommendation:</h1>
+<blockquote>
+<p>The cover crop recommendation is a very general guideline for helping you balance your soil system based on some of the various numbers on the SHA. It is nearly impossible to provide anyone with a specific cover crop recommendation due to the large number of variables, such</p>
+<p>as equipment and seed available, crop rotation, climate, etc. However, we can give some suggestions for the producer starting out and wanting to know where to begin.</p>
+<p>Two factors determine the percentage of grass to legumes/brassicas. First is the Soil Health Score (SHS). The lower the SHS the higher percentage of legumes recommended. Second is the C:N ratio. If it is above 18:1, then we are going to suggest a higher percentage of legumes to help provide you with the organic N needed to help you start the residue decomposition and nutrient cycling processes. If your C:N ratio falls in the desired range, then we base the mix of grasses to legumes from the soil health score. The number one factor going into the soil health score is soil respiration. Remember that respiration is an indicator of living microbial biomass.</p>
+<p>A ramped-up system is really working for you. You are now cycling nutrients, building and rebuilding soil aggregates, infiltrating and holding more water, getting better root growth and a more efficient use of your nutrients all at a lower cost in time and money.</p>
+</blockquote>
+<h2 id="plant-nutrients-other-than-n-provided-by-the-sha-test">Plant Nutrients other than N provided by the SHA test:</h2>
+<h4 id="soil-test-methods">Soil Test Methods:</h4>
+<blockquote>
+<p>Ward Laboratories uses soil tests developed and calibrated by Land Grant Universities. Several bulletins publish standard methods of soil tests. We prefer to use standard methods that have performed well for many years.</p>
+</blockquote>
+<h4 id="soil-ph-ec">Soil pH &amp; EC:</h4>
+<blockquote>
+<p>We use a 1:1 water pH. This means we measure 10 grams of soil and 10 mL of water. The soil and water react for 30 minutes and then we read EC to measure soluble salts and then measure soil pH to determine if soil is alkaline, neutral or acid. If sample shows acid pH (&lt;6.5), a buffer solution is added to measure total acidity of the soil so we can predict the amount of lime to neutralize the acidity.</p>
+</blockquote>
+<h4 id="soil-organic-matter">Soil Organic Matter:</h4>
+<blockquote>
+<p>Soil samples, in crucibles, are dried for 2 hours at 105 C to drive off hydroscopic water. Soil samples are then cooled to room temperature and weighed. Then the samples are heated to 360 C for 2 hours, cooled and weighed again to burn off organic matter without effecting soil carbonates. The difference in the two weights is percent organic matter by LOI (loss on ignition).</p>
+</blockquote>
+<h4 id="phosphorus">Phosphorus:</h4>
+<blockquote>
+<p>Our normal extractant for phosphorus (P) is Mehlich 3 solution. Available phosphorus is held on soil particles therefore leaches very slowly. Research has found P moves about ¾ inch per year in silty soils and up to 2 inches per year in sandy soils. Mehlich 3 extractant is similar to Bray P-1. Acetic acid in Mehlich 3 extract buffers the solution so available P is measured in all soils. Other P tests we provide are Bray P-1, Bray P-2, and Olsen P for calcareous soils.</p>
+<p>Inductively Coupled Argon Plasma (ICAP) measures Mehlich 3 P. Flow injection analysis (FIA) measures Olsen P, Bray P-1 and Bray P-2. Sodium bicarbonate solution adjusted to a pH of 8.5 extracts available P from the soil. It has no acid.</p>
+</blockquote>
+<h4 id="exchangeable-cations-potassium-k-calcium-ca-magnesium-mg-and-sodium-na">Exchangeable cations; Potassium (K), Calcium (Ca), Magnesium (Mg), and Sodium (Na):</h4>
+<blockquote>
+<p>Our extractant for cations is ammonium acetate (pH 7.0). This ammonium acetate extract has a neutral pH so no acid is used. Ammonium ions replace potassium (K,) calcium (Ca), magnesium (Mg), and sodium (Na) on the cation exchange sites (CEC). Inductively Coupled Argon Plasma (ICAP) instrumentation measures the cations in the soil extract. The equivalent sum of the four cations and buffer pH estimates cation exchange (CEC). With sum of cations, we can calculate base saturation for each cation.</p>
+<p>Hydrogen ion saturation indicates soil acidity. Acidity should not exceed 30 % H. The buffer pH measures amount of lime to neutralize acidity.</p>
+<p>Sodium base saturation is a problem when base saturation is greater than 5 % Na. High Na % is treated with gypsum or sulfur depending on soil pH.</p>
+</blockquote>
+<h4 id="sulfur-s">Sulfur (S):</h4>
+<blockquote>
+<p>Mehlich 3 solution extracts soluble and available sulfur. ICAP analyzes sulfur. Sulfur in Mehlich 3 extract is mainly the sulfate ion. Sulfate is soluble like nitrate and is managed the same as N.</p>
+</blockquote>
+<h4 id="zinc-iron-manganese-and-copper">Zinc, Iron, Manganese, and Copper:</h4>
+<blockquote>
+<p>Our extractant of choice for zinc, iron, manganese, and copper is DTPA. The extract pH is 7.3 indicating no acid present in the extractant. DTPA extract accurately measures availability of Zn, Fe, Mn, and Cu. DTPA is a chelate that simulates uptake of micronutrients by plants. Over a 2-hour shaking time, DTPA absorbs the micronutrients held on soil particles. This is a good estimate of their availability to plants. ICAP detects the four micronutrients.</p>
+</blockquote>
+<h4 id="boron">Boron:</h4>
+<blockquote>
+<p>A dilute calcium chloride hot water solution extracts boron. Boron is more soluble than phosphorus and less soluble than sulfate and nitrate. Hot water is a good measure of boron availability. ICAP measures boron in the extract.</p>
+</blockquote>
+<h4 id="chloride">Chloride:</h4>
+<blockquote>
+<p>Chloride is a soluble anion, like nitrate and sulfate. Calcium nitrate solution extracts chloride that FIA measures. Chloride is in low supply in the Great Plains. Potash fertilizer is potassium chloride. There is no shortage of chloride where potash is applied.</p>
+</blockquote>
+<h1 id="concentration-ranges">Concentration Ranges:</h1>
+<h3 id="table-1-biological">Table 1 – Biological</h3>
+<table style="width:93%;">
+<colgroup>
+<col style="width: 32%"/>
+<col style="width: 20%"/>
+<col style="width: 20%"/>
+<col style="width: 21%"/>
+</colgroup>
+<thead>
+<tr>
+<th><blockquote>
+<p><strong>Test</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></th>
+<th><strong>Marginal</strong></th>
+<th><blockquote>
+<p><strong>Optimum</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="4"><blockquote>
+<p><em><strong>Microbial Respiration</strong></em></p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>24 hr. CO2-C, ppm</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 60</p>
+</blockquote></td>
+<td>60 - 120</td>
+<td><blockquote>
+<p>&gt; 120</p>
+</blockquote></td>
+</tr>
+<tr>
+<td colspan="4"><blockquote>
+<p><em><strong>Water Extract (WE)</strong></em></p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>WE Organic Carbon, C</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 120</p>
+</blockquote></td>
+<td>120 – 240</td>
+<td><blockquote>
+<p>&gt; 240</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>WE Total Nitrogen, N</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 – 15</p>
+</blockquote></td>
+<td>15 – 30</td>
+<td><blockquote>
+<p>&gt;30</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>WE Organic Nitrogen, N</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 12</p>
+</blockquote></td>
+<td>12 - 25</td>
+<td><blockquote>
+<p>&gt; 25</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>Biological Calculations</strong></p>
+</blockquote></td>
+<td><blockquote>
+<p><strong>Not Balanced</strong></p>
+</blockquote></td>
+<td><strong>Balanced</strong></td>
+<td><blockquote>
+<p><strong>Not Balanced</strong></p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>WE C:N Ratio</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 7</p>
+</blockquote></td>
+<td>7 - 15</td>
+<td><blockquote>
+<p>&gt; 15</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Organic N Release</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 10</p>
+</blockquote></td>
+<td>10 - 50</td>
+<td><blockquote>
+<p>&gt; 50</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p><strong>Microbial Activity</strong></p>
+</blockquote></td>
+<td><strong>Low</strong></td>
+<td><strong>Medium</strong></td>
+<td><blockquote>
+<p><strong>High</strong></p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>% MAC</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 20</p>
+</blockquote></td>
+<td>20 – 80</td>
+<td><blockquote>
+<p>&gt;80</p>
+</blockquote></td>
+</tr>
+<tr>
+<td><blockquote>
+<p>Soil Health Number</p>
+</blockquote></td>
+<td><blockquote>
+<p>0 - 10</p>
+</blockquote></td>
+<td>10- 40</td>
+<td><blockquote>
+<p>&gt;40</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h3 id="table-2-chemical">Table 2 – Chemical</h3>
+<table style="width:93%;">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 17%"/>
+<col style="width: 24%"/>
+<col style="width: 18%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Test</strong></th>
+<th><strong>Low</strong></th>
+<th><blockquote>
+<p><strong>Medium</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>High</strong></p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="4"><blockquote>
+<p><em><strong>Macronutrients</strong></em></p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>WE Nitrate, NO3-N</p>
+</blockquote></td>
+<td>0 - 3</td>
+<td><blockquote>
+<p>3 - 15</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 15</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>WE Ammonium, NH4-N</p>
+</blockquote></td>
+<td>0 - 1</td>
+<td><blockquote>
+<p>1 - 3</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 3</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>M3 Phosphorus, P</p>
+</blockquote></td>
+<td>0 - 12</td>
+<td><blockquote>
+<p>12 - 25</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 25</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>NH4AOc Potassium, K</p>
+</blockquote></td>
+<td>0 - 80</td>
+<td>80 - 160</td>
+<td><blockquote>
+<p>&gt; 160</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>NH4AOc Calcium, Ca</p>
+</blockquote></td>
+<td>0 - 500</td>
+<td><blockquote>
+<p>500 - 2500</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 2500</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>NH4AOc Magnesium, Mg</p>
+</blockquote></td>
+<td>0 - 50</td>
+<td>50 - 150</td>
+<td><blockquote>
+<p>&gt; 150</p>
+</blockquote></td>
+</tr>
+<tr>
+<td colspan="4"><blockquote>
+<p><em><strong>Micronutrients</strong></em></p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>M3 Sulfur, S</p>
+</blockquote></td>
+<td>0 - 10</td>
+<td><blockquote>
+<p>10 - 15</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 15</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>DTPA Zinc, Zn</p>
+</blockquote></td>
+<td>0 - 0.5</td>
+<td><blockquote>
+<p>0.5-1.0</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 1.0</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>DTPA Iron, Fe</p>
+</blockquote></td>
+<td>0 - 4.5</td>
+<td style="text-align: left;"><blockquote>
+<p>4.5 - 10</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 10</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>DTPA Manganese, Mn</p>
+</blockquote></td>
+<td>0 - 1</td>
+<td><blockquote>
+<p>1 - 2</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 2</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>DTPA Copper, Cu</p>
+</blockquote></td>
+<td>0 - 0.1</td>
+<td style="text-align: left;"><blockquote>
+<p>0.1 - 0.2</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 0.2</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>Hot Water Boron, B</p>
+</blockquote></td>
+<td>0 - 0.25</td>
+<td style="text-align: left;"><blockquote>
+<p>0.25 - 0.50</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 0.50</p>
+</blockquote></td>
+</tr>
+<tr>
+<td style="text-align: left;"><blockquote>
+<p>CaNO3 Chloride, Cl (2 ft sample)</p>
+</blockquote></td>
+<td>0 - 3</td>
+<td><blockquote>
+<p>3 – 6</p>
+</blockquote></td>
+<td><blockquote>
+<p>&gt; 6</p>
+</blockquote></td>
+</tr>
+</tbody>
+</table>
+<h3 id="table-3-physical">Table 3 – Physical</h3>
+<table style="width:93%;">
+<colgroup>
+<col style="width: 35%"/>
+<col style="width: 17%"/>
+<col style="width: 20%"/>
+<col style="width: 21%"/>
+</colgroup>
+<thead>
+<tr>
+<th><strong>Test</strong></th>
+<th style="text-align: left;"><blockquote>
+<p><strong>Low</strong></p>
+</blockquote></th>
+<th style="text-align: left;"><strong>Medium</strong></th>
+<th style="text-align: left;"><strong>High</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em><strong>Water Stable Aggregates (Mod)</strong></em></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td>Sand/Fine Sandy Loams</td>
+<td style="text-align: left;">0 - 40</td>
+<td style="text-align: left;">40 - 80</td>
+<td style="text-align: left;">&gt; 80</td>
+</tr>
+<tr>
+<td>Loams/Silt Loams</td>
+<td style="text-align: left;">0 - 25</td>
+<td style="text-align: left;">26 - 55</td>
+<td style="text-align: left;">&gt; 55</td>
+</tr>
+<tr>
+<td>Clay/Clay with high OM</td>
+<td style="text-align: left;">0 - 30</td>
+<td style="text-align: left;">30 - 50</td>
+<td style="text-align: left;">&gt; 50</td>
+</tr>
+<tr>
+<td><em><strong>Sodic/Alkali</strong></em></td>
+<td style="text-align: left;"><strong>No Issue</strong></td>
+<td style="text-align: left;"><strong>Increasing Issue</strong></td>
+<td style="text-align: left;"><strong>High Issue</strong></td>
+</tr>
+<tr>
+<td>% Sodium (Na) Saturation</td>
+<td style="text-align: left;">0-5</td>
+<td style="text-align: left;">5 - 15</td>
+<td style="text-align: left;">&gt;15</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Additional information is available on the website at <a href="http://www.wardlab.com/"><u>www.wardlab.com</u></a> and new information may be added as it becomes available. Any questions regarding soil health testing may be directed to</strong> <a href="mailto:CustomerService@wardlab.com"><u>CustomerService@wardlab.com.</u></a></em></p>
+</blockquote>
+</div></body>
+</html>
