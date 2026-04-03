@@ -193,6 +193,14 @@
           </button>
         </li>
 
+                  <!-- Acknowledgements -->
+        <li class="nav-item" role="presentation">
+          <button id="acknowledgements-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                  data-bs-target="#acknowledgements" role="tab" aria-controls="acknowledgements-details" aria-selected="false">
+            Acknowledgements
+          </button>
+        </li>
+
       </ul>
     </div>
   </div>
@@ -688,6 +696,12 @@
         </div>
       </div>
 
+        <!-- Acknowledgements Pane -->
+      <div class="tab-pane fade" id="acknowledgements" role="tabpanel" aria-labelledby="tech-details-tab">
+        <div id="acknowledgements-status" class="text-muted mb-2" style="display:none;"></div>
+        <div id="acknowledgements-content" class="markdown-content"></div>
+      </div>
+
     </div> <!-- /tab-content -->
   </div> <!-- /container-fluid (content) -->
 
@@ -880,7 +894,7 @@
       "summary-year","summary-variable","summary-strip","summary-granularity","summary-depth",
       "plot-1","plot-2",
       "nir-content","soilbio-content","soilchem-content","biomass-field-content",
-      "intro-content","experiment-content","tech-content"
+      "intro-content","experiment-content","tech-content", "acknowledgements-content"
     ];
     const missing = requiredIds.filter(id => !document.getElementById(id));
     if (missing.length) console.warn("🚨 index.html missing required elements:", missing);

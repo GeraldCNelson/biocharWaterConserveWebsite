@@ -28,6 +28,7 @@ function prettyNameFromContainerId(containerId) {
   if (containerId === "intro-content") return "introduction";
   if (containerId === "experiment-content") return "experiment design";
   if (containerId === "tech-content") return "technical details";
+  if (containerId === "acknowledgements-content") return "acknowledgement details";
   if (containerId.startsWith("modal-")) return "help";
   return containerId.replace(/-content$/i, "").replace(/[-_]/g, " ").trim();
 }

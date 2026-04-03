@@ -210,6 +210,12 @@ docx_markdown_config: DocxMarkdownConfig = {
         "output_md": "techDetails.md",
         "images": [],
     },
+
+    # acknowledgements file
+    "acknowledgements.docx": {
+        "output_md": "acknowledgements.md",
+        "images": [],
+    },
 }
 
 
@@ -251,6 +257,7 @@ def build_markdown_mapping() -> dict[str, str]:
         "intro-content": f"/markdown/{docx_markdown_config['intro.docx']['output_md']}",
         "experiment-content": f"/markdown/{docx_markdown_config['experimentDesign.docx']['output_md']}",
         "tech-content": f"/markdown/{docx_markdown_config['techDetails_updated.docx']['output_md']}",
+        "acknowledgements-content": f"/markdown/{docx_markdown_config['acknowledgements.docx']['output_md']}",
         # Modals
         "modal-main-help": f"/markdown/{modal_config['main']['output']}",
         "modal-summary-help": f"/markdown/{modal_config['summary']['output']}",
