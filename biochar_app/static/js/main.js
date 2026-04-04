@@ -282,6 +282,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       biomassRendererType: typeof renderBiomassFieldTables,
     });
 
+document.addEventListener("click", function (event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const link = target.closest(".tab-link");
+  if (!link) return;
+
+  event.preventDefault();
+
+  const tabId = link.getAttribute("data-tab");
+  if (!tabId) return;
+
+  const tabButton = document.getElementById(tabId);
+  if (!(tabButton instanceof HTMLElement)) return;
+
+  tabButton.click();
+
+  const dropdownMenu = tabButton.closest(".dropdown-menu");
+  if (dropdownMenu && window.bootstrap?.Dropdown) {
+    const toggle = dropdownMenu.previousElementSibling;
+    if (toggle instanceof Element) {
+      const dropdownInstance = window.bootstrap.Dropdown.getOrCreateInstance(toggle);
+      dropdownInstance.hide();
+    }
+  }
+});
     debugLog("✅ Application initialized.");
   } catch (err) {
     console.error("❌ Fatal error during app initialization:", err);

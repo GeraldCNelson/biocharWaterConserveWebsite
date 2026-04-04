@@ -31,6 +31,16 @@ figcaption, caption {
   font-style: italic;
   text-align: center;
   margin-top: 0.5em;
+}
+.tab-link {
+  color: #2c5aa0;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab-link:hover {
+  color: #1f3f73;
+  text-decoration: underline;
 }</style></head><h2 id="directions-for-use-of-the-options-in-the-interactive-plots-tab">Directions for use of the options in the Interactive Plots tab</h2>
 <p>The control panel (left side) has the following choices</p>
 <ul>

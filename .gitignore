@@ -121,3 +121,6 @@ package-lock.json
 # *.csv.tmp
 # *_debug.csv
 # *_scratch.csv
+
+.DS_Store
+**/.DS_Store

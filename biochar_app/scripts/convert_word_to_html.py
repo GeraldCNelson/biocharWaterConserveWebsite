@@ -24,6 +24,7 @@ from typing import Any, Optional, cast
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
+from biochar_app.config.core import TAB_LINKS
 from biochar_app.scripts.markdown_config import docx_markdown_config, modal_config, DocxConfig
 
 
@@ -40,6 +41,29 @@ CONVERTED_HTML_DIR = MARKDOWN_DIR / "converted_html"
 DOCX_DIR.mkdir(parents=True, exist_ok=True)
 CONVERTED_HTML_DIR.mkdir(parents=True, exist_ok=True)
 
+def inject_tab_links(soup: BeautifulSoup) -> None:
+    """Replace known tab labels with clickable links in <p> and <li> text."""
+    for tag in soup.find_all(["p", "li"]):
+        if not isinstance(tag, Tag):
+            continue
+
+        html = str(tag)
+        original_html = html
+
+        for label, tab_id in TAB_LINKS.items():
+            # Skip if this exact tab-link is already present
+            if f'data-tab="{tab_id}"' in html:
+                continue
+
+            link_html = f'<a href="#" class="tab-link" data-tab="{tab_id}">{label}</a>'
+            html = html.replace(label, link_html)
+
+        if html != original_html:
+            replacement = BeautifulSoup(html, "html.parser")
+            if replacement.body:
+                tag.replace_with(*replacement.body.contents)
+            else:
+                tag.replace_with(*replacement.contents)
 
 # ---------------------------------------------------------------------
 # Pandoc CSS
@@ -79,6 +103,16 @@ figcaption, caption {
   font-style: italic;
   text-align: center;
   margin-top: 0.5em;
+}
+.tab-link {
+  color: #2c5aa0;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab-link:hover {
+  color: #1f3f73;
+  text-decoration: underline;
 }
 """.strip()
 
@@ -235,8 +269,10 @@ def main() -> int:
 
             _normalize_figure_captions(soup)
             _normalize_table_captions(soup)
+            inject_tab_links(soup)
 
-            out_path.write_text(str(soup), encoding="utf-8")
+            html = str(soup)
+            out_path.write_text(html, encoding="utf-8")
             print(f"✅ Saved cleaned HTML to: {out_path}")
 
         except subprocess.CalledProcessError as e:

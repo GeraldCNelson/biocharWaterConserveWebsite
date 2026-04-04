@@ -31,6 +31,16 @@ figcaption, caption {
   font-style: italic;
   text-align: center;
   margin-top: 0.5em;
+}
+.tab-link {
+  color: #2c5aa0;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab-link:hover {
+  color: #1f3f73;
+  text-decoration: underline;
 }</style></head><h1 id="the-biochar-field-data-collection-process">The biochar field data collection process</h1>
 <p>Data on soil volumetric water content (VWC), bulk electrical conductivity (EC), and temperature (°C) are collected from 12 Campbell Scientific CR206X data loggers, arranged 3 each in each of the 4 strips. Each data logger collects data from 3 Campbell Scientific CS650 Water Content Reflectometers, located at 6, 12, and 18 inches below the surface of the field.</p>
 <p>The data flow from sensor to software has three steps – hard wired soil sensor to data logger, RF signal to a base datalogger, and finally from the datalogger to the final download site through a Starlink system, using an IPv6 56 bit prefix assigned by Starlink to the base datalogger, an ASUSRT-AX88U Pro wifi router. The router then assigns a 64 bit IPv6 address to the base data station, a CR680 data logger configured as a router.</p>
@@ -51,5 +61,5 @@ figcaption, caption {
 <h2 id="interpreting-ratios-why-temperature-ratios-are-not-reported">Interpreting Ratios: Why Temperature Ratios Are Not Reported</h2>
 <p>Many of the plots and summary tables in this dashboard show ratios for volumetric water content (VWC) and electrical conductivity (EC). These ratios compare one strip or logger location to another (for example, S1/S2) and are often useful for seeing treatment effects or spatial differences. In contrast, we do not compute or display ratios for temperature variables.</p>
 <p>At first glance it might seem that temperature ratios could be made meaningful by expressing temperatures in Kelvin, so that absolute zero corresponds to 0K and all values are strictly positive. However, even in Kelvin, a ratio such as <span class="math inline">$\frac{T_{experiment}}{T_{reference}}$</span> does not have a clear physical interpretation for soil or air temperature in this experiment. The processes we care about (plant growth, soil evaporation, microbial activity, etc.) respond more to temperature differences and thresholds (for example, days above or below a critical temperature) than to multiplicative changes in the absolute temperature value.</p>
-<p>Temperature time series in this field are also highly seasonal and can cross 0 °C multiple times. When sensors at two locations differ only by a few degrees, the ratio can bounce around dramatically even though the absolute difference is small and biologically unimportant. In extreme cases, dividing by a value near freezing can produce very large or unstable ratios, which is the practical 'divide‑by‑zero' problem noted in the Summary Statistics tab.</p>
+<p>Temperature time series in this field are also highly seasonal and can cross 0 °C multiple times. When sensors at two locations differ only by a few degrees, the ratio can bounce around dramatically even though the absolute difference is small and biologically unimportant. In extreme cases, dividing by a value near freezing can produce very large or unstable ratios, which is the practical 'divide‑by‑zero' problem noted in the <a class="tab-link" data-tab="summary-tab" href="#">Summary Statistics</a> tab.</p>
 <p>For these reasons, the project uses temperature mainly in its original units (°F or °C, depending on the display setting) and summarizes it with statistics such as minimum, mean, maximum, and standard deviation, rather than as a ratio between strips. Users interested in relative temperature behavior are encouraged to compare plots or summary tables directly (for example, comparing mean temperatures across strips or depths) instead of relying on a temperature ratio metric.</p>

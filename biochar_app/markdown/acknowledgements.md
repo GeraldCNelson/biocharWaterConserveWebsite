@@ -31,6 +31,16 @@ figcaption, caption {
   font-style: italic;
   text-align: center;
   margin-top: 0.5em;
+}
+.tab-link {
+  color: #2c5aa0;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab-link:hover {
+  color: #1f3f73;
+  text-decoration: underline;
 }</style></head><h1 id="acknowledgements">Acknowledgements</h1>
 <p>The Fruita Biochar Research Project had its roots in an experiment performed at the local farm of principal investigator Michael Lobato with input from Citizens for Clean Air, Grand Junction (CCA) member, Gerald C. Nelson.</p>
 <p>CCA was interested in the potential value of biochar as a productive use of otherwise wasted (and burned) plant material. Lobato and Nelson approached Colorado State University (CSU) Professor Perry Cabot, based at the Fruita branch of the Western Colorado Research Center of the CSU College of Agriculture, about the possibility of using station resources to explore further the potential of biochar to improve agricultural productivity.</p>

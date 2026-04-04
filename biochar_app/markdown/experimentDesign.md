@@ -31,6 +31,16 @@ figcaption, caption {
   font-style: italic;
   text-align: center;
   margin-top: 0.5em;
+}
+.tab-link {
+  color: #2c5aa0;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab-link:hover {
+  color: #1f3f73;
+  text-decoration: underline;
 }</style></head><h1 id="the-biochar-experimental-design">The Biochar Experimental Design</h1>
 <h2 id="hypotheses-to-be-tested">Hypotheses to be tested</h2>
 <p>As discussed in the Introduction tab, the process of making biochar leaves massive amounts of space available in the biochar pores where water, nutrients, and soil biota can be stored. In a desert environment like that around Fruita, Colorado, water shortages can be a big problem. The primary research question for this experiment is how much more water can be stored in a field with biochar than in a field without and for how long. A second research question is what does biochar contribute to quantity and quality of pasture production. A third topic is do the benefits of having biochar in the soil last for multiple years.</p>
@@ -81,7 +91,7 @@ figcaption, caption {
 Fertilizer application</h2>
 <p>The Ward Labs fertilizer recommendations based on the soil samples for each strip were followed. Data on timing and quantity are available on the Bulk Downloads tab.</p>
 <h2 id="yield-quality-and-quantity-measurements">Yield quality and quantity measurements</h2>
-<p>Grasses were harvested three times a season in each of the four strips with measurements on dried biomass content and analyzed for nutrient composition by strip (Pasture Quality Metrics and Biomass (Field Samples) tabs.<br/>
+<p>Grasses were harvested three times a season in each of the four strips with measurements on dried biomass content and analyzed for nutrient composition by strip (<a class="tab-link" data-tab="nir-tab" href="#">Pasture Quality Metrics</a> and <a class="tab-link" data-tab="biomass-field-tab" href="#">Biomass (Field Samples)</a> tabs.<br/>
 <br/>
-Soil Chemistry and Biological Activity</p>
-<p>Soil samples were collected in each strip twice a year, in the spring and fall. The data were sent to Ward Labs for testing for both chemical composition and biological activity (Soil Biological Health and Soil Chemistry tabs. As with all the data presented here, these data can be downloaded using the Bulk Downloads tab.</p>
+<a class="tab-link" data-tab="soilchem-tab" href="#">Soil Chemistry</a> and Biological Activity</p>
+<p>Soil samples were collected in each strip twice a year, in the spring and fall. The data were sent to Ward Labs for testing for both chemical composition and biological activity (Soil <a class="tab-link" data-tab="soilbio-tab" href="#">Biological Health</a> and <a class="tab-link" data-tab="soilchem-tab" href="#">Soil Chemistry</a> tabs. As with all the data presented here, these data can be downloaded using the Bulk Downloads tab.</p>

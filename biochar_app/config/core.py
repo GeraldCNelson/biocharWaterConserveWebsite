@@ -93,6 +93,15 @@ DEFAULT_STRIP = "S1"
 DEFAULT_LOGGER_LOCATION = "T"
 DEFAULT_GRANULARITY = "daily"
 
+TAB_LINKS = {
+    "Interactive Plots": "main-tab",
+    "Summary Statistics": "summary-tab",
+    "Custom Season": "gseason-tab",
+    "Pasture Quality Metrics": "nir-tab",
+    "Biomass (Field Samples)": "biomass-field-tab",
+    "Biological Health": "soilbio-tab",
+    "Soil Chemistry": "soilchem-tab",
+}
 # ---------------------------------------------------------------------
 # Growing-season defaults
 # ---------------------------------------------------------------------
