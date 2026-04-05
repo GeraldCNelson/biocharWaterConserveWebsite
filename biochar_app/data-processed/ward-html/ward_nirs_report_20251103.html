@@ -172,14 +172,15 @@
     .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
 <style>body {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 12px 18px;
-  line-height: 1.32;
+  padding: 10px 20px;
+  line-height: 1.22;
 }
 
 .lab-reference-content {
-  font-size: 1rem;
+  font-size: 0.98rem;
+  line-height: 1.22;
 }
 
 .lab-reference-content h1,
@@ -189,37 +190,46 @@
 .lab-reference-content h5,
 .lab-reference-content h6 {
   scroll-margin-top: 90px;
-  line-height: 1.15;
+  line-height: 1.08;
 }
 
 .lab-reference-content h1 {
-  margin: 0.7em 0 0.2em;
+  margin: 0.55em 0 0.14em;
 }
 
 .lab-reference-content h2,
 .lab-reference-content h3 {
-  margin: 0.55em 0 0.18em;
+  margin: 0.42em 0 0.12em;
 }
 
 .lab-reference-content h4,
 .lab-reference-content h5,
 .lab-reference-content h6 {
-  margin: 0.45em 0 0.15em;
+  margin: 0.34em 0 0.10em;
 }
 
 .lab-reference-content p,
 .lab-reference-content ul,
 .lab-reference-content ol {
-  margin: 0.16em 0;
+  margin: 0.10em 0;
+}
+
+.lab-reference-content li {
+  margin: 0.04em 0;
+}
+
+.lab-reference-content ul,
+.lab-reference-content ol {
+  padding-left: 1.2em;
 }
 
 .lab-reference-content hr {
-  margin: 0.6em 0;
+  margin: 0.45em 0;
 }
 
 blockquote {
-  margin: 0.22em 0 0.4em 1rem;
-  padding-left: 0.7rem;
+  margin: 0.16em 0 0.28em 0.85rem;
+  padding-left: 0.55rem;
   border-left: 3px solid #d9d9d9;
 }
 
@@ -238,24 +248,47 @@ img {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 0.35em auto;
+  margin: 0.22em auto;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0.4em 0 0.7em;
+  margin: 0.25em 0 0.45em;
+  font-size: 0.95rem;
+  line-height: 1.16;
 }
 
-th, td {
+th,
+td {
   border: 1px solid #d0d0d0;
-  padding: 0.32em 0.42em;
+  padding: 0.18em 0.32em;
   vertical-align: top;
 }
 
-caption, figcaption {
+th {
+  font-weight: 600;
+  background-color: #f7f7f7;
+}
+
+td p,
+th p,
+td ul,
+th ul,
+td ol,
+th ol {
+  margin: 0;
+}
+
+td li,
+th li {
+  margin: 0;
+}
+
+caption,
+figcaption {
   font-style: italic;
-  margin-top: 0.2em;
+  margin-top: 0.14em;
 }
 
 .lab-ref-anchor {
