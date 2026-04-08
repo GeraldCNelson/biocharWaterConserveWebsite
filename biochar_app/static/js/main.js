@@ -7,6 +7,7 @@ import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
 import { initSummaryTab } from "./tab_summary.js";
+import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -230,6 +231,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       paneId: "biomass-field",
       renderFn: renderBiomassFieldTables,
       label: "Biomass (Field Samples)",
+    });
+
+    wireTabRender({
+      href: "#glossary",
+      tabId: "glossary-tab",
+      paneId: "glossary",
+      renderFn: renderGlossary,
+      label: "Glossary",
     });
 
     debugLog("📖 Loading markdown mapping from backend…");
