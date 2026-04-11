@@ -1,12 +1,45 @@
+// @ts-check
 // api_requests.js
+
 import { getDropdownValue } from "./ui_utils.js";
+void getDropdownValue;
+
+/**
+ * @typedef {Record<string, any>} AnyRecord
+ */
+
+/**
+ * @typedef {{ us: string, metric: string }} UnitLabelEntry
+ */
+
+/**
+ * @typedef {{
+ *   key?: string,
+ *   label?: string,
+ *   start?: string,
+ *   end?: string
+ * }} PeriodLike
+ */
+
+/**
+ * @typedef {{
+ *   decimals?: number | null,
+ *   rowHeader?: string,
+ *   emptyMessage?: string,
+ *   returnType?: "node" | "html"
+ * }} GenerateSummaryTableOptions
+ */
 
 /**
  * Simple helper to capitalize the first letter of a string.
+ *
+ * @param {string} str
+ * @returns {string}
  */
 function capitalizeFirst(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
 }
+void capitalizeFirst;
 
 /**
  * Strict unit-aware label resolver.
@@ -19,6 +52,11 @@ function capitalizeFirst(str) {
  *  - if object form is used, BOTH keys must exist
  *  - NO fallback to the other unit system
  *  - throws on invalid shape so we catch bugs early
+ *
+ * @param {string | UnitLabelEntry | AnyRecord | null | undefined} labelEntry
+ * @param {"us" | "metric"} unitSystem
+ * @param {string} [fallback=""]
+ * @returns {string}
  */
 export function resolveUnitLabelStrict(labelEntry, unitSystem, fallback = "") {
   if (!labelEntry) {
@@ -30,22 +68,23 @@ export function resolveUnitLabelStrict(labelEntry, unitSystem, fallback = "") {
   if (typeof labelEntry === "string") return labelEntry;
 
   if (typeof labelEntry === "object") {
-    const hasUS = Object.prototype.hasOwnProperty.call(labelEntry, "us");
-    const hasMetric = Object.prototype.hasOwnProperty.call(labelEntry, "metric");
+    const entry = /** @type {AnyRecord} */ (labelEntry);
+    const hasUS = Object.prototype.hasOwnProperty.call(entry, "us");
+    const hasMetric = Object.prototype.hasOwnProperty.call(entry, "metric");
 
     if (!hasUS || !hasMetric) {
       throw new Error(
-        `Invalid label entry: expected keys {us, metric}. Got keys: ${Object.keys(labelEntry).join(", ")}`
+        `Invalid label entry: expected keys {us, metric}. Got keys: ${Object.keys(entry).join(", ")}`
       );
     }
 
-    if (!Object.prototype.hasOwnProperty.call(labelEntry, unitSystem)) {
+    if (!Object.prototype.hasOwnProperty.call(entry, unitSystem)) {
       throw new Error(
-        `Label entry missing unitSystem=${unitSystem}. Keys: ${Object.keys(labelEntry).join(", ")}`
+        `Label entry missing unitSystem=${unitSystem}. Keys: ${Object.keys(entry).join(", ")}`
       );
     }
 
-    const value = labelEntry[unitSystem];
+    const value = entry[unitSystem];
     if (typeof value !== "string" || !value.trim()) {
       throw new Error(
         `Label for unitSystem=${unitSystem} must be a non-empty string. Got: ${String(value)}`
@@ -66,6 +105,11 @@ export function resolveUnitLabelStrict(labelEntry, unitSystem, fallback = "") {
 /**
  * Helper: format the accordion header title
  * e.g. "Winter (Nov–Apr) — Volumetric Water Content (%)"
+ *
+ * @param {string} code
+ * @param {PeriodLike | null | undefined} spec
+ * @param {string} prettyVarWithContext
+ * @returns {string}
  */
 export function formatGseasonLabel(code, spec, prettyVarWithContext) {
   const label = (spec && spec.label) || code.replace(/_/g, " ");
@@ -75,6 +119,10 @@ export function formatGseasonLabel(code, spec, prettyVarWithContext) {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
 
+  /**
+   * @param {string} md
+   * @returns {string}
+   */
   function fmtMonth(md) {
     if (!md) return "";
     const [m] = md.split("-");
@@ -83,7 +131,7 @@ export function formatGseasonLabel(code, spec, prettyVarWithContext) {
   }
 
   const startPart = spec?.start ? fmtMonth(spec.start) : "";
-  const endPart   = spec?.end   ? fmtMonth(spec.end)   : "";
+  const endPart = spec?.end ? fmtMonth(spec.end) : "";
 
   const range =
     startPart && endPart ? ` (${startPart}–${endPart})` : "";
@@ -93,7 +141,13 @@ export function formatGseasonLabel(code, spec, prettyVarWithContext) {
     : `${label}${range}`;
 }
 
-// api_requests.js
+/**
+ * Fetch JSON with sensible defaults and clearer errors.
+ *
+ * @param {string} url
+ * @param {RequestInit & { headers?: HeadersInit, body?: BodyInit | null }} [init={}]
+ * @returns {Promise<any>}
+ */
 export async function fetchJson(url, init = {}) {
   const headers = new Headers(init.headers || {});
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -121,6 +175,14 @@ export async function fetchJson(url, init = {}) {
   return await res.json();
 }
 
+/**
+ * Build a summary table from one of several supported summary-stat shapes.
+ *
+ * @param {any} stats
+ * @param {string} variable
+ * @param {GenerateSummaryTableOptions} [opts={}]
+ * @returns {HTMLDivElement | string}
+ */
 export function generateSummaryTable(stats, variable, opts = {}) {
   const {
     decimals = null,
@@ -131,6 +193,9 @@ export function generateSummaryTable(stats, variable, opts = {}) {
 
   const wrapper = document.createElement("div");
 
+  /**
+   * @returns {HTMLDivElement | string}
+   */
   const finish = () => {
     if (returnType === "html") {
       return wrapper.innerHTML;
@@ -144,9 +209,17 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     return finish();
   }
 
+  /**
+   * @param {any} v
+   * @returns {v is AnyRecord}
+   */
   const isPlainObject = (v) =>
     v !== null && typeof v === "object" && !Array.isArray(v);
 
+  /**
+   * @param {any} v
+   * @returns {string}
+   */
   const displayValue = (v) => {
     if (v === null || v === undefined) return "";
     if (typeof v === "string") return v;
@@ -169,12 +242,20 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     table.className = "table table-sm table-striped table-bordered";
 
     const cols = Array.from(
-      stats.reduce((set, row) => {
-        if (isPlainObject(row)) {
-          Object.keys(row).forEach((k) => set.add(k));
-        }
-        return set;
-      }, new Set())
+      stats.reduce(
+        /**
+         * @param {Set<string>} set
+         * @param {any} row
+         * @returns {Set<string>}
+         */
+        (set, row) => {
+          if (isPlainObject(row)) {
+            Object.keys(row).forEach((k) => set.add(k));
+          }
+          return set;
+        },
+        new Set()
+      )
     );
 
     const thead = document.createElement("thead");
@@ -188,15 +269,21 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    stats.forEach((row) => {
-      const tr = document.createElement("tr");
-      cols.forEach((c) => {
-        const td = document.createElement("td");
-        td.textContent = isPlainObject(row) ? displayValue(row[c]) : "";
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
+    stats.forEach(
+      /**
+       * @param {any} row
+       * @returns {void}
+       */
+      (row) => {
+        const tr = document.createElement("tr");
+        cols.forEach((c) => {
+          const td = document.createElement("td");
+          td.textContent = isPlainObject(row) ? displayValue(row[c]) : "";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      }
+    );
     table.appendChild(tbody);
 
     wrapper.appendChild(table);
@@ -208,8 +295,13 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     Array.isArray(stats.rows) &&
     isPlainObject(stats.data)
   ) {
-    const { periods, rows } = stats;
+    /** @type {PeriodLike[]} */
+    const periods = stats.periods;
+    /** @type {string[]} */
+    const rows = stats.rows;
+    /** @type {AnyRecord} */
     const rowLabels = isPlainObject(stats.rowLabels) ? stats.rowLabels : {};
+    /** @type {AnyRecord} */
     const data = stats.data;
 
     let varKey = variable;
@@ -235,34 +327,52 @@ export function generateSummaryTable(stats, variable, opts = {}) {
     th0.textContent = rowHeader;
     trh.appendChild(th0);
 
-    periods.forEach((p) => {
-      const th = document.createElement("th");
-      th.textContent = p?.label || p?.key || "";
-      trh.appendChild(th);
-    });
+    periods.forEach(
+      /**
+       * @param {PeriodLike} p
+       * @returns {void}
+       */
+      (p) => {
+        const th = document.createElement("th");
+        th.textContent = p?.label || p?.key || "";
+        trh.appendChild(th);
+      }
+    );
 
     thead.appendChild(trh);
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    rows.forEach((rowKey) => {
-      const tr = document.createElement("tr");
+    rows.forEach(
+      /**
+       * @param {string} rowKey
+       * @returns {void}
+       */
+      (rowKey) => {
+        const tr = document.createElement("tr");
 
-      const td0 = document.createElement("td");
-      td0.textContent = rowLabels[rowKey] || rowKey;
-      tr.appendChild(td0);
+        const td0 = document.createElement("td");
+        td0.textContent = rowLabels[rowKey] || rowKey;
+        tr.appendChild(td0);
 
-      const rowMap = varBlock[rowKey];
-      periods.forEach((p) => {
-        const pk = p?.key;
-        const td = document.createElement("td");
-        const v = isPlainObject(rowMap) && pk ? rowMap[pk] : null;
-        td.textContent = displayValue(v);
-        tr.appendChild(td);
-      });
+        const rowMap = varBlock[rowKey];
+        periods.forEach(
+          /**
+           * @param {PeriodLike} p
+           * @returns {void}
+           */
+          (p) => {
+            const pk = p?.key;
+            const td = document.createElement("td");
+            const v = isPlainObject(rowMap) && pk ? rowMap[pk] : null;
+            td.textContent = displayValue(v);
+            tr.appendChild(td);
+          }
+        );
 
-      tbody.appendChild(tr);
-    });
+        tbody.appendChild(tr);
+      }
+    );
 
     table.appendChild(tbody);
     wrapper.appendChild(table);

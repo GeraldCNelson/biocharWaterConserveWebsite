@@ -8,6 +8,11 @@
  *  - "soil" -> uses soil-* CSS classes
  *  - any other string -> generic classes
  */
+/**
+ * @param {string} titleText
+ * @param {string} [subtitleText]
+ * @param {string} [variant]
+ */
 export function makeSetSectionTitle(titleText, subtitleText = "", variant = "nir") {
   const section = document.createElement("div");
 

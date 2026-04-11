@@ -527,7 +527,6 @@ def make_raw_figure(
                     y=safe_tolist(to_float_series(df_plot[temp_col])),
                     mode="lines",
                     name="Air Temp",
-                    yaxis="y2",
                     line=dict(
                         dash="dot",
                         color=PLOT_COLORS.get("air_temp", None),
@@ -535,12 +534,12 @@ def make_raw_figure(
                     ),
                 )
             )
-            use_secondary_y = True
 
     if use_secondary_y:
         fig.update_layout(yaxis2=common_yaxis2_config(usys))
 
-    add_irrigation_shapes(fig, strip, year, usys)
+    if display_variable in ("VWC", "SWC"):
+        add_irrigation_shapes(fig, strip, year, usys)
 
     title_text = build_raw_plot_title(
         granularity=granularity,

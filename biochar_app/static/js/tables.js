@@ -1,3 +1,4 @@
+// @ts-check
 // static/js/tables.js
 //
 // Shared helpers for rendering table payloads.
@@ -11,10 +12,59 @@
 // normalizeOneSet must preserve {key,label} objects for periods/variables.
 // Converting them to strings breaks renderOneSetFromPayload (expects v.key / p.key).
 
+/**
+ * @typedef {Record<string, any>} AnyRecord
+ */
+
+/**
+ * @typedef {{
+ *   key?: string,
+ *   label?: string,
+ *   title?: string,
+ *   id?: string,
+ *   name?: string,
+ *   note?: string,
+ *   [key: string]: any
+ * }} KeyLabelItem
+ */
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   label: string,
+ *   periods: KeyLabelItem[],
+ *   variables: KeyLabelItem[],
+ *   rows: string[],
+ *   rowLabels: Record<string, string>,
+ *   data: AnyRecord,
+ *   note: string
+ * }} NormalizedSet
+ */
+
+/**
+ * @typedef {Window & {
+ *   bootstrap?: {
+ *     Modal?: new (el: Element) => { show: () => void }
+ *   }
+ * }} TablesWindow
+ */
+
+/** @type {TablesWindow} */
+const tablesWindow = /** @type {TablesWindow} */ (window);
+
+/**
+ * @param {any} x
+ * @returns {x is AnyRecord}
+ */
 export function isObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
 }
 
+/**
+ * @param {any} v
+ * @param {string} [fallback=""]
+ * @returns {string}
+ */
 export function safeStr(v, fallback = "") {
   if (v === null || v === undefined) return fallback;
   const s = String(v).trim();
@@ -30,6 +80,10 @@ export function safeStr(v, fallback = "") {
  * clickable <a> links WITHOUT using innerHTML (avoids XSS).
  *
  * Example: "Source: https://example.com/foo" => Source: [link]
+ *
+ * @param {HTMLElement} parentEl
+ * @param {string} text
+ * @returns {void}
  */
 function appendTextWithLinks(parentEl, text) {
   const raw = safeStr(text, "");
@@ -38,6 +92,7 @@ function appendTextWithLinks(parentEl, text) {
   const urlRe = /(https?:\/\/[^\s<>"'()]+)(?=[\s<>"'()]|$)/g;
 
   let last = 0;
+  /** @type {RegExpExecArray | null} */
   let m;
 
   while ((m = urlRe.exec(raw)) !== null) {
@@ -67,6 +122,12 @@ function appendTextWithLinks(parentEl, text) {
 // Normalization
 // ------------------------------------------------------------
 
+/**
+ * @param {any} s
+ * @param {number} [idx=0]
+ * @param {number | null} [totalSets=null]
+ * @returns {NormalizedSet}
+ */
 function normalizeOneSet(s, idx = 0, totalSets = null) {
   const set = isObject(s) ? s : {};
 
@@ -91,6 +152,10 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
 
   const key = safeStr(set.key, "") || `set_${idx + 1}`;
 
+  /**
+   * @param {any} x
+   * @returns {KeyLabelItem | null}
+   */
   function normalizeKeyLabelItem(x) {
     if (x === null || x === undefined) return null;
 
@@ -118,11 +183,21 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
     return null;
   }
 
+  /**
+   * @param {any} arr
+   * @returns {KeyLabelItem[]}
+   */
   function normalizeKeyLabelList(arr) {
     if (!Array.isArray(arr)) return [];
     return arr
       .map(normalizeKeyLabelItem)
-      .filter((v) => v && v.key);
+      .filter(
+        /**
+         * @param {KeyLabelItem | null} v
+         * @returns {v is KeyLabelItem}
+         */
+        (v) => Boolean(v && v.key)
+      );
   }
 
   const periods = normalizeKeyLabelList(set.periods);
@@ -151,6 +226,9 @@ function normalizeOneSet(s, idx = 0, totalSets = null) {
  *  A) Standard multi-set: { title, sets: [ {key,label,periods,variables,rows,rowLabels,data,note/notes?}, ... ] }
  *  B) Legacy single-set:  { title, periods, variables, rows, rowLabels, data, note/notes? }
  *  C) Legacy wrapper:     { title, set: { ...single set... } }
+ *
+ * @param {any} raw
+ * @returns {{ title: string, sets: NormalizedSet[] }}
  */
 export function normalizePayload(raw) {
   if (!isObject(raw)) return { title: "", sets: [] };
@@ -160,7 +238,14 @@ export function normalizePayload(raw) {
   if (Array.isArray(raw.sets)) {
     return {
       title,
-      sets: raw.sets.map((s, i) => normalizeOneSet(s, i, raw.sets.length)),
+      sets: raw.sets.map(
+        /**
+         * @param {any} s
+         * @param {number} i
+         * @returns {NormalizedSet}
+         */
+        (s, i) => normalizeOneSet(s, i, raw.sets.length)
+      ),
     };
   }
 
@@ -208,6 +293,11 @@ export function normalizePayload(raw) {
 // Rendering helpers
 // ------------------------------------------------------------
 
+/**
+ * @param {HTMLElement} parentEl
+ * @param {NormalizedSet} setPayload
+ * @returns {void}
+ */
 export function renderOneSetFromPayload(parentEl, setPayload) {
   if (!parentEl) return;
 
@@ -269,6 +359,10 @@ export function renderOneSetFromPayload(parentEl, setPayload) {
   }
 }
 
+/**
+ * @param {string} s
+ * @returns {string}
+ */
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -278,6 +372,10 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
+/**
+ * @param {AnyRecord} band
+ * @returns {string}
+ */
 function formatBandRange(band) {
   const hasMin = band["min_value"] !== null && band["min_value"] !== undefined;
   const hasMax = band["max_value"] !== null && band["max_value"] !== undefined;
@@ -294,6 +392,10 @@ function formatBandRange(band) {
   return "";
 }
 
+/**
+ * @param {AnyRecord | null | undefined} variable
+ * @returns {void}
+ */
 function openReferenceModal(variable) {
   if (!variable || !variable["reference"]) return;
 
@@ -308,7 +410,7 @@ function openReferenceModal(variable) {
 
   modalTitle.textContent = variable["label"] || "Reference";
 
-  const ref = variable["reference"];
+  const ref = isObject(variable["reference"]) ? variable["reference"] : {};
   const refs = Array.isArray(ref["references"]) ? ref["references"] : [];
   const thresholds = isObject(ref["thresholds"]) ? ref["thresholds"] : null;
   const bands = Array.isArray(thresholds?.["bands"]) ? thresholds["bands"] : [];
@@ -334,11 +436,11 @@ function openReferenceModal(variable) {
   if (bands.length > 0) {
     html += `<hr><h6>Interpretation ranges</h6>`;
 
-    if (thresholds["method_note"]) {
+    if (thresholds && thresholds["method_note"]) {
       html += `<p class="text-muted mb-2">${escapeHtml(thresholds["method_note"])}</p>`;
     }
 
-    if (thresholds["unit_label"]) {
+    if (thresholds && thresholds["unit_label"]) {
       html += `<p class="mb-2"><strong>Units:</strong> ${escapeHtml(thresholds["unit_label"])}</p>`;
     }
 
@@ -377,15 +479,29 @@ function openReferenceModal(variable) {
 
   modalBody.innerHTML = html || "<p>No reference details available.</p>";
 
-  if (!window.bootstrap || !window.bootstrap.Modal) {
+  if (!tablesWindow.bootstrap || !tablesWindow.bootstrap.Modal) {
     console.warn("Bootstrap Modal is not available.");
     return;
   }
 
-  const modal = new window.bootstrap.Modal(modalEl);
+  const modal = new tablesWindow.bootstrap.Modal(modalEl);
   modal.show();
 }
 
+/**
+ * @param {{
+ *   label?: string,
+ *   periods?: KeyLabelItem[],
+ *   rows?: string[],
+ *   rowLabels?: Record<string, string>,
+ *   data?: AnyRecord,
+ *   variables?: KeyLabelItem[]
+ * }} setPayload
+ * @param {string} variableKey
+ * @param {string} variableLabel
+ * @param {string} [variableNote=""]
+ * @returns {HTMLDivElement}
+ */
 export function buildTableForVariable(setPayload, variableKey, variableLabel, variableNote = "") {
   const periods = Array.isArray(setPayload.periods) ? setPayload.periods : [];
   const rows = Array.isArray(setPayload.rows) ? setPayload.rows : [];
@@ -402,13 +518,27 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
 
   const variable =
     Array.isArray(setPayload.variables)
-      ? setPayload.variables.find((v) => safeStr(v.key, "") === safeStr(variableKey, ""))
+      ? setPayload.variables.find(
+          /**
+           * @param {KeyLabelItem} v
+           * @returns {boolean}
+           */
+          (v) => safeStr(v.key, "") === safeStr(variableKey, "")
+        )
       : null;
 
   console.log("TABLE VARIABLE DEBUG:", variableKey, variable);
 
+  /**
+   * @param {any} s
+   * @returns {string}
+   */
   const norm = (s) => String(s ?? "").trim().toLowerCase();
 
+  /**
+   * @param {string} rowKey
+   * @returns {boolean}
+   */
   const isRatioRowKey = (rowKey) => {
     const k = norm(rowKey).replace(/\s+/g, "");
     return (
@@ -421,10 +551,19 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
     );
   };
 
+  /**
+   * @param {string} s
+   * @returns {boolean}
+   */
   const looksNumeric = (s) => {
     return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s);
   };
 
+  /**
+   * @param {any} v
+   * @param {string} rowKey
+   * @returns {string}
+   */
   const formatValue = (v, rowKey) => {
     if (v === null || v === undefined) return "";
 

@@ -2,6 +2,19 @@
 // static/js/downloads.js
 
 /**
+ * @typedef {Window & {
+ *   unitSystem?: string,
+ *   depthMapping?: Record<string, Record<string, string>>,
+ *   __lastSummaryData?: any,
+ *   __bulkDownloadManifest?: any,
+ *   Plotly?: any
+ * }} DownloadsWindow
+ */
+
+/** @type {DownloadsWindow} */
+const downloadsWindow = /** @type {DownloadsWindow} */ (window);
+
+/**
  * Helper: build a filename-safe slug from pieces.
  * @param {Array<string | number | null | undefined | false>} parts
  * @returns {string}
@@ -70,6 +83,7 @@ function extFromContentType(ct) {
  * @param {string} url
  * @param {any} payload
  * @param {string} fallbackFilename
+ * @returns {Promise<void>}
  */
 async function postAndDownload(url, payload, fallbackFilename) {
   console.log("⬇️ postAndDownload →", url, payload);
@@ -120,6 +134,7 @@ async function postAndDownload(url, payload, fallbackFilename) {
 
 /**
  * @param {"raw"|"ratio"|"all"} [kind="all"]
+ * @returns {Promise<void>}
  */
 export async function downloadTraceData(kind = "all") {
   try {
@@ -139,7 +154,7 @@ export async function downloadTraceData(kind = "all") {
     const strip = stripEl.value;
     const granularity = granEl.value;
     const depth = depthEl.value;
-    const unitSystem = window.unitSystem || "us";
+    const unitSystem = downloadsWindow.unitSystem || "us";
 
     const payload = {
       year,
@@ -175,6 +190,7 @@ export async function downloadTraceData(kind = "all") {
 
 /**
  * @param {"raw"|"ratio"|"all"|"zip"} [mode="all"]
+ * @returns {Promise<void>}
  */
 export async function downloadSummaryData(mode = "all") {
   const yearEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-year"));
@@ -194,14 +210,14 @@ export async function downloadSummaryData(mode = "all") {
   const strip = stripEl.value;
   const granularity = granularityEl.value;
   const depth = depthEl.value;
-  const unitSystem = window.unitSystem || "us";
+  const unitSystem = downloadsWindow.unitSystem || "us";
 
   if (Number.isNaN(year)) {
     alert("Please choose a valid year before downloading.");
     return;
   }
 
-  const summaryStats = window.__lastSummaryData || null;
+  const summaryStats = downloadsWindow.__lastSummaryData || null;
 
   const payload = {
     year,
@@ -231,6 +247,9 @@ export async function downloadSummaryData(mode = "all") {
   }
 }
 
+/**
+ * @returns {void}
+ */
 export function initSummaryDownloadMenu() {
   const rawBtn = document.getElementById("download-summary-raw");
   const ratioBtn = document.getElementById("download-summary-ratio");
@@ -242,10 +261,30 @@ export function initSummaryDownloadMenu() {
     return;
   }
 
-  if (rawBtn) rawBtn.addEventListener("click", (e) => { e.preventDefault(); void downloadSummaryData("raw"); });
-  if (ratioBtn) ratioBtn.addEventListener("click", (e) => { e.preventDefault(); void downloadSummaryData("ratio"); });
-  if (allBtn) allBtn.addEventListener("click", (e) => { e.preventDefault(); void downloadSummaryData("all"); });
-  if (zipBtn) zipBtn.addEventListener("click", (e) => { e.preventDefault(); void downloadSummaryData("zip"); });
+  if (rawBtn) {
+    rawBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      void downloadSummaryData("raw");
+    });
+  }
+  if (ratioBtn) {
+    ratioBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      void downloadSummaryData("ratio");
+    });
+  }
+  if (allBtn) {
+    allBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      void downloadSummaryData("all");
+    });
+  }
+  if (zipBtn) {
+    zipBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      void downloadSummaryData("zip");
+    });
+  }
 
   console.log("✅ Summary download menu initialized.");
 }
@@ -259,7 +298,11 @@ export function initSummaryDownloadMenu() {
  * @returns {string}
  */
 function buildPlotFilename({ plotType, format }) {
-  /** @param {string} id @param {string} [fallback=""] */
+  /**
+   * @param {string} id
+   * @param {string} [fallback=""]
+   * @returns {string}
+   */
   const getVal = (id, fallback = "") => {
     const el = /** @type {HTMLInputElement | HTMLSelectElement | null} */ (document.getElementById(id));
     return el?.value || fallback;
@@ -271,11 +314,11 @@ function buildPlotFilename({ plotType, format }) {
   const depthIndex = getVal("main-depth");
   const granularity = getVal("main-granularity");
   const year = getVal("main-year");
-  const unitSystem = window.unitSystem || "us";
+  const unitSystem = downloadsWindow.unitSystem || "us";
 
   let depthPart = "";
-  if (depthIndex && window.depthMapping?.[depthIndex]) {
-    const depthLabel = window.depthMapping[depthIndex][unitSystem];
+  if (depthIndex && downloadsWindow.depthMapping?.[depthIndex]) {
+    const depthLabel = downloadsWindow.depthMapping[depthIndex][unitSystem];
     depthPart = String(depthLabel)
       .replace(/\s+/g, "")
       .replace("inches", "in")
@@ -305,10 +348,12 @@ function buildPlotFilename({ plotType, format }) {
  * @param {string|HTMLElement} [target="raw"]
  * @param {string} [format="png"]
  * @param {string} [sizeMode="screen"]
+ * @returns {Promise<void>}
  */
 export async function downloadPlot(target = "raw", format = "png", sizeMode = "screen") {
   try {
-    const Plotly = window.Plotly;
+    /** @type {any} */
+    const Plotly = downloadsWindow.Plotly;
     if (!Plotly) {
       alert("Plotly is not available; cannot download plot image.");
       return;
@@ -345,7 +390,9 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
       if (!el) {
         const plotDivs = Array.from(document.querySelectorAll(".js-plotly-plot"));
-        if (plotDivs.length > 0) el = /** @type {HTMLElement} */ ((t === "ratio") ? (plotDivs[1] || plotDivs[0]) : plotDivs[0]);
+        if (plotDivs.length > 0) {
+          el = /** @type {HTMLElement} */ ((t === "ratio") ? (plotDivs[1] || plotDivs[0]) : plotDivs[0]);
+        }
       }
     }
 
@@ -355,7 +402,9 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       return;
     }
 
-    let width, height, scale;
+    let width;
+    let height;
+    let scale;
     if (String(sizeMode).toLowerCase().trim() === "fixed") {
       width = 1600;
       height = 900;
@@ -424,7 +473,6 @@ const BULK_DATASET_TOKEN = {
 function normalizeBulkDataset(uiDatasetRaw) {
   const ui = String(uiDatasetRaw || "").trim().toLowerCase();
 
-  // Backward compatibility while templates/HTML catch up
   if (ui === "fertilizing") return "fertilizer";
 
   return ALL_YEARS_UI_ALIASES[ui] || ui;
@@ -561,6 +609,9 @@ function hasDatasetFamily(manifest, dataset) {
   );
 }
 
+/**
+ * @returns {Promise<void>}
+ */
 export async function initBulkDownloadTab() {
   const yearEl = /** @type {HTMLSelectElement | null} */ (
     document.getElementById("bulk-year") ||
@@ -572,9 +623,9 @@ export async function initBulkDownloadTab() {
     document.querySelector('[data-role="bulk-granularity"]')
   );
 
-const buttons = /** @type {HTMLButtonElement[]} */ (
-  Array.from(document.querySelectorAll(".bulk-download-btn, [data-dataset]"))
-);
+  const buttons = /** @type {HTMLButtonElement[]} */ (
+    Array.from(document.querySelectorAll(".bulk-download-btn, [data-dataset]"))
+  );
   if (!buttons.length) {
     console.warn("⚠️ Bulk download UI not found (need buttons with data-dataset).", {
       hasYear: !!yearEl,
@@ -584,6 +635,9 @@ const buttons = /** @type {HTMLButtonElement[]} */ (
     return;
   }
 
+  /**
+   * @returns {number | null}
+   */
   function selectedYear() {
     if (!yearEl) return null;
     const raw = String(yearEl.value || "").trim();
@@ -591,6 +645,9 @@ const buttons = /** @type {HTMLButtonElement[]} */ (
     return Number.isFinite(y) ? y : null;
   }
 
+  /**
+   * @returns {string | null}
+   */
   function selectedGranularity() {
     if (!granEl) return null;
     return normalizeResolution(granEl.value);
@@ -602,18 +659,15 @@ const buttons = /** @type {HTMLButtonElement[]} */ (
    * hardDisable=false + visualEnabled=false:
    *   looks disabled, but click handler still runs and can show guidance
    *
-   * @param {HTMLElement} btn
+   * @param {HTMLButtonElement} btn
    * @param {{ visualEnabled: boolean, hardDisable?: boolean }} args
+   * @returns {void}
    */
-/**
- * @param {HTMLButtonElement} btn
- * @param {{ visualEnabled: boolean, hardDisable?: boolean }} args
- */
-function setButtonState(btn, { visualEnabled, hardDisable = false }) {
-  btn.disabled = hardDisable;
-  btn.classList.toggle("disabled", !visualEnabled);
-  btn.setAttribute("aria-disabled", String(!visualEnabled));
-}
+  function setButtonState(btn, { visualEnabled, hardDisable = false }) {
+    btn.disabled = hardDisable;
+    btn.classList.toggle("disabled", !visualEnabled);
+    btn.setAttribute("aria-disabled", String(!visualEnabled));
+  }
 
   /** @type {any} */
   let manifest = null;
@@ -621,7 +675,7 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
     const resp = await fetch("/api/bulk_download_manifest");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     manifest = await resp.json();
-    window.__bulkDownloadManifest = manifest;
+    downloadsWindow.__bulkDownloadManifest = manifest;
   } catch (e) {
     console.warn("⚠️ Bulk manifest fetch failed:", e);
     for (const b of buttons) {
@@ -633,10 +687,15 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
   const years = Array.isArray(manifest?.years) ? manifest.years : [];
   const granularities = Array.isArray(manifest?.granularities) ? manifest.granularities : [];
 
-  // Populate if there are no real choices yet (placeholder-only select counts as empty)
   if (yearEl && !selectHasRealOptions(yearEl)) {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
-      .map((y) => `<option value="${y}">${y}</option>`)
+      .map(
+        /**
+         * @param {string | number} y
+         * @returns {string}
+         */
+        (y) => `<option value="${y}">${y}</option>`
+      )
       .join("");
     yearEl.innerHTML = `<option value="">Select year...</option>${opts}`;
   }
@@ -645,7 +704,15 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
     const gList = granularities.length ? granularities : ["15min", "hourly", "daily", "monthly", "gseason"];
     granEl.innerHTML =
       `<option value="">Select granularity...</option>` +
-      gList.map((g) => `<option value="${g}">${g}</option>`).join("");
+      gList
+        .map(
+          /**
+           * @param {string} g
+           * @returns {string}
+           */
+          (g) => `<option value="${g}">${g}</option>`
+        )
+        .join("");
   }
 
   /**
@@ -673,6 +740,9 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
     return s === "fertilizing" ? "fertilizer" : s;
   }
 
+  /**
+   * @returns {void}
+   */
   function refreshEnabledState() {
     const y = selectedYear();
     const gRaw = selectedGranularity();
@@ -695,7 +765,6 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
           continue;
         }
 
-        // logger/weather require BOTH year and granularity
         if (ds === "loggers" || ds === "weather") {
           const familyExists = hasDatasetFamily(manifest, ds);
 
@@ -722,7 +791,6 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
           continue;
         }
 
-        // year-based non-granular datasets: irrigation, fertilizer, biomass
         const familyExists = hasDatasetFamily(manifest, ds);
 
         if (!familyExists) {
@@ -731,7 +799,6 @@ function setButtonState(btn, { visualEnabled, hardDisable = false }) {
         }
 
         if (!y) {
-          // Keep clickable so user gets the "Please select a year." message.
           setButtonState(btn, { visualEnabled: false, hardDisable: false });
           continue;
         }

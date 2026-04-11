@@ -1,6 +1,16 @@
-// static/js/ui_loading.js
+// @ts-check
+// ui_loading.js
 
+/**
+ * Ensure the container has non-static positioning so an absolute overlay
+ * can be placed inside it safely.
+ *
+ * @param {HTMLElement | null} el
+ * @returns {void}
+ */
 function ensurePositioned(el) {
+  if (!el) return;
+
   const pos = window.getComputedStyle(el).position;
   if (pos === "static") {
     el.dataset._prevPosition = "static";
@@ -8,123 +18,170 @@ function ensurePositioned(el) {
   }
 }
 
+/**
+ * Ensure the container has a minimum height while loading so the overlay
+ * has visible space even before Plotly finishes rendering.
+ *
+ * @param {HTMLElement | null} el
+ * @param {number} [px=160]
+ * @returns {void}
+ */
 function ensureMinHeight(el, px = 160) {
+  if (!el) return;
+
   const minH = window.getComputedStyle(el).minHeight;
-  const numeric = parseFloat(minH || "0") || 0;
-  if (numeric < 1) {
+  const minHNum = parseFloat(minH);
+
+  if (!Number.isFinite(minHNum) || minHNum < px) {
     el.dataset._prevMinHeight = el.style.minHeight || "";
     el.style.minHeight = `${px}px`;
   }
 }
 
-/* =========================================================
-   In-container overlay (plots, tables, markdown containers)
-   ========================================================= */
-
+/**
+ * Show a loading overlay inside the given container.
+ *
+ * @param {HTMLElement | null} container
+ * @param {string} [label="Loading"]
+ * @returns {void}
+ */
 export function showLoadingOverlay(container, label = "Loading") {
   if (!container) return;
 
-  // If already exists, don’t stack multiples
-  const existing = container.querySelector(":scope > .loading-overlay");
+  ensurePositioned(container);
+  ensureMinHeight(container);
+
+  const existing = container.querySelector(".plot-loading-overlay");
   if (existing) return;
 
-  ensurePositioned(container);
-  ensureMinHeight(container, 160);
-
   const overlay = document.createElement("div");
-  overlay.className = "loading-overlay";
-  overlay.setAttribute("role", "status");
-  overlay.setAttribute("aria-live", "polite");
-
+  overlay.className = "plot-loading-overlay";
   overlay.innerHTML = `
-    <div class="loading-overlay-inner">
-      <span>${label}</span><span class="dots"></span>
+    <div class="plot-loading-overlay__inner">
+      <div class="plot-loading-overlay__spinner"></div>
+      <div class="plot-loading-overlay__label">${label}…</div>
     </div>
   `;
 
+  Object.assign(overlay.style, {
+    position: "absolute",
+    inset: "0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(255,255,255,0.72)",
+    zIndex: "20",
+    pointerEvents: "none",
+  });
+
+  const inner = /** @type {HTMLElement | null} */ (overlay.firstElementChild);
+  if (inner) {
+    Object.assign(inner.style, {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "10px",
+      fontSize: "14px",
+      color: "#333",
+    });
+  }
+
+  const spinner = /** @type {HTMLElement | null} */ (
+    overlay.querySelector(".plot-loading-overlay__spinner")
+  );
+  if (spinner) {
+    Object.assign(spinner.style, {
+      width: "28px",
+      height: "28px",
+      border: "3px solid rgba(0,0,0,0.15)",
+      borderTop: "3px solid rgba(0,0,0,0.55)",
+      borderRadius: "50%",
+      animation: "plot-loading-spin 0.8s linear infinite",
+    });
+  }
+
   container.appendChild(overlay);
+
+  if (!document.getElementById("plot-loading-overlay-style")) {
+    const style = document.createElement("style");
+    style.id = "plot-loading-overlay-style";
+    style.textContent = `
+      @keyframes plot-loading-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 }
 
+/**
+ * Hide the loading overlay inside the given container and restore any
+ * temporary sizing/positioning adjustments.
+ *
+ * @param {HTMLElement | null} container
+ * @returns {void}
+ */
 export function hideLoadingOverlay(container) {
   if (!container) return;
 
-  const overlay = container.querySelector(":scope > .loading-overlay");
-  if (overlay) overlay.remove();
+  const overlay = container.querySelector(".plot-loading-overlay");
+  if (overlay) {
+    overlay.remove();
+  }
 
-  // Restore temporary styling if we changed it
   if (container.dataset._prevPosition === "static") {
-    container.style.position = "";
+    container.style.position = "static";
     delete container.dataset._prevPosition;
   }
 
   if ("_prevMinHeight" in container.dataset) {
-    container.style.minHeight = container.dataset._prevMinHeight;
+    container.style.minHeight = container.dataset._prevMinHeight || "";
     delete container.dataset._prevMinHeight;
   }
 }
 
-/* =========================================================
-   Status-line loading dots (e.g., summary-status)
-   ========================================================= */
+/** @type {Record<string, number>} */
+const loadingDotTimers = {};
 
+/**
+ * Start animated loading dots in a text element.
+ *
+ * @param {string} elId
+ * @param {string} [baseText="Loading"]
+ * @returns {void}
+ */
 export function startLoadingDots(elId, baseText = "Loading") {
   const el = document.getElementById(elId);
-  if (!el) return null;
+  if (!el) return;
 
-  stopLoadingDots("");
+  stopLoadingDots(elId);
 
-  let dots = 0;
+  let count = 0;
   el.textContent = baseText;
 
-  const timer = window.setInterval(() => {
-    dots = (dots + 1) % 4;
-    el.textContent = baseText + ".".repeat(dots);
-  }, 350);
-
-  el.dataset.loadingTimer = String(timer);
-  el.style.display = "";
-  return timer;
+  loadingDotTimers[elId] = window.setInterval(() => {
+    count = (count + 1) % 4;
+    el.textContent = `${baseText}${".".repeat(count)}`;
+  }, 400);
 }
 
+/**
+ * Stop animated loading dots and optionally set final text.
+ *
+ * @param {string} elId
+ * @param {string} [finalText=""]
+ * @returns {void}
+ */
 export function stopLoadingDots(elId, finalText = "") {
+  const timerId = loadingDotTimers[elId];
+  if (timerId) {
+    window.clearInterval(timerId);
+    delete loadingDotTimers[elId];
+  }
+
   const el = document.getElementById(elId);
   if (!el) return;
 
-  const raw = el.dataset.loadingTimer;
-  if (raw) {
-    window.clearInterval(parseInt(raw, 10));
-    delete el.dataset.loadingTimer;
-  }
-
-  // Always clear or set text
   el.textContent = finalText;
-}
-
-/* =========================================================
-   Boot-level page loader (covers whole screen on first load)
-   ========================================================= */
-
-export function hideBootLoading() {
-  const el = document.getElementById("boot-loading");
-  if (!el) return;
-
-  // Remove it entirely so it can't block clicks ever again
-  el.remove();
-}
-
-export function showBootLoading(label = "Loading site") {
-  // Optional helper if you ever want to re-enable
-  let el = document.getElementById("boot-loading");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "boot-loading";
-    el.className = "boot-loading";
-    el.innerHTML = `<div class="boot-loading-inner"><span></span><span class="dots"></span></div>`;
-    document.body.appendChild(el);
-  }
-
-  const textSpan = el.querySelector(".boot-loading-inner > span");
-  if (textSpan) textSpan.textContent = label;
-
-  el.style.display = "flex";
 }

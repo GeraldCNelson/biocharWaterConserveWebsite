@@ -11,13 +11,30 @@ import { getDropdownValue } from "./ui_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 /**
+ * @typedef {Window & {
+ *   labelNameMapping?: Record<string, any>,
+ *   gseasonPeriods?: Record<string, any>,
+ *   latestSummaryStats?: any,
+ *   __lastSummaryData?: any
+ * }} SummaryWindow
+ */
+
+/** @type {SummaryWindow} */
+const summaryWindow = /** @type {SummaryWindow} */ (window);
+
+/**
  * @param {string} str
  * @returns {string}
  */
 function capitalizeFirst(str) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
 }
+void capitalizeFirst;
 
+/**
+ * @param {string} variableKey
+ * @returns {boolean}
+ */
 function isTemperatureVariable(variableKey) {
   return String(variableKey || "").trim().toUpperCase() === "T";
 }
@@ -128,7 +145,7 @@ function getDepthDisplayLabel(unitSystem) {
  * @returns {string}
  */
 function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
-  const labelMap = window.labelNameMapping || {};
+  const labelMap = summaryWindow.labelNameMapping || {};
   let prettyVar = variable;
 
   try {
@@ -160,7 +177,7 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
   const firstVal = stats[keys[0]];
   if (!isPlainObject(firstVal)) return stats;
 
-  const labelMap = window.labelNameMapping || {};
+  const labelMap = summaryWindow.labelNameMapping || {};
   let prettyVar = variable;
 
   try {
@@ -170,6 +187,7 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
     throw e;
   }
 
+  /** @type {Record<string, string>} */
   const loggerMap = { T: "Top", M: "Mid", B: "Bottom" };
 
   /** @type {Record<string, any>} */
@@ -216,7 +234,7 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
  * @returns {string}
  */
 function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
-  const periods = window.gseasonPeriods || {};
+  const periods = summaryWindow.gseasonPeriods || {};
   const idBase = "gseasonAccordion";
 
   const seasonEntries = Object.entries(periods);
@@ -350,7 +368,7 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
       : `<p class="text-muted mb-0">No S3/S4 ratio summary available.</p>`;
 
     const title = (typeof formatGseasonLabel === "function")
-      ? formatGseasonLabel(code, spec, null)
+      ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
 
     const isFirst = idx === 0;
@@ -392,6 +410,10 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
   return html;
 }
 
+/**
+ * @param {string} [text=""]
+ * @returns {void}
+ */
 function showSummaryStatus(text = "") {
   const el = document.getElementById("summary-status");
   if (!el) return;
@@ -399,6 +421,9 @@ function showSummaryStatus(text = "") {
   if (typeof text === "string") el.textContent = text;
 }
 
+/**
+ * @returns {void}
+ */
 function hideSummaryStatus() {
   const el = document.getElementById("summary-status");
   if (!el) return;
@@ -406,6 +431,9 @@ function hideSummaryStatus() {
   el.style.display = "none";
 }
 
+/**
+ * @returns {Promise<void>}
+ */
 export async function updateSummaryStatistics() {
   console.log("📊 updateSummaryStatistics: Updating summary statistics...");
 
@@ -462,14 +490,14 @@ export async function updateSummaryStatistics() {
 
     console.log("✅ Received summary stats response:", data);
 
-    window.latestSummaryStats = {
+    summaryWindow.latestSummaryStats = {
       raw: data?.raw_statistics ?? null,
       ratio: data?.ratio_statistics ?? null,
       gseason: data?.gseason_stats ?? null,
       meta: { year, variable, strip, granularity, depth, unitSystem },
     };
 
-    window.__lastSummaryData = data;
+    summaryWindow.__lastSummaryData = data;
 
     const titleEl = document.getElementById("summary-title");
     if (titleEl) {
@@ -569,6 +597,9 @@ export async function updateSummaryStatistics() {
   }
 }
 
+/**
+ * @returns {void}
+ */
 export function initSummaryTab() {
   const btn = document.getElementById("update-summary");
   if (!btn) {
@@ -578,7 +609,7 @@ export function initSummaryTab() {
 
   btn.addEventListener("click", (e) => {
     e.preventDefault();
-    updateSummaryStatistics();
+    void updateSummaryStatistics();
   });
 
   const summaryTab = document.getElementById("summary-tab");
@@ -587,7 +618,7 @@ export function initSummaryTab() {
     summaryTab.addEventListener("shown.bs.tab", () => {
       if (container.dataset.autoloaded === "true") return;
       container.dataset.autoloaded = "true";
-      updateSummaryStatistics();
+      void updateSummaryStatistics();
     });
   }
 

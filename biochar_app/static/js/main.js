@@ -45,24 +45,60 @@ import {
 // 7) Custom-season setup
 import { initCustomGseason } from "./custom_gseason.js";
 
-// 8) Boot loader helper
-import { hideBootLoading } from "./ui_loading.js";
+/**
+ * @typedef {Window & {
+ *   downloadTraceData?: typeof downloadTraceData,
+ *   downloadPlot?: typeof downloadPlot,
+ *   downloadSummaryData?: typeof downloadSummaryData,
+ *   dropdownOptions?: Record<string, any>,
+ *   unitSystem?: string,
+ *   dateRanges?: Record<string, any>,
+ *   depthMapping?: Record<string, { us?: string, metric?: string }>,
+ *   CUSTOM_GSEASON_CONFIG?: any,
+ *   bootstrap?: {
+ *     Dropdown?: {
+ *       getOrCreateInstance: (el: Element) => { hide: () => void }
+ *     }
+ *   }
+ * }} MainWindow
+ */
+
+/** @type {MainWindow} */
+const mainWindow = /** @type {MainWindow} */ (window);
+
+/**
+ * Hide the initial boot/loading overlay if present.
+ * Kept local so main.js does not depend on a missing export.
+ *
+ * @returns {void}
+ */
+function hideBootLoading() {
+  const boot = document.getElementById("boot-loading");
+  if (boot) {
+    boot.style.display = "none";
+  }
+}
+
+/**
+ * @typedef {{
+ *   href?: string,
+ *   tabId?: string,
+ *   paneId?: string,
+ *   renderFn: () => void | Promise<void>,
+ *   label?: string
+ * }} WireTabRenderArgs
+ */
 
 // ----------------------------------------------------
 // Expose download helpers for inline onclick handlers
 // ----------------------------------------------------
-window.downloadTraceData = downloadTraceData;
-window.downloadPlot = downloadPlot;
-window.downloadSummaryData = downloadSummaryData;
+mainWindow.downloadTraceData = downloadTraceData;
+mainWindow.downloadPlot = downloadPlot;
+mainWindow.downloadSummaryData = downloadSummaryData;
 
 /**
- * @param {{
- *   href?: string,
- *   tabId?: string,
- *   paneId?: string,
- *   renderFn: Function,
- *   label?: string
- * }} args
+ * @param {WireTabRenderArgs} args
+ * @returns {void}
  */
 function wireTabRender({ href, tabId, paneId, renderFn, label }) {
   const tabLink =
@@ -94,14 +130,14 @@ function wireTabRender({ href, tabId, paneId, renderFn, label }) {
 
   tabLink.addEventListener("shown.bs.tab", () => {
     console.debug(`[wireTabRender] ${label || href || tabId} render triggered`);
-    renderFn();
+    void renderFn();
   });
 
   if (tabLink.classList.contains("active")) {
     console.debug(
       `[wireTabRender] ${label || href || tabId} already active — rendering`
     );
-    renderFn();
+    void renderFn();
   }
 }
 
@@ -118,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    window.dropdownOptions = options;
+    mainWindow.dropdownOptions = options;
 
     const defaults = options.defaults || {};
 
@@ -127,15 +163,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       throw new Error("unitSystem missing from API defaults");
     }
 
-    window.unitSystem = defaults.unitSystem;
-    console.log("✅ unitSystem initialized from backend:", window.unitSystem);
+    mainWindow.unitSystem = defaults.unitSystem;
+    console.log("✅ unitSystem initialized from backend:", mainWindow.unitSystem);
 
     populateAllDropdowns(options);
-    setupUnitToggleHandlers(window.unitSystem === "metric" ? "metric" : "us");
+    setupUnitToggleHandlers(mainWindow.unitSystem === "metric" ? "metric" : "us");
     initializeUpdateButtons();
 
     await waitForAllDropdowns(getAllDropdownIds());
-    await new Promise(requestAnimationFrame);
+    await new Promise(
+      /**
+       * @param {FrameRequestCallback} resolve
+       */
+      (resolve) => requestAnimationFrame(resolve)
+    );
 
     const DO_NOT_SEED = new Set(["startDate", "endDate", "dateRanges"]);
     for (const [key, value] of Object.entries(defaults)) {
@@ -167,20 +208,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     applyDateRangeFromDefaults(
       selectedYear,
       selectedGran,
-      window.dateRanges || {}
+      mainWindow.dateRanges || {}
     );
     wireMainDateRangeListeners();
 
-    updateDepthLabels(window.unitSystem);
+    updateDepthLabels(mainWindow.unitSystem || "us");
 
     initializeTraceOptionControls();
 
     debugGroup("🎛️ Dropdown defaults & mappings", () => {
       console.table(defaults);
 
-      if (window.depthMapping) {
+      if (mainWindow.depthMapping) {
         console.table(
-          Object.entries(window.depthMapping).map(([depth, map]) => ({
+          Object.entries(mainWindow.depthMapping).map(([depth, map]) => ({
             Depth: depth,
             US: map.us,
             Metric: map.metric,
@@ -188,8 +229,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         );
       }
 
-      if (window.dateRanges) {
-        console.log("🗓️ window.dateRanges keys:", Object.keys(window.dateRanges));
+      if (mainWindow.dateRanges) {
+        console.log("🗓️ window.dateRanges keys:", Object.keys(mainWindow.dateRanges));
       }
     });
 
@@ -264,8 +305,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const gseasonContent = document.getElementById("gseason-content");
-    if (gseasonContent && window.CUSTOM_GSEASON_CONFIG) {
-      initCustomGseason(window.CUSTOM_GSEASON_CONFIG);
+    if (gseasonContent && mainWindow.CUSTOM_GSEASON_CONFIG) {
+      initCustomGseason(mainWindow.CUSTOM_GSEASON_CONFIG);
     }
 
     initSummaryTab();
@@ -291,32 +332,33 @@ document.addEventListener("DOMContentLoaded", async () => {
       biomassRendererType: typeof renderBiomassFieldTables,
     });
 
-document.addEventListener("click", function (event) {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
+    document.addEventListener("click", function (event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
 
-  const link = target.closest(".tab-link");
-  if (!link) return;
+      const link = target.closest(".tab-link");
+      if (!link) return;
 
-  event.preventDefault();
+      event.preventDefault();
 
-  const tabId = link.getAttribute("data-tab");
-  if (!tabId) return;
+      const tabId = link.getAttribute("data-tab");
+      if (!tabId) return;
 
-  const tabButton = document.getElementById(tabId);
-  if (!(tabButton instanceof HTMLElement)) return;
+      const tabButton = document.getElementById(tabId);
+      if (!(tabButton instanceof HTMLElement)) return;
 
-  tabButton.click();
+      tabButton.click();
 
-  const dropdownMenu = tabButton.closest(".dropdown-menu");
-  if (dropdownMenu && window.bootstrap?.Dropdown) {
-    const toggle = dropdownMenu.previousElementSibling;
-    if (toggle instanceof Element) {
-      const dropdownInstance = window.bootstrap.Dropdown.getOrCreateInstance(toggle);
-      dropdownInstance.hide();
-    }
-  }
-});
+      const dropdownMenu = tabButton.closest(".dropdown-menu");
+      if (dropdownMenu && mainWindow.bootstrap?.Dropdown) {
+        const toggle = dropdownMenu.previousElementSibling;
+        if (toggle instanceof Element) {
+          const dropdownInstance = mainWindow.bootstrap.Dropdown.getOrCreateInstance(toggle);
+          dropdownInstance.hide();
+        }
+      }
+    });
+
     debugLog("✅ Application initialized.");
   } catch (err) {
     console.error("❌ Fatal error during app initialization:", err);

@@ -350,7 +350,7 @@ def common_legend_config(title: str) -> dict:
         bordercolor="rgba(0, 0, 0, 0.15)",
         borderwidth=1,
         orientation="v",
-        x=1.5,          # ⬅️ was 1.01
+        x=1.02,
         xanchor="left",
         y=1.0,
         yanchor="top",

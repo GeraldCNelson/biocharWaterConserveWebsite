@@ -396,6 +396,22 @@ export const glossarySections = [
   },
 ];
 
+/**
+ * @typedef {Window & {
+ *   bootstrap?: {
+ *     Tooltip?: {
+ *       getOrCreateInstance: (el: Element) => unknown
+ *     }
+ *   }
+ * }} GlossaryWindow
+ */
+
+/** @type {GlossaryWindow} */
+const glossaryWindow = /** @type {GlossaryWindow} */ (window);
+
+/**
+ * @returns {void}
+ */
 export function renderGlossary() {
   const container = document.getElementById("glossary-content");
   if (!container) {
@@ -451,7 +467,7 @@ export function renderGlossary() {
     `;
 
     const body = item.querySelector(".accordion-body");
-    if (body) {
+    if (body instanceof HTMLElement) {
       section.items.forEach((entry) => {
         const termBlock = document.createElement("div");
         termBlock.className = "mb-3 glossary-entry";
@@ -470,6 +486,9 @@ export function renderGlossary() {
   container.dataset.rendered = "true";
 }
 
+/**
+ * @returns {Record<string, string>}
+ */
 export function buildGlossaryLookup() {
   /** @type {Record<string, string>} */
   const lookup = {};
@@ -483,6 +502,10 @@ export function buildGlossaryLookup() {
   return lookup;
 }
 
+/**
+ * @param {ParentNode} [root=document]
+ * @returns {void}
+ */
 export function applyGlossaryTooltips(root = document) {
   const lookup = buildGlossaryLookup();
 
@@ -501,9 +524,10 @@ export function applyGlossaryTooltips(root = document) {
     node.setAttribute("data-bs-trigger", "hover focus");
   });
 
-  if (window.bootstrap?.Tooltip) {
+  const TooltipCtor = glossaryWindow.bootstrap?.Tooltip;
+  if (TooltipCtor) {
     root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
-      window.bootstrap.Tooltip.getOrCreateInstance(el);
+      TooltipCtor.getOrCreateInstance(el);
     });
   }
 }

@@ -39,14 +39,18 @@ export function initCustomGseason(cfg) {
     return () => periodsData;
   }
 
+  const yearSelectEl = yearSelect;
+  const addPeriodBtnEl = addPeriodBtn;
+  const containerEl = container;
+
   // 1) populate anchor-year dropdown
-  yearSelect.innerHTML = "";
+  yearSelectEl.innerHTML = "";
   years.forEach((y) => {
     const opt = document.createElement("option");
     opt.value = String(y);
     opt.textContent = String(y);
     if (y === defaultYear) opt.selected = true;
-    yearSelect.appendChild(opt);
+    yearSelectEl.appendChild(opt);
   });
 
   // 2) initialize periodsData from defaults
@@ -72,8 +76,8 @@ export function initCustomGseason(cfg) {
 
   // 3) render all period rows
   function renderPeriods() {
-    container.innerHTML = "";
-    const anchor = parseInt(yearSelect.value, 10);
+    containerEl.innerHTML = "";
+    const anchor = parseInt(yearSelectEl.value, 10);
 
     periodsData.forEach((p, idx) => {
       // if default, recompute on year change
@@ -127,7 +131,7 @@ export function initCustomGseason(cfg) {
           </div>
         </div>
       `;
-      container.appendChild(row);
+      containerEl.appendChild(row);
 
       const removeBtn = /** @type {HTMLButtonElement | null} */ (
         row.querySelector(".remove-period")
@@ -174,7 +178,7 @@ export function initCustomGseason(cfg) {
 
   // 4) “+ Add Period” button
   addPeriodBtn.onclick = () => {
-    const anchor = parseInt(yearSelect.value, 10);
+    const anchor = parseInt(yearSelectEl.value, 10);
     const newIdx = periodsData.length + 1;
 
     periodsData.push({
@@ -189,7 +193,7 @@ export function initCustomGseason(cfg) {
   };
 
   // 5) re-render on anchor-year change
-  yearSelect.onchange = renderPeriods;
+  yearSelectEl.onchange = renderPeriods;
 
   // 6) initial bootstrap
   initPeriodsData();
