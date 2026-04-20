@@ -66,8 +66,8 @@ figcaption, caption {
 <h2 id="what-is-biochar">What is biochar?</h2>
 <p>Biochar is the solid material obtained from the thermochemical conversion of biomass in an oxygen-limited environment (<a href="https://biochar-international.org/">International Biochar Initiative</a>). The surface area inside the biochar pores is approximately 2,000 ft/gram (about half a basketball court!). Its water holding capacity is up to 7 times the weight of the biochar (Figure 1).</p>
 <figure>
-<img alt="Scanning electron microscope image of biochar" src="/static/images/biocharMicro1.jpg" style="width:3.32721in;height:2.5in"/>
-<figcaption>Figure 1. . Scanning electron microscope image of biochar</figcaption>
+<img src="/static/images/biocharMicro1.jpg" style="width:3.3809in;height:2.54483in"/>
+<figcaption>Figure 1. Scanning electron microscope image of biochar</figcaption>
 </figure>
 <h2 id="plant-biology-and-biochar-structure">Plant biology and biochar structure</h2>
 <p>For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.</p>
@@ -78,10 +78,10 @@ figcaption, caption {
 </colgroup>
 <thead>
 <tr>
-<th><p><img alt="Lignin chemical structure" src="/static/images/lignin_diagram.jpg" style="width:3.29167in;height:3.80989in"/></p>
-<p>. Lignin chemical structure</p></th>
-<th><p><img alt="Biochar chemical structure" src="/static/images/biochar_diagram.jpg" style="width:2.96261in;height:2.36111in"/></p>
-<p>. Biochar chemical structure</p></th>
+<th><p><img src="/static/images/lignin_diagram.jpg" style="width:3.28481in;height:3.80989in"/></p>
+<p>Figure 2. Lignin chemical structure</p></th>
+<th><p><img src="/static/images/biochar_diagram.jpg" style="width:2.96261in;height:2.36111in"/></p>
+<p>Figure 3. Biochar chemical structure</p></th>
 </tr>
 </thead>
 <tbody>
