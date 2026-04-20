@@ -26,7 +26,7 @@ void getDropdownValue;
  *   decimals?: number | null,
  *   rowHeader?: string,
  *   emptyMessage?: string,
- *   returnType?: "node" | "html"
+ *   returnType?: "node" | "outputs_html"
  * }} GenerateSummaryTableOptions
  */
 

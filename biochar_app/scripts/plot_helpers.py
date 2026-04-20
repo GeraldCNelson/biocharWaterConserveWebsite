@@ -69,6 +69,8 @@ from biochar_app.config.units import (
 from biochar_app.scripts.type_utils import NAN, UnitSystem
 logger = logging.getLogger(__name__)
 
+from biochar_app.scripts.data_loading import load_irrigation_data
+
 # ---------------------------------------------------------------------------
 # Strong typing for unit system (fixes "Expected Literal['us','metric'] got str")
 # ---------------------------------------------------------------------------
@@ -682,39 +684,28 @@ def _reconcile_irrigation_gallons(
 
 def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     """
-    Load irrigation events for a given strip + year from the cleaned
-    management CSV, not directly from the workbook.
+    Return irrigation events for one strip and year.
 
-    Returns DataFrame with columns:
-        start (Timestamp), end (Timestamp), volume_gal (float)
+    Output columns
+    --------------
+    - start
+    - end
+    - volume_gal
 
-    Notes
-    -----
-    - Irrigation is applied by strip pair:
-        S1/S2 -> west
-        S3/S4 -> east
-    - The cleaned CSV stores this as `strip_group` with values:
-        S1_S2, S3_S4
+    This is a thin wrapper around the canonical strip-level irrigation loader
+    in data_loading.py.
     """
-    from biochar_app.config.paths import IRRIGATION_CSV
-
-    group = "S1_S2" if strip in ("S1", "S2") else "S3_S4"
-    cache_key = (year, group)
+    cache_key = (year, strip)
 
     if cache_key in _IRRIGATION_CACHE:
         return _IRRIGATION_CACHE[cache_key].copy()
 
     empty = pd.DataFrame(columns=["start", "end", "volume_gal"])
 
-    if not IRRIGATION_CSV.exists():
-        logger.warning("Irrigation CSV not found: %s", IRRIGATION_CSV)
-        _IRRIGATION_CACHE[cache_key] = empty
-        return empty.copy()
-
     try:
-        df = pd.read_csv(IRRIGATION_CSV)
-    except Exception as e:
-        logger.warning("Failed to read irrigation CSV %s: %s", IRRIGATION_CSV, e)
+        df = load_irrigation_data()
+    except Exception as exc:
+        logger.warning("Failed to load irrigation data: %s", exc)
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
@@ -722,56 +713,45 @@ def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
-    required_cols = {"year", "strip_group", "start_timestamp", "end_timestamp", "gallons"}
-    missing = sorted(required_cols - set(df.columns))
-    if missing:
-        logger.warning(
-            "Irrigation CSV %s missing required columns: %s",
-            IRRIGATION_CSV,
-            missing,
-        )
+    events = df.loc[
+        (df["strip"] == strip) & (df["year"] == year),
+        ["start_timestamp", "end_timestamp", "gallons"],
+    ].copy()
+
+    if events.empty:
         _IRRIGATION_CACHE[cache_key] = empty
         return empty.copy()
 
-    # Filter to requested year + strip pair
-    df = df.copy()
-    # derive year from timestamp (more reliable than CSV column)
-    start_ts = pd.to_datetime(df["start_timestamp"], errors="coerce")
-    df = df.assign(_year=start_ts.dt.year)
-
-    df = df[
-        (df["_year"] == year)
-        & (df["strip_group"].astype(str).str.strip() == group)
-        ].copy()
-
-    if df.empty:
-        _IRRIGATION_CACHE[cache_key] = empty
-        return empty.copy()
-
-    start = pd.to_datetime(df["start_timestamp"], errors="coerce")
-    end = pd.to_datetime(df["end_timestamp"], errors="coerce")
-    gallons = pd.to_numeric(df["gallons"], errors="coerce")
-
-    events = pd.DataFrame(
-        {
-            "start": start,
-            "end": end,
-            "volume_gal": gallons,
+    events.rename(
+        columns={
+            "start_timestamp": "start",
+            "end_timestamp": "end",
+            "gallons": "volume_gal",
         },
-        index=df.index,
+        inplace=True,
     )
 
-    # Safety for overnight events, though extraction script should already handle this.
-    overnight = (events["end"] < events["start"]) & events["end"].notna() & events["start"].notna()
-    if bool(overnight.any()):
-        events.loc[overnight, "end"] = events.loc[overnight, "end"] + pd.Timedelta(days=1)
+    events["start"] = pd.to_datetime(events["start"], errors="coerce")
+    events["end"] = pd.to_datetime(events["end"], errors="coerce")
+    events["volume_gal"] = pd.to_numeric(events["volume_gal"], errors="coerce")
 
-    events = events[
+    events = events.loc[
         events["start"].notna()
         & events["end"].notna()
         & events["volume_gal"].notna()
         & (events["volume_gal"] > 0)
     ].copy()
+
+    # Safety for overnight events
+    overnight = (
+        (events["end"] < events["start"])
+        & events["end"].notna()
+        & events["start"].notna()
+    )
+    if bool(overnight.any()):
+        events.loc[overnight, "end"] = (
+            events.loc[overnight, "end"] + pd.Timedelta(days=1)
+        )
 
     events.sort_values("start", inplace=True)
     events.reset_index(drop=True, inplace=True)

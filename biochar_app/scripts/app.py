@@ -23,7 +23,7 @@ from biochar_app.scripts.config import (
     DEFAULT_GSEASON_PERIODS,
 )
 from biochar_app.config.paths import PARQUET_DIR
-from biochar_app.scripts.routes_utils import load_logger_year as _orig_load_logger_year
+from biochar_app.scripts.data_loading import load_logger_data as _orig_load_logger_data
 from biochar_app.scripts.routes import main_router, api_router
 from biochar_app.scripts.date_ranges import build_date_ranges
 from biochar_app.scripts import state
@@ -38,14 +38,14 @@ _cache: dict[tuple[int, str], pd.DataFrame] = {}  # (year, granularity) -> df
 
 # ============================= Caching hook ============================= #
 
-def _cached_load_logger_year(year: int, granularity: str) -> pd.DataFrame:
+def _cached_load_logger_data(year: int, granularity: str) -> pd.DataFrame:
     """
     Thin wrapper around routes_utils.load_logger_year to cache (year, granularity)
     in memory so all routes benefit.
     """
     key = (int(year), str(granularity))
     if key not in _cache:
-        df = _orig_load_logger_year(int(year), str(granularity))
+        df = _orig_load_logger_data(int(year), str(granularity))
         _cache[key] = df
         logger.info("📥 Cached slice %s×%s (rows=%d)", key[0], key[1], len(df))
     return _cache[key]
@@ -113,7 +113,7 @@ if not has_any_parquet:
 
 # 5) Monkey-patch loader so all routes use caching “for free”
 import biochar_app.scripts.routes_utils as _ru
-_ru.load_logger_year = _cached_load_logger_year  # type: ignore[attr-defined]
+_ru.load_logger_year = _cached_load_logger_data  # type: ignore[attr-defined]
 
 
 # 6) Build DATE_RANGES once at import time
@@ -149,7 +149,7 @@ logger.info("✅ Date range preload complete")
 
 # 7) Preload only the default slice at boot
 try:
-    df0 = _cached_load_logger_year(DEFAULT_YEAR, DEFAULT_GRANULARITY)
+    df0 = _cached_load_logger_data(DEFAULT_YEAR, DEFAULT_GRANULARITY)
     logger.info(
         "✅ Preloaded default slice (%s, %s) rows=%d",
         DEFAULT_YEAR,

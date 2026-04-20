@@ -33,9 +33,11 @@ from biochar_app.scripts.bulk_download_utils import build_manifest, build_zip_fo
 
 from biochar_app.scripts.routes_utils import (
     load_gseason_df,
-    load_logger_year,
     periods_to_list_of_dicts,
 )
+
+from biochar_app.scripts.data_loading import load_logger_data
+
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
     get_flat_gseason_summary,
@@ -92,7 +94,7 @@ from biochar_app.config.paths import (
     WARD_PDF_DIR,
     WEATHER_DOWNLOADS_DIR,
 )
-from biochar_app.scripts.markdown_config import build_markdown_mapping
+from biochar_app.markdown.tools.markdown_config import build_markdown_mapping
 
 from types import SimpleNamespace
 
@@ -625,8 +627,8 @@ async def api_plot_raw(req: PlotRequest):
         return JSONResponse(fig)
 
     t0 = perf_counter()
-    df = load_logger_year(year, gran)
-    logger.info("⏱ load_logger_year(%s) %.3fs", gran, perf_counter() - t0)
+    df = load_logger_data(year, gran)
+    logger.info("⏱ load_logger_data(%s) %.3fs", gran, perf_counter() - t0)
 
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
@@ -706,7 +708,7 @@ async def api_plot_ratio(req: PlotRequest):
         )
         return JSONResponse(fig)
 
-    df = load_logger_year(year, gran)
+    df = load_logger_data(year, gran)
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
@@ -793,7 +795,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     df_base = _LOADED_LOGGER_CACHE.get(cache_key)
     if df_base is None:
-        df_base = load_logger_year(year, source_granularity)
+        df_base = load_logger_data(year, source_granularity)
         if df_base is not None and not getattr(df_base, "empty", True):
             if "timestamp" in df_base.columns:
                 df_base = df_base.copy()
