@@ -50,7 +50,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
@@ -192,7 +192,7 @@ def suggest_matches(
 
 
 def build_anchor_records(
-    lab_references: Dict[str, object],
+    lab_references: Mapping[str, object],
     only_page: Optional[str] = None,
 ) -> Tuple[List[AnchorRecord], List[Tuple[str, int, str]]]:
     """

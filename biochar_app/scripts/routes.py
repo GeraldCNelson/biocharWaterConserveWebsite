@@ -993,7 +993,7 @@ async def api_get_nir_table():
 # ---------------------------------------------------------------------------
 @main_router.get("/markdown/{filename}")
 async def serve_markdown(filename: str):
-    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown")
+    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown", "outputs_md")
     fullpath = os.path.abspath(os.path.join(md_dir, filename))
 
     if not os.path.exists(fullpath):

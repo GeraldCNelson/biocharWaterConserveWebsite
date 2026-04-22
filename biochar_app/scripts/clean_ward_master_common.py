@@ -43,12 +43,15 @@ supply:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Optional, Mapping, Sequence
+from typing import Iterable, Optional, Mapping, Sequence, TypeAlias
 
 import json
 import re
 
 import pandas as pd
+
+
+ScalarValue: TypeAlias = str | int | float | None
 
 
 # ---------------------------------------------------------------------
@@ -221,10 +224,12 @@ def parse_to_iso_date(value: object) -> Optional[str]:
     if not s or s.upper() in COMMON_EMPTY_STRINGS:
         return None
 
-    ts = pd.to_datetime(value, errors="coerce")
+    ts = pd.to_datetime(s, errors="coerce")
     if pd.isna(ts):
         return None
-    return ts.date().isoformat()
+
+    iso_date: str = ts.date().isoformat()
+    return iso_date
 
 
 def normalize_date_columns(
@@ -254,7 +259,11 @@ def normalize_date_columns(
 # ---------------------------------------------------------------------
 # Special Ward value normalization / numeric coercion
 # ---------------------------------------------------------------------
-def normalize_special_ward_value(value: object, *, below_detection_to_zero: bool = True) -> object:
+def normalize_special_ward_value(
+    value: ScalarValue,
+    *,
+    below_detection_to_zero: bool = True,
+) -> ScalarValue:
     """
     Normalize special strings used in Ward/Lobato files.
 
@@ -291,15 +300,17 @@ def normalize_special_ward_values(
     out = df.copy()
     exclude = {str(c) for c in exclude_cols}
 
+    def _normalize_cell(x: ScalarValue) -> ScalarValue:
+        return normalize_special_ward_value(
+            x,
+            below_detection_to_zero=below_detection_to_zero,
+        )
+
     for c in out.columns:
         if c in exclude:
             continue
-        out[c] = out[c].apply(
-            lambda x: normalize_special_ward_value(
-                x,
-                below_detection_to_zero=below_detection_to_zero,
-            )
-        )
+        out[c] = out[c].map(_normalize_cell)
+
     return out
 
 
@@ -432,6 +443,7 @@ def drop_admin_columns(
     ]
     return df.drop(columns=to_drop, errors="ignore")
 
+
 # ---------------------------------------------------------------------
 # Validation / reporting helpers
 # ---------------------------------------------------------------------
@@ -457,13 +469,14 @@ def print_date_summary(df: pd.DataFrame, *, date_col: str = "date_rept") -> None
         return
 
     print(f"\nUnique dates in '{date_col}':")
-    for v in sorted(s.unique().tolist()):
-        print(f"  {v}")
+    unique_dates: list[str] = [str(v) for v in sorted(s.unique().tolist())]
+    for unique_date in unique_dates:
+        print(f"  {unique_date}")
 
     print(f"\nCounts by '{date_col}':")
     counts = s.value_counts().sort_index()
-    for k, v in counts.items():
-        print(f"  {k}: {int(v)}")
+    for count_key, count_value in counts.items():
+        print(f"  {str(count_key)}: {int(count_value)}")
 
 
 def report_missing_columns(df: pd.DataFrame, expected: Iterable[str]) -> list[str]:
@@ -633,6 +646,7 @@ def clean_compiled_workbook(
     df = ensure_compatibility_columns(df)
 
     return df, header_map
+
 
 # ---------------------------------------------------------------------
 # Higher-level cleaning helpers

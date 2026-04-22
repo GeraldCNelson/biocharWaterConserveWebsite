@@ -133,10 +133,15 @@ def _rename_nir_date(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _canonicalize_strip(value: object) -> str | None:
-    if value is None or pd.isna(value):
+    if value is None:
+        return None
+    if isinstance(value, float) and pd.isna(value):
         return None
 
     s = str(value).strip().upper()
+    if not s:
+        return None
+
     s = s.replace("_", "").replace("-", "").replace(" ", "")
 
     match = re.search(r"S([1-4])", s)
@@ -151,7 +156,7 @@ def _canonicalize_strip(value: object) -> str | None:
 
 
 def _find_sheet_name(xls: pd.ExcelFile, patterns: tuple[str, ...]) -> str:
-    lower_map = {name.lower(): name for name in xls.sheet_names}
+    lower_map = {str(name).lower(): str(name) for name in xls.sheet_names}
 
     for lower_name, orig_name in lower_map.items():
         if all(p.lower() in lower_name for p in patterns):

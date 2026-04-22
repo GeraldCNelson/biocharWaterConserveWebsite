@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-biochar_app/scripts/convert_word_to_html.py
+convert_word_to_html.py
 
 Convert Word (.docx) files in biochar_app/markdown/docx/ to HTML (via pandoc),
 then post-process:
 - inject CSS
 - rewrite image src paths based on markdown_config.docx_markdown_config
 - normalize figure/table captions with numbering
-- write output HTML files into biochar_app/markdown/
+- write output HTML content into biochar_app/markdown/outputs_md/
 
 Notes:
-- This script writes HTML content (not Markdown) into .md files in some cases,
-  matching your current workflow where serve_markdown() serves converted HTML.
-- CRITICAL: Uses biochar_app.markdown.tools.markdown_config as the single source of truth.
+- This script writes HTML content (not Markdown) into .md files, matching the
+  current workflow where serve_markdown() serves converted HTML.
+- CRITICAL: Uses biochar_app.markdown.tools.markdown_config as the single
+  source of truth.
 """
 
 from __future__ import annotations
@@ -34,17 +35,31 @@ from biochar_app.markdown.tools.markdown_config import (
 
 
 # ---------------------------------------------------------------------
-# Paths (match your repo layout)
+# Paths (robust to script location inside biochar_app)
 # ---------------------------------------------------------------------
 
 HERE = Path(__file__).resolve()
-BIOCHAR_APP = HERE.parents[1]  # .../biochar_app
+
+try:
+    BIOCHAR_APP = next(p for p in [HERE.parent, *HERE.parents] if p.name == "biochar_app")
+except StopIteration as exc:
+    raise RuntimeError(
+        f"Could not locate 'biochar_app' in parents of: {HERE}"
+    ) from exc
+
 MARKDOWN_DIR = BIOCHAR_APP / "markdown"
 DOCX_DIR = MARKDOWN_DIR / "docx"
-CONVERTED_HTML_DIR = MARKDOWN_DIR / "converted_html"
+OUTPUTS_MD_DIR = MARKDOWN_DIR / "outputs_md"
+OUTPUTS_HTML_DIR = MARKDOWN_DIR / "outputs_html"
 
-DOCX_DIR.mkdir(parents=True, exist_ok=True)
-CONVERTED_HTML_DIR.mkdir(parents=True, exist_ok=True)
+for d in [DOCX_DIR, OUTPUTS_MD_DIR, OUTPUTS_HTML_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
+print(f"BIOCHAR_APP: {BIOCHAR_APP}")
+print(f"MARKDOWN_DIR: {MARKDOWN_DIR}")
+print(f"DOCX_DIR: {DOCX_DIR}")
+print(f"OUTPUTS_MD_DIR: {OUTPUTS_MD_DIR}")
+print(f"OUTPUTS_HTML_DIR: {OUTPUTS_HTML_DIR}")
 
 
 # ---------------------------------------------------------------------
@@ -319,8 +334,6 @@ def _normalize_paragraph_image_captions(
     Pattern handled:
     - a paragraph/tag containing only an image
     - followed by a paragraph with caption-like text
-
-    This is what is needed for your Figure 2 / Figure 3 case.
     """
     figure_count = starting_figure_count
 
@@ -413,7 +426,7 @@ def main() -> int:
     for docx_path in docx_files:
         filename = docx_path.name
         output_name = _output_name_for_docx(filename)
-        out_path = MARKDOWN_DIR / output_name
+        out_path = OUTPUTS_MD_DIR / output_name
 
         print(f"\n📄 Converting {filename} → {output_name}")
 

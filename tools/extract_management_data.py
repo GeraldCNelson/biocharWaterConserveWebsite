@@ -1,24 +1,37 @@
 #!/usr/bin/env python3
+
 """
+
 extract_management_data.py
 
 Extract clean irrigation and fertilizer CSVs from the raw
+
 biochar-data-master.xlsx workbook.
 
 Outputs
+
 -------
+
 - IRRIGATION_CSV
+
 - FERTILIZER_CSV
 
 Design
+
 ------
+
 - Source workbook remains the raw authority.
+
 - This script extracts only the rows/columns needed by the app.
+
 - Output CSVs become the stable app-facing datasets.
 
 Run
+
 ---
-python -m biochar_app.scripts.extract_management_data
+
+python tools/extract_management_data.py
+
 """
 
 from __future__ import annotations
@@ -126,10 +139,15 @@ def extract_year_from_sheet_name(sheet_name: str) -> int | None:
 
 
 def normalize_strip_group(value: object) -> str | None:
-    if value is None or pd.isna(value):
+    if value is None:
+        return None
+    if isinstance(value, float) and pd.isna(value):
         return None
 
     s = str(value).strip().upper()
+    if not s:
+        return None
+
     compact = s.replace(" ", "").replace("_", "").replace("-", "")
 
     if compact in {"1&2", "1AND2", "S1&S2", "S1ANDS2"}:
@@ -141,10 +159,15 @@ def normalize_strip_group(value: object) -> str | None:
 
 
 def normalize_strip(value: object) -> str | None:
-    if value is None or pd.isna(value):
+    if value is None:
+        return None
+    if isinstance(value, float) and pd.isna(value):
         return None
 
     s = str(value).strip().upper()
+    if not s:
+        return None
+
     compact = s.replace(" ", "").replace("_", "").replace("-", "")
 
     if "STRIP1" in compact or compact == "S1":

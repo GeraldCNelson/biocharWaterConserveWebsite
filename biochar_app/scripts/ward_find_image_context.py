@@ -62,7 +62,7 @@ def find_nearest_block_index(img_tag: Tag, blocks: list[tuple[Tag, str]]) -> int
             return i
 
     # Walk upward from img to find a block ancestor
-    current = img_tag
+    current: Tag | None = img_tag
     while current is not None:
         for i, (block, _) in enumerate(blocks):
             if block is current:

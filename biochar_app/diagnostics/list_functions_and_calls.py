@@ -2,7 +2,7 @@ import os
 import re
 
 # Folder to scan (you can change this to your project root)
-PROJECT_DIR = "."
+PROJECT_DIR = "../scripts"
 
 # Regex patterns
 function_def_pattern = re.compile(r'^\s*def\s+(\w+)\s*\(')

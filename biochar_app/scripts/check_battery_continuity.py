@@ -49,10 +49,16 @@ def _battery_cols(df: pd.DataFrame) -> list[str]:
 def _continuity(ts: pd.Series) -> tuple[bool, pd.Timedelta | None]:
     if len(ts) < 2:
         return False, None
+
     deltas = ts.diff().dropna()
     if deltas.empty:
         return False, None
-    max_gap = deltas.max()
+
+    max_gap_obj = deltas.max()
+    if not isinstance(max_gap_obj, pd.Timedelta):
+        return False, None
+
+    max_gap = max_gap_obj
     return bool(max_gap <= MAX_GAP), max_gap
 
 

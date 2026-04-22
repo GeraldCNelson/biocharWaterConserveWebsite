@@ -166,26 +166,26 @@ docx_markdown_config: DocxMarkdownConfig = {
         "output_md": "intro.md",
         "images": [
             {
-                "file": "biocharMicro1.jpg",
+                "file": "biocharMicro1.webp",
                 "caption": "Figure 1. Scanning electron microscope image of biochar",
                 "alt": "Scanning electron microscope image of biochar",
                 "title": "Scanning electron microscope image of biochar",
             },
             {
-                "file": "lignin_diagram.jpg",
+                "file": "lignin_diagram.webp",
                 "caption": "Figure 2. Lignin chemical structure",
                 "alt": "Diagram showing lignin structure",
                 "title": "Diagram showing lignin structure",
             },
             {
-                "file": "biochar_diagram.jpg",
+                "file": "biochar_diagram.webp",
                 "caption": "Figure 3. Biochar chemical structure",
                 "alt": "Diagram showing biochar chemical structure",
                 "title": "Diagram showing biochar chemical structure",
             },
         ],
         "side_by_side": [
-            ["lignin_diagram.jpg", "biochar_diagram.jpg"],
+            ["lignin_diagram.webp", "biochar_diagram.webp"],
         ],
     },
     "experimentDesign.docx": {
@@ -198,7 +198,7 @@ docx_markdown_config: DocxMarkdownConfig = {
                 "title": "Layout of biochar plots",
             },
             {
-                "file": "biochar_closeup.jpg",
+                "file": "biochar_closeup.webp",
                 "caption": "Figure 2: Closeup image of biochar material",
                 "alt": "Closeup of biochar material",
                 "title": "Closeup of biochar material",
