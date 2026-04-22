@@ -234,7 +234,11 @@ def _extract_years_from_dataframe(df: pd.DataFrame) -> list[int]:
 
     for col in candidate_date_cols:
         if col in df.columns:
-            dt = pd.to_datetime(df[col], errors="coerce")
+            dt = pd.to_datetime(
+                df[col],
+                format="ISO8601",
+                errors="coerce"
+            )
             years = sorted(int(y) for y in dt.dt.year.dropna().astype(int).unique())
             if years:
                 return years
