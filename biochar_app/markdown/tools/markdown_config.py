@@ -192,7 +192,7 @@ docx_markdown_config: DocxMarkdownConfig = {
         "output_md": "experimentDesign.md",
         "images": [
             {
-                "file": "biocharExperimentalDesign.png",
+                "file": "biocharExperimentalDesign.webp",
                 "caption": "Figure 1: Field experimental layout",
                 "alt": "Layout of biochar plots",
                 "title": "Layout of biochar plots",
