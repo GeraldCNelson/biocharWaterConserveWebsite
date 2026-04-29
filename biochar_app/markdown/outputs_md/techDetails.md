@@ -42,21 +42,9 @@ figcaption, caption {
   color: #1f3f73;
   text-decoration: underline;
 }</style></head><h1 id="the-biochar-field-data-collection-process">The biochar field data collection process</h1>
-<figure>
-<img src="media/image1.png" style="width:0.625in;height:0.60972in"/>
-<figcaption>Figure 1. CR206X</figcaption>
-</figure>
 <p>Data on soil volumetric water content (VWC), bulk electrical conductivity (EC), and temperature (°C) are collected from 12 Campbell Scientific CR206X data loggers, arranged 3 each in each of the 4 strips. Each data logger collects data from 3 Campbell Scientific CS650 Water Content Reflectometers, located at 6, 12, and 18 inches below the surface of the field.</p>
-<figure>
-<img src="media/image2.png" style="width:0.80347in;height:0.51042in"/>
-<figcaption>Figure 2. CR800</figcaption>
-</figure>
-<p>The data flow from sensor to software has three steps – hard wired soil sensor to data logger, RF signal to a base datalogger, and finally from the datalogger to the final download site through a Starlink system, using an IPv6 56 bit prefix assigned by Starlink to the base datalogger, an ASUSRT-AX88U Pro Wi-Fi router. The router then assigns a 64 bit IPv6 address to the base data station, a CR800 data logger configured as a router.</p>
+<p>The data flow from sensor to software has three steps – hard wired soil sensor to data logger, RF signal to a base datalogger, and finally from the datalogger to the final download site through a Starlink system, using an IPv6 56-bit prefix assigned by Starlink to the base datalogger, an ASUSRT-AX88U Pro Wi-Fi router. The router then assigns a 64-bit IPv6 address to the base data station, a CR800 data logger configured as a router.</p>
 <h2 id="collecting-the-data">Collecting the data</h2>
-<figure>
-<img src="media/image3.png" style="width:0.39444in;height:2.10069in"/>
-<figcaption>Figure 3. CR650</figcaption>
-</figure>
 <p>The CS650s are configured as a water content reflectometer, with the two parallel rods forming an open-ended transmission line. A differential oscillator circuit is connected to the rods, with an oscillator state change triggered by the return of a reflected signal from one of the rods. The two-way travel time of the electromagnetic waves that are induced by the oscillator on the rod varies with changing dielectric permittivity. Water is the main contributor to the bulk dielectric permittivity of the soil or porous media, so the travel time of the reflected wave increases with increasing water content and decreases with decreasing water content, hence the name water content reflectometer. The average travel time of the reflected wave multiplied by a scaling factor of 128 is called the period average. Period average is reported in microseconds and is the raw output of a water content reflectometer.</p>
 <p>Electrical conductivity is determined by exciting the rods with a known non-polarizing waveform and measuring the signal attenuation. Signal attenuation is reported as a dimensionless voltage ratio, which is the ratio of the excitation voltage to the measured voltage along the sensor rods when they are excited at a fixed 100 kHz frequency. Voltage ratio ranges from 1 in nonconductive media to about 17 in highly conductive media. Values greater than 17 are highly unstable and indicate that the soil conditions are outside of the specified operating range of the sensor.</p>
 <p>Temperature is measured with a thermistor in contact with one of the rods.</p>

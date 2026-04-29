@@ -29,7 +29,6 @@ ENV/
 ############################
 # OS junk
 ############################
-.DS_Store
 Thumbs.db
 
 ############################
@@ -83,6 +82,17 @@ biochar_app/data-processed/**
 !biochar_app/data-processed/management/**
 !biochar_app/data-processed/ward-html/
 !biochar_app/data-processed/ward-html/**
+
+############################
+# Management: exclude large/generated artifacts
+############################
+biochar_app/data-processed/management/**/backup/
+biochar_app/data-processed/management/**/backups/
+biochar_app/data-processed/management/**/*.sqlite
+biochar_app/data-processed/management/**/*.jpg
+biochar_app/data-processed/management/**/*.jpeg
+biochar_app/data-processed/management/**/*.png
+biochar_app/data-processed/management/**/*.mp4
 
 ############################
 # Processed data we still ignore
