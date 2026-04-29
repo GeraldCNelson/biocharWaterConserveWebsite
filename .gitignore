@@ -101,6 +101,17 @@ biochar_app/data-processed/parquet/
 biochar_app/data-processed/downloads/
 
 ############################
+
+# Generated diagnostics/results
+
+############################
+biochar_app/diagnostics/plots/
+biochar_app/diagnostics/reports/
+biochar_app/results/
+biochar_app/special_plots/
+biochar_app/pakbus/pakbus_data/
+
+############################
 # Archives
 ############################
 archive/
@@ -118,6 +129,8 @@ package-lock.json
 *.xlsx
 *.docx
 *.pdf
+~$*.xlsx
+~$*.docx
 
 ############################
 # Compressed bundles / scratch exports
