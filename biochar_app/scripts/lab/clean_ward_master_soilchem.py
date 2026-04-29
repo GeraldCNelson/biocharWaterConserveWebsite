@@ -35,7 +35,7 @@ from typing import Optional
 import pandas as pd
 
 from biochar_app.config.paths import LAB_TESTS_RAW_DIR, SOIL_CHEM_PROCESSED_DIR
-from biochar_app.scripts.clean_ward_master_common import (
+from biochar_app.scripts.lab.clean_ward_master_common import (
     clean_compiled_workbook,
     standardize_ward_dataframe,
     validate_and_report,

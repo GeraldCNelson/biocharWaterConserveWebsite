@@ -50,7 +50,7 @@ from biochar_app.config.paths import (
     SOIL_BIO_RAW_DIR,
     WARD_MASTER_SOILBIO_CSV,
 )
-from biochar_app.scripts.clean_ward_master_common import (
+from biochar_app.scripts.lab.clean_ward_master_common import (
     clean_compiled_workbook,
     standardize_ward_dataframe,
     validate_and_report,

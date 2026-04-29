@@ -44,11 +44,12 @@ figcaption, caption {
 }</style></head><h1 id="acknowledgements">Acknowledgements</h1>
 <p>The Fruita Biochar Research Project had its roots in an experiment performed at the local farm of principal investigator Michael Lobato with input from Citizens for Clean Air, Grand Junction (CCA) member, Gerald C. Nelson.</p>
 <p>CCA was interested in the potential value of biochar as a productive use of otherwise wasted (and burned) plant material. Lobato and Nelson approached Colorado State University (CSU) Professor Perry Cabot, based at the Fruita branch of the Western Colorado Research Center of the CSU College of Agriculture, about the possibility of using station resources to explore further the potential of biochar to improve agricultural productivity.</p>
-<p>CSU provided access to an unused research pasture strip and surplus data gathering equipment (data loggers and solar panels) and important technical expertise in their use. Lobato, Nelson, and then Colorado Mesa University (CMU) student Holly Stanley joined the project in its initial preparation activities in the spring of 2023. All three have remained active on the project.</p>
+<p>CSU provided access to an unused research pasture strip and surplus data gathering equipment (data loggers and solar panels) and important technical expertise in their use. Lobato, Nelson, and Holly Stanley , who began as an intern from Colorado Mesa University and after graduation continued her work with the team as a Research Associate with Matrix Resource Technologies. All three have remained active on the project.</p>
 <h2 id="financial-and-other-support">Financial and other support</h2>
 <p>The project thanks the following organizations and individuals for financial, technical and other support</p>
 <ul>
 <li><p>Colorado State University, College of Agriculture</p></li>
+<li><p>Western Colorado Community Foundation/Dave and Mary Wood Fund</p></li>
 <li><p>Citizens for Clean Air, Grand Junction</p></li>
 <li><p>Ward Labs, Kearney, Nebraska</p></li>
 <li><p>CSU’s Western Colorado Research Center Research Associates James Fry and Bill Szasz as well as Field Technician Charlie Richards</p></li>

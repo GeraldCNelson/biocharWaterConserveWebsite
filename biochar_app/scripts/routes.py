@@ -26,7 +26,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from biochar_app.scripts.bulk_downloads import bulk_router
-from biochar_app.scripts.biomass_field_tables import get_biomass_field_table_payload
+from biochar_app.scripts.lab.biomass_field_tables import get_biomass_field_table_payload
 
 from biochar_app.scripts.bulk_download_utils import default_bulk_registry
 from biochar_app.scripts.bulk_download_utils import build_manifest, build_zip_for_selection

@@ -54,7 +54,7 @@ from biochar_app.config.paths import (
     LAB_TESTS_RAW_DIR,
     HAY_TESTS_PROCESSED_DIR,
 )
-from biochar_app.scripts.clean_ward_master_common import (
+from biochar_app.scripts.lab.clean_ward_master_common import (
     read_ward_two_header_csv,
     standardize_ward_dataframe,
     validate_and_report,
