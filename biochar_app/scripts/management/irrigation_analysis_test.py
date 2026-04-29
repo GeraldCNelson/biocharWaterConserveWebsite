@@ -13,11 +13,10 @@ from biochar_app.scripts.data_loading import (
     prepare_irrigation_input,
 )
 
-from biochar_app.scripts.irrigation_analysis import (
+from biochar_app.scripts.management.irrigation_analysis import (
     analyze_irrigation_events,
     build_event_debug_table,
     summarize_targets_and_runtimes,
-    build_bottom_control_sensor_map,
     analyze_bottom_logger_controls,
     build_variable_definitions_table,
     build_variable_definitions_with_sources,

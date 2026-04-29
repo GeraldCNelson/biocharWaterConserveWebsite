@@ -468,23 +468,16 @@ def bulk_download_manifest() -> dict[str, Any]:
         if not csv_path.exists():
             continue
 
-        try:
-            df = pd.read_csv(csv_path)
-            years_in_df = _extract_years_from_dataframe(df)
-        except Exception:
-            years_in_df = []
-        year: Optional[int] = None
-        for year in years_in_df:
-            items.append(
-                {
-                    "key": f"{dataset_key}_{year}",
-                    "dataset": dataset_key,
-                    "year": year,
-                    "resolution": None,
-                    "label": f"{label_base} ({year})",
-                    "file_path": str(csv_path),
-                }
-            )
+        items.append(
+            {
+                "key": f"{dataset_key}_all",
+                "dataset": dataset_key,
+                "year": None,
+                "resolution": None,
+                "label": f"{label_base} (all years)",
+                "file_path": str(csv_path),
+            }
+        )
 
     if IRRIGATION_WORKBOOK_PATH.exists():
         try:
@@ -647,10 +640,6 @@ async def bulk_download(payload: dict[str, Any]):
         files.append(("README.txt", readme.encode("utf-8")))
 
     elif dataset in MANAGEMENT_DATASETS:
-        year = _safe_int(parts[1]) if len(parts) >= 2 else None
-        if year is None:
-            raise HTTPException(status_code=400, detail=f"Invalid year in key: {key}")
-
         csv_path, dataset_label, filename_pattern = MANAGEMENT_DATASETS[dataset]
 
         if not csv_path.exists():
@@ -661,20 +650,22 @@ async def bulk_download(payload: dict[str, Any]):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to read management CSV {csv_path}: {e}")
 
-        filtered_df = _filter_management_df_to_year(management_df, dataset, year)
+        csv_bytes = management_df.to_csv(index=False).encode("utf-8")
 
-        if filtered_df.empty:
-            raise HTTPException(status_code=404, detail=f"No {dataset} records found for year {year}")
+        filename = (
+            filename_pattern.format(year="all")
+            if "{year}" in filename_pattern
+            else filename_pattern
+        )
 
-        csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
-        files.append((filename_pattern.format(year=year), csv_bytes))
+        files.append((filename, csv_bytes))
 
         readme = _readme_text(
             dataset_label,
-            year,
             None,
-            notes=f"Source cleaned management CSV: {csv_path}",
-            df=filtered_df,
+            None,
+            notes=f"Source cleaned all-years management CSV: {csv_path}",
+            df=management_df,
         )
         files.append(("README.txt", readme.encode("utf-8")))
 

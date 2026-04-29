@@ -87,8 +87,6 @@ from biochar_app.config.units import (
 
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
-    PARQUET_DIR,
-    DOWNLOADS_BASE_DIR,
     LOGGER_DOWNLOADS_DIR,
     WARD_HTML_DIR,
     WARD_PDF_DIR,
@@ -1118,3 +1116,10 @@ async def ward_nirs_report():
 async def ward_soil_sha_report():
     file_path = get_latest_ward_html("ward_soil_sha_report_*.html")
     return file_path.read_text(encoding="utf-8")
+
+@main_router.get("/management/irrigation-entry")
+async def irrigation_entry_page(request: Request):
+    return templates.TemplateResponse(
+        "irrigation_entry.html",
+        {"request": request},
+    )

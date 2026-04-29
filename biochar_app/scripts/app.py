@@ -28,6 +28,8 @@ from biochar_app.scripts.routes import main_router, api_router
 from biochar_app.scripts.date_ranges import build_date_ranges
 from biochar_app.scripts import state
 
+from biochar_app.scripts.management.management_routes import management_router
+
 # ─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -70,6 +72,8 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # 2) Include routers
 app.include_router(main_router)
 app.include_router(api_router)
+
+app.include_router(management_router)
 
 # 3) SPA entrypoint via Jinja2
 templates = Jinja2Templates(directory=str(templates_dir))

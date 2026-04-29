@@ -248,3 +248,44 @@ def cylinder_volume_m3(length_cm: float = SWC_CYLINDER_LENGTH_CM,
 
 LOGGER_TIMEZONE = "America/Denver"  # semantic only, do NOT apply tzinfo
 DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
+
+# ---------------------------------------------------------------------
+# Field geometry (source of truth)
+# ---------------------------------------------------------------------
+
+ACRE_TO_FT2 = 43560
+
+FIELD_GEOMETRY = {
+    "S1": {"width_ft": 47.0, "length_ft": 370.0},
+    "S2": {"width_ft": 47.0, "length_ft": 370.0},
+    "S3": {"width_ft": 47.0, "length_ft": 370.0},
+    "S4": {"width_ft": 47.0, "length_ft": 370.0},
+}
+
+# ---------------------------------------------------------------------
+# Derived geometry (do NOT hardcode elsewhere)
+# ---------------------------------------------------------------------
+
+STRIP_AREA_FT2 = {
+    k: v["width_ft"] * v["length_ft"]
+    for k, v in FIELD_GEOMETRY.items()
+}
+
+STRIP_AREA_ACRES = {
+    k: area_ft2 / ACRE_TO_FT2
+    for k, area_ft2 in STRIP_AREA_FT2.items()
+}
+
+# Optional (very useful)
+STRIP_GROUP_AREA_ACRES = {
+    "S1_S2": STRIP_AREA_ACRES["S1"] + STRIP_AREA_ACRES["S2"],
+    "S3_S4": STRIP_AREA_ACRES["S3"] + STRIP_AREA_ACRES["S4"],
+}
+
+# --- Unit conversions ---
+
+ACRE_TO_FT2 = 43560.0          # square feet per acre
+INCH_TO_FT = 1.0 / 12.0        # feet per inch
+FT3_TO_GALLONS = 7.48052       # gallons per cubic foo
+
+GALLONS_PER_ACRE_INCH = ACRE_TO_FT2 * INCH_TO_FT * FT3_TO_GALLONS
