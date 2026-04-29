@@ -1,3 +1,0 @@
-leaf,table,frame_len,request_mode,n_hint,signed16_be@20,signed16_be@22,anchor_off,anchor_sec_le,anchor_iso,tcp_stream,frame_number,src_file,frame_hex
-S1T,1,27,,,,,,,,0,1,S1T_Table1.tsv,bda0016ffd10020ffd09b700000500022c7900000001000081f8bd
-S1T,1,31,last_n,297,-297,0,,,,0,4,S1T_Table1.tsv,bda0016ffd10020ffd09b800000600022c790000fed70000fedc000036c9bd
