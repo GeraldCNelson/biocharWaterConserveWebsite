@@ -1,0 +1,22 @@
+year,date,start_timestamp,end_timestamp,strip_group,location,gallons,notes
+2024,2024-04-19,2024-04-19 14:14:00,2024-04-19 21:33:00,S3_S4,east,109750,"Flow meter was restricted due to a pack rat nest, thus no data is available. All data estimated. Flushed pipes prior to irrigation and removed rat nests from both ends of gated pipes."
+2024,2024-04-20,2024-04-20 10:11:00,2024-04-20 17:54:00,S1_S2,west,125900,Repaired meter prior to watering.
+2024,2024-05-03,2024-05-03 08:37:00,2024-05-03 15:28:00,S3_S4,east,89200,Some HOBO sensors did not get submerged in water.
+2024,2024-05-11,2024-05-11 06:55:00,2024-05-11 16:18:00,S1_S2,west,133000,HOBO sensors accidentaly placed in Strips 3 & 4.
+2024,2024-05-17,2024-05-17 13:31:00,2024-05-17 19:09:00,S3_S4,east,95100,Did not use HOBOs. Seen I needed to water that very day.
+2024,2024-06-01,2024-06-01 08:29:00,2024-06-01 17:57:00,S3_S4,east,122900,Jerry placed hobos on Thursday.
+2024,2024-06-01,2024-06-01 18:05:00,2024-06-02 07:46:00,S1_S2,west,162500,Turned off morning of 6/2 @ 7:46am
+2024,2024-06-15,2024-06-15 07:29:00,2024-06-15 16:13:00,S3_S4,east,105000,HOBO sensors were used and collected.
+2024,2024-06-22,2024-06-22 08:00:00,2024-06-22 15:49:00,S1_S2,west,94200,HOBO sensors used and collected. Jerry placed and Michael collected.
+2024,2024-06-28,2024-06-28 08:19:00,2024-06-28 14:44:00,S3_S4,east,79300,HOBO sensors used and collected. Michael placed and collected.
+2024,2024-07-11,2024-07-11 10:01:00,2024-07-11 17:39:00,S3_S4,east,93100,"Jerry and I removed 6"" sensor from S4B on Friday afternoon. Will replace sensor on 7/13/24."
+2024,2024-07-20,2024-07-20 08:54:00,2024-07-20 17:43:00,S1_S2,west,111100,
+2024,2024-07-26,2024-07-26 19:02:00,2024-07-27 07:21:00,S3_S4,east,143700,Watered overnight.
+2024,2024-08-09,2024-08-09 08:45:00,2024-08-09 15:50:00,S3_S4,east,93800,
+2024,2024-08-10,2024-08-10 08:50:00,2024-08-10 20:38:00,S1_S2,west,169400,
+2024,2024-08-23,2024-08-23 09:32:00,2024-08-23 15:04:00,S3_S4,east,60300,
+2024,2024-09-06,2024-09-06 09:33:00,2024-09-06 16:29:00,S3_S4,east,97900,
+2024,2024-09-07,2024-09-07 08:23:00,2024-09-07 16:16:00,S1_S2,west,106000,
+2024,2024-09-20,2024-09-20 14:27:00,2024-09-20 17:52:00,S3_S4,east,32900,Had issues with linear which forced me to interupt watering session.
+2024,2024-10-04,2024-10-04 11:55:00,2024-10-04 18:02:00,S3_S4,east,94400,
+2024,2024-10-18,2024-10-18 09:34:00,2024-10-18 17:17:00,S3_S4,east,107100,"Performed surface runoff test with acclima sensors. Loggers did not log data, so no results."

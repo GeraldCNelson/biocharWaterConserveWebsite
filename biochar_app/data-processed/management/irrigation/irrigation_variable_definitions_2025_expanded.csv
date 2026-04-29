@@ -1,0 +1,33 @@
+variable_name,source_csv,definition,formula_or_rule
+event_id,irrigation_event_inspection_plot_log_2025.csv,,
+output_file,irrigation_event_inspection_plot_log_2025.csv,,
+sensor_col,irrigation_event_inspection_plot_log_2025.csv,Sensor column used for the grouped summary row.,Name of the logger variable analyzed for that row
+status,irrigation_event_inspection_plot_log_2025.csv,,
+strip,irrigation_event_inspection_plot_log_2025.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
+actual_runtime_hours,irrigation_runtimes_2025_all_depths.csv,Typical actual irrigation runtime in hours represented by the grouped event history.,Median of event_duration_hours within each group
+actual_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,Typical actual irrigation runtime in minutes represented by the grouped event history.,actual_runtime_hours * 60
+depth_inches,irrigation_runtimes_2025_all_depths.csv,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
+median_avg_flow_gph,irrigation_runtimes_2025_all_depths.csv,Median event-level average irrigation flow rate for the grouped events.,Median of avg_flow_gph within each group; avg_flow_gph = volume_gal / event_duration_hours
+median_lag_after_irrigation_hr,irrigation_runtimes_2025_all_depths.csv,Median time between irrigation shutoff and plateau attainment for the grouped events.,Median of lag_after_irrigation_hr within each group; lag_after_irrigation_hr = time_to_plateau_hours - event_duration_hours
+n_events,irrigation_runtimes_2025_all_depths.csv,Number of events contributing usable values to the grouped summary.,Count of non-missing source values within each group
+rec_runtime_hours,irrigation_runtimes_2025_all_depths.csv,Recommended runtime in hours based on historical event response within a group.,Median of time_to_plateau_hours within each group
+rec_runtime_is_trustworthy,irrigation_runtimes_2025_all_depths.csv,Flag indicating whether the recommended runtime summary is based on at least the minimum number of events.,True when n_events >= min_events
+rec_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,Recommended runtime in minutes based on historical event response within a group.,rec_runtime_hours * 60
+source_time_col,irrigation_runtimes_2025_all_depths.csv,Event-level time variable used to compute the recommended runtime summary.,"Set in code to the grouped source time variable, currently time_to_plateau_hours"
+strip,irrigation_runtimes_2025_all_depths.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
+summary_stat,irrigation_runtimes_2025_all_depths.csv,Summary statistic used to convert event-level times into the reported runtime.,Set in code to median
+year,irrigation_runtimes_2025_all_depths.csv,Calendar year of the analyzed irrigation events.,Assigned from the selected analysis year
+depth_inches,irrigation_targets_2025_all_depths.csv,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
+depth_index,irrigation_targets_2025_all_depths.csv,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
+k_std,irrigation_targets_2025_all_depths.csv,Multiplier applied to the standard deviation when building the raw target value.,raw_target_value = mean_value + k_std * sd_value
+mean_value,irrigation_targets_2025_all_depths.csv,Mean historical value of the source variable used for target estimation.,Mean of source_value_col within each group
+n_events,irrigation_targets_2025_all_depths.csv,Number of events contributing usable values to the grouped summary.,Count of non-missing source values within each group
+quantile_cap,irrigation_targets_2025_all_depths.csv,Upper cap applied so the target does not exceed an extreme historical value.,Quantile of source_value_col within each group using upper_quantile_cap
+raw_target_value,irrigation_targets_2025_all_depths.csv,Uncapped target calculated from the mean plus a fraction of the standard deviation.,mean_value + k_std * sd_value
+sd_value,irrigation_targets_2025_all_depths.csv,Standard deviation of the historical source values used for target estimation.,Standard deviation of source_value_col within each group with ddof=1; 0.0 if n_events == 1
+sensor_col,irrigation_targets_2025_all_depths.csv,Sensor column used for the grouped summary row.,Name of the logger variable analyzed for that row
+source_value_col,irrigation_targets_2025_all_depths.csv,Event-level variable used to compute the target summary.,"Set in code to the grouped source variable, currently plateau_vwc"
+strip,irrigation_targets_2025_all_depths.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
+target_is_trustworthy,irrigation_targets_2025_all_depths.csv,Flag indicating whether the target summary is based on at least the minimum number of events.,True when n_events >= min_events
+target_value,irrigation_targets_2025_all_depths.csv,Operational target VWC based on historical plateau responses within a group.,"min(mean_value + k_std * sd_value, quantile_cap)"
+year,irrigation_targets_2025_all_depths.csv,Calendar year of the analyzed irrigation events.,Assigned from the selected analysis year

@@ -1,0 +1,13 @@
+year,pair,metric,effect
+2023,S1-S2,K_uptake_lb_strip,0.9681
+2024,S1-S2,K_uptake_lb_strip,0.0
+2025,S1-S2,K_uptake_lb_strip,-2.1394
+2023,S3-S4,K_uptake_lb_strip,0.076
+2024,S3-S4,K_uptake_lb_strip,0.0
+2025,S3-S4,K_uptake_lb_strip,-3.0645
+2023,S1-S2,K_use_efficiency,0.0968
+2024,S1-S2,K_use_efficiency,
+2025,S1-S2,K_use_efficiency,
+2023,S3-S4,K_use_efficiency,0.0019
+2024,S3-S4,K_use_efficiency,
+2025,S3-S4,K_use_efficiency,-0.276

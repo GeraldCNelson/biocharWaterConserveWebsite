@@ -1,0 +1,3 @@
+year,date,start_timestamp,end_timestamp,strip_group,location,gallons,notes,total_meter_gallons,flow_allocation_fraction,start_totalizer_gal_x100,end_totalizer_gal_x100,start_flow_gpm,end_flow_gpm,avg_flow_gpm,entered_by,event_id
+2026,2026-04-21,2026-04-21T14:54,2026-04-22T08:52,S1_S2,west,221700.0,,443400.0,0.5,224578.0,229012.0,410.0,310.0,360.0,GCN,2026-04-21_S1_S2_bbe65f90
+2026,2026-04-21,2026-04-21T14:54,2026-04-22T08:52,S3_S4,east,221700.0,,443400.0,0.5,224578.0,229012.0,410.0,310.0,360.0,GCN,2026-04-21_S3_S4_18bfec4f

@@ -1,0 +1,35 @@
+variable,definition,formula_or_rule
+baseline_vwc,Pre-irrigation reference VWC for one event.,Median VWC over the lookback window before irrigation_start; baseline_time is the last timestamp in that lookback window.
+peak_vwc,Maximum post-irrigation VWC found in the search window for one event.,Maximum VWC after irrigation_start within the peak search window.
+peak_increase,Increase from baseline to peak for one event.,peak_vwc - baseline_vwc
+plateau_vwc,Estimated stabilized VWC below the maximum peak after irrigation for one event.,"Median VWC over the detected plateau window; if no flat segment is found, use the fallback window after peak."
+target_value,Operational target VWC based on historical plateau responses within a group.,"min(mean_value + k_std * sd_value, quantile_cap)"
+time_to_peak_hours,Elapsed time from irrigation_start to peak VWC for one event.,"peak_time - irrigation_start, in hours"
+time_to_plateau_hours,Elapsed time from irrigation_start to plateau attainment for one event.,"plateau_time - irrigation_start, in hours"
+lag_after_irrigation_hr,Additional time after irrigation shutoff before plateau is reached for one event.,time_to_plateau_hours - event_duration_hours
+event_duration_hours,Length of time irrigation water was running for one event.,"irrigation_end - irrigation_start, in hours"
+avg_flow_gph,Average application flow rate during one irrigation event.,volume_gal / event_duration_hours
+plateau_method,Method used to estimate plateau_vwc for one event.,flat_segment = sustained low-slope zone found; fallback_window = delayed post-peak summary window used; no_peak = no meaningful wetting peak detected.
+depth_index,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
+depth_inches,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
+n_events,Number of events contributing usable values to the grouped summary.,Count of non-missing source values within each group
+mean_value,Mean historical value of the source variable used for target estimation.,Mean of source_value_col within each group
+sd_value,Standard deviation of the historical source values used for target estimation.,Standard deviation of source_value_col within each group with ddof=1; 0.0 if n_events == 1
+raw_target_value,Uncapped target calculated from the mean plus a fraction of the standard deviation.,mean_value + k_std * sd_value
+quantile_cap,Upper cap applied so the target does not exceed an extreme historical value.,Quantile of source_value_col within each group using upper_quantile_cap
+target_is_trustworthy,Flag indicating whether the target summary is based on at least the minimum number of events.,True when n_events >= min_events
+source_value_col,Event-level variable used to compute the target summary.,"Set in code to the grouped source variable, currently plateau_vwc"
+k_std,Multiplier applied to the standard deviation when building the raw target value.,raw_target_value = mean_value + k_std * sd_value
+rec_runtime_hours,Recommended runtime in hours based on historical event response within a group.,Median of time_to_plateau_hours within each group
+rec_runtime_minutes,Recommended runtime in minutes based on historical event response within a group.,rec_runtime_hours * 60
+rec_runtime_is_trustworthy,Flag indicating whether the recommended runtime summary is based on at least the minimum number of events.,True when n_events >= min_events
+actual_runtime_hours,Typical actual irrigation runtime in hours represented by the grouped event history.,Median of event_duration_hours within each group
+actual_runtime_minutes,Typical actual irrigation runtime in minutes represented by the grouped event history.,actual_runtime_hours * 60
+source_time_col,Event-level time variable used to compute the recommended runtime summary.,"Set in code to the grouped source time variable, currently time_to_plateau_hours"
+summary_stat,Summary statistic used to convert event-level times into the reported runtime.,Set in code to median
+median_irrigation_duration_hours,Median irrigation run duration for the grouped events.,Median of event_duration_hours within each group
+median_avg_flow_gph,Median event-level average irrigation flow rate for the grouped events.,Median of avg_flow_gph within each group; avg_flow_gph = volume_gal / event_duration_hours
+median_lag_after_irrigation_hr,Median time between irrigation shutoff and plateau attainment for the grouped events.,Median of lag_after_irrigation_hr within each group; lag_after_irrigation_hr = time_to_plateau_hours - event_duration_hours
+sensor_col,Sensor column used for the grouped summary row.,Name of the logger variable analyzed for that row
+strip,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
+year,Calendar year of the analyzed irrigation events.,Assigned from the selected analysis year
