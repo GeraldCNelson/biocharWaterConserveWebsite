@@ -57,16 +57,16 @@ FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
     ),
 }
 
-MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
+MANAGEMENT_DATASETS = {
     "irrigation": (
         IRRIGATION_CSV,
         "Irrigation",
-        "biochar_irrigation_{year}.csv",
+        "biochar_irrigation_all_years.csv",
     ),
     "fertilizer": (
         FERTILIZER_CSV,
-        "Fertilizer Use",
-        "biochar_fertilizer_use_{year}.csv",
+        "Fertilizer use",
+        "biochar_fertilizer_all_years.csv",
     ),
 }
 
@@ -362,7 +362,6 @@ def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
             return c
 
     return None
-
 
 # --------------------------------------------------------------------------------------
 # File reading helpers

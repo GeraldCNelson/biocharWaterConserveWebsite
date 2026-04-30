@@ -15,7 +15,6 @@
 const downloadsWindow = /** @type {DownloadsWindow} */ (window);
 
 /**
- * Helper: build a filename-safe slug from pieces.
  * @param {Array<string | number | null | undefined | false>} parts
  * @returns {string}
  */
@@ -28,11 +27,6 @@ function buildFilename(parts) {
 }
 
 /**
- * Parse Content-Disposition header for filename.
- * Supports:
- *   - filename="..."
- *   - filename*=UTF-8''...
- *
  * @param {string | null} cd
  * @returns {string}
  */
@@ -55,7 +49,6 @@ function getFilenameFromContentDisposition(cd) {
 }
 
 /**
- * Map content-type to a reasonable extension.
  * @param {string | null} ct
  * @returns {string}
  */
@@ -76,10 +69,6 @@ function extFromContentType(ct) {
 }
 
 /**
- * Generic helper to POST JSON and download the returned blob.
- * - Uses server-provided filename if present (Content-Disposition)
- * - Otherwise uses fallbackFilename, but adjusts extension to match Content-Type if possible
- *
  * @param {string} url
  * @param {any} payload
  * @param {string} fallbackFilename
@@ -127,10 +116,6 @@ async function postAndDownload(url, payload, fallbackFilename) {
   window.URL.revokeObjectURL(objUrl);
   console.log("✅ Download triggered:", filename, { contentType: ct, contentDisposition: cd });
 }
-
-/* -------------------------------------------------------------------------
- *  MAIN DATA DOWNLOADS (Raw / Ratio / All)
- * ---------------------------------------------------------------------- */
 
 /**
  * @param {"raw"|"ratio"|"all"} [kind="all"]
@@ -183,10 +168,6 @@ export async function downloadTraceData(kind = "all") {
     alert("Unable to download data. Please check the console for details.");
   }
 }
-
-/* -------------------------------------------------------------------------
- *  SUMMARY STATISTICS DOWNLOAD (Summary Statistics tab)
- * ---------------------------------------------------------------------- */
 
 /**
  * @param {"raw"|"ratio"|"all"|"zip"} [mode="all"]
@@ -267,18 +248,21 @@ export function initSummaryDownloadMenu() {
       void downloadSummaryData("raw");
     });
   }
+
   if (ratioBtn) {
     ratioBtn.addEventListener("click", (e) => {
       e.preventDefault();
       void downloadSummaryData("ratio");
     });
   }
+
   if (allBtn) {
     allBtn.addEventListener("click", (e) => {
       e.preventDefault();
       void downloadSummaryData("all");
     });
   }
+
   if (zipBtn) {
     zipBtn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -288,10 +272,6 @@ export function initSummaryDownloadMenu() {
 
   console.log("✅ Summary download menu initialized.");
 }
-
-/* -------------------------------------------------------------------------
- *  PLOT IMAGE DOWNLOADS (JPEG/PNG of Plotly figures)
- * ---------------------------------------------------------------------- */
 
 /**
  * @param {{ plotType: string, format: string }} param0
@@ -370,12 +350,14 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
     /** @type {HTMLElement | null} */
     let el = null;
+
     if (typeof target === "object" && target !== null) {
       el = /** @type {HTMLElement} */ (target);
     } else {
       const t = String(target).toLowerCase().trim();
       /** @type {string[]} */
       const idCandidates = [];
+
       if (t === "raw") idCandidates.push("plot-1");
       else if (t === "ratio") idCandidates.push("plot-2");
       else idCandidates.push(String(target));
@@ -391,7 +373,7 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
       if (!el) {
         const plotDivs = Array.from(document.querySelectorAll(".js-plotly-plot"));
         if (plotDivs.length > 0) {
-          el = /** @type {HTMLElement} */ ((t === "ratio") ? (plotDivs[1] || plotDivs[0]) : plotDivs[0]);
+          el = /** @type {HTMLElement} */ (t === "ratio" ? plotDivs[1] || plotDivs[0] : plotDivs[0]);
         }
       }
     }
@@ -405,6 +387,7 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
     let width;
     let height;
     let scale;
+
     if (String(sizeMode).toLowerCase().trim() === "fixed") {
       width = 1600;
       height = 900;
@@ -418,7 +401,6 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
 
     const plotType = String(target).toLowerCase().trim() === "ratio" ? "ratio" : "raw";
     const filename = buildPlotFilename({ plotType, format: plotlyFormat });
-
     const dataUrl = await Plotly.toImage(el, { format: plotlyFormat, width, height, scale });
 
     const a = document.createElement("a");
@@ -435,11 +417,9 @@ export async function downloadPlot(target = "raw", format = "png", sizeMode = "s
   }
 }
 
-/* -------------------------------------------------------------------------
- *  BULK DOWNLOAD TAB INITIALIZATION
- * ---------------------------------------------------------------------- */
-
-const ALL_YEARS_MANIFEST_KEYS = new Set([
+const ALL_YEARS_DATASETS = new Set([
+  "irrigation",
+  "fertilizer",
   "soil_chem_all",
   "soil_bio_all",
   "hay_all",
@@ -455,6 +435,15 @@ const ALL_YEARS_UI_ALIASES = {
   biomass_hay: "hay_all",
   hay: "hay_all",
   hay_nir: "hay_all",
+};
+
+/** @type {Record<string, string>} */
+const ALL_YEARS_KEY_BY_DATASET = {
+  irrigation: "irrigation_all",
+  fertilizer: "fertilizer_all",
+  soil_chem_all: "soil_chem_all",
+  soil_bio_all: "soil_bio_all",
+  hay_all: "hay_all",
 };
 
 /** @type {Record<string, string>} */
@@ -483,7 +472,15 @@ function normalizeBulkDataset(uiDatasetRaw) {
  * @returns {boolean}
  */
 function isAllYearsDataset(normalizedDataset) {
-  return ALL_YEARS_MANIFEST_KEYS.has(normalizedDataset);
+  return ALL_YEARS_DATASETS.has(normalizedDataset);
+}
+
+/**
+ * @param {string} normalizedDataset
+ * @returns {string}
+ */
+function allYearsManifestKey(normalizedDataset) {
+  return ALL_YEARS_KEY_BY_DATASET[normalizedDataset] || normalizedDataset;
 }
 
 /**
@@ -492,6 +489,7 @@ function isAllYearsDataset(normalizedDataset) {
  */
 function normalizeResolution(raw) {
   if (raw == null) return null;
+
   let g = String(raw).trim().toLowerCase();
   if (!g) return null;
 
@@ -500,24 +498,21 @@ function normalizeResolution(raw) {
     "15 min": "15min",
     "15m": "15min",
     "15 minutes": "15min",
-
-    "hour": "hourly",
-    "hours": "hourly",
-    "hourly": "hourly",
-
-    "day": "daily",
-    "days": "daily",
-    "daily": "daily",
-
-    "month": "monthly",
-    "months": "monthly",
-    "monthly": "monthly",
-
+    hour: "hourly",
+    hours: "hourly",
+    hourly: "hourly",
+    day: "daily",
+    days: "daily",
+    daily: "daily",
+    month: "monthly",
+    months: "monthly",
+    monthly: "monthly",
     "g-season": "gseason",
     "g season": "gseason",
-    "g_season": "gseason",
-    "gseason": "gseason",
+    g_season: "gseason",
+    gseason: "gseason",
   };
+
   if (Object.prototype.hasOwnProperty.call(map, g)) {
     g = /** @type {Record<string, string>} */ (map)[g];
   }
@@ -556,21 +551,21 @@ function findManifestKey(manifest, { dataset, year, granularity }) {
   if (!manifest) return null;
 
   if (isAllYearsDataset(dataset)) {
-    return findEntryByKey(manifest, dataset)?.key || null;
+    const key = allYearsManifestKey(dataset);
+    return findEntryByKey(manifest, key)?.key || null;
   }
 
   const token = BULK_DATASET_TOKEN[dataset] || dataset;
   const y = year == null ? null : parseInt(String(year), 10);
   const g = normalizeResolution(granularity);
-
   const entries = getManifestEntries(manifest);
+
   if (!Array.isArray(entries)) return null;
 
   return (
     entries.find((e) => {
       if (!e || typeof e !== "object") return false;
       if (String(e.dataset || "").trim().toLowerCase() !== String(token).trim().toLowerCase()) return false;
-
       if (y != null && parseInt(e.year, 10) !== y) return false;
 
       const res = normalizeResolution(e.resolution ?? e.granularity ?? null);
@@ -599,6 +594,7 @@ function selectHasRealOptions(el) {
 function hasDatasetFamily(manifest, dataset) {
   const token = BULK_DATASET_TOKEN[dataset] || dataset;
   const entries = getManifestEntries(manifest);
+
   if (!Array.isArray(entries)) return false;
 
   return entries.some(
@@ -626,6 +622,7 @@ export async function initBulkDownloadTab() {
   const buttons = /** @type {HTMLButtonElement[]} */ (
     Array.from(document.querySelectorAll(".bulk-download-btn, [data-dataset]"))
   );
+
   if (!buttons.length) {
     console.warn("⚠️ Bulk download UI not found (need buttons with data-dataset).", {
       hasYear: !!yearEl,
@@ -654,11 +651,6 @@ export async function initBulkDownloadTab() {
   }
 
   /**
-   * hardDisable=true:
-   *   truly unavailable; browser blocks clicks
-   * hardDisable=false + visualEnabled=false:
-   *   looks disabled, but click handler still runs and can show guidance
-   *
    * @param {HTMLButtonElement} btn
    * @param {{ visualEnabled: boolean, hardDisable?: boolean }} args
    * @returns {void}
@@ -671,16 +663,26 @@ export async function initBulkDownloadTab() {
 
   /** @type {any} */
   let manifest = null;
+
   try {
     const resp = await fetch("/api/bulk_download_manifest");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
     manifest = await resp.json();
     downloadsWindow.__bulkDownloadManifest = manifest;
+
+    console.log("🧾 Bulk manifest loaded.", {
+      entries: getManifestEntries(manifest)?.length || 0,
+      hasIrrigation: Boolean(findEntryByKey(manifest, "irrigation_all")),
+      hasFertilizer: Boolean(findEntryByKey(manifest, "fertilizer_all")),
+    });
   } catch (e) {
     console.warn("⚠️ Bulk manifest fetch failed:", e);
+
     for (const b of buttons) {
       setButtonState(b, { visualEnabled: false, hardDisable: true });
     }
+
     return;
   }
 
@@ -689,55 +691,18 @@ export async function initBulkDownloadTab() {
 
   if (yearEl && !selectHasRealOptions(yearEl)) {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
-      .map(
-        /**
-         * @param {string | number} y
-         * @returns {string}
-         */
-        (y) => `<option value="${y}">${y}</option>`
-      )
+      .map((y) => `<option value="${y}">${y}</option>`)
       .join("");
+
     yearEl.innerHTML = `<option value="">Select year...</option>${opts}`;
   }
 
   if (granEl && !selectHasRealOptions(granEl)) {
     const gList = granularities.length ? granularities : ["15min", "hourly", "daily", "monthly", "gseason"];
+
     granEl.innerHTML =
       `<option value="">Select granularity...</option>` +
-      gList
-        .map(
-          /**
-           * @param {string} g
-           * @returns {string}
-           */
-          (g) => `<option value="${g}">${g}</option>`
-        )
-        .join("");
-  }
-
-  /**
-   * @param {string | null | undefined} v
-   * @returns {string}
-   */
-  function normalizeGranularityToken(v) {
-    const s = String(v || "").trim().toLowerCase();
-    if (!s) return "";
-
-    const compact = s.replace(/\s+/g, "").replace(/_/g, "-");
-    if (compact === "15-min" || compact === "15min") return "15min";
-
-    if (["hourly", "daily", "monthly", "gseason"].includes(compact)) return compact;
-
-    return compact.replace(/-/g, "");
-  }
-
-  /**
-   * @param {string | null | undefined} v
-   * @returns {string}
-   */
-  function normalizeDatasetToken(v) {
-    const s = String(v || "").trim().toLowerCase();
-    return s === "fertilizing" ? "fertilizer" : s;
+      gList.map((g) => `<option value="${g}">${g}</option>`).join("");
   }
 
   /**
@@ -745,9 +710,7 @@ export async function initBulkDownloadTab() {
    */
   function refreshEnabledState() {
     const y = selectedYear();
-    const gRaw = selectedGranularity();
-    const g = normalizeGranularityToken(gRaw);
-
+    const g = selectedGranularity();
     const entries = getManifestEntries(manifest);
     const hasEntries = Array.isArray(entries) && entries.length > 0;
 
@@ -755,42 +718,27 @@ export async function initBulkDownloadTab() {
       const uiDsRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
       const ds = normalizeBulkDataset(uiDsRaw);
 
-      if (hasEntries) {
-        if (isAllYearsDataset(ds)) {
-          const entry = findEntryByKey(manifest, ds);
-          setButtonState(btn, {
-            visualEnabled: Boolean(entry?.key),
-            hardDisable: !Boolean(entry?.key),
-          });
-          continue;
-        }
+      if (!hasEntries) {
+        setButtonState(btn, {
+          visualEnabled: isAllYearsDataset(ds) || Boolean(y),
+          hardDisable: false,
+        });
+        continue;
+      }
 
-        if (ds === "loggers" || ds === "weather") {
-          const familyExists = hasDatasetFamily(manifest, ds);
+      if (isAllYearsDataset(ds)) {
+        const key = allYearsManifestKey(ds);
+        const entry = findEntryByKey(manifest, key);
 
-          if (!familyExists) {
-            setButtonState(btn, { visualEnabled: false, hardDisable: true });
-            continue;
-          }
+        setButtonState(btn, {
+          visualEnabled: Boolean(entry?.key),
+          hardDisable: !Boolean(entry?.key),
+        });
 
-          if (!y || !g) {
-            setButtonState(btn, { visualEnabled: false, hardDisable: false });
-            continue;
-          }
+        continue;
+      }
 
-          const key = findManifestKey(manifest, {
-            dataset: normalizeDatasetToken(ds),
-            year: y,
-            granularity: g,
-          });
-
-          setButtonState(btn, {
-            visualEnabled: Boolean(key),
-            hardDisable: !Boolean(key),
-          });
-          continue;
-        }
-
+      if (ds === "loggers" || ds === "weather") {
         const familyExists = hasDatasetFamily(manifest, ds);
 
         if (!familyExists) {
@@ -798,40 +746,46 @@ export async function initBulkDownloadTab() {
           continue;
         }
 
-        if (!y) {
+        if (!y || !g) {
           setButtonState(btn, { visualEnabled: false, hardDisable: false });
           continue;
         }
 
         const key = findManifestKey(manifest, {
-          dataset: normalizeDatasetToken(ds),
+          dataset: ds,
           year: y,
-          granularity: null,
+          granularity: g,
         });
 
         setButtonState(btn, {
           visualEnabled: Boolean(key),
           hardDisable: !Boolean(key),
         });
+
         continue;
       }
 
-      if (isAllYearsDataset(ds)) {
-        setButtonState(btn, { visualEnabled: true, hardDisable: false });
+      const familyExists = hasDatasetFamily(manifest, ds);
+
+      if (!familyExists) {
+        setButtonState(btn, { visualEnabled: false, hardDisable: true });
         continue;
       }
 
-      if (ds === "loggers" || ds === "weather") {
-        setButtonState(btn, {
-          visualEnabled: Boolean(y && g),
-          hardDisable: false,
-        });
+      if (!y) {
+        setButtonState(btn, { visualEnabled: false, hardDisable: false });
         continue;
       }
+
+      const key = findManifestKey(manifest, {
+        dataset: ds,
+        year: y,
+        granularity: null,
+      });
 
       setButtonState(btn, {
-        visualEnabled: Boolean(y),
-        hardDisable: false,
+        visualEnabled: Boolean(key),
+        hardDisable: !Boolean(key),
       });
     }
   }
@@ -846,15 +800,16 @@ export async function initBulkDownloadTab() {
       const uiDatasetRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
       const uiDataset = String(uiDatasetRaw || "").trim();
       const ds = normalizeBulkDataset(uiDataset);
-
       const y = selectedYear();
       const g = selectedGranularity();
       const allYears = isAllYearsDataset(ds);
 
       if ((ds === "loggers" || ds === "weather") && (!y || !g)) {
         alert("Please select both a year and a granularity.");
+
         if (!y) document.getElementById("bulk-year")?.focus();
         else document.getElementById("bulk-granularity")?.focus();
+
         return;
       }
 
@@ -866,8 +821,8 @@ export async function initBulkDownloadTab() {
 
       const key = findManifestKey(manifest, {
         dataset: ds,
-        year: (ds === "loggers" || ds === "weather") ? y : (allYears ? null : y),
-        granularity: (ds === "loggers" || ds === "weather") ? g : null,
+        year: ds === "loggers" || ds === "weather" ? y : allYears ? null : y,
+        granularity: ds === "loggers" || ds === "weather" ? g : null,
       });
 
       if (!key) {
@@ -878,6 +833,7 @@ export async function initBulkDownloadTab() {
           granularity: g,
           manifest,
         });
+
         alert("That dataset/year (and granularity, if applicable) is not available.");
         return;
       }
@@ -902,6 +858,7 @@ export async function initBulkDownloadTab() {
   }
 
   refreshEnabledState();
+
   console.log("✅ Bulk download tab initialized.", {
     years: years.length,
     granularities: granularities.length,
