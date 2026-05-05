@@ -1,418 +1,176 @@
 // glossary.js
 
-export const glossarySections = [
-  {
-    key: "biochar_soil_basics",
-    label: "Biochar & Soil Basics",
-    items: [
-      {
-        term: "Biochar",
-        definition:
-          "A carbon-rich material produced by heating biomass under low-oxygen conditions. In soil, it can affect water holding, nutrient retention, bulk density, and microbial habitat.",
-      },
-      {
-        term: "Pyrolysis",
-        definition:
-          "The thermal conversion process used to make biochar from biomass in a low-oxygen environment.",
-      },
-      {
-        term: "Soil Organic Matter (SOM)",
-        definition:
-          "The organic fraction of soil, including decomposing plant material, microbial residues, and stable carbon compounds.",
-      },
-      {
-        term: "Carbon Sequestration",
-        definition:
-          "The long-term storage of carbon in soil or biomass. Biochar is often studied for its potential to increase carbon storage.",
-      },
-      {
-        term: "Bulk Density",
-        definition:
-          "The mass of dry soil per unit volume, usually expressed as g/cm³. Lower bulk density often indicates greater pore space and improved root penetration.",
-      },
-      {
-        term: "Cation Exchange Capacity (CEC)",
-        definition:
-          "A measure of the soil’s ability to hold and exchange positively charged nutrients such as potassium, calcium, magnesium, and sodium.",
-      },
-      {
-        term: "Elemental Saturation",
-        definition:
-          "The proportion of the soil’s cation exchange capacity occupied by specific cations, such as K, Ca, Mg, Na, or H.",
-      },
-    ],
-  },
-  {
-    key: "experimental_design",
-    label: "Experimental Design",
-    items: [
-      {
-        term: "Strip",
-        definition:
-          "One of the four field treatment areas in the biochar experiment: S1, S2, S3, and S4.",
-      },
-      {
-        term: "Treatment Strip",
-        definition:
-          "A strip that received biochar. In this experiment, S1 and S3 are treatment strips.",
-      },
-      {
-        term: "Control Strip",
-        definition:
-          "A strip that did not receive biochar. In this experiment, S2 and S4 are control strips.",
-      },
-      {
-        term: "Irrigation Regime",
-        definition:
-          "The water application schedule used for a strip pair within the experiment.",
-      },
-      {
-        term: "Baseline",
-        definition:
-          "Measurements taken before biochar application, used as a pre-treatment reference.",
-      },
-      {
-        term: "Directional Change",
-        definition:
-          "Whether a variable increases or decreases over time or differs positively or negatively between treatment and control.",
-      },
-    ],
-  },
-  {
-    key: "time_periods",
-    label: "Time Periods & Aggregation",
-    items: [
-      {
-        term: "Granularity",
-        definition:
-          "The time resolution at which data are displayed or summarized, such as 15-minute, hourly, daily, monthly, or growing season.",
-      },
-      {
-        term: "Aggregation",
-        definition:
-          "The process of summarizing higher-frequency data into lower-frequency periods, such as averaging 15-minute measurements into daily values.",
-      },
-      {
-        term: "Growing Season",
-        definition:
-          "In the default app configuration, the period from April 1 through October 31. It is defined by the irrigation window.",
-      },
-      {
-        term: "Winter / Dormant Period",
-        definition:
-          "In the default app configuration, the period from November 1 through March 31.",
-      },
-      {
-        term: "Custom Season",
-        definition:
-          "A user-defined seasonal grouping used to summarize data outside the default periods.",
-      },
-    ],
-  },
-  {
-    key: "water_sensor_metrics",
-    label: "Water & Sensor Metrics",
-    items: [
-      {
-        term: "Volumetric Water Content (VWC)",
-        definition:
-          "The percentage of soil volume occupied by water. This is a primary soil moisture measurement from the dataloggers.",
-      },
-      {
-        term: "Soil Water Content (SWC)",
-        definition:
-          "The total amount of water stored in a defined soil layer. In this app, SWC is derived from VWC and depth assumptions.",
-      },
-      {
-        term: "Field Capacity",
-        definition:
-          "The amount of water remaining in soil after excess gravitational water has drained away.",
-      },
-      {
-        term: "Wilting Point",
-        definition:
-          "The soil moisture level below which plants can no longer extract sufficient water.",
-      },
-      {
-        term: "Electrical Conductivity (EC)",
-        definition:
-          "A measure of the soil’s ability to conduct electricity, related to dissolved salts and ion concentration.",
-      },
-      {
-        term: "Depth",
-        definition:
-          "The soil depth associated with a sensor or summarized value.",
-      },
-      {
-        term: "Logger Location",
-        definition:
-          "The physical datalogger position within a strip, used to distinguish measurements from different points in the field.",
-      },
-    ],
-  },
-  {
-    key: "ratios_deltas",
-    label: "Ratios, Differences, and Derived Metrics",
-    items: [
-      {
-        term: "Ratio",
-        definition:
-          "A comparison between paired strips, used to highlight treatment effects while accounting for shared environmental conditions.",
-      },
-      {
-        term: "VWC Ratio",
-        definition:
-          "A ratio comparing volumetric water content between paired strips, used to detect relative treatment effects in soil moisture.",
-      },
-      {
-        term: "EC Ratio",
-        definition:
-          "A ratio comparing electrical conductivity between paired strips, used to highlight relative differences in salts or dissolved ions.",
-      },
-      {
-        term: "Temperature Ratio",
-        definition:
-          "A ratio comparing temperature values between paired strips. It should be interpreted cautiously, especially when values are near zero.",
-      },
-      {
-        term: "Delta (Δ)",
-        definition:
-          "A difference value, often used to compare treatment and control or to compare one time period with another.",
-      },
-      {
-        term: "ΔSWC",
-        definition:
-          "The difference in soil water content between strips or between time periods.",
-      },
-      {
-        term: "ΔT",
-        definition:
-          "The difference in temperature between strips or between time periods.",
-      },
-    ],
-  },
-  {
-    key: "soil_chemistry",
-    label: "Soil Chemistry",
-    items: [
-      {
-        term: "pH",
-        definition: "A measure of soil acidity or alkalinity.",
-      },
-      {
-        term: "Salinity",
-        definition: "The concentration of soluble salts in the soil.",
-      },
-      {
-        term: "Potassium (K)",
-        definition:
-          "An essential plant nutrient involved in water regulation, enzyme activation, and stress tolerance.",
-      },
-      {
-        term: "Phosphorus (P)",
-        definition:
-          "An essential plant nutrient involved in energy transfer, root development, and metabolism.",
-      },
-      {
-        term: "Nitrogen (N)",
-        definition:
-          "An essential plant nutrient strongly associated with protein formation and plant growth.",
-      },
-      {
-        term: "Nitrate-N",
-        definition:
-          "A plant-available form of nitrogen commonly measured in soil tests.",
-      },
-      {
-        term: "Olsen P",
-        definition:
-          "A soil-test phosphorus measure commonly used in alkaline or calcareous soils.",
-      },
-      {
-        term: "Organic Matter",
-        definition:
-          "The portion of soil made up of plant, microbial, and other carbon-based residues.",
-      },
-    ],
-  },
-  {
-    key: "soil_biology",
-    label: "Soil Biology",
-    items: [
-      {
-        term: "PLFA",
-        definition:
-          "Phospholipid fatty acid analysis, a method used to estimate microbial biomass and microbial community composition in soil.",
-      },
-      {
-        term: "Total Microbial Biomass",
-        definition:
-          "An estimate of the total living microbial mass in the soil sample.",
-      },
-      {
-        term: "Bacterial Biomass",
-        definition:
-          "An estimate of the bacterial component of the soil microbial community.",
-      },
-      {
-        term: "Fungal Biomass",
-        definition:
-          "An estimate of the fungal component of the soil microbial community.",
-      },
-      {
-        term: "Fungal:Bacterial Ratio",
-        definition:
-          "A comparison of fungal biomass to bacterial biomass, often used as an indicator of soil biological balance.",
-      },
-      {
-        term: "Actinomycetes",
-        definition:
-          "A group of filamentous bacteria important in decomposition of complex organic matter.",
-      },
-      {
-        term: "Microbial Diversity",
-        definition:
-          "A measure of the variety of microbial groups present in the soil.",
-      },
-      {
-        term: "Biological Buffering",
-        definition:
-          "A working term for the stabilizing effect of microbial processes on nutrient availability over time.",
-      },
-    ],
-  },
-  {
-    key: "plant_forage_metrics",
-    label: "Plant, Biomass, and Forage Metrics",
-    items: [
-      {
-        term: "Biomass",
-        definition:
-          "The mass of plant material produced in the field.",
-      },
-      {
-        term: "Dry Weight",
-        definition:
-          "The plant mass after water has been removed, used for comparing biomass production across samples.",
-      },
-      {
-        term: "NIR",
-        definition:
-          "Near-infrared reflectance analysis, used to estimate forage nutrient composition and quality.",
-      },
-      {
-        term: "Crude Protein (CP)",
-        definition:
-          "An estimate of plant protein content, usually derived from nitrogen concentration.",
-      },
-      {
-        term: "ADF",
-        definition:
-          "Acid detergent fiber, a forage quality measure associated with lower digestibility at higher values.",
-      },
-      {
-        term: "NDF",
-        definition:
-          "Neutral detergent fiber, a forage quality measure associated with fiber content and intake potential.",
-      },
-      {
-        term: "RFV",
-        definition:
-          "Relative Feed Value, a combined index of forage quality.",
-      },
-      {
-        term: "Plant Uptake",
-        definition:
-          "The amount of a nutrient removed from the field through plant growth and harvest.",
-      },
-      {
-        term: "Plant Withdrawal",
-        definition:
-          "A practical term for nutrient removal in harvested biomass.",
-      },
-    ],
-  },
-  {
-    key: "irrigation_management",
-    label: "Irrigation & Management",
-    items: [
-      {
-        term: "Irrigation Event",
-        definition:
-          "A single application of irrigation water over a defined time window.",
-      },
-      {
-        term: "Irrigation Overlay",
-        definition:
-          "A visual display of irrigation timing on a plot, often shown as shaded regions or annotations.",
-      },
-      {
-        term: "Gallons Applied",
-        definition:
-          "The amount of irrigation water delivered during an event.",
-      },
-      {
-        term: "Fertilizer Application",
-        definition:
-          "The addition of nutrients to a strip, typically recorded by date, nutrient, and amount.",
-      },
-      {
-        term: "Nutrient Budget",
-        definition:
-          "A comparison of nutrient inputs, outputs, and changes in storage, often using fertilizer, plant uptake, and soil stock change.",
-      },
-    ],
-  },
-  {
-    key: "interpretation_terms",
-    label: "Interpretation Terms",
-    items: [
-      {
-        term: "Retention",
-        definition:
-          "The ability of soil to hold water or nutrients rather than losing them through drainage, leaching, or other pathways.",
-      },
-      {
-        term: "Availability",
-        definition:
-          "The extent to which a nutrient is accessible for plant uptake.",
-      },
-      {
-        term: "Buffering",
-        definition:
-          "The tendency of a soil system to resist rapid change in nutrient or moisture conditions.",
-      },
-      {
-        term: "Turnover",
-        definition:
-          "The cycling of nutrients through soil, microbes, and plants over time.",
-      },
-      {
-        term: "Efficiency",
-        definition:
-          "A relative measure of how effectively a system converts inputs such as water or fertilizer into plant growth or nutrient uptake.",
-      },
-    ],
-  },
-];
+/**
+ * @typedef {{
+ *   citation?: string,
+ *   doi?: string,
+ *   note?: string
+ * }} GlossarySource
+ */
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   term: string,
+ *   abbreviation?: string,
+ *   definition: string,
+ *   units?: string,
+ *   matches?: string[],
+ *   related_to?: string[],
+ *   source?: GlossarySource
+ * }} GlossaryEntry
+ */
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   label: string,
+ *   items: GlossaryEntry[]
+ * }} GlossarySection
+ */
+
+/**
+ * @typedef {{
+ *   sections: GlossarySection[]
+ * }} GlossaryData
+ */
 
 /**
  * @typedef {Window & {
  *   bootstrap?: {
+ *     Collapse?: new (el: Element, options?: object) => { show: () => void, hide: () => void },
  *     Tooltip?: {
  *       getOrCreateInstance: (el: Element) => unknown
  *     }
- *   }
+ *   },
+ *   __glossaryData?: GlossaryData
  * }} GlossaryWindow
  */
 
 /** @type {GlossaryWindow} */
 const glossaryWindow = /** @type {GlossaryWindow} */ (window);
 
+const GLOSSARY_JSON_URL = "/static/data/glossary_terms.json";
+
 /**
- * @returns {void}
+ * @param {GlossaryEntry} entry
+ * @returns {string}
  */
-export function renderGlossary() {
+function glossaryDisplayTerm(entry) {
+  return entry.abbreviation
+    ? `${entry.term} (${entry.abbreviation})`
+    : entry.term;
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeSearchText(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+/**
+ * @param {GlossaryEntry} entry
+ * @returns {string}
+ */
+function searchableEntryText(entry) {
+  const parts = [
+    entry.key,
+    entry.term,
+    entry.abbreviation || "",
+    entry.definition || "",
+    entry.units || "",
+    ...(entry.matches || []),
+    ...(entry.related_to || []),
+    entry.source?.citation || "",
+    entry.source?.doi || "",
+    entry.source?.note || "",
+  ];
+
+  return normalizeSearchText(parts.join(" "));
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function clearHighlights(root) {
+  root.querySelectorAll("mark.glossary-highlight").forEach((mark) => {
+    const text = document.createTextNode(mark.textContent || "");
+    mark.replaceWith(text);
+  });
+}
+
+function highlightMatches(root, query) {
+  if (!query) return;
+
+  const regex = new RegExp(`(${escapeRegex(query)})`, "gi");
+
+  root.querySelectorAll(".glossary-term, .glossary-definition, .glossary-units, .glossary-related, .glossary-source").forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+
+    el.childNodes.forEach((node) => {
+      if (node.nodeType !== Node.TEXT_NODE) return;
+
+      const text = node.textContent || "";
+      if (!regex.test(text)) return;
+
+      regex.lastIndex = 0;
+
+      const span = document.createElement("span");
+      span.innerHTML = text.replace(regex, `<mark class="glossary-highlight">$1</mark>`);
+      node.replaceWith(...Array.from(span.childNodes));
+    });
+  });
+}
+
+/**
+ * @param {GlossaryEntry[]} allEntries
+ * @param {string[] | undefined} relatedKeys
+ * @returns {string}
+ */
+function relatedTermsText(allEntries, relatedKeys) {
+  if (!relatedKeys || relatedKeys.length === 0) return "";
+
+  const labels = relatedKeys.map((key) => {
+    const match = allEntries.find((entry) => entry.key === key);
+    return match ? glossaryDisplayTerm(match) : key;
+  });
+
+  return labels.join(", ");
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {boolean} show
+ */
+function setEntryVisible(container, show) {
+  container.classList.toggle("d-none", !show);
+}
+
+/**
+ * @returns {Promise<GlossaryData>}
+ */
+export async function loadGlossaryData() {
+  if (glossaryWindow.__glossaryData) {
+    return glossaryWindow.__glossaryData;
+  }
+
+  const resp = await fetch(GLOSSARY_JSON_URL);
+  if (!resp.ok) {
+    throw new Error(`Failed to load glossary JSON: HTTP ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  glossaryWindow.__glossaryData = data;
+  return data;
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+export async function renderGlossary() {
   const container = document.getElementById("glossary-content");
   if (!container) {
     console.warn("Glossary container #glossary-content not found.");
@@ -420,6 +178,9 @@ export function renderGlossary() {
   }
 
   if (container.dataset.rendered === "true") return;
+
+  const glossaryData = await loadGlossaryData();
+  const allEntries = glossaryData.sections.flatMap((section) => section.items || []);
 
   container.innerHTML = "";
 
@@ -433,13 +194,29 @@ export function renderGlossary() {
   `;
   container.appendChild(intro);
 
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "mb-3";
+  searchWrap.innerHTML = `
+    <label for="glossary-search" class="form-label fw-semibold">Search glossary</label>
+    <input
+      id="glossary-search"
+      type="search"
+      class="form-control"
+      placeholder="Search terms, definitions, units, abbreviations, or column names..."
+      autocomplete="off"
+    >
+    <div id="glossary-search-status" class="form-text"></div>
+  `;
+  container.appendChild(searchWrap);
+
   const accordion = document.createElement("div");
   accordion.className = "accordion";
   accordion.id = "glossary-accordion";
 
-  glossarySections.forEach((section, index) => {
+  glossaryData.sections.forEach((section, index) => {
     const item = document.createElement("div");
-    item.className = "accordion-item";
+    item.className = "accordion-item glossary-section";
+    item.dataset.sectionKey = section.key;
 
     const headerId = `glossary-heading-${section.key}`;
     const collapseId = `glossary-collapse-${section.key}`;
@@ -460,8 +237,7 @@ export function renderGlossary() {
       <div
         id="${collapseId}"
         class="accordion-collapse collapse ${isFirst ? "show" : ""}"
-        aria-labelledby="${headerId}"
-        data-bs-parent="#glossary-accordion">
+        aria-labelledby="${headerId}">
         <div class="accordion-body"></div>
       </div>
     `;
@@ -471,10 +247,35 @@ export function renderGlossary() {
       section.items.forEach((entry) => {
         const termBlock = document.createElement("div");
         termBlock.className = "mb-3 glossary-entry";
+        termBlock.dataset.searchText = searchableEntryText(entry);
+
+        const relatedText = relatedTermsText(allEntries, entry.related_to);
+
+        const unitsHtml = entry.units
+          ? `<div class="glossary-units small"><strong>Units:</strong> ${entry.units}</div>`
+          : "";
+
+        const relatedHtml = relatedText
+          ? `<div class="glossary-related small"><strong>Related terms:</strong> ${relatedText}</div>`
+          : "";
+
+        const sourceParts = [];
+        if (entry.source?.citation) sourceParts.push(entry.source.citation);
+        if (entry.source?.doi) sourceParts.push(`DOI: ${entry.source.doi}`);
+        if (entry.source?.note) sourceParts.push(entry.source.note);
+
+        const sourceHtml = sourceParts.length
+          ? `<div class="glossary-source small"><strong>Source:</strong> ${sourceParts.join("; ")}</div>`
+          : "";
+
         termBlock.innerHTML = `
-          <div class="glossary-term">${entry.term}</div>
-          <div class="glossary-definition">${entry.definition}</div>
+          <div class="glossary-term fw-semibold">${glossaryDisplayTerm(entry)}</div>
+          <div class="glossary-definition">${entry.definition || ""}</div>
+          ${unitsHtml}
+          ${relatedHtml}
+          ${sourceHtml}
         `;
+
         body.appendChild(termBlock);
       });
     }
@@ -483,19 +284,105 @@ export function renderGlossary() {
   });
 
   container.appendChild(accordion);
+
+  const searchInput = document.getElementById("glossary-search");
+  const status = document.getElementById("glossary-search-status");
+
+  if (searchInput instanceof HTMLInputElement) {
+    searchInput.addEventListener("input", () => {
+      const query = normalizeSearchText(searchInput.value);
+      clearHighlights(container);
+      const sections = Array.from(container.querySelectorAll(".glossary-section"));
+      let totalMatches = 0;
+
+      sections.forEach((sectionEl) => {
+        if (!(sectionEl instanceof HTMLElement)) return;
+
+        const entries = Array.from(sectionEl.querySelectorAll(".glossary-entry"));
+        let sectionMatches = 0;
+
+        entries.forEach((entryEl) => {
+          if (!(entryEl instanceof HTMLElement)) return;
+
+          const entryText = entryEl.dataset.searchText || "";
+          const isMatch = !query || entryText.includes(query);
+
+          setEntryVisible(entryEl, isMatch);
+
+          if (isMatch) {
+            sectionMatches += 1;
+            totalMatches += 1;
+          }
+        });
+
+        const collapseEl = sectionEl.querySelector(".accordion-collapse");
+        const buttonEl = sectionEl.querySelector(".accordion-button");
+
+        if (collapseEl instanceof HTMLElement && buttonEl instanceof HTMLElement) {
+          if (query && sectionMatches > 0) {
+            const collapse = glossaryWindow.bootstrap?.Collapse
+              ? new glossaryWindow.bootstrap.Collapse(collapseEl, { toggle: false })
+              : null;
+
+            collapse?.show();
+            collapseEl.classList.add("show");
+            buttonEl.classList.remove("collapsed");
+            buttonEl.setAttribute("aria-expanded", "true");
+          } else if (query && sectionMatches === 0) {
+            const collapse = glossaryWindow.bootstrap?.Collapse
+              ? new glossaryWindow.bootstrap.Collapse(collapseEl, { toggle: false })
+              : null;
+
+            collapse?.hide();
+            collapseEl.classList.remove("show");
+            buttonEl.classList.add("collapsed");
+            buttonEl.setAttribute("aria-expanded", "false");
+          }
+        }
+
+        sectionEl.classList.toggle("d-none", query.length > 0 && sectionMatches === 0);
+      });
+
+      if (query) {
+        highlightMatches(container, query);
+      }
+
+      if (status instanceof HTMLElement) {
+        if (!query) {
+          status.textContent = "";
+        } else if (totalMatches === 1) {
+          status.textContent = "1 matching glossary entry";
+        } else {
+          status.textContent = `${totalMatches} matching glossary entries`;
+        }
+      }
+    });
+  }
+
   container.dataset.rendered = "true";
 }
 
 /**
- * @returns {Record<string, string>}
+ * @returns {Promise<Record<string, string>>}
  */
-export function buildGlossaryLookup() {
+export async function buildGlossaryLookup() {
+  const glossaryData = await loadGlossaryData();
+
   /** @type {Record<string, string>} */
   const lookup = {};
 
-  glossarySections.forEach((section) => {
+  glossaryData.sections.forEach((section) => {
     section.items.forEach((entry) => {
       lookup[entry.term] = entry.definition;
+      lookup[glossaryDisplayTerm(entry)] = entry.definition;
+
+      if (entry.abbreviation) {
+        lookup[entry.abbreviation] = entry.definition;
+      }
+
+      (entry.matches || []).forEach((match) => {
+        lookup[match] = entry.definition;
+      });
     });
   });
 
@@ -504,10 +391,10 @@ export function buildGlossaryLookup() {
 
 /**
  * @param {ParentNode} [root=document]
- * @returns {void}
+ * @returns {Promise<void>}
  */
-export function applyGlossaryTooltips(root = document) {
-  const lookup = buildGlossaryLookup();
+export async function applyGlossaryTooltips(root = document) {
+  const lookup = await buildGlossaryLookup();
 
   const nodes = root.querySelectorAll("[data-glossary-term]");
 

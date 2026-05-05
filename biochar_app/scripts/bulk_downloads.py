@@ -1,3 +1,22 @@
+#!/usr/bin/env python3
+"""
+biochar_app/scripts/bulk_downloads.py
+
+Bulk download API routes for the Biochar Fruita CSU dashboard.
+
+Responsibilities
+----------------
+- Build the bulk-download manifest used by the frontend.
+- Serve ZIP downloads for logger, weather, irrigation, fertilizer, soil chemistry,
+  soil biology, and biomass/NIR datasets.
+- Include a README.txt file with each ZIP archive.
+- Pass unit-system state through to README builders where applicable.
+
+Notes
+-----
+This module serves already-processed/standardized datasets. It should not perform
+heavy ETL work.
+"""
 from __future__ import annotations
 
 import io
@@ -20,19 +39,16 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
     IRRIGATION_CSV,
-    FERTILIZER_CSV,
+    FERTILIZER_CSV_OUT,
 )
 from biochar_app.scripts.data_loading import load_logger_data, load_weather_data
-
-# --------------------------------------------------------------------------------------
-# Router
-# --------------------------------------------------------------------------------------
+from biochar_app.scripts.readme_builders import (
+    build_file_dataset_readme,
+    build_management_readme,
+    build_timeseries_yearly_readme,
+)
 
 bulk_router = APIRouter()
-
-# --------------------------------------------------------------------------------------
-# Paths / conventions
-# --------------------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IRRIGATION_WORKBOOK_PATH = REPO_ROOT / "biochar_app" / "data-raw" / "biochar-data-master.xlsx"
@@ -40,43 +56,19 @@ IRRIGATION_WORKBOOK_PATH = REPO_ROOT / "biochar_app" / "data-raw" / "biochar-dat
 ALLOWED_RESOLUTIONS = ["15min", "hourly", "daily", "monthly", "gseason"]
 
 FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
-    "soil_chem_all": (
-        "Soil Chemistry (all years)",
-        WARD_MASTER_SOILCHEM_CSV,
-        "biochar_soil_chemistry_all_years.csv",
-    ),
-    "soil_bio_all": (
-        "Soil Biology (all years)",
-        WARD_MASTER_SOILBIO_CSV,
-        "biochar_soil_biology_all_years.csv",
-    ),
-    "hay_all": (
-        "Biomass / Hay NIR (all years)",
-        WARD_MASTER_NIR_CSV,
-        "biochar_biomass_hay_all_years.csv",
-    ),
+    "soil_chem_all": ("Soil Chemistry (all years)", WARD_MASTER_SOILCHEM_CSV, "biochar_soil_chemistry_all_years.csv"),
+    "soil_bio_all": ("Soil Biology (all years)", WARD_MASTER_SOILBIO_CSV, "biochar_soil_biology_all_years.csv"),
+    "hay_all": ("Biomass / Hay NIR (all years)", WARD_MASTER_NIR_CSV, "biochar_biomass_hay_all_years.csv"),
 }
 
-MANAGEMENT_DATASETS = {
-    "irrigation": (
-        IRRIGATION_CSV,
-        "Irrigation",
-        "biochar_irrigation_all_years.csv",
-    ),
-    "fertilizer": (
-        FERTILIZER_CSV,
-        "Fertilizer use",
-        "biochar_fertilizer_all_years.csv",
-    ),
+MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
+    "irrigation": (IRRIGATION_CSV, "Irrigation", "biochar_irrigation_all_years.csv"),
+    "fertilizer": (FERTILIZER_CSV_OUT, "Fertilizer use", "biochar_fertilizer_all_years.csv"),
 }
 
 WORKBOOK_TOKENS: dict[str, str] = {
     "biomass": "BIOMASS",
 }
-
-# --------------------------------------------------------------------------------------
-# Small helpers
-# --------------------------------------------------------------------------------------
 
 
 def _safe_int(v: Any) -> Optional[int]:
@@ -86,106 +78,6 @@ def _safe_int(v: Any) -> Optional[int]:
         return None
 
 
-def _detect_year_span(df: pd.DataFrame) -> str:
-    candidate_date_cols = [
-        "date_rec",
-        "date",
-        "sample_date",
-        "date_rept",
-        "start_timestamp",
-        "end_timestamp",
-        "application_date",
-        "timestamp",
-    ]
-    candidate_year_cols = ["year", "Year"]
-
-    for col in candidate_date_cols:
-        if col in df.columns:
-            dt = pd.to_datetime(df[col], errors="coerce")
-            years = sorted(y for y in dt.dt.year.dropna().astype(int).unique())
-            if years:
-                return f"{years[0]}–{years[-1]}" if len(years) > 1 else str(years[0])
-
-    for col in candidate_year_cols:
-        if col in df.columns:
-            vals = pd.to_numeric(df[col], errors="coerce").dropna().astype(int)
-            years = sorted(vals.unique())
-            if years:
-                return f"{years[0]}–{years[-1]}" if len(years) > 1 else str(years[0])
-
-    return "unknown"
-
-
-def _dataset_summary(df: pd.DataFrame) -> str:
-    rows = len(df)
-    cols = len(df.columns)
-    year_text = _detect_year_span(df)
-
-    return f"""Dataset summary
----------------
-Rows: {rows}
-Variables: {cols}
-Years included: {year_text}
-"""
-
-
-def _file_backed_readme_text(
-    dataset_label: str,
-    source_path: Path,
-    df: pd.DataFrame,
-) -> str:
-    summary = _dataset_summary(df)
-
-    return f"""Biochar Fruita CSU – Bulk Download
-
-Dataset: {dataset_label}
-Source file: {source_path}
-
-{summary}
-
-Notes
------
-This archive contains the canonical all-years CSV currently used by the Biochar dashboard.
-
-Units
------
-See the Technical Details tab and dataset-specific documentation for variable definitions and units.
-
-Generated by the Biochar dashboard bulk download endpoint.
-"""
-
-
-def _readme_text(
-    dataset: str,
-    year: Optional[int],
-    resolution: Optional[str],
-    notes: str = "",
-    df: Optional[pd.DataFrame] = None,
-) -> str:
-    ytxt = str(year) if year is not None else "ALL/NA"
-    rtxt = resolution if resolution is not None else "ALL/NA"
-
-    summary = ""
-    if df is not None:
-        summary = "\n" + _dataset_summary(df)
-
-    return f"""Biochar Fruita CSU – Bulk Download
-
-Dataset: {dataset}
-Year: {ytxt}
-Resolution: {rtxt}
-{summary}
-
-Notes
------
-{notes or "See tab 'Technical Details' for variable definitions and units."}
-
-Units
------
-Stored data are in US customary units in the backend (display may be metric if toggled).
-
-Generated by the Biochar dashboard bulk download endpoint.
-"""
 
 
 def _list_years_on_disk() -> list[int]:
@@ -196,8 +88,7 @@ def _list_years_on_disk() -> list[int]:
             if not res_dir.is_dir():
                 continue
             for p in res_dir.glob("*.parquet"):
-                stem = p.stem
-                y = _safe_int(stem.split("_", 1)[0])
+                y = _safe_int(p.stem.split("_", 1)[0])
                 if y is not None and 1900 <= y <= 2100:
                     years.add(y)
 
@@ -219,84 +110,6 @@ def _list_resolutions_on_disk(year: int) -> list[str]:
             found.append(res)
 
     return [r for r in ALLOWED_RESOLUTIONS if r in found]
-
-
-def _extract_years_from_dataframe(df: pd.DataFrame) -> list[int]:
-    candidate_date_cols = [
-        "start_timestamp",
-        "application_date",
-        "date",
-        "timestamp",
-        "date_rec",
-        "end_timestamp",
-    ]
-    candidate_year_cols = ["year", "Year"]
-
-    for col in candidate_date_cols:
-        if col in df.columns:
-            dt = pd.to_datetime(
-                df[col],
-                format="ISO8601",
-                errors="coerce"
-            )
-            years = sorted(int(y) for y in dt.dt.year.dropna().astype(int).unique())
-            if years:
-                return years
-
-    for col in candidate_year_cols:
-        if col in df.columns:
-            vals = pd.to_numeric(df[col], errors="coerce").dropna().astype(int)
-            years = sorted(int(y) for y in vals.unique())
-            if years:
-                return years
-
-    return []
-
-
-def _filter_management_df_to_year(df: pd.DataFrame, dataset: str, year: int) -> pd.DataFrame:
-    out = df.copy()
-
-    if dataset == "irrigation":
-        if "start_timestamp" not in out.columns:
-            raise HTTPException(
-                status_code=500,
-                detail="Irrigation CSV missing required column: start_timestamp",
-            )
-
-        start_ts = pd.to_datetime(out["start_timestamp"], errors="coerce")
-        out = out.assign(_year=start_ts.dt.year)
-        out = out[out["_year"] == year].copy()
-        out.drop(columns=["_year"], inplace=True, errors="ignore")
-        return out
-
-    date_candidates = [
-        "application_date",
-        "date",
-        "timestamp",
-        "start_timestamp",
-    ]
-    for col in date_candidates:
-        if col in out.columns:
-            ts = pd.to_datetime(out[col], errors="coerce")
-            out = out.assign(_year=ts.dt.year)
-            out = out[out["_year"] == year].copy()
-            out.drop(columns=["_year"], inplace=True, errors="ignore")
-            return out
-
-    for col in ("year", "Year"):
-        if col in out.columns:
-            yrs = pd.to_numeric(out[col], errors="coerce")
-            return out[yrs == year].copy()
-
-    raise HTTPException(
-        status_code=500,
-        detail=f"Could not infer year for management dataset '{dataset}' from cleaned CSV columns",
-    )
-
-
-# --------------------------------------------------------------------------------------
-# Parquet path resolution
-# --------------------------------------------------------------------------------------
 
 
 def _summary_logger_parquet_path(year: int, resolution: str) -> Path:
@@ -330,7 +143,6 @@ def _logger_parquet_path(year: int, resolution: str) -> Path:
     preferred = _summary_logger_parquet_path(year, resolution)
     if preferred.exists():
         return preferred
-
     return PARQUET_DIR / str(year) / resolution / f"{year}_{resolution}.parquet"
 
 
@@ -362,10 +174,6 @@ def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
             return c
 
     return None
-
-# --------------------------------------------------------------------------------------
-# File reading helpers
-# --------------------------------------------------------------------------------------
 
 
 def _read_parquet_df(path: Path) -> pd.DataFrame:
@@ -426,19 +234,13 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     return buf.read()
 
 
-# --------------------------------------------------------------------------------------
-# Manifest
-# --------------------------------------------------------------------------------------
-
-
 @bulk_router.get("/bulk_download_manifest")
 def bulk_download_manifest() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
 
     years = _list_years_on_disk()
     for y in years:
-        res_list = _list_resolutions_on_disk(y)
-        for res in res_list:
+        for res in _list_resolutions_on_disk(y):
             lp = _logger_parquet_path(y, res)
             if lp.exists():
                 items.append(
@@ -464,19 +266,17 @@ def bulk_download_manifest() -> dict[str, Any]:
                 )
 
     for dataset_key, (csv_path, label_base, _) in MANAGEMENT_DATASETS.items():
-        if not csv_path.exists():
-            continue
-
-        items.append(
-            {
-                "key": f"{dataset_key}_all",
-                "dataset": dataset_key,
-                "year": None,
-                "resolution": None,
-                "label": f"{label_base} (all years)",
-                "file_path": str(csv_path),
-            }
-        )
+         if csv_path.exists():
+            items.append(
+                {
+                    "key": f"{dataset_key}_all",
+                    "dataset": dataset_key,
+                    "year": None,
+                    "resolution": None,
+                    "label": f"{label_base} (all years)",
+                    "file_path": str(csv_path),
+                }
+            )
 
     if IRRIGATION_WORKBOOK_PATH.exists():
         try:
@@ -485,26 +285,37 @@ def bulk_download_manifest() -> dict[str, Any]:
         except Exception:
             sheets = []
 
+        seen_workbook_keys: set[str] = set()
         for base, token in WORKBOOK_TOKENS.items():
             for s in sheets:
                 s_match = s.strip().upper()
-                if token in s_match:
-                    for part in s_match.replace("-", " ").replace("_", " ").split():
-                        if len(part) == 4 and part.isdigit():
-                            year = int(part)
-                            break
-                    if year is None:
-                        continue
-                    items.append(
-                        {
-                            "key": f"{base}_{year}",
-                            "dataset": base,
-                            "year": year,
-                            "resolution": None,
-                            "label": f"{base.title()} ({year})",
-                            "workbook_sheet": s,
-                        }
-                    )
+                if token not in s_match:
+                    continue
+
+                year = None
+                for part in s_match.replace("-", " ").replace("_", " ").split():
+                    if len(part) == 4 and part.isdigit():
+                        year = int(part)
+                        break
+
+                if year is None:
+                    continue
+
+                workbook_key = f"{base}_{year}"
+                if workbook_key in seen_workbook_keys:
+                    continue
+                seen_workbook_keys.add(workbook_key)
+
+                items.append(
+                    {
+                        "key": workbook_key,
+                        "dataset": base,
+                        "year": year,
+                        "resolution": None,
+                        "label": f"{base.title()} ({year})",
+                        "workbook_sheet": s,
+                    }
+                )
 
     for key, (label, p, _) in FILE_BACKED_DOWNLOADS.items():
         if p.exists():
@@ -529,18 +340,9 @@ def bulk_download_manifest() -> dict[str, Any]:
     }
 
 
-# --------------------------------------------------------------------------------------
-# Download
-# --------------------------------------------------------------------------------------
-
-
 @bulk_router.post("/bulk_download")
 async def bulk_download(payload: dict[str, Any]):
-    """
-    Payload supports:
-      - {"key": "loggers_2025_daily"}
-      - {"keys": ["loggers_2025_daily"]}
-    """
+    unit_system = str(payload.get("unitSystem") or payload.get("unit_system") or "us").lower()
     keys = payload.get("keys")
     if isinstance(keys, list) and keys:
         key = str(keys[0])
@@ -562,9 +364,9 @@ async def bulk_download(payload: dict[str, Any]):
             raise HTTPException(status_code=500, detail=f"Failed to read CSV for key {key}: {e}")
 
         csv_bytes = df.to_csv(index=False).encode("utf-8")
-        readme = _file_backed_readme_text(
+        readme = build_file_dataset_readme(
+            dataset_key=key,
             dataset_label=dataset_label,
-            source_path=p,
             df=df,
         )
 
@@ -612,15 +414,16 @@ async def bulk_download(payload: dict[str, Any]):
                 files.append((f"biochar_loggers_{year}_{resolution}_ratios.csv", ratios_bytes))
                 ratios_included = True
 
-            readme = _readme_text(
-                "logger",
-                year,
-                resolution,
+            readme = build_timeseries_yearly_readme(
+                dataset="logger",
+                year=year,
+                resolution=resolution,
                 notes=(
                     "Source loader: biochar_app.scripts.data_loading.load_logger_data\n"
                     f"Ratios included as separate file: {'yes' if ratios_included else 'no'}"
                 ),
                 df=logger_df,
+                unit_system=unit_system,
             )
 
         else:
@@ -628,12 +431,13 @@ async def bulk_download(payload: dict[str, Any]):
             csv_bytes = weather_df.to_csv(index=False).encode("utf-8")
             files.append((f"biochar_weather_{year}_{resolution}.csv", csv_bytes))
 
-            readme = _readme_text(
-                "weather",
-                year,
-                resolution,
+            readme = build_timeseries_yearly_readme(
+                dataset="weather",
+                year=year,
+                resolution=resolution,
                 notes="Source loader: biochar_app.scripts.data_loading.load_weather_data",
                 df=weather_df,
+                unit_system=unit_system,
             )
 
         files.append(("README.txt", readme.encode("utf-8")))
@@ -659,12 +463,11 @@ async def bulk_download(payload: dict[str, Any]):
 
         files.append((filename, csv_bytes))
 
-        readme = _readme_text(
-            dataset_label,
-            None,
-            None,
-            notes=f"Source cleaned all-years management CSV: {csv_path}",
+        readme = build_management_readme(
+            dataset=dataset,
+            dataset_label=dataset_label,
             df=management_df,
+            unit_system=unit_system,
         )
         files.append(("README.txt", readme.encode("utf-8")))
 
@@ -694,11 +497,11 @@ async def bulk_download(payload: dict[str, Any]):
         csv_bytes = workbook_df.to_csv(index=False).encode("utf-8")
         files.append((f"biochar_{dataset}_{year}.csv", csv_bytes))
 
-        readme = _readme_text(
-            dataset,
-            year,
-            None,
-            notes=f"Source workbook: {IRRIGATION_WORKBOOK_PATH}\nSheet: {sheet}",
+        readme = build_timeseries_yearly_readme(
+            dataset=dataset,
+            year=year,
+            resolution="workbook sheet",
+            notes=f"Workbook sheet: {sheet}",
             df=workbook_df,
         )
         files.append(("README.txt", readme.encode("utf-8")))

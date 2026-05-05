@@ -606,6 +606,20 @@ function hasDatasetFamily(manifest, dataset) {
 }
 
 /**
+ * @returns {"us" | "metric"}
+ */
+function selectedBulkUnitSystem() {
+  const bulkToggle = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("units-toggle_bulk")
+  );
+
+  if (bulkToggle) {
+    return bulkToggle.checked ? "metric" : "us";
+  }
+
+  return downloadsWindow.unitSystem === "metric" ? "metric" : "us";
+}
+/**
  * @returns {Promise<void>}
  */
 export async function initBulkDownloadTab() {
@@ -793,6 +807,13 @@ export async function initBulkDownloadTab() {
   if (yearEl) yearEl.addEventListener("change", refreshEnabledState);
   if (granEl) granEl.addEventListener("change", refreshEnabledState);
 
+  const bulkUnitToggle = /** @type {HTMLInputElement | null} */ (
+    document.getElementById("units-toggle_bulk")
+  );
+
+  if (bulkUnitToggle) {
+    bulkUnitToggle.checked = downloadsWindow.unitSystem === "metric";
+  }
   for (const btn of buttons) {
     btn.addEventListener("click", async (evt) => {
       evt.preventDefault();
@@ -838,7 +859,8 @@ export async function initBulkDownloadTab() {
         return;
       }
 
-      const payload = { keys: [key] };
+      const unitSystem = selectedBulkUnitSystem();
+      const payload = { keys: [key], unitSystem };
       console.log("🧾 Bulk download request:", payload);
 
       let suffix = "";

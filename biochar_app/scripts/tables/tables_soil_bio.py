@@ -321,7 +321,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
             VariableSpec(
                 key="gram_neg_biomass",
                 label="Gram− Biomass (ng/g)",
-                candidates=("gram_biomass", "gram_neg_biomass", "gram_neg_ng_per_g", "gram_negative_ng_per_g"),
+                candidates=("gram_neg_biomass", "gram_neg_ng_per_g", "gram_negative_ng_per_g", "gram_biomass"),
                 note="Gram-negative bacterial biomass (ng/g).",
                 reference_key="gram_pos_gram",
             ),

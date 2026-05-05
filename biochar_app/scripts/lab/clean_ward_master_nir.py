@@ -95,6 +95,8 @@ DROP_COLUMNS = {
     "lab_no",
     "results_for",
     "description",
+    "moisture_pct_db",
+    "dry_matter_pct_db",
 }
 
 EXPECTED_NIR_COLUMNS = [
@@ -235,6 +237,44 @@ def _read_one_2024_mineral_workbook(path: Path) -> pd.DataFrame:
 
     return merged
 
+def _drop_as_received_pct_when_dry_basis_exists(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drop as-received/wet-basis percentage columns when a dry-basis equivalent exists.
+
+    Example:
+    - keep ndf_pct_db
+    - drop ndf_pct
+
+    Always keep moisture/dry-matter columns because they describe sample water content.
+    """
+    keep_always = {
+        "moisture_pct",
+        "dry_matter_pct",
+        "moisture_pct_db",
+        "dry_matter_pct_db",
+    }
+
+    drop_cols: list[str] = []
+
+    for col in df.columns:
+        if col in keep_always:
+            continue
+
+        # Handle both patterns:
+        # - ndf_pct → ndf_pct_db
+        # - ndfd48_pctndf → ndfd48_pctndf_db
+
+        if not col.endswith("_db"):
+            db_col = f"{col}_db"
+            if db_col in df.columns:
+                drop_cols.append(col)
+
+    if drop_cols:
+        logger.info("🧹 Dropping as-received columns with dry-basis equivalents:")
+        for col in drop_cols:
+            logger.info(f"   {col}")
+
+    return df.drop(columns=drop_cols, errors="ignore")
 
 def _read_2024_mineral_supplements() -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
@@ -324,6 +364,10 @@ def clean_ward_master_nir() -> None:
     # Patch missing 2024 mineral values
     supplement_df = _read_2024_mineral_supplements()
     df = _patch_missing_minerals(df, supplement_df)
+
+    # Prefer dry-basis forage/NIR values when both as-received and dry-basis exist
+    df = _drop_as_received_pct_when_dry_basis_exists(df)
+
 
     # Put keys first
     key_cols = [c for c in ["strip", "nir_date"] if c in df.columns]

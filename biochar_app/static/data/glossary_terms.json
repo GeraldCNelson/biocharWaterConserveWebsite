@@ -1,0 +1,854 @@
+{
+  "sections": [
+    {
+      "key": "biochar_soil_basics",
+      "label": "Biochar & Soil Basics",
+      "items": [
+        {
+          "key": "biochar",
+          "term": "Biochar",
+          "definition": "A carbon-rich material produced by heating biomass under low-oxygen conditions. In soil, it can affect water holding, nutrient retention, bulk density, and microbial habitat.",
+          "matches": ["Biochar"]
+        },
+        {
+          "key": "pyrolysis",
+          "term": "Pyrolysis",
+          "definition": "The thermal conversion process used to make biochar from biomass in a low-oxygen environment.",
+          "matches": ["Pyrolysis"]
+        },
+        {
+          "key": "soc",
+          "term": "Soil Organic Carbon",
+          "abbreviation": "SOC",
+          "definition": "The carbon component of soil organic matter. SOC represents the amount of carbon stored in the soil and is the primary metric used to evaluate carbon sequestration and long-term carbon storage. SOC is sometimes estimated from soil organic matter using a conversion factor, but direct measurements are more accurate.",
+          "units": "commonly reported as percent carbon (%) or as carbon mass per soil mass",
+          "matches": ["SOC", "organic_carbon", "soil_organic_carbon", "organic_c", "organic_c_h2o_ppm"],
+          "related_to": ["som", "active_carbon", "microbial_necromass"]
+        },
+        {
+          "key": "som",
+          "term": "Soil Organic Matter",
+          "abbreviation": "SOM",
+          "definition": "The organic fraction of soil, including decomposing plant material, microbial residues, and stable carbon compounds. SOM includes carbon as well as other elements such as hydrogen, oxygen, and nitrogen. It is commonly reported in soil tests and is often used as a proxy for soil organic carbon.",
+          "units": "commonly reported as percent organic matter (%)",
+          "matches": ["SOM", "Organic Matter", "organic_matter", "organic_matter_loi_pct"],
+          "related_to": ["soc", "active_carbon"]
+        },
+        {
+          "key": "carbon_sequestration",
+          "term": "Carbon Sequestration",
+          "definition": "The long-term storage of carbon in soil or biomass. Biochar is often studied for its potential to increase carbon storage.",
+          "matches": ["Carbon Sequestration"],
+          "related_to": ["soc"]
+        },
+        {
+          "key": "bulk_density",
+          "term": "Bulk Density",
+          "definition": "The mass of dry soil per unit volume. Lower bulk density often indicates greater pore space and improved root penetration.",
+          "units": "commonly reported as g/cm³",
+          "matches": ["Bulk Density", "bulk_density"]
+        }
+      ]
+    },
+    {
+      "key": "experimental_design",
+      "label": "Experimental Design",
+      "items": [
+        {
+          "key": "strip",
+          "term": "Strip",
+          "definition": "One of the four field treatment areas in the biochar experiment: S1, S2, S3, and S4.",
+          "matches": ["Strip", "S1", "S2", "S3", "S4"]
+        },
+        {
+          "key": "treatment_strip",
+          "term": "Treatment Strip",
+          "definition": "A strip that received biochar. In this experiment, S1 and S3 are treatment strips.",
+          "matches": ["Treatment Strip"]
+        },
+        {
+          "key": "control_strip",
+          "term": "Control Strip",
+          "definition": "A strip that did not receive biochar. In this experiment, S2 and S4 are control strips.",
+          "matches": ["Control Strip"]
+        },
+        {
+          "key": "irrigation_regime",
+          "term": "Irrigation Regime",
+          "definition": "The water application schedule used for a strip pair within the experiment.",
+          "matches": ["Irrigation Regime"]
+        },
+        {
+          "key": "baseline",
+          "term": "Baseline",
+          "definition": "Measurements taken before biochar application, used as a pre-treatment reference.",
+          "matches": ["Baseline"]
+        },
+        {
+          "key": "directional_change",
+          "term": "Directional Change",
+          "definition": "Whether a variable increases or decreases over time or differs positively or negatively between treatment and control.",
+          "matches": ["Directional Change"]
+        }
+      ]
+    },
+    {
+      "key": "time_periods",
+      "label": "Time Periods & Aggregation",
+      "items": [
+        {
+          "key": "granularity",
+          "term": "Granularity",
+          "definition": "The time resolution at which data are displayed or summarized, such as 15-minute, hourly, daily, monthly, or growing season.",
+          "matches": ["Granularity", "15min", "hourly", "daily", "monthly", "gseason"]
+        },
+        {
+          "key": "aggregation",
+          "term": "Aggregation",
+          "definition": "The process of summarizing higher-frequency data into lower-frequency periods, such as averaging 15-minute measurements into daily values.",
+          "matches": ["Aggregation"]
+        },
+        {
+          "key": "growing_season",
+          "term": "Growing Season",
+          "definition": "In the default app configuration, the period from April 1 through October 31. It is defined by the irrigation window.",
+          "matches": ["Growing Season", "gseason"]
+        },
+        {
+          "key": "winter_dormant_period",
+          "term": "Winter / Dormant Period",
+          "definition": "In the default app configuration, the period from November 1 through March 31.",
+          "matches": ["Winter", "Dormant Period"]
+        },
+        {
+          "key": "custom_season",
+          "term": "Custom Season",
+          "definition": "A user-defined seasonal grouping used to summarize data outside the default periods.",
+          "matches": ["Custom Season"]
+        }
+      ]
+    },
+    {
+      "key": "water_sensor_metrics",
+      "label": "Water & Sensor Metrics",
+      "items": [
+        {
+          "key": "vwc",
+          "term": "Volumetric Water Content",
+          "abbreviation": "VWC",
+          "definition": "The percentage of soil volume occupied by water. This is a primary soil moisture measurement from the dataloggers.",
+          "units": "percent volumetric water content (%)",
+          "matches": ["VWC"]
+        },
+        {
+          "key": "swc",
+          "term": "Soil Water Content",
+          "abbreviation": "SWC",
+          "definition": "The total amount of water stored in a defined soil layer. In this app, SWC is derived from VWC and depth assumptions.",
+          "units": "gallons or liters depending on unit system",
+          "matches": ["SWC", "SWC_vol"]
+        },
+        {
+          "key": "ec",
+          "term": "Electrical Conductivity",
+          "abbreviation": "EC",
+          "definition": "A measure of the soil’s ability to conduct electricity, related to dissolved salts and ion concentration. Common units include deciSiemens per meter (dS/m), milliSiemens per centimeter (mS/cm), or millimhos per centimeter (mmho/cm), where 1 dS/m = 1 mS/cm = 1 mmho/cm.",
+          "units": "dS/m, mS/cm, or mmho/cm",
+          "matches": ["EC", "electrical_conductivity", "1_1_s_salts_mmho_cm"],
+          "source": {
+            "note": "Standard soil science unit equivalence."
+          }
+        },
+        {
+          "key": "field_capacity",
+          "term": "Field Capacity",
+          "definition": "The amount of water remaining in soil after excess gravitational water has drained away.",
+          "matches": ["Field Capacity"]
+        },
+        {
+          "key": "wilting_point",
+          "term": "Wilting Point",
+          "definition": "The soil moisture level below which plants can no longer extract sufficient water.",
+          "matches": ["Wilting Point"]
+        },
+        {
+          "key": "depth",
+          "term": "Depth",
+          "definition": "The soil depth associated with a sensor or summarized value.",
+          "units": "inches or centimeters depending on unit system",
+          "matches": ["Depth", "begin_depth_in", "end_depth_in"]
+        },
+        {
+          "key": "logger_location",
+          "term": "Logger Location",
+          "definition": "The physical datalogger position within a strip, used to distinguish measurements from different points in the field.",
+          "matches": ["Logger Location", "logger_location"]
+        }
+      ]
+    },
+    {
+      "key": "ratios_deltas",
+      "label": "Ratios, Differences, and Derived Metrics",
+      "items": [
+        {
+          "key": "ratio",
+          "term": "Ratio",
+          "definition": "A comparison between paired strips, used to highlight treatment effects while accounting for shared environmental conditions.",
+          "units": "unitless",
+          "matches": ["ratio"]
+        },
+        {
+          "key": "vwc_ratio",
+          "term": "VWC Ratio",
+          "definition": "A ratio comparing volumetric water content between paired strips, used to detect relative treatment effects in soil moisture.",
+          "units": "unitless",
+          "matches": ["VWC", "ratio"]
+        },
+        {
+          "key": "ec_ratio",
+          "term": "EC Ratio",
+          "definition": "A ratio comparing electrical conductivity between paired strips, used to highlight relative differences in salts or dissolved ions.",
+          "units": "unitless",
+          "matches": ["EC", "ratio"]
+        },
+        {
+          "key": "temperature_ratio",
+          "term": "Temperature Ratio",
+          "definition": "A ratio comparing temperature values between paired strips. It should be interpreted cautiously, especially when values are near zero.",
+          "units": "unitless",
+          "matches": ["T", "ratio", "temperature"]
+        },
+        {
+          "key": "delta",
+          "term": "Delta",
+          "abbreviation": "Δ",
+          "definition": "A difference value, often used to compare treatment and control or to compare one time period with another.",
+          "matches": ["Delta", "Δ", "diff"]
+        },
+        {
+          "key": "delta_swc",
+          "term": "ΔSWC",
+          "definition": "The difference in soil water content between strips or between time periods.",
+          "units": "gallons or liters depending on unit system",
+          "matches": ["SWCdiff", "ΔSWC"]
+        },
+        {
+          "key": "delta_t",
+          "term": "ΔT",
+          "definition": "The difference in temperature between strips or between time periods.",
+          "units": "degrees Fahrenheit or degrees Celsius depending on unit system",
+          "matches": ["Tdiff", "ΔT"]
+        }
+      ]
+    },
+    {
+      "key": "soil_chemistry",
+      "label": "Soil Chemistry",
+      "items": [
+        {
+          "key": "ph",
+          "term": "pH",
+          "definition": "A measure of soil acidity or alkalinity.",
+          "units": "standard pH units",
+          "matches": ["pH", "ph", "soil_ph", "1_1_soil_ph", "wdrf_buffer_ph"]
+        },
+        {
+          "key": "salinity",
+          "term": "Salinity",
+          "definition": "The concentration of soluble salts in the soil.",
+          "units": "commonly reported as electrical conductivity units such as dS/m or mmho/cm",
+          "matches": ["Salinity", "salinity", "1_1_s_salts_mmho_cm"]
+        },
+        {
+          "key": "excess_lime",
+          "term": "Excess Lime",
+          "definition": "A measure indicating the presence of free calcium carbonate or lime in soil, often important for interpreting alkaline soil chemistry and nutrient availability.",
+          "units": "as reported by laboratory",
+          "matches": ["excess_lime"]
+        },
+        {
+          "key": "organic_matter",
+          "term": "Organic Matter",
+          "definition": "The portion of soil made up of plant, microbial, and other carbon-based residues.",
+          "units": "commonly reported as percent (%)",
+          "matches": ["Organic Matter", "organic_matter", "organic_matter_loi_pct"],
+          "related_to": ["som", "soc"]
+        },
+        {
+          "key": "nitrogen",
+          "term": "Nitrogen",
+          "abbreviation": "N",
+          "definition": "An essential plant nutrient strongly associated with protein formation and plant growth.",
+          "units": "commonly reported as ppm, mg/kg, percent, or application rate depending on context",
+          "matches": ["N", "nitrogen", "nitrogen_rec", "total_n_h2o_ppm_n", "organic_n_h2o_ppm"]
+        },
+        {
+          "key": "nitrate_n",
+          "term": "Nitrate-N",
+          "definition": "A plant-available form of nitrogen commonly measured in soil tests.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["Nitrate-N", "nitrate", "nitrate_n_ppm", "h2o_no3_n"]
+        },
+        {
+          "key": "ammonium_n",
+          "term": "Ammonium-N",
+          "definition": "A plant-available form of nitrogen that can be taken up by plants or converted to nitrate through nitrification.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["ammonium", "nh4", "h2o_nh4_n"]
+        },
+        {
+          "key": "organic_n",
+          "term": "Organic Nitrogen",
+          "abbreviation": "Organic N",
+          "definition": "Nitrogen contained in organic compounds in soil. It can become plant-available over time through microbial mineralization.",
+          "units": "commonly reported as ppm N or mg/kg N",
+          "matches": ["organic_n", "organic_n_h2o_ppm", "organic_nitrogen"]
+        },
+        {
+          "key": "phosphorus",
+          "term": "Phosphorus",
+          "abbreviation": "P",
+          "definition": "An essential plant nutrient involved in energy transfer, root development, and metabolism.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["P", "phosphorus", "p2o5_rec"]
+        },
+        {
+          "key": "olsen_p",
+          "term": "Olsen P",
+          "definition": "A soil-test phosphorus measure commonly used in alkaline or calcareous soils.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["Olsen P", "olsen", "olsen_p_ppm_p"]
+        },
+        {
+          "key": "potassium",
+          "term": "Potassium",
+          "abbreviation": "K",
+          "definition": "An essential plant nutrient involved in water regulation, enzyme activation, and stress tolerance.",
+          "units": "commonly reported as ppm, mg/kg, or percent saturation depending on context",
+          "matches": ["K", "potassium", "potassium_ppm_k", "k2o_rec"]
+        },
+        {
+          "key": "sulfur",
+          "term": "Sulfur",
+          "abbreviation": "S",
+          "definition": "An essential plant nutrient involved in protein formation, enzyme activity, and plant metabolism. In soil tests it is often reported as sulfate-sulfur.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["sulfur", "sulfur_rec", "sulfate_s", "sulfate_s_ppm_s"]
+        },
+        {
+          "key": "calcium",
+          "term": "Calcium",
+          "abbreviation": "Ca",
+          "definition": "A secondary plant nutrient and base cation important for cell wall structure, root growth, and soil chemical balance.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["calcium", "calcium_ppm_ca", "Ca"]
+        },
+        {
+          "key": "magnesium",
+          "term": "Magnesium",
+          "abbreviation": "Mg",
+          "definition": "A secondary plant nutrient and base cation that is central to chlorophyll and photosynthesis.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["magnesium", "magnesium_ppm_mg", "magnesium_rec", "Mg"]
+        },
+        {
+          "key": "sodium",
+          "term": "Sodium",
+          "abbreviation": "Na",
+          "definition": "A soluble cation that can affect soil structure and salinity when present at elevated levels.",
+          "units": "commonly reported as ppm or mg/kg",
+          "matches": ["sodium", "sodium_ppm_na", "Na"]
+        },
+        {
+          "key": "zinc",
+          "term": "Zinc",
+          "abbreviation": "Zn",
+          "definition": "An essential plant micronutrient involved in enzyme function, growth regulation, and protein synthesis.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["zinc", "zinc_ppm_zn", "zinc_rec", "Zn"]
+        },
+        {
+          "key": "iron",
+          "term": "Iron",
+          "abbreviation": "Fe",
+          "definition": "An essential plant micronutrient involved in chlorophyll formation and electron transfer reactions.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["iron", "iron_ppm_fe", "iron_rec", "Fe"]
+        },
+        {
+          "key": "manganese",
+          "term": "Manganese",
+          "abbreviation": "Mn",
+          "definition": "An essential plant micronutrient involved in photosynthesis, enzyme activation, and nitrogen metabolism.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["manganese", "manganese_ppm_mn", "manganese_rec", "Mn"]
+        },
+        {
+          "key": "copper",
+          "term": "Copper",
+          "abbreviation": "Cu",
+          "definition": "An essential plant micronutrient involved in enzyme systems, lignin formation, and reproductive growth.",
+          "units": "commonly reported as ppm or mg/kg; recommendations may be reported as application rate",
+          "matches": ["copper", "copper_ppm_cu", "copper_rec", "Cu"]
+        },
+        {
+          "key": "cec",
+          "term": "Cation Exchange Capacity",
+          "abbreviation": "CEC",
+          "definition": "A measure of the soil’s ability to hold and exchange positively charged nutrients such as potassium, calcium, magnesium, and sodium.",
+          "units": "commonly reported as meq/100g or cmol(+)/kg",
+          "matches": ["CEC", "cation_exchange_capacity", "cec_meq_100g", "cec_sum_of_cations_me_100g"]
+        },
+        {
+          "key": "base_saturation",
+          "term": "Base Saturation",
+          "definition": "The proportion of soil cation exchange capacity occupied by base cations such as calcium, magnesium, potassium, and sodium.",
+          "units": "percent saturation (%)",
+          "matches": ["base_saturation", "pctca_sat", "pctmg_sat", "pctk_sat", "pctna_sat", "pcth_sat"]
+        },
+        {
+          "key": "soil_respiration",
+          "term": "Soil Respiration",
+          "definition": "A measure of microbial metabolic activity in soil, typically quantified as carbon dioxide released over a given time period. It reflects organic matter decomposition and microbial activity.",
+          "units": "as reported by laboratory, commonly CO₂-C release per unit soil per time",
+          "matches": ["co2_soil_respiration", "soil_respiration"],
+          "related_to": ["total_microbial_biomass", "active_carbon", "soc"]
+        },
+        {
+          "key": "water_stable_aggregates",
+          "term": "Water Stable Aggregates",
+          "definition": "A measure of soil structure indicating the ability of soil aggregates to resist breakdown when exposed to water.",
+          "units": "as reported by laboratory, commonly percent (%)",
+          "matches": ["water_stable_aggregates", "water_stable_aggregates_mod"]
+        },
+        {
+          "key": "soil_health_score",
+          "term": "Soil Health Score",
+          "definition": "A composite or laboratory-derived index summarizing multiple soil health indicators.",
+          "units": "index value",
+          "matches": ["soil_health_score"]
+        },
+        {
+          "key": "active_carbon",
+          "term": "Microbially Active Carbon",
+          "definition": "The fraction of soil organic carbon that is readily available for microbial use. This pool responds quickly to management changes and is strongly linked to microbial activity and nutrient cycling.",
+          "units": "percent microbially active carbon (%) or equivalent laboratory units",
+          "matches": ["microbially_active_carbon_pctma", "active_carbon"],
+          "related_to": ["soc", "soil_respiration", "total_microbial_biomass"]
+        },
+        {
+          "key": "organic_n_release_reserve",
+          "term": "Organic Nitrogen Release and Reserve",
+          "definition": "Laboratory indicators of nitrogen that may become available through microbial mineralization and the pool of organic nitrogen retained in soil.",
+          "units": "commonly reported as ppm N",
+          "matches": ["organic_nitrogen_release_ppm_n", "organic_nitrogen_reserve_ppm_n"]
+        },
+        {
+          "key": "organic_c_n_ratio",
+          "term": "Organic C:N Ratio",
+          "definition": "The ratio of organic carbon to organic nitrogen. It is used to interpret organic matter quality, decomposition, and nitrogen mineralization potential.",
+          "units": "unitless ratio",
+          "matches": ["organic_c_n_h2o", "c_n_ratio"]
+        }
+      ]
+    },
+    {
+      "key": "soil_biology",
+      "label": "Soil Biology",
+      "items": [
+        {
+          "key": "plfa",
+          "term": "PLFA",
+          "definition": "Phospholipid fatty acid analysis, a method used to estimate microbial biomass and microbial community composition in soil.",
+          "matches": ["PLFA", "plfa"]
+        },
+        {
+          "key": "total_microbial_biomass",
+          "term": "Total Microbial Biomass",
+          "definition": "An estimate of the total living microbial mass in the soil sample.",
+          "units": "commonly reported as biomass per mass of soil",
+          "matches": ["Total Microbial Biomass", "total_biomass"]
+        },
+        {
+          "key": "bacterial_biomass",
+          "term": "Bacterial Biomass",
+          "definition": "An estimate of the bacterial component of the soil microbial community.",
+          "units": "commonly reported as biomass per mass of soil",
+          "matches": ["Bacterial Biomass", "total_bacteria_biomass", "bacteria_pct"]
+        },
+        {
+          "key": "fungal_biomass",
+          "term": "Fungal Biomass",
+          "definition": "An estimate of the fungal component of the soil microbial community.",
+          "units": "commonly reported as biomass per mass of soil",
+          "matches": ["Fungal Biomass", "total_fungi_biomass", "total_fungi_pct", "fungi", "fungal"]
+        },
+        {
+          "key": "actinomycetes",
+          "term": "Actinomycetes",
+          "definition": "A group of filamentous bacteria important in decomposition of complex organic matter.",
+          "units": "commonly reported as biomass per mass of soil or percent of total biomass",
+          "matches": ["Actinomycetes", "actinomycetes_biomass", "actinomycetes_pct"]
+        },
+        {
+          "key": "gram_positive_biomass",
+          "term": "Gram-positive bacteria",
+          "abbreviation": "Gram+",
+          "definition": "Bacteria with thick cell walls that tend to be more resilient to environmental stress and are often associated with decomposition of complex organic matter.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["gram_pos", "gram_positive", "gram_pos_biomass", "gram_pos_pct"]
+        },
+        {
+          "key": "gram_negative_biomass",
+          "term": "Gram-negative bacteria",
+          "abbreviation": "Gram−",
+          "definition": "Bacteria with thinner cell walls that typically respond more quickly to available nutrients and are often associated with labile carbon cycling.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["gram_neg", "gram_negative", "gram_neg_biomass", "gram_neg_pct"]
+        },
+        {
+          "key": "am_fungi",
+          "term": "Arbuscular mycorrhizal fungi",
+          "abbreviation": "AMF",
+          "definition": "A group of symbiotic fungi that colonize plant roots and enhance nutrient and water uptake, especially phosphorus.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["arbuscular_mycorrhizal", "arbuscular_mycorrhizal_biomass", "am_fungi"]
+        },
+        {
+          "key": "saprophytes",
+          "term": "Saprophytic fungi",
+          "definition": "Fungi that decompose dead organic matter and contribute to nutrient recycling in soil.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["saprophytes", "saprophytic", "saprophytes_biomass", "saprophytic_pct"]
+        },
+        {
+          "key": "protozoa",
+          "term": "Protozoa",
+          "definition": "Single-celled organisms that consume bacteria and contribute to nutrient cycling through microbial grazing.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["protozoa", "protozoa_biomass", "protozoan_pct"]
+        },
+        {
+          "key": "rhizobia",
+          "term": "Rhizobia",
+          "definition": "Nitrogen-fixing bacteria commonly associated with legume roots and soil nitrogen cycling.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["rhizobia", "rhizobia_biomass", "rhizobia_pct"]
+        },
+        {
+          "key": "undifferentiated_biomass",
+          "term": "Undifferentiated Microbial Biomass",
+          "definition": "PLFA biomass not assigned to a specific microbial functional group.",
+          "units": "biomass per mass of soil or percent of total biomass",
+          "matches": ["undifferentiated", "undifferentiated_biomass", "undifferentiated_pct"]
+        },
+        {
+          "key": "fungal_bacterial_ratio",
+          "term": "Fungal:Bacterial Ratio",
+          "definition": "A comparison of fungal biomass to bacterial biomass, often used as an indicator of soil biological balance.",
+          "units": "unitless ratio",
+          "matches": ["Fungal:Bacterial Ratio", "fungal_bacterial_ratio", "fungi_bacteria"]
+        },
+        {
+          "key": "gram_ratio",
+          "term": "Gram(+):Gram(−) Ratio",
+          "definition": "The ratio of Gram-positive to Gram-negative bacterial biomass, used to characterize microbial community structure and shifts in carbon utilization strategies.",
+          "units": "unitless ratio",
+          "matches": ["gram_pos_gram", "gram_pos_neg"]
+        },
+        {
+          "key": "predator_prey",
+          "term": "Predator:Prey Ratio",
+          "definition": "A ratio representing higher trophic level organisms relative to microbial prey, used as an indicator of soil food web structure.",
+          "units": "unitless ratio",
+          "matches": ["predator_prey"],
+          "aliases": [
+            "soil food web ratio"
+          ]
+        },
+        {
+          "key": "sat_unsat",
+          "term": "Saturated:Unsaturated Fatty Acid Ratio",
+          "definition": "A PLFA stress indicator where higher values may reflect environmental stress or shifts in microbial membrane composition.",
+          "units": "unitless ratio",
+          "matches": ["sat_unsat", "saturated", "unsaturated"]
+        },
+        {
+          "key": "mono_poly",
+          "term": "Monounsaturated:Polyunsaturated Ratio",
+          "definition": "A PLFA indicator of microbial community structure and physiological status.",
+          "units": "unitless ratio",
+          "matches": ["mono_poly", "monounsaturated", "polyunsaturated"],
+          "aliases": [
+                      "microbial stress indicator",
+                      "mono poly ratio",
+                      "MUFA PUFA ratio",
+                      "MUFA:PUFA ratio",
+                      "monounsaturated polyunsaturated ratio",
+                      "monounsaturated:polyunsaturated ratio"
+                    ]
+        },
+        {
+          "key": "cyclopropyl_precursor_ratios",
+          "term": "Cyclopropyl Precursor Ratios",
+          "definition": "PLFA ratios comparing precursor fatty acids to cyclopropyl fatty acids, often used as indicators of microbial stress or community physiological status.",
+          "units": "unitless ratio",
+          "matches": ["pre_16_1w7c_cy17_0", "pre_18_1w7c_cy19_0", "cyclo_17_0", "cyclo_19_0"]
+        },
+        {
+          "key": "microbial_diversity",
+          "term": "Microbial Diversity",
+          "definition": "A measure of the variety of microbial groups present in the soil.",
+          "units": "index value",
+          "matches": ["Microbial Diversity", "diversity", "diversity_index"]
+        },
+        {
+          "key": "microbial_necromass",
+          "term": "Microbial Necromass",
+          "definition": "Accumulated dead microbial biomass, including fungal and bacterial cells and fragments. Microbial necromass is a persistent component of soil organic carbon and can contribute substantially to soil fertility and carbon sequestration.",
+          "units": "typically reported as carbon mass, such as mg C/kg soil",
+          "matches": ["necromass", "microbial_necromass"],
+          "related_to": ["soc", "som", "total_microbial_biomass"],
+          "source": {
+            "citation": "Deconstructing the microbial necromass continuum to inform soil carbon sequestration, Functional Ecology",
+            "doi": "10.1111/1365-2435.14014",
+            "note": "Article reports microbial necromass as a major contributor to soil organic carbon."
+          }
+        },
+        {
+          "key": "biological_buffering",
+          "term": "Biological Buffering",
+          "definition": "A working term for the stabilizing effect of microbial processes on nutrient availability over time.",
+          "matches": ["Biological Buffering"]
+        }
+      ]
+    },
+    {
+      "key": "plant_forage_metrics",
+      "label": "Plant, Biomass, and Forage Metrics",
+      "items": [
+        {
+          "key": "biomass",
+          "term": "Biomass",
+          "definition": "The mass of plant material produced in the field.",
+          "units": "commonly reported as dry mass or yield per area",
+          "matches": ["Biomass", "biomass"]
+        },
+        {
+          "key": "dry_weight",
+          "term": "Dry Weight",
+          "definition": "The plant mass after water has been removed, used for comparing biomass production across samples.",
+          "units": "mass units such as grams, pounds, kilograms, or tons depending on dataset",
+          "matches": ["Dry Weight", "dry_weight"]
+        },
+        {
+          "key": "nir",
+          "term": "NIR",
+          "definition": "Near-infrared reflectance analysis, used to estimate forage nutrient composition and quality.",
+          "matches": ["NIR", "nir"]
+        },
+        {
+          "key": "crude_protein",
+          "term": "Crude Protein",
+          "abbreviation": "CP",
+          "definition": "An estimate of plant protein content, usually derived from nitrogen concentration.",
+          "units": "commonly reported as percent (%)",
+          "matches": ["Crude Protein", "CP", "crude_protein"]
+        },
+        {
+          "key": "adf",
+          "term": "Acid Detergent Fiber",
+          "abbreviation": "ADF",
+          "definition": "Acid detergent fiber, a forage quality measure associated with lower digestibility at higher values.",
+          "units": "commonly reported as percent (%)",
+          "matches": ["ADF", "acid_detergent_fiber", "adf_pct_db"]
+        },
+        {
+          "key": "ndf",
+          "term": "Neutral Detergent Fiber",
+          "abbreviation": "NDF",
+          "definition": "Neutral detergent fiber, a forage quality measure associated with fiber content and intake potential.",
+          "units": "commonly reported as percent (%)",
+          "matches": ["NDF", "neutral_detergent_fiber", "ndf_pct_db"]
+        },
+        {
+          "key": "rfv",
+          "term": "Relative Feed Value",
+          "abbreviation": "RFV",
+          "definition": "Relative Feed Value, a combined index of forage quality.",
+          "units": "index value",
+          "matches": ["RFV", "relative_feed_value"],
+          "aliases": [
+                        "forage quality index"
+                      ]
+        },
+        {
+          "key": "rfq",
+          "term": "Relative Forage Quality",
+          "abbreviation": "RFQ",
+          "definition": "Relative Forage Quality, a forage quality index that incorporates digestibility estimates.",
+          "units": "index value",
+          "matches": ["RFQ", "relative_forage_quality"]
+        },
+        {
+          "key": "plant_uptake",
+          "term": "Plant Uptake",
+          "definition": "The amount of a nutrient removed from the field through plant growth and harvest.",
+          "units": "commonly reported as nutrient mass or nutrient mass per area",
+          "matches": ["Plant Uptake", "uptake"]
+        },
+        {
+          "key": "plant_withdrawal",
+          "term": "Plant Withdrawal",
+          "definition": "A practical term for nutrient removal in harvested biomass.",
+          "units": "commonly reported as nutrient mass or nutrient mass per area",
+          "matches": ["Plant Withdrawal", "withdrawal"]
+        }
+      ]
+    },
+    {
+      "key": "weather_metrics",
+      "label": "Weather Metrics",
+      "items": [
+        {
+          "key": "temp_air",
+          "term": "Air Temperature",
+          "definition": "The temperature of the air measured at the weather station.",
+          "units": "degrees Fahrenheit or degrees Celsius depending on unit system",
+          "matches": ["temp_air", "air_temperature"]
+        },
+        {
+          "key": "rh",
+          "term": "Relative Humidity",
+          "abbreviation": "RH",
+          "definition": "The amount of water vapor in the air relative to the maximum amount the air could hold at that temperature.",
+          "units": "percent (%)",
+          "matches": ["rh", "relative_humidity"]
+        },
+        {
+          "key": "dewpoint",
+          "term": "Dewpoint",
+          "definition": "The temperature at which air becomes saturated with water vapor and condensation can begin.",
+          "units": "degrees Fahrenheit or degrees Celsius depending on unit system",
+          "matches": ["dewpoint", "dew_point"]
+        },
+        {
+          "key": "vapor_pressure",
+          "term": "Vapor Pressure",
+          "definition": "The pressure exerted by water vapor in the air. Vapor pressure is useful for understanding atmospheric moisture demand.",
+          "units": "pressure units such as psi or kPa depending on unit system",
+          "matches": ["vapor_pressure"]
+        },
+        {
+          "key": "solar_rad",
+          "term": "Solar Radiation",
+          "definition": "Incoming solar energy measured at the weather station, commonly used to interpret evapotranspiration, crop growth, and soil temperature patterns.",
+          "units": "W/m²",
+          "matches": ["solar_rad", "solar_radiation"]
+        },
+        {
+          "key": "precip",
+          "term": "Precipitation",
+          "definition": "Water input from rainfall or other atmospheric sources, reported as depth over a time period.",
+          "units": "inches or millimeters depending on unit system",
+          "matches": ["precip", "precipitation"]
+        },
+        {
+          "key": "wind_speed",
+          "term": "Wind Speed",
+          "definition": "The speed of air movement measured at the weather station.",
+          "units": "miles per hour or meters per second depending on unit system",
+          "matches": ["wind_speed"]
+        },
+        {
+          "key": "wind_dir",
+          "term": "Wind Direction",
+          "definition": "The direction from which wind is blowing, usually reported in degrees from north.",
+          "units": "degrees from north",
+          "matches": ["wind_dir", "wind_direction"]
+        },
+        {
+          "key": "soil_temp",
+          "term": "Soil Temperature",
+          "definition": "Temperature measured below the soil surface at a specified depth.",
+          "units": "degrees Fahrenheit or degrees Celsius depending on unit system",
+          "matches": ["soil_temp", "soil_temperature", "st5cm", "st15cm"]
+        }
+      ]
+    },
+    {
+      "key": "irrigation_management",
+      "label": "Irrigation & Management",
+      "items": [
+        {
+          "key": "irrigation_event",
+          "term": "Irrigation Event",
+          "definition": "A single application of irrigation water over a defined time window.",
+          "matches": ["Irrigation Event", "irrigation_event"]
+        },
+        {
+          "key": "irrigation_overlay",
+          "term": "Irrigation Overlay",
+          "definition": "A visual display of irrigation timing on a plot, often shown as shaded regions or annotations.",
+          "matches": ["Irrigation Overlay"]
+        },
+        {
+          "key": "irrigation_volume",
+          "term": "Irrigation Volume",
+          "definition": "The amount of irrigation water delivered during an event.",
+          "units": "gallons or liters depending on unit system",
+          "matches": ["Gallons Applied", "gallons", "gallons_applied", "liters", "irrigation_volume"]
+        },
+        {
+          "key": "fertilizer_application",
+          "term": "Fertilizer Application",
+          "definition": "The addition of nutrients to a strip, typically recorded by date, nutrient, and amount.",
+          "units": "application units vary by source dataset",
+          "matches": ["Fertilizer Application", "fertilizer"]
+        },
+        {
+          "key": "nutrient_budget",
+          "term": "Nutrient Budget",
+          "definition": "A comparison of nutrient inputs, outputs, and changes in storage, often using fertilizer, plant uptake, and soil stock change.",
+          "matches": ["Nutrient Budget", "budget"]
+        }
+      ]
+    },
+    {
+      "key": "interpretation_terms",
+      "label": "Interpretation Terms",
+      "items": [
+        {
+          "key": "retention",
+          "term": "Retention",
+          "definition": "The ability of soil to hold water or nutrients rather than losing them through drainage, leaching, or other pathways.",
+          "matches": ["Retention"]
+        },
+        {
+          "key": "availability",
+          "term": "Availability",
+          "definition": "The extent to which a nutrient is accessible for plant uptake.",
+          "matches": ["Availability"]
+        },
+        {
+          "key": "buffering",
+          "term": "Buffering",
+          "definition": "The tendency of a soil system to resist rapid change in nutrient or moisture conditions.",
+          "matches": ["Buffering"]
+        },
+        {
+          "key": "turnover",
+          "term": "Turnover",
+          "definition": "The cycling of nutrients through soil, microbes, and plants over time.",
+          "matches": ["Turnover"]
+        },
+        {
+          "key": "efficiency",
+          "term": "Efficiency",
+          "definition": "A relative measure of how effectively a system converts inputs such as water or fertilizer into plant growth or nutrient uptake.",
+          "matches": ["Efficiency"]
+        }
+      ]
+    }
+  ]
+}

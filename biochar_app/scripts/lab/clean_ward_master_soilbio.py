@@ -100,8 +100,8 @@ SOILBIO_RENAME_MAP: Dict[str, str] = {
     "actinomycetes_biomass": "actinomycetes_biomass",
     "actinomycetes_pct": "actinomycetes_pct",
 
-    "gram_biomass_1": "gram_biomass",
-    "gram_pct_1": "gram_pct",
+    "gram_biomass_1": "gram_neg_biomass",
+    "gram_pct_1": "gram_neg_pct",
 
     "rhizobia_biomass": "rhizobia_biomass",
     "rhizobia_pct": "rhizobia_pct",
@@ -157,8 +157,8 @@ EXPECTED_SOILBIO_COLUMNS = [
     "gram_pos_pct",
     "actinomycetes_biomass",
     "actinomycetes_pct",
-    "gram_biomass",
-    "gram_pct",
+    "gram_neg_biomass",
+    "gram_neg_pct",
     "rhizobia_biomass",
     "rhizobia_pct",
     "total_fungi_biomass",

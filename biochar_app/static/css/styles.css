@@ -97,6 +97,12 @@ html {
     background-color: #c4daff;
 }
 
+.glossary-highlight {
+  background-color: #fff3a3;
+  padding: 0 0.1rem;
+  border-radius: 0.15rem;
+}
+
 /* Prefer compact Bootstrap tables in this container */
 #summary-table-container table.table-sm th,
 #summary-table-container table.table-sm td {
