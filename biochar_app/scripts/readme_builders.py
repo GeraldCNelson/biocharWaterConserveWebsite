@@ -636,6 +636,17 @@ def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "-----",
         "Units vary by variable and follow standard soil testing conventions such as ppm, %, or meq/100g.",
         "",
+        "Reference note",
+        "--------------",
+        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
+        "",
+        "Primary sources:",
+        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
+        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
+        "",
+        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
+        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
+        "",
     ])
 
 
@@ -668,6 +679,17 @@ def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "Units",
         "-----",
         "Units vary by variable and include biomass measures, percentages, ratios, and index values depending on the variable.",
+        "",
+        "Reference note",
+        "--------------",
+        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
+        "",
+        "Primary sources:",
+        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
+        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
+        "",
+        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
+        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
         "",
     ])
 
@@ -1167,6 +1189,17 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "Units",
         "-----",
         "Units vary by variable and follow the standardized units stored in the exported CSV.",
+        "",
+        "Reference note",
+        "--------------",
+        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
+        "",
+        "Primary sources:",
+        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
+        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
+        "",
+        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
+        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
         "",
     ])
 

@@ -186,11 +186,22 @@ export async function renderGlossary() {
 
   const intro = document.createElement("div");
   intro.className = "mb-3";
-  intro.innerHTML = `
-    <p class="mb-2">
-      This glossary defines terms used throughout the biochar research website, including field measurements,
-      soil chemistry, soil biology, irrigation, forage quality, and app-specific analysis terms.
-    </p>
+intro.innerHTML = `
+  <p class="mb-2">
+    This glossary defines terms used throughout the biochar research website, including field measurements,
+    soil chemistry, soil biology, irrigation, forage quality, and app-specific analysis terms.
+  </p>
+  <p class="mb-2">
+    <strong>Note:</strong> Many laboratory-test definitions are adapted from Ward Laboratories guidance documents:
+  </p>
+  <ul class="mb-2">
+    <li><a href="https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf" target="_blank">Ward Soil Health Overview</a></li>
+    <li><a href="https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf" target="_blank">Ward Soil Health Assessment Guide</a></li>
+  </ul>
+  <p class="mb-2">
+    Units and interpretation notes follow Ward terminology where available. In cases where Ward documentation
+    describes a method without specifying an explicit unit, the glossary reflects the best available interpretation.
+  </p>
   `;
   container.appendChild(intro);
 
