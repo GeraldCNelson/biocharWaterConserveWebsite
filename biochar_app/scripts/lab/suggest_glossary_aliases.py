@@ -25,7 +25,7 @@ DATASETS = {
 
 
 SCIENTIFIC_ALIASES = {
-    "mono_poly": [
+    "monounsaturated_polyunsaturated_ratio": [
         "monounsaturated polyunsaturated ratio",
         "monounsaturated:polyunsaturated ratio",
         "mono poly ratio",
@@ -33,14 +33,14 @@ SCIENTIFIC_ALIASES = {
         "MUFA:PUFA ratio",
         "microbial stress indicator",
     ],
-    "sat_unsat": [
+    "saturated_unsaturated_ratio": [
         "saturated unsaturated ratio",
         "saturated:unsaturated ratio",
         "saturated fatty acid unsaturated fatty acid ratio",
         "microbial stress ratio",
         "PLFA stress indicator",
     ],
-    "gram_pos_gram": [
+    "gram_pos_gram_neg_ratio": [
         "gram positive gram negative ratio",
         "gram-positive gram-negative ratio",
         "Gram(+):Gram(-) ratio",

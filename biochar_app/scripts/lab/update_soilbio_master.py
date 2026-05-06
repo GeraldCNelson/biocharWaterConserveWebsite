@@ -167,7 +167,7 @@ RAW_TO_CANONICAL = {
     "total_fungi_pct": "total_fungi_pct",
 
     "arbuscular_mycorrhizal_ng_per_g": "arbuscular_mycorrhizal_biomass",
-    "arbuscular_mycorrhizal_pct": "arbusular_mycorrhizal_pct",
+    "arbuscular_mycorrhizal_pct": "arbuscular_mycorrhizal_pct",
 
     "saprophytes_ng_per_g": "saprophytes_biomass",
     "saprophytes_pct": "saprophytic_pct",
@@ -180,13 +180,13 @@ RAW_TO_CANONICAL = {
 
     "fungi_bacteria": "fungi_bacteria",
     "predator_prey": "predator_prey",
-    "gram_gram": "gram_pos_gram",
+    "gram_gram": "gram_pos_gram_neg_ratio",
 
     # These next ones depend on how your cleaner wants to store them.
     # Since the master has both components and ratios, map only to the ratio columns
     # that already exist in the master.
-    "saturated_unsaturated": "sat_unsat",
-    "monounsaturated_polyunsaturated": "mono_poly",
+    "saturated_unsaturated": "saturated_unsaturated_ratio",
+    "monounsaturated_polyunsaturated": "monounsaturated_polyunsaturated_ratio",
     "pre16_1w7c_17_0cyclo": "pre_16_1w7c_cy17_0",
     "pre18_1w7c_19_0cyclo": "pre_18_1w7c_cy19_0",
 }

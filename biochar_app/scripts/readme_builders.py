@@ -14,36 +14,44 @@ from biochar_app.config.core import (
     variable_name_mapping,
 )
 
+from biochar_app.config.descriptions import (
+    PROJECT_README_TITLE,
+    PROJECT_METHOD_NOTE,
+    PROJECT_REFERENCE_NOTE,
+    PROJECT_REFERENCE_SOURCES,
+    PROJECT_SAMPLE_CONTEXT_NOTE,
+    LOGGER_DESCRIPTION,
+    WEATHER_DESCRIPTION,
+    WEATHER_DATA_SOURCE,
+    IRRIGATION_DESCRIPTION,
+    FERTILIZER_DESCRIPTION,
+    SOIL_CHEMISTRY_DESCRIPTION,
+    SOIL_CHEMISTRY_SCOPE_NOTE,
+    SOIL_BIOLOGY_DESCRIPTION,
+    SOIL_BIOLOGY_SCOPE_NOTE,
+    HAY_DESCRIPTION,
+    HAY_SAMPLE_CONTEXT_NOTE,
+    GENERIC_FILE_DESCRIPTION,
+    PROJECT_NIR_REFERENCE_NOTE,
+    PROJECT_NIR_REFERENCE_SOURCES,
+)
+
 GLOSSARY_JSON_PATH = Path(__file__).resolve().parents[1] / "static" / "data" / "glossary_terms.json"
 
-LOGGER_DESCRIPTION = (
-    "This file contains standardized logger-derived data for the Biochar Fruita CSU "
-    "field experiment. It includes raw logger measurements, derived soil water content "
-    "values, treatment-control ratios, and treatment-control differences where available. "
-    "Sensors record soil conditions at three depths and three logger locations within each strip."
-)
 
-WEATHER_DESCRIPTION = (
-    "This file contains standardized weather data from the associated CoAgMet station, FRT3 (https://coagmet.colostate.edu/data/url-builder), "
-    "aligned with the Biochar Fruita CSU field experiment. These data provide environmental "
-    "context for soil and plant measurements, including temperature, precipitation, and "
-    "related variables."
-)
+def build_nir_reference_note() -> str:
+    lines = [
+        "Reference note",
+        "--------------",
+        PROJECT_NIR_REFERENCE_NOTE,
+        "",
+        "Primary sources:",
+    ]
 
-IRRIGATION_DESCRIPTION = (
-    "This dataset contains standardized irrigation management records for the Biochar "
-    "Fruita CSU field experiment. The site uses furrow irrigation. Strips S1 and S2 are "
-    "irrigated together on the west side, and strips S3 and S4 are irrigated together on "
-    "the east side. Irrigation events include timing, duration, and applied water volume "
-    "where available."
-)
+    for label, source in PROJECT_NIR_REFERENCE_SOURCES:
+        lines.append(f"- {label}: {source}")
 
-FERTILIZER_DESCRIPTION = (
-    "This dataset contains standardized fertilizer application records for the Biochar "
-    "Fruita CSU field experiment. Applications are recorded at the strip level and include "
-    "timing, material, and application amounts where available."
-)
-
+    return _join_readme_lines(lines).rstrip()
 
 def _join_readme_lines(lines: list[str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
@@ -97,6 +105,18 @@ def _dataset_summary(df: pd.DataFrame) -> str:
         f"Variables: {len(df.columns)}",
     ]).rstrip()
 
+def build_project_reference_note() -> str:
+    lines = [
+        "Reference note",
+        "--------------",
+        PROJECT_REFERENCE_NOTE,
+        "",
+        "Primary sources:",
+    ]
+
+    for label, url in PROJECT_REFERENCE_SOURCES:
+        lines.append(f"- {label}: {url}")
+    return _join_readme_lines(lines).rstrip()
 
 def build_depth_codes_section(unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
@@ -131,7 +151,7 @@ def build_strip_codes_section() -> str:
 def build_weather_variable_codes_section() -> str:
     lines = [
         "Weather data source:",
-        "CoAgMet station FRT3: https://coagmet.colostate.edu/data/url-builder",
+        WEATHER_DATA_SOURCE,
         "",
         "Weather variable names:",
         "These are the standardized exported weather column names used by the dashboard.",
@@ -300,6 +320,7 @@ def _variable_line(label: str, cols: list[str], units: str = "") -> list[str]:
         lines.append(f"  Units: {units}")
     lines.append(f"  Example columns: {_example_columns(cols)}")
     return lines
+
 
 def _glossary_definition_for_key(key: str) -> str:
     entries = load_glossary_entries()
@@ -488,7 +509,7 @@ def build_timeseries_yearly_readme(
         description = f"This file contains standardized {dataset_label} for {year} at {resolution} resolution."
 
     lines = [
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {year}",
@@ -580,7 +601,7 @@ def build_management_readme(
         description = f"This file contains standardized management records for {dataset_label} for {years_text}."
 
     return _join_readme_lines([
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {years_text}",
@@ -610,7 +631,7 @@ def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
     return _join_readme_lines([
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {coverage}",
@@ -622,11 +643,11 @@ def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
         "Description",
         "-----------",
-        "This dataset contains laboratory soil chemistry measurements collected from the Biochar Fruita CSU field experiment.",
+        SOIL_CHEMISTRY_DESCRIPTION,
         "",
-        "Samples were collected from four strips (S1–S4). Biochar was applied to strips S1 and S3 after March 2023 sampling. Strips S2 and S4 serve as controls.",
+        PROJECT_SAMPLE_CONTEXT_NOTE,
         "",
-        "The dataset includes measurements of soil nutrients, pH, salinity, organic matter, soil organic carbon, and related chemical properties used to evaluate soil fertility and carbon dynamics.",
+        SOIL_CHEMISTRY_SCOPE_NOTE,
         "",
         "Variables",
         "---------",
@@ -636,16 +657,7 @@ def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "-----",
         "Units vary by variable and follow standard soil testing conventions such as ppm, %, or meq/100g.",
         "",
-        "Reference note",
-        "--------------",
-        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
-        "",
-        "Primary sources:",
-        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
-        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
-        "",
-        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
-        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
+        build_project_reference_note(),
         "",
     ])
 
@@ -654,7 +666,7 @@ def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
     return _join_readme_lines([
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {coverage}",
@@ -666,11 +678,11 @@ def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
         "Description",
         "-----------",
-        "This dataset contains laboratory soil biology measurements collected from the Biochar Fruita CSU field experiment.",
+        SOIL_BIOLOGY_DESCRIPTION,
         "",
-        "These data are used to evaluate microbial biomass, microbial community structure, and biological response to biochar treatment.",
+        SOIL_BIOLOGY_SCOPE_NOTE,
         "",
-        "Samples were collected from four strips (S1–S4). Biochar was applied to strips S1 and S3 after March 2023 sampling. Strips S2 and S4 serve as controls.",
+        PROJECT_SAMPLE_CONTEXT_NOTE,
         "",
         "Variables",
         "---------",
@@ -680,16 +692,7 @@ def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "-----",
         "Units vary by variable and include biomass measures, percentages, ratios, and index values depending on the variable.",
         "",
-        "Reference note",
-        "--------------",
-        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
-        "",
-        "Primary sources:",
-        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
-        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
-        "",
-        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
-        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
+        build_project_reference_note(),
         "",
     ])
 
@@ -746,7 +749,7 @@ def build_hay_variable_section(df: pd.DataFrame) -> str:
     lines.extend(_variable_line(
         "Net Energy",
         present(["nel_pct_db", "nem_pct_db", "neg_pct_db"]),
-        "energy-related values as reported by the laboratory",
+        "energy values as provided in the NIR export",
     ))
 
     lines.extend(["", "Carbohydrates and energy fractions (dry basis)", ""])
@@ -772,7 +775,7 @@ def build_hay_variable_section(df: pd.DataFrame) -> str:
     lines.extend(_variable_line(
         "NDF digestibility and in vitro true digestibility",
         present(["ndfd48_pctndf_db", "ivtdmd48_pctndf_db"]),
-        "percent, as reported by the laboratory",
+        "percent digestibility, as provided in the NIR export",
     ))
     lines.extend(_variable_line(
         "Fat and lignin",
@@ -850,7 +853,7 @@ def build_soilchem_variable_section(df: pd.DataFrame) -> str:
     lines.extend(_variable_line(
         "Excess lime",
         present(["excess_lime"]),
-        "as reported by laboratory",
+        PROJECT_METHOD_NOTE,
     ))
 
     lines.extend(["", "Macronutrients", ""])
@@ -949,13 +952,13 @@ def build_soilchem_variable_section(df: pd.DataFrame) -> str:
         "Soil respiration",
         present(["co2_soil_respiration"]),
         "soil_respiration",
-        "as reported by laboratory",
+        PROJECT_METHOD_NOTE,
     ))
     lines.extend(_variable_line_from_glossary(
         "Water stable aggregates",
         present(["water_stable_aggregates_mod"]),
         "water_stable_aggregates",
-        "as reported by laboratory",
+        PROJECT_METHOD_NOTE,
     ))
     lines.extend(_variable_line_from_glossary(
         "Soil health score",
@@ -1058,7 +1061,7 @@ def build_soilbio_variable_section(df: pd.DataFrame) -> str:
     ))
     lines.extend(_variable_line_from_glossary(
         "Arbuscular mycorrhizal fungi",
-        present(["arbuscular_mycorrhizal_biomass", "arbusular_mycorrhizal_pct"]),
+        present(["arbuscular_mycorrhizal_biomass", "arbuscular_mycorrhizal_pct"]),
         "am_fungi",
         "biomass per mass of soil or percent, depending on column",
     ))
@@ -1102,7 +1105,7 @@ def build_soilbio_variable_section(df: pd.DataFrame) -> str:
     ))
     lines.extend(_variable_line_from_glossary(
         "Gram(+):Gram(−) ratio",
-        present(["gram_pos_gram"]),
+        present(["gram_pos_gram_neg_ratio"]),
         "gram_ratio",
         "unitless ratio",
     ))
@@ -1114,14 +1117,14 @@ def build_soilbio_variable_section(df: pd.DataFrame) -> str:
     ))
     lines.extend(_variable_line_from_glossary(
         "Saturated:Unsaturated fatty acid ratio",
-        present(["sat_unsat"]),
-        "sat_unsat",
+        present(["saturated_unsaturated_ratio"]),
+        "saturated_unsaturated_ratio",
         "unitless ratio",
     ))
     lines.extend(_variable_line_from_glossary(
         "Monounsaturated:Polyunsaturated ratio",
-        present(["mono_poly"]),
-        "mono_poly",
+        present(["monounsaturated_polyunsaturated_ratio"]),
+        "monounsaturated_polyunsaturated_ratio",
         "unitless ratio",
     ))
     lines.extend(_variable_line(
@@ -1137,7 +1140,7 @@ def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
     return _join_readme_lines([
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {coverage}",
@@ -1149,9 +1152,9 @@ def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
         "Description",
         "-----------",
-        "This dataset contains biomass, hay, and forage quality measurements from the Biochar Fruita CSU field experiment. These data are used to evaluate plant production, forage quality, nutrient removal, and crop response to biochar treatment.",
+        HAY_DESCRIPTION,
         "",
-        "Samples are associated with the four experimental strips (S1–S4). Biochar was applied to strips S1 and S3 after March 2023 sampling. Strips S2 and S4 serve as controls.",
+        HAY_SAMPLE_CONTEXT_NOTE,
         "",
         "Variables",
         "---------",
@@ -1161,6 +1164,7 @@ def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "-----",
         "Most forage quality, mineral, carbohydrate, digestibility, fat, lignin, and ash variables are reported on a dry matter basis. Moisture and dry matter columns are retained as as-received sample characteristics. RFV and RFQ are unitless index values.",
         "",
+        build_nir_reference_note(),
     ])
 
 
@@ -1168,7 +1172,7 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
     return _join_readme_lines([
-        "Biochar Fruita CSU – Bulk Download",
+        PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {coverage}",
@@ -1180,7 +1184,7 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
         "Description",
         "-----------",
-        "This archive contains a standardized all-years dataset from the Biochar Fruita CSU project.",
+        GENERIC_FILE_DESCRIPTION,
         "",
         "Variables",
         "---------",
@@ -1189,17 +1193,6 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "Units",
         "-----",
         "Units vary by variable and follow the standardized units stored in the exported CSV.",
-        "",
-        "Reference note",
-        "--------------",
-        "Several soil chemistry and soil health definitions are derived from Ward Laboratories guidance documents.",
-        "",
-        "Primary sources:",
-        "- https://www.wardlab.com/wp-content/uploads/2024/04/2024-Soil-Health-One-Pager-C.pdf",
-        "- https://www.wardlab.com/wp-content/uploads/2024/12/SHA-Guide-FINAL-May.pdf",
-        "",
-        "Where Ward documentation describes a measurement method but does not clearly specify the exported unit "
-        "(for example, Water Stable Aggregates or Excess Lime), this README reflects the best available interpretation.",
         "",
     ])
 

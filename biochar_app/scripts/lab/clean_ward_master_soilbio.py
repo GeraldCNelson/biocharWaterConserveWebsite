@@ -110,7 +110,7 @@ SOILBIO_RENAME_MAP: Dict[str, str] = {
     "total_fungi_pct": "total_fungi_pct",
 
     "arbuscular_mycorrhizal_biomass": "arbuscular_mycorrhizal_biomass",
-    "arbusular_mycorrhizal_pct": "arbusular_mycorrhizal_pct",
+    "arbuscular_mycorrhizal_pct": "arbuscular_mycorrhizal_pct",
 
     "saprophytic_pct": "saprophytic_pct",
     "saprophytes_biomass": "saprophytes_biomass",
@@ -124,15 +124,15 @@ SOILBIO_RENAME_MAP: Dict[str, str] = {
     # ratios / lipid fractions
     "fungi_bacteria": "fungi_bacteria",
     "predator_prey": "predator_prey",
-    "gram_gram": "gram_pos_gram",
+    "gram_gram": "gram_pos_gram_neg_ratio",
 
     "saturated": "saturated",
     "unsaturated": "unsaturated",
-    "sat_unsat": "sat_unsat",
+    "saturated_unsaturated_ratio": "saturated_unsaturated_ratio",
 
     "monounsaturated": "monounsaturated",
     "polyunsaturated": "polyunsaturated",
-    "mono_poly": "mono_poly",
+    "monounsaturated_polyunsaturated_ratio": "monounsaturated_polyunsaturated_ratio",
 
     "pre_16_1_w7c": "pre_16_1_w7c",
     "cyclo_17_0": "cyclo_17_0",
@@ -164,7 +164,7 @@ EXPECTED_SOILBIO_COLUMNS = [
     "total_fungi_biomass",
     "total_fungi_pct",
     "arbuscular_mycorrhizal_biomass",
-    "arbusular_mycorrhizal_pct",
+    "arbuscular_mycorrhizal_pct",
     "saprophytic_pct",
     "saprophytes_biomass",
     "protozoan_pct",
@@ -173,13 +173,13 @@ EXPECTED_SOILBIO_COLUMNS = [
     "undifferentiated_biomass",
     "fungi_bacteria",
     "predator_prey",
-    "gram_pos_gram",
+    "gram_pos_gram_neg_ratio",
     "saturated",
     "unsaturated",
-    "sat_unsat",
+    "saturated_unsaturated_ratio",
     "monounsaturated",
     "polyunsaturated",
-    "mono_poly",
+    "monounsaturated_polyunsaturated_ratio",
     "pre_16_1_w7c",
     "cyclo_17_0",
     "pre_16_1w7c_cy17_0",

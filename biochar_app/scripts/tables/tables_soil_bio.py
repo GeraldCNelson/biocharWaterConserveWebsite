@@ -116,15 +116,15 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
         "Pre 16:1 w7c ng/g",
         "Pre 16:1w7c ng/g",
     ),
-    "mono_poly": (
+    "monounsaturated_polyunsaturated_ratio": (
         "Monounsaturated:Polyunsaturated ng/g",
         "Monounsaturated:Polyunsaturated",
     ),
-    "sat_unsat": (
+    "saturated_unsaturated_ratio": (
         "Saturated:Unsaturated ng/g",
         "Saturated:Unsaturated",
     ),
-    "gram_pos_gram": (
+    "gram_pos_gram_neg_ratio": (
         "Gram(+):Gram(-) ng/g",
         "Gram(+):Gram(-)",
         "Gram (+):Gram (-) ng/g",
@@ -167,7 +167,7 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
         "Arbuscular Mycorrhizal ng/g",
         "Arbuscular Mycorrhizal",
     ),
-    "arbusular_mycorrhizal_pct": (
+    "arbuscular_mycorrhizal_pct": (
         "Arbuscular Mycorrhizal ng/g % Biomass",
         "Arbuscular Mycorrhizal % Biomass",
     ),
@@ -297,7 +297,6 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Mycorrhizae Biomass (ng/g)",
                 candidates=(
                     "arbuscular_mycorrhizal_biomass",
-                    "arbusular_mycorrhizal_biomass",
                     "mycorrhizae_biomass",
                     "mycorrhizae_ng_per_g",
                 ),
@@ -316,14 +315,14 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 label="Gram+ Biomass (ng/g)",
                 candidates=("gram_pos_biomass", "gram_pos_ng_per_g", "gram_positive_ng_per_g"),
                 note="Gram-positive bacterial biomass (ng/g).",
-                reference_key="gram_pos_gram",
+                reference_key="gram_pos_gram_neg_ratio",
             ),
             VariableSpec(
                 key="gram_neg_biomass",
                 label="Gram− Biomass (ng/g)",
                 candidates=("gram_neg_biomass", "gram_neg_ng_per_g", "gram_negative_ng_per_g", "gram_biomass"),
                 note="Gram-negative bacterial biomass (ng/g).",
-                reference_key="gram_pos_gram",
+                reference_key="gram_pos_gram_neg_ratio",
             ),
             VariableSpec(
                 key="protozoan_biomass",
@@ -375,16 +374,16 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 reference_key=None,
             ),
             VariableSpec(
-                key="sat_unsat",
+                key="saturated_unsaturated_ratio",
                 label="Saturated : Unsaturated",
-                candidates=("sat_unsat",),
+                candidates=("saturated_unsaturated_ratio",),
                 note="Ratio of saturated to unsaturated fatty acids (unitless).",
                 reference_key=None,
             ),
             VariableSpec(
-                key="mono_poly",
+                key="monounsaturated_polyunsaturated_ratio",
                 label="Monounsaturated : Polyunsaturated",
-                candidates=("mono_poly",),
+                candidates=("monounsaturated_polyunsaturated_ratio",),
                 note="Ratio of mono- to polyunsaturated fatty acids (unitless).",
                 reference_key=None,
             ),
@@ -403,11 +402,11 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 reference_key="predator_prey",
             ),
             VariableSpec(
-                key="gram_pos_gram",
+                key="gram_pos_gram_neg_ratio",
                 label="Gram+ : Gram−",
-                candidates=("gram_pos_gram", "gram_pos_neg", "gram_pos_gram_neg", "gram_pos_to_neg"),
+                candidates=("gram_pos_neg", "gram_pos_gram_neg", "gram_pos_to_neg"),
                 note="Ratio of Gram+ to Gram− bacterial biomass (unitless).",
-                reference_key="gram_pos_gram",
+                reference_key="gram_pos_gram_neg_ratio",
             ),
         ],
     },

@@ -463,6 +463,13 @@
           "matches": ["PLFA", "plfa"]
         },
         {
+          "key": "plfa_biomass_units",
+          "term": "PLFA Biomass Units",
+          "definition": "PLFA biomass values represent phospholipid fatty acid biomarker abundance measured from soil microbial membranes. The laboratory-reported values are used directly in the exported datasets.",
+          "units": "laboratory-specific PLFA biomass units",
+          "matches": ["biomass_units", "plfa_units"]
+        },
+        {
           "key": "total_microbial_biomass",
           "term": "Total Microbial Biomass",
           "definition": "An estimate of the total living microbial mass in the soil sample.",
@@ -543,6 +550,24 @@
           "matches": ["undifferentiated", "undifferentiated_biomass", "undifferentiated_pct"]
         },
         {
+          "key": "relative_biomass_pct",
+          "term": "Relative Biomass Percentage",
+          "definition": "The percentage contribution of a microbial group relative to total measured microbial biomass.",
+          "units": "percent of total microbial biomass (%)",
+          "matches": [
+            "bacteria_pct",
+            "gram_pos_pct",
+            "gram_neg_pct",
+            "actinomycetes_pct",
+            "rhizobia_pct",
+            "total_fungi_pct",
+            "saprophytic_pct",
+            "protozoan_pct",
+            "undifferentiated_pct",
+            "arbuscular_mycorrhizal_pct"
+          ]
+        },
+        {
           "key": "fungal_bacterial_ratio",
           "term": "Fungal:Bacterial Ratio",
           "definition": "A comparison of fungal biomass to bacterial biomass, often used as an indicator of soil biological balance.",
@@ -554,7 +579,7 @@
           "term": "Gram(+):Gram(−) Ratio",
           "definition": "The ratio of Gram-positive to Gram-negative bacterial biomass, used to characterize microbial community structure and shifts in carbon utilization strategies.",
           "units": "unitless ratio",
-          "matches": ["gram_pos_gram", "gram_pos_neg"]
+          "matches": ["gram_pos_gram_neg_ratio"]
         },
         {
           "key": "predator_prey",
@@ -567,18 +592,42 @@
           ]
         },
         {
-          "key": "sat_unsat",
+          "key": "saturated_unsaturated_ratio",
           "term": "Saturated:Unsaturated Fatty Acid Ratio",
-          "definition": "A PLFA stress indicator where higher values may reflect environmental stress or shifts in microbial membrane composition.",
+          "definition": "A PLFA-derived ratio comparing saturated to unsaturated fatty acids. It is commonly interpreted as an indicator of microbial physiological stress or shifts in membrane composition.",
           "units": "unitless ratio",
-          "matches": ["sat_unsat", "saturated", "unsaturated"]
+          "matches": ["saturated_unsaturated_ratio", "saturated_unsaturated_ratio"]
         },
         {
-          "key": "mono_poly",
+          "key": "saturated_fatty_acids",
+          "term": "Saturated Fatty Acids",
+          "definition": "The summed saturated phospholipid fatty acid (PLFA) biomarkers measured in the soil microbial community.",
+          "units": "PLFA biomass units as reported by laboratory",
+          "matches": ["saturated"],
+          "related_to": ["saturated_unsaturated_ratio", "monounsaturated_fatty_acids", "polyunsaturated_fatty_acids"]
+        },
+        {
+          "key": "unsaturated_fatty_acids",
+          "term": "Unsaturated Fatty Acids",
+          "definition": "The summed unsaturated phospholipid fatty acid (PLFA) biomarkers measured in the soil microbial community. In the 2025 dataset this is effectively the sum of monounsaturated and polyunsaturated fatty acids.",
+          "units": "PLFA biomass units as reported by laboratory",
+          "matches": ["unsaturated"],
+          "related_to": ["saturated_unsaturated_ratio", "monounsaturated_fatty_acids", "polyunsaturated_fatty_acids"]
+        },
+        {
+          "key": "polyunsaturated_fatty_acids",
+          "term": "Polyunsaturated Fatty Acids",
+          "definition": "The summed polyunsaturated PLFA biomarkers measured in the microbial community.",
+          "units": "PLFA biomass units as reported by laboratory",
+          "matches": ["polyunsaturated", "poly_unsaturated", "polyunsaturated_fatty_acids"],
+          "related_to": ["monounsaturated_polyunsaturated_ratio", "unsaturated_fatty_acids"]
+        },
+        {
+          "key": "monounsaturated_polyunsaturated_ratio",
           "term": "Monounsaturated:Polyunsaturated Ratio",
           "definition": "A PLFA indicator of microbial community structure and physiological status.",
           "units": "unitless ratio",
-          "matches": ["mono_poly", "monounsaturated", "polyunsaturated"],
+          "matches": ["monounsaturated_polyunsaturated_ratio", "monounsaturated", "polyunsaturated"],
           "aliases": [
                       "microbial stress indicator",
                       "mono poly ratio",
@@ -591,9 +640,16 @@
         {
           "key": "cyclopropyl_precursor_ratios",
           "term": "Cyclopropyl Precursor Ratios",
-          "definition": "PLFA ratios comparing precursor fatty acids to cyclopropyl fatty acids, often used as indicators of microbial stress or community physiological status.",
+          "definition": "Ratios comparing monounsaturated precursor fatty acids to cyclopropyl fatty acids. These PLFA indicators are commonly used to evaluate microbial physiological stress and shifts in bacterial growth conditions.",
           "units": "unitless ratio",
-          "matches": ["pre_16_1w7c_cy17_0", "pre_18_1w7c_cy19_0", "cyclo_17_0", "cyclo_19_0"]
+          "matches": [
+            "pre_16_1w7c_cy17_0",
+            "pre_18_1w7c_cy19_0",
+            "cyclo_17_0",
+            "cyclo_19_0",
+            "pre_16_1_w7c",
+            "pre_18_1_w7c"
+          ]
         },
         {
           "key": "microbial_diversity",
