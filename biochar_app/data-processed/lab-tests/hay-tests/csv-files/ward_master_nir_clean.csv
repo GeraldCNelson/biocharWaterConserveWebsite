@@ -1,4 +1,4 @@
-strip,nir_date,sample_id,crude_protein_pct_db,moisture_pct,dry_matter_pct,adf_pct_db,ndf_pct_db,tdn_pct_db,nel_pct_db,nem_pct_db,neg_pct_db,RFV,Ca_pct_db,P_pct_db,K_pct_db,Mg_pct_db,ash_pct_db,ndfd48_pctndf_db,ivtdmd48_pctndf_db,fat_pct_db,lignin_pct_db,nfc_pct_db,starch_pct_db,esc_pct_db,wsc_pct_db,RFQ,fructan_pct_db
+strip,nir_date,sample_id,crude_protein_pct_db,moisture_pct,dry_matter_pct,adf_pct_db,ndf_pct_db,tdn_pct_db,nel_pct_db,nem_pct_db,neg_pct_db,rfv,ca_pct_db,p_pct_db,k_pct_db,mg_pct_db,ash_pct_db,ndfd48_pctndf_db,ivtdmd48_pctndf_db,fat_pct_db,lignin_pct_db,nfc_pct_db,starch_pct_db,esc_pct_db,wsc_pct_db,rfq,fructan_pct_db
 strip_1,2023-06-14,,11.3,59.81,40.19,37.0,69.5,60.3,0.6173,0.6002,0.3395,80,0.33,0.23,1.74,0.17,5.24,26.9,67.0,2.4,5.4,13.4,1.2,6.9,7.3,110,
 strip_2,2023-06-14,,12.1,65.68,34.32,34.6,63.8,63.1,0.6484,0.642,0.3774,90,0.33,0.23,1.75,0.19,5.18,25.0,72.9,2.7,4.73,18.5,1.2,7.4,8.6,130,
 strip_3,2023-06-14,,9.9,55.22,44.78,37.1,70.1,60.2,0.6163,0.5988,0.3383,80,0.31,0.22,1.35,0.15,3.86,28.3,63.1,2.5,5.93,15.6,3.0,6.4,6.9,105,
