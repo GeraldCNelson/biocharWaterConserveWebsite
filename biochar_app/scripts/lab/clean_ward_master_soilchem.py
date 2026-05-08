@@ -6,7 +6,7 @@ Clean the compiled Soil Chemistry workbook into a canonical machine-readable CSV
 for the Biochar dashboard.
 
 Code to run in a terminal
-python -m biochar_app.scripts.clean_ward_master_soilchem
+python -m biochar_app.scripts.lab.clean_ward_master_soilchem
 
 Conventions
 -----------
@@ -165,7 +165,14 @@ def clean_ward_master_soilchem(sheet: Optional[str] = None) -> None:
         below_detection_to_zero=True,
         extra_drop_cols=(),
         fixed_depth=(0, 8),
-        numeric_exclude_cols=("strip", "date_rec", "date_rept", "date_recd", "sample_id"),
+        numeric_exclude_cols=("strip",
+                              "date_rec",
+                              "date_rept",
+                              "date_recd",
+                              "sample_id",
+                              "past_crop",
+                              "excess_lime",
+                              ),
         add_compatibility_aliases=True,
     )
 

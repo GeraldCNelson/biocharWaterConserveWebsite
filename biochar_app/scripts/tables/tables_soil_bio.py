@@ -58,6 +58,11 @@ from biochar_app.config.lab_variable_metadata import (
     get_lab_variable_metadata,
 )
 
+from biochar_app.scripts.tables.table_metadata_helpers import (
+    metadata_label,
+    metadata_note,
+)
+
 # -----------------------------------------------------------------------------
 # Shared top-level note (STANDARD)
 # -----------------------------------------------------------------------------
@@ -224,14 +229,7 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
     ),
 }
 
-def metadata_label(key: str, fallback: str | None = None) -> str:
-    label = get_display_label(key)
-    return label if label != key else (fallback or key)
 
-
-def metadata_note(key: str, fallback: str | None = None) -> str | None:
-    meta = get_lab_variable_metadata(key)
-    return meta.get("interpretation_note") or meta.get("definition") or fallback
 # -----------------------------------------------------------------------------
 # Soil Bio variable groups
 # -----------------------------------------------------------------------------

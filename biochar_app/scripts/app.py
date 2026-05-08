@@ -92,8 +92,9 @@ async def serve_spa(request: Request) -> HTMLResponse:
     ]
 
     return templates.TemplateResponse(
-        "index.html",
-        {
+        request=request,
+        name="index.html",
+        context={
             "request": request,
             "DEFAULT_YEAR": DEFAULT_YEAR,
             "YEARS": YEARS,
