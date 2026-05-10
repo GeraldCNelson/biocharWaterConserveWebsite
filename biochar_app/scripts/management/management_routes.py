@@ -18,11 +18,6 @@ from biochar_app.scripts.management.management_db import (
     list_irrigation_events,
 )
 
-from biochar_app.scripts.management.management_export import (
-    export_irrigation_clean_csv,
-    rebuild_irrigation_clean_csv,
-)
-
 from biochar_app.config.paths import DATA_PROCESSED_DIR
 
 from PIL import Image
@@ -190,13 +185,10 @@ async def api_get_irrigation_event(event_id: str):
         raise HTTPException(status_code=404, detail=f"Irrigation event not found: {event_id}")
     return {"event": event}
 
-@management_router.post("/irrigation/export-clean-csv")
-async def api_export_irrigation_clean_csv():
-    return export_irrigation_clean_csv()
 
-@management_router.post("/irrigation/rebuild-clean-csv")
-async def api_rebuild_irrigation_clean_csv():
-    return rebuild_irrigation_clean_csv()
+# @management_router.post("/irrigation/rebuild-clean-csv")
+# async def api_rebuild_irrigation_clean_csv():
+#     return rebuild_irrigation_clean_csv()
 
 
 PHOTO_DIR = DATA_PROCESSED_DIR / "management" / "photos" / "irrigation"
@@ -272,13 +264,13 @@ async def upload_irrigation_photo(
         "photo_path": str(path),
     }
 
-@management_router.post("/irrigation/export-and-rebuild")
-async def api_export_and_rebuild_irrigation():
-    export_result = export_irrigation_clean_csv()
-    rebuild_result = rebuild_irrigation_clean_csv()
-
-    return {
-        "ok": True,
-        "export": export_result,
-        "rebuild": rebuild_result,
-    }
+# @management_router.post("/irrigation/export-and-rebuild")q
+# async def api_export_and_rebuild_irrigation():
+#     export_result = export_irrigation_clean_csv()
+#     rebuild_result = rebuild_irrigation_clean_csv()
+#
+#     return {
+#         "ok": True,
+#         "export": export_result,q
+#         "rebuild": rebuild_result,
+#     }
