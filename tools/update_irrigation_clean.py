@@ -48,7 +48,10 @@ from pathlib import Path
 from typing import Final
 
 import pandas as pd
-
+from biochar_app.config.paths import (
+    IRRIGATION_CSV,
+    IRRIGATION_DIR,
+)
 
 REQUIRED_COLUMNS: Final[list[str]] = [
     "year",
@@ -77,23 +80,25 @@ class UpdatePaths:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Update irrigation_clean.csv with new events.")
+    parser = argparse.ArgumentParser(
+        description="Update irrigation_clean.csv with new events."
+    )
     parser.add_argument(
         "--clean",
         type=Path,
-        default=Path("biochar_app/data-processed/management/irrigation_clean.csv"),
+        default=IRRIGATION_CSV,
         help="Path to the live cumulative irrigation_clean.csv",
     )
     parser.add_argument(
         "--new",
         type=Path,
-        default=Path("biochar_app/data-raw/management/irrigation_2026_raw.csv"),
-        help="Path to the new raw irrigation CSV to append",
+        default=IRRIGATION_DIR / "irrigation_2026_raw.csv",
+        help="Path to the new irrigation CSV to append",
     )
     parser.add_argument(
         "--backup-dir",
         type=Path,
-        default=Path("biochar_app/data-processed/management/backups"),
+        default=IRRIGATION_DIR / "backups",
         help="Directory for timestamped backups of irrigation_clean.csv",
     )
     parser.add_argument(
@@ -269,7 +274,17 @@ def update_irrigation_clean(paths: UpdatePaths, dry_run: bool = False) -> None:
     print(f"Rows after update       : {len(combined)}")
 
     if new_unique.empty:
-        print("\nNo new irrigation events found. Nothing to append.")
+        print("\nNo new irrigation events found.")
+
+        if dry_run:
+            print("Dry run only. No files were written.")
+            return
+
+        backup_path = make_backup(paths.clean_csv, paths.backup_dir)
+        combined.to_csv(paths.clean_csv, index=False)
+
+        print(f"Backup written to: {backup_path}")
+        print(f"Rewrote normalized live file: {paths.clean_csv}")
         return
 
     print("\nNew rows to append:")
