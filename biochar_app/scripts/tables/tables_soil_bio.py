@@ -66,7 +66,7 @@ from biochar_app.scripts.tables.table_metadata_helpers import (
 # -----------------------------------------------------------------------------
 # Shared top-level note (STANDARD)
 # -----------------------------------------------------------------------------
-SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means."
+SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means."
 
 # -----------------------------------------------------------------------------
 # Raw Ward biological column aliases -> cleaned machine-readable columns

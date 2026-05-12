@@ -22,6 +22,8 @@ from biochar_app.scripts.config import (
     YEARS,
     DEFAULT_GSEASON_PERIODS,
 )
+
+from biochar_app.config.core import MONTH_ABBR
 from biochar_app.config.paths import PARQUET_DIR
 from biochar_app.scripts.data_loading import load_logger_data as _orig_load_logger_data
 from biochar_app.scripts.routes import main_router, api_router
@@ -99,6 +101,7 @@ async def serve_spa(request: Request) -> HTMLResponse:
             "DEFAULT_YEAR": DEFAULT_YEAR,
             "YEARS": YEARS,
             "DEFAULT_GSEASON_PERIODS": periods_list,
+            "MONTH_ABBR": dict(MONTH_ABBR),
         },
     )
 

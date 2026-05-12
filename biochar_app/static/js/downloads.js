@@ -20,10 +20,10 @@ const downloadsWindow = /** @type {DownloadsWindow} */ (window);
  */
 function buildFilename(parts) {
   return parts
-    .filter(Boolean)
-    .join("_")
-    .replace(/\s+/g, "-")
-    .replace(/[^\w\-]+/g, "");
+      .filter(Boolean)
+      .join("_")
+      .replace(/\s+/g, "-")
+      .replace(/[^\w\-]+/g, "");
 }
 
 /**
@@ -152,15 +152,15 @@ export async function downloadTraceData(kind = "all") {
     };
 
     const fname =
-      buildFilename([
-        "data",
-        kind,
-        variable,
-        strip,
-        `${depth}depth`,
-        granularity,
-        year,
-      ]) + ".zip";
+        buildFilename([
+          "data",
+          kind,
+          variable,
+          strip,
+          `${depth}depth`,
+          granularity,
+          year,
+        ]) + ".zip";
 
     await postAndDownload("/api/download_data", payload, fname);
   } catch (err) {
@@ -300,11 +300,11 @@ function buildPlotFilename({ plotType, format }) {
   if (depthIndex && downloadsWindow.depthMapping?.[depthIndex]) {
     const depthLabel = downloadsWindow.depthMapping[depthIndex][unitSystem];
     depthPart = String(depthLabel)
-      .replace(/\s+/g, "")
-      .replace("inches", "in")
-      .replace("inch", "in")
-      .replace("centimeters", "cm")
-      .replace("centimeter", "cm");
+        .replace(/\s+/g, "")
+        .replace("inches", "in")
+        .replace("inch", "in")
+        .replace("centimeters", "cm")
+        .replace("centimeter", "cm");
   }
 
   const ext = format === "jpeg" ? "jpg" : format;
@@ -563,16 +563,16 @@ function findManifestKey(manifest, { dataset, year, granularity }) {
   if (!Array.isArray(entries)) return null;
 
   return (
-    entries.find((e) => {
-      if (!e || typeof e !== "object") return false;
-      if (String(e.dataset || "").trim().toLowerCase() !== String(token).trim().toLowerCase()) return false;
-      if (y != null && parseInt(e.year, 10) !== y) return false;
+      entries.find((e) => {
+        if (!e || typeof e !== "object") return false;
+        if (String(e.dataset || "").trim().toLowerCase() !== String(token).trim().toLowerCase()) return false;
+        if (y != null && parseInt(e.year, 10) !== y) return false;
 
-      const res = normalizeResolution(e.resolution ?? e.granularity ?? null);
-      if (g && res !== g) return false;
+        const res = normalizeResolution(e.resolution ?? e.granularity ?? null);
+        if (g && res !== g) return false;
 
-      return Boolean(e.key);
-    })?.key || null
+        return Boolean(e.key);
+      })?.key || null
   );
 }
 
@@ -598,10 +598,10 @@ function hasDatasetFamily(manifest, dataset) {
   if (!Array.isArray(entries)) return false;
 
   return entries.some(
-    (e) =>
-      e &&
-      typeof e === "object" &&
-      String(e.dataset || "").trim().toLowerCase() === String(token).trim().toLowerCase()
+      (e) =>
+          e &&
+          typeof e === "object" &&
+          String(e.dataset || "").trim().toLowerCase() === String(token).trim().toLowerCase()
   );
 }
 
@@ -610,7 +610,7 @@ function hasDatasetFamily(manifest, dataset) {
  */
 function selectedBulkUnitSystem() {
   const bulkToggle = /** @type {HTMLInputElement | null} */ (
-    document.getElementById("units-toggle_bulk")
+      document.getElementById("units-toggle_bulk")
   );
 
   if (bulkToggle) {
@@ -646,9 +646,6 @@ export async function initBulkDownloadTab() {
     return;
   }
 
-  /**
-   * @returns {number | null}
-   */
   function selectedYear() {
     if (!yearEl) return null;
     const raw = String(yearEl.value || "").trim();
@@ -656,19 +653,11 @@ export async function initBulkDownloadTab() {
     return Number.isFinite(y) ? y : null;
   }
 
-  /**
-   * @returns {string | null}
-   */
   function selectedGranularity() {
     if (!granEl) return null;
     return normalizeResolution(granEl.value);
   }
 
-  /**
-   * @param {HTMLButtonElement} btn
-   * @param {{ visualEnabled: boolean, hardDisable?: boolean }} args
-   * @returns {void}
-   */
   function setButtonState(btn, { visualEnabled, hardDisable = false }) {
     btn.disabled = hardDisable;
     btn.classList.toggle("disabled", !visualEnabled);
@@ -701,7 +690,22 @@ export async function initBulkDownloadTab() {
   }
 
   const years = Array.isArray(manifest?.years) ? manifest.years : [];
-  const granularities = Array.isArray(manifest?.granularities) ? manifest.granularities : [];
+  const rawGranularities = Array.isArray(manifest?.granularities)
+    ? manifest.granularities
+    : [];
+
+  const granularityOptions = rawGranularities
+    .map((g) => {
+      if (typeof g === "string") {
+        return { value: g, label: g };
+      }
+
+      return {
+        value: String(g?.value || ""),
+        label: String(g?.label || g?.value || ""),
+      };
+    })
+    .filter((g) => g.value);
 
   if (yearEl && !selectHasRealOptions(yearEl)) {
     const opts = (years.length ? years : [2023, 2024, 2025, 2026])
@@ -712,16 +716,13 @@ export async function initBulkDownloadTab() {
   }
 
   if (granEl && !selectHasRealOptions(granEl)) {
-    const gList = granularities.length ? granularities : ["15min", "hourly", "daily", "monthly", "gseason"];
-
     granEl.innerHTML =
       `<option value="">Select granularity...</option>` +
-      gList.map((g) => `<option value="${g}">${g}</option>`).join("");
+      granularityOptions
+        .map((g) => `<option value="${g.value}">${g.label}</option>`)
+        .join("");
   }
 
-  /**
-   * @returns {void}
-   */
   function refreshEnabledState() {
     const y = selectedYear();
     const g = selectedGranularity();
@@ -814,6 +815,7 @@ export async function initBulkDownloadTab() {
   if (bulkUnitToggle) {
     bulkUnitToggle.checked = downloadsWindow.unitSystem === "metric";
   }
+
   for (const btn of buttons) {
     btn.addEventListener("click", async (evt) => {
       evt.preventDefault();
@@ -883,7 +885,7 @@ export async function initBulkDownloadTab() {
 
   console.log("✅ Bulk download tab initialized.", {
     years: years.length,
-    granularities: granularities.length,
+    granularities: granularityOptions.length,
     buttons: buttons.length,
     hasEntries: Array.isArray(getManifestEntries(manifest)),
   });

@@ -119,6 +119,40 @@ DEFAULT_GSEASON_PERIODS = {
     },
 }
 
+MONTH_ABBR = {
+    "01": "Jan",
+    "02": "Feb",
+    "03": "Mar",
+    "04": "Apr",
+    "05": "May",
+    "06": "Jun",
+    "07": "Jul",
+    "08": "Aug",
+    "09": "Sep",
+    "10": "Oct",
+    "11": "Nov",
+    "12": "Dec",
+}
+
+
+def format_gseason_date(mm_dd: str) -> str:
+    month, day = mm_dd.split("-")
+    return f"{MONTH_ABBR.get(month, month)} {int(day)}"
+
+
+def build_gseason_period_label(period: dict) -> str:
+    label = period.get("label", "")
+    start = format_gseason_date(period.get("start", ""))
+    end = format_gseason_date(period.get("end", ""))
+    return f"{label}: {start}–{end}"
+
+
+def build_gseason_period_labels(periods: dict) -> list[str]:
+    return [
+        build_gseason_period_label(period)
+        for period in periods.values()
+    ]
+
 # ---------------------------------------------------------------------
 # Mappings (names)
 # ---------------------------------------------------------------------
@@ -135,7 +169,7 @@ variable_name_mapping = {
 strip_name_mapping = {"S1": "Strip 1", "S2": "Strip 2", "S3": "Strip 3", "S4": "Strip 4"}
 
 granularity_name_mapping = {
-    "gseason": "Growing Season",
+    "gseason": "Seasonal Periods",
     "monthly": "Monthly",
     "daily":   "Daily",
     "15min":   "15 Minute",
@@ -151,6 +185,8 @@ variable_name_abbrev = {
     "precip_mm": "Precip.",
     "irrigation": "Irrigation",
 }
+
+
 
 
 # ---------------------------------------------------------------------
@@ -173,6 +209,13 @@ COAGMET_VARIABLE_MAP = {
     "st5cm": "soil_temp_5cm",
     "st15cm": "soil_temp_15cm",
 }
+
+SOIL_SAMPLING_DEPTH_LABEL = "0–12 in"
+
+SOIL_TABLE_TOP_NOTE = (
+    f"Rows: STRIP 1–4 ({SOIL_SAMPLING_DEPTH_LABEL}). "
+    "Columns: sampling events. Values shown are strip means."
+)
 # ---------------------------------------------------------------------
 # Plot appearance
 # ---------------------------------------------------------------------

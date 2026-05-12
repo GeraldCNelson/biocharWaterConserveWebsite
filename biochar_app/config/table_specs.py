@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from biochar_app.config import paths
-
+from biochar_app.config.core import SOIL_TABLE_TOP_NOTE
 
 # -----------------------------------------------------------------------------
 # Set spec (group label + link to variable definitions)
@@ -91,7 +91,7 @@ TABLE_SOURCES: dict[str, TableSourceSpec] = {
         row_key="strip",
         period_key="date_rec",
         already_wide=False,
-        notes="Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.",
+        notes=SOIL_TABLE_TOP_NOTE,
     ),
     "soilchem_master": TableSourceSpec(
         key="soilchem_master",
@@ -102,7 +102,7 @@ TABLE_SOURCES: dict[str, TableSourceSpec] = {
         row_key="strip",
         period_key="date_rec",
         already_wide=False,
-        notes="Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.",
+        notes=SOIL_TABLE_TOP_NOTE,
     ),
     "biomass_field_master": TableSourceSpec(
         key="biomass_field_master",

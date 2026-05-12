@@ -161,11 +161,14 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
     ]
 
 
-def build_manifest(xlsx_path: str | Path) -> List[Dict[str, Any]]:
+def build_manifest(xlsx_path: str | Path) -> Dict[str, Any]:
     """
-    Compatibility wrapper for routes.py (if still used somewhere).
+    Compatibility wrapper for routes.py.
+    Returns the full bulk download manifest, including:
+    - entries
+    - years
+    - granularities
     """
     from biochar_app.scripts.bulk_downloads import bulk_download_manifest
     manifest = bulk_download_manifest()
-    entries = manifest.get("entries") if isinstance(manifest, dict) else manifest
-    return entries if isinstance(entries, list) else []
+    return manifest if isinstance(manifest, dict) else {"entries": manifest}

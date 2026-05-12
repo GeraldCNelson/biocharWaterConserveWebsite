@@ -539,6 +539,7 @@ html {
 .tab-content {
     overflow: visible;
     height: auto;
+    padding-bottom: 40px;
 }
 
 

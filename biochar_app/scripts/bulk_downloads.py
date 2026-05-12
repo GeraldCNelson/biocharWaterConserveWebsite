@@ -27,6 +27,8 @@ from typing import Any, Optional
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from biochar_app.config.core import granularity_name_mapping
+
 
 from biochar_app.config.paths import (
     PARQUET_DIR,
@@ -266,7 +268,7 @@ def bulk_download_manifest() -> dict[str, Any]:
                 )
 
     for dataset_key, (csv_path, label_base, _) in MANAGEMENT_DATASETS.items():
-         if csv_path.exists():
+        if csv_path.exists():
             items.append(
                 {
                     "key": f"{dataset_key}_all",
@@ -331,7 +333,13 @@ def bulk_download_manifest() -> dict[str, Any]:
             )
 
     manifest_years = sorted({int(item["year"]) for item in items if item.get("year") is not None})
-    manifest_granularities = sorted({str(item["resolution"]) for item in items if item.get("resolution")})
+    manifest_granularities = [
+        {
+            "value": g,
+            "label": granularity_name_mapping.get(g, g),
+        }
+        for g in sorted({str(item["resolution"]) for item in items if item.get("resolution")})
+    ]
 
     return {
         "entries": items,

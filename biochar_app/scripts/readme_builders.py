@@ -38,6 +38,11 @@ from biochar_app.config.descriptions import (
 
 GLOSSARY_JSON_PATH = Path(__file__).resolve().parents[1] / "static" / "data" / "glossary_terms.json"
 
+def format_resolution_label(resolution: str) -> str:
+    resolution = str(resolution or "").strip().lower()
+    if resolution == "gseason":
+        return "season"
+    return resolution
 
 def build_nir_reference_note() -> str:
     lines = [
@@ -488,9 +493,11 @@ def build_timeseries_yearly_readme(
     df: Optional[pd.DataFrame] = None,
     units_text: str = "",
     unit_system: str = "us",
+    season_periods_text: str = "",
 ) -> str:
     dataset_key = str(dataset or "").strip().lower()
     unit_system = _normalize_unit_system(unit_system)
+    resolution_label = format_resolution_label(resolution)
 
     dataset_label = {
         "logger": "Logger data",
@@ -502,11 +509,11 @@ def build_timeseries_yearly_readme(
         units_text = build_units_text(dataset_key, unit_system)
 
     if dataset_key in {"logger", "loggers"}:
-        description = f"{LOGGER_DESCRIPTION} This download covers {year} at {resolution} resolution."
+        description = f"{LOGGER_DESCRIPTION} This download covers {year} at {resolution_label} resolution."
     elif dataset_key == "weather":
-        description = f"{WEATHER_DESCRIPTION} This download covers {year} at {resolution} resolution."
+        description = f"{WEATHER_DESCRIPTION} This download covers {year} at {resolution_label} resolution."
     else:
-        description = f"This file contains standardized {dataset_label} for {year} at {resolution} resolution."
+        description = f"This file contains standardized {dataset_label} for {year} at {resolution_label} resolution."
 
     lines = [
         PROJECT_README_TITLE,
@@ -514,7 +521,7 @@ def build_timeseries_yearly_readme(
         f"Dataset: {dataset_label}",
         f"Coverage: {year}",
         f"Units: {_unit_system_label(unit_system)}",
-        f"File type: standardized {resolution} dataset (CSV packaged as ZIP)",
+        f"File type: standardized {resolution_label} dataset (CSV packaged as ZIP)",
         "",
     ]
 
@@ -532,6 +539,14 @@ def build_timeseries_yearly_readme(
         description,
         "",
     ])
+
+    if resolution == "gseason" and season_periods_text:
+        lines.extend([
+            "Seasonal periods",
+            "----------------",
+            season_periods_text,
+            "",
+        ])
 
     if dataset_key in {"logger", "loggers"}:
         lines.extend([
@@ -586,7 +601,7 @@ def build_management_readme(
         description = "\n".join([
             f"{IRRIGATION_DESCRIPTION} This download covers {years_text}.",
             "",
-            "During the study period, S1/S2 are irrigated roughly every four weeks while S3/S4 are irrigated every two weeks. "
+            "During the season, S1/S2 are irrigated roughly every four weeks while S3/S4 are irrigated every two weeks. "
             "Records include irrigation start and end times, duration, and applied water volume "
             "where available.",
         ])

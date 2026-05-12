@@ -44,7 +44,8 @@
         window.CUSTOM_GSEASON_CONFIG = {
             defaultYear: {{ DEFAULT_YEAR }},
             years: {{ YEARS | tojson }},
-            defaultPeriods: {{ DEFAULT_GSEASON_PERIODS | tojson }}
+            defaultPeriods: {{ DEFAULT_GSEASON_PERIODS | tojson }},
+            monthAbbr: {{ MONTH_ABBR | default({}, true) | tojson }}
         };
     </script>
 
@@ -547,7 +548,7 @@
                 <div class="container-fluid mt-2">
                     <h4 class="mb-2">Soil Biological Health</h4>
                     <p class="text-muted mb-2">
-                        Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.
+                        Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means.
                     </p>
                     <div class="nir-scroll">
                         <div id="soilbio-content" class="nir-content"></div>
@@ -560,7 +561,7 @@
                 <div class="container-fluid mt-2">
                     <h4 class="mb-2">Soil Chemistry</h4>
                     <p class="text-muted mb-2">
-                        Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.
+                        Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means.
                     </p>
                     <div class="nir-scroll">
                         <div id="soilchem-content" class="nir-content"></div>
