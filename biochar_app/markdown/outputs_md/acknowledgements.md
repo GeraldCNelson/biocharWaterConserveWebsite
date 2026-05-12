@@ -57,7 +57,8 @@ figcaption, caption {
 <li><p>Alex Dunlop and Bill Jaeger at LOR Foundation (LOR)</p></li>
 <li><p>Phil Brink and Greg Peterson of Colorado Ag Water Alliance (CAWA) for financially supporting this project</p></li>
 <li><p>Brenna Mefford of Wilson Water Group, LLC</p></li>
-<li><p>Jeff Pieper, CSU Area Extension Specialist for suggesting the use of the SPAD device. Ray Hedgecoke for the use of his skid steer and auger.</p></li>
+<li><p>Jeff Pieper, CSU Area Extension Specialist for suggesting the use of the SPAD device.</p></li>
+<li><p>Ray Hedgecoke for the use of his skid steer and auger.</p></li>
 <li><p>Bryan Reed, former Colorado Mesa University (CMU Tech) Agricultural Technical Professor and current Colorado State University WCRC Operations Manager for Agricultural Research for his continued encouragement, discussions, and biochar inoculation experiments for future field applications</p></li>
 <li><p>Dr. Ann Hess of CSU’s Graybill Stat Lab for her guidance and recommendations tackling the data</p></li>
 <li><p>The CSU IN-RICHES team, including Dr. Megan Machmuller, Dr. Lexi Firth, Rebecca Even, M.Sc., and Dr. Jim Ippolito of University of Ohio for their collaborative efforts for including this field into their expansive soil health studies as well as their continued advice, expertise and support</p></li>
