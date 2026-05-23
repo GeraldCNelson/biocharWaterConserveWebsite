@@ -1,23 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 from datetime import datetime
-from typing import Any, List, Dict
+from typing import Any, Dict, List
 
-# Adjust this import if your paths module differs
 from biochar_app.config.paths import DATA_PROCESSED_DIR
-
-# ---------------------------------------------------------------------
-# Database location
-# ---------------------------------------------------------------------
 
 DB_PATH = DATA_PROCESSED_DIR / "management" / "management_entries.sqlite"
 
-
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
 
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format."""
@@ -25,19 +15,15 @@ def utc_now_iso() -> str:
 
 
 def get_connection() -> sqlite3.Connection:
-    """Get SQLite connection (creates directory if needed)."""
+    """Get SQLite connection, creating the parent directory if needed."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ---------------------------------------------------------------------
-# Initialization
-# ---------------------------------------------------------------------
-
 def initialize_management_db() -> None:
-    """Create tables if they do not exist."""
+    """Create management tables if they do not exist."""
     with get_connection() as conn:
         conn.execute(
             """
@@ -54,13 +40,13 @@ def initialize_management_db() -> None:
                 start_totalizer_gal_x100 REAL,
                 end_totalizer_gal_x100 REAL,
 
-                gallons REAL,  -- total meter gallons
+                total_meter_gallons REAL,
                 flow_allocation_fraction REAL DEFAULT 1.0,
-                allocated_gallons REAL,  -- gallons assigned to this strip group
+                gallons_group REAL,
 
                 start_flow_gpm REAL,
                 end_flow_gpm REAL,
-                avg_flow_gpm REAL,
+                avg_flow_gpm_group REAL,
 
                 start_photo TEXT,
                 end_photo TEXT,
@@ -77,14 +63,9 @@ def initialize_management_db() -> None:
         conn.commit()
 
 
-# ---------------------------------------------------------------------
-# CRUD operations
-# ---------------------------------------------------------------------
-
 def insert_irrigation_event(row: Dict[str, Any]) -> None:
     """Insert a new irrigation event."""
     now = utc_now_iso()
-
     row = {
         **row,
         "created_at": now,
@@ -141,7 +122,8 @@ def list_irrigation_events(limit: int = 100) -> List[Dict[str, Any]]:
             """
             SELECT *
             FROM irrigation_events
-            ORDER BY COALESCE(start_timestamp, created_at) DESC LIMIT ?
+            ORDER BY COALESCE(start_timestamp, created_at) DESC
+            LIMIT ?
             """,
             [limit],
         ).fetchall()

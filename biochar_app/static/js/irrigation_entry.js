@@ -1,5 +1,27 @@
 // @ts-check
 
+/**
+ * irrigation_entry.js
+ *
+ * Field-entry UI for irrigation events.
+ *
+ * Terminology
+ * -----------
+ * The management database/API now uses explicit irrigation volume names:
+ *
+ *   ev.total_meter_gallons
+ *     = total water measured at the meter upstream of the split valve
+ *
+ *   ev.gallons_group
+ *     = water assigned to the selected strip group after applying
+ *       flow_allocation_fraction
+ *
+ * Strip-level fields such as gallons_strip are created later by
+ * tools/update_irrigation_clean.py when irrigation_clean.csv is rebuilt.
+ *
+ * This file only displays/records the field-entry event values.
+ */
+
 const STORAGE_KEY = "biochar_active_irrigation_events";
 const FORM_STORAGE_KEY = "biochar_irrigation_entry_form";
 
@@ -317,13 +339,18 @@ async function refreshRecentEvents() {
     }
 
     container.innerHTML = events.map((ev) => {
-      const totalGallons = ev.gallons == null
+      const totalMeterGallons = ev.total_meter_gallons == null
         ? ""
-        : ` — total meter: ${Number(ev.gallons).toLocaleString()} gal`;
 
-      const allocatedGallons = ev.allocated_gallons == null
+        : ` — total meter: ${Number(ev.total_meter_gallons).toLocaleString()} gal`;
+
+      const groupGallons = ev.gallons_group == null
         ? ""
-        : ` — allocated: ${Number(ev.allocated_gallons).toLocaleString()} gal`;
+        : ` — group assigned: ${Number(ev.gallons_group).toLocaleString()} gal`;
+
+      const flowFraction = ev.flow_allocation_fraction == null
+        ? ""
+        : ` — flow fraction: ${Number(ev.flow_allocation_fraction).toLocaleString()}`;
 
       const startPhoto = ev.start_photo
         ? ` — <a href="${ev.start_photo}" target="_blank">start photo</a>`
@@ -336,7 +363,7 @@ async function refreshRecentEvents() {
       return `
         <div class="border rounded p-2 mb-2 bg-white">
           <div><strong>${ev.date || ""}</strong> ${ev.strip_group || ""} (${ev.location || ""})</div>
-          <div>Status: ${ev.status || ""}${totalGallons}${allocatedGallons}${startPhoto}${endPhoto}</div>
+          <div>Status: ${ev.status || ""}${totalMeterGallons}${groupGallons}${flowFraction}${startPhoto}${endPhoto}</div>
           <div class="text-muted">${ev.event_id || ""}</div>
         </div>
       `;

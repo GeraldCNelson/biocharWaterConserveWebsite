@@ -293,7 +293,7 @@ def add_irrigation_shapes(
                 if ts is None or ts < start_ts or ts > end_ts:
                     continue
                 try:
-                    total += float(ev.get("volume_gal", 0) or 0.0)
+                    total += float(ev.get("gallons_strip", 0) or 0.0)
                 except (TypeError, ValueError):
                     pass
 
@@ -345,7 +345,7 @@ def add_irrigation_shapes(
             )
 
             try:
-                vol = float(ev.get("volume_gal", 0) or 0.0)
+                vol = float(ev.get("gallons_strip", 0) or 0.0)
             except (TypeError, ValueError):
                 continue
 

@@ -52,7 +52,6 @@ def load_logger_data(year: int, granularity: Optional[str] = None) -> pd.DataFra
             df_out[col] = pd.Series([], dtype="datetime64[ns]")
             return df_out
 
-        # Filter rows using iloc on numpy positions instead of dropna(subset=...)
         keep_idx = np.flatnonzero(valid_mask.to_numpy())
         df_out = df_out.iloc[keep_idx].copy()
 
@@ -146,14 +145,6 @@ def load_weather_data(year: int, granularity: Optional[str] = None) -> pd.DataFr
 
     This does NOT fetch from CoAgMet. It reads already-processed parquet
     written by ETL.
-
-    Returns
-    -------
-    DataFrame with a naive `timestamp` column and weather variables
-    at the requested granularity.
-
-    If no weather parquet exists, returns an empty dataframe with
-    a `timestamp` column.
     """
     gran = (granularity or "15min").lower()
 
@@ -183,47 +174,40 @@ def load_irrigation_data() -> pd.DataFrame:
     """
     Canonical loader for cleaned irrigation management data.
 
-    Source
-    ------
-    Reads the cleaned irrigation CSV defined by IRRIGATION_CSV.
-
-    Required source columns
-    -----------------------
-    - strip_group
-    - start_timestamp
-    - end_timestamp
-    - gallons
-
-    Returned columns
-    ----------------
+    Preferred clean schema is strip-level and uses:
     - strip_group
     - strip
     - start_timestamp
     - end_timestamp
-    - duration_hours
-    - gallons
-    - year
+    - gallons_group
+    - gallons_strip
 
-    Notes
-    -----
-    The cleaned CSV stores irrigation by strip pair / side. This function
-    expands each event to one row per strip:
-    - WEST or S1_S2 -> S1 and S2
-    - EAST or S3_S4 -> S3 and S4
+    This function intentionally does not return a generic `gallons` column.
     """
     path = Path(IRRIGATION_CSV)
 
-    empty = pd.DataFrame(
-        columns=[
-            "strip_group",
-            "strip",
-            "start_timestamp",
-            "end_timestamp",
-            "duration_hours",
-            "gallons",
-            "year",
-        ]
-    )
+    output_cols = [
+        "strip_group",
+        "strip",
+        "start_timestamp",
+        "end_timestamp",
+        "duration_hours",
+        "event_duration_hours",
+        "gallons_group",
+        "gallons_strip",
+        "total_meter_gallons",
+        "flow_allocation_fraction",
+        "strip_allocation_fraction",
+        "avg_flow_gpm_group",
+        "avg_flow_gpm_strip",
+        "avg_flow_gph_strip",
+        "year",
+        "location",
+        "event_id",
+        "notes",
+    ]
+
+    empty = pd.DataFrame(columns=output_cols)
 
     if not path.exists():
         return empty
@@ -232,18 +216,23 @@ def load_irrigation_data() -> pd.DataFrame:
     if df.empty:
         return empty
 
-    required_cols = {"strip_group", "start_timestamp", "end_timestamp", "gallons"}
-    missing = sorted(required_cols - set(df.columns))
+    df = df.copy()
+
+    required = {"strip_group", "start_timestamp", "end_timestamp"}
+    missing = sorted(required - set(df.columns))
     if missing:
         raise KeyError(f"Irrigation CSV is missing required columns: {missing}")
 
-    df = df.copy()
+    has_new_strip_schema = {"strip", "gallons_strip"}.issubset(df.columns)
+
+    if not has_new_strip_schema and "gallons" not in df.columns and "gallons_group" not in df.columns:
+        raise KeyError(
+            "Irrigation CSV must contain either new strip-level columns "
+            "('strip', 'gallons_strip') or legacy group-level 'gallons'."
+        )
 
     df["start_timestamp"] = pd.to_datetime(df["start_timestamp"], errors="coerce")
     df["end_timestamp"] = pd.to_datetime(df["end_timestamp"], errors="coerce")
-    df["gallons"] = pd.to_numeric(df["gallons"], errors="coerce")
-
-    df = df.dropna(subset=["start_timestamp", "end_timestamp", "gallons"]).copy()
 
     overnight = (
         (df["end_timestamp"] < df["start_timestamp"])
@@ -255,44 +244,116 @@ def load_irrigation_data() -> pd.DataFrame:
             df.loc[overnight, "end_timestamp"] + pd.Timedelta(days=1)
         )
 
-    df = df.loc[df["gallons"] > 0].copy()
+    df = df.dropna(subset=["start_timestamp", "end_timestamp"]).copy()
+
+    if df.empty:
+        return empty
 
     df["duration_hours"] = (
         df["end_timestamp"] - df["start_timestamp"]
     ).dt.total_seconds() / 3600.0
+    df["event_duration_hours"] = df["duration_hours"]
 
-    df["year"] = df["start_timestamp"].dt.year
+    df["year"] = (
+        pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+        if "year" in df.columns
+        else df["start_timestamp"].dt.year.astype("Int64")
+    )
 
     def expand_group(strip_group: object) -> list[str]:
         group = str(strip_group).strip().lower()
-
-        if group in {"west", "s1_s2"}:
+        if group in {"west", "s1_s2", "s1/s2"}:
             return ["S1", "S2"]
-        if group in {"east", "s3_s4"}:
+        if group in {"east", "s3_s4", "s3/s4"}:
             return ["S3", "S4"]
         return []
 
-    rows: list[dict[str, object]] = []
+    if has_new_strip_schema:
+        out = df.copy()
 
-    for _, row in df.iterrows():
-        strips = expand_group(row["strip_group"])
-        for strip in strips:
-            rows.append(
-                {
-                    "strip_group": row["strip_group"],
-                    "strip": strip,
-                    "start_timestamp": row["start_timestamp"],
-                    "end_timestamp": row["end_timestamp"],
-                    "duration_hours": row["duration_hours"],
-                    "gallons": row["gallons"],
-                    "year": row["year"],
-                }
-            )
+        out["strip"] = out["strip"].astype(str).str.strip().str.upper()
+        out["gallons_strip"] = pd.to_numeric(out["gallons_strip"], errors="coerce")
 
-    if not rows:
-        return empty
+        if "gallons_group" in out.columns:
+            out["gallons_group"] = pd.to_numeric(out["gallons_group"], errors="coerce")
+        else:
+            out["gallons_group"] = pd.NA
 
-    out = pd.DataFrame(rows)
+        out = out.dropna(subset=["strip", "gallons_strip"]).copy()
+        out = out.loc[out["gallons_strip"] > 0].copy()
+
+    else:
+        # Legacy fallback for older group-level clean files.
+        # In legacy files, `gallons` or `gallons_group` is interpreted as group-level water.
+        group_volume_col = "gallons_group" if "gallons_group" in df.columns else "gallons"
+        df["gallons_group"] = pd.to_numeric(df[group_volume_col], errors="coerce")
+        df = df.dropna(subset=["gallons_group"]).copy()
+        df = df.loc[df["gallons_group"] > 0].copy()
+
+        rows: list[dict[str, object]] = []
+
+        for _, row in df.iterrows():
+            strips = expand_group(row["strip_group"])
+            if not strips:
+                continue
+
+            strip_fraction = 1.0 / float(len(strips))
+            gallons_group = float(row["gallons_group"])
+
+            for strip in strips:
+                rows.append(
+                    {
+                        **row.to_dict(),
+                        "strip": strip,
+                        "strip_allocation_fraction": strip_fraction,
+                        "gallons_group": gallons_group,
+                        "gallons_strip": gallons_group * strip_fraction,
+                    }
+                )
+
+        if not rows:
+            return empty
+
+        out = pd.DataFrame(rows)
+
+    if "total_meter_gallons" not in out.columns:
+        out["total_meter_gallons"] = out["gallons_group"]
+
+    if "flow_allocation_fraction" not in out.columns:
+        out["flow_allocation_fraction"] = pd.NA
+
+    if "strip_allocation_fraction" not in out.columns:
+        out["strip_allocation_fraction"] = pd.NA
+
+    if "avg_flow_gpm_group" in out.columns:
+        out["avg_flow_gpm_group"] = pd.to_numeric(out["avg_flow_gpm_group"], errors="coerce")
+    elif "avg_flow_gpm" in out.columns:
+        out["avg_flow_gpm_group"] = pd.to_numeric(out["avg_flow_gpm"], errors="coerce")
+    else:
+        out["avg_flow_gpm_group"] = pd.NA
+
+    if "avg_flow_gpm_strip" not in out.columns:
+        out["avg_flow_gpm_strip"] = (
+            pd.to_numeric(out["avg_flow_gpm_group"], errors="coerce")
+            * pd.to_numeric(out["strip_allocation_fraction"], errors="coerce")
+        )
+
+    if "avg_flow_gph_strip" not in out.columns:
+        out["avg_flow_gph_strip"] = (
+            pd.to_numeric(out["gallons_strip"], errors="coerce")
+            / pd.to_numeric(out["duration_hours"], errors="coerce")
+        )
+        out.loc[out["duration_hours"] <= 0, "avg_flow_gph_strip"] = pd.NA
+
+    for col in ["location", "event_id", "notes"]:
+        if col not in out.columns:
+            out[col] = ""
+
+    for col in output_cols:
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    out = out[output_cols].copy()
     out.sort_values(["strip", "start_timestamp"], inplace=True)
     out.reset_index(drop=True, inplace=True)
     return out
@@ -302,9 +363,6 @@ def prepare_irrigation_input(df: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare a dataframe for irrigation-analysis functions that require a
     DatetimeIndex with unique timestamps.
-
-    Duplicate naive timestamps can exist because ETL exports civil local time
-    after dropping timezone info, which collapses the repeated fall DST hour.
     """
     out = df.copy()
 

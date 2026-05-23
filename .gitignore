@@ -138,6 +138,17 @@ package-lock.json
 *.zip
 
 ############################
+# Geospatial rasters
+############################
+biochar_app/geospatial/**/*.img
+biochar_app/geospatial/**/*.tif
+biochar_app/geospatial/**/*.tiff
+biochar_app/geospatial/**/*.laz
+biochar_app/geospatial/**/*.las
+biochar_app/geospatial/**/*.qgz
+biochar_app/geospatial/**/*.gpkg
+
+############################
 # Optional: large local-only exports
 # Uncomment if these ever become noisy again
 ############################

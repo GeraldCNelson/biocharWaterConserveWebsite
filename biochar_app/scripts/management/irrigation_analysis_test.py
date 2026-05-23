@@ -2,7 +2,6 @@ import pandas as pd
 from pathlib import Path
 
 from biochar_app.config.core import (
-    DEFAULT_YEAR,
     SENSOR_DEPTH_CODES,
     SENSOR_DEPTH_VALUES,
     STRIPS,
@@ -20,6 +19,9 @@ from biochar_app.scripts.management.irrigation_analysis import (
     analyze_bottom_logger_controls,
     build_variable_definitions_table,
     build_variable_definitions_with_sources,
+)
+
+from biochar_app.scripts.management.irrigation_plots import (
     save_irrigation_event_multidepth_plots,
 )
 
@@ -28,19 +30,13 @@ DEPTH_INDEX_TO_INCHES: dict[str, int] = {
     for depth_code in SENSOR_DEPTH_CODES
 }
 
-year = DEFAULT_YEAR
+year = 2026
 
 
 def run_irrigation_analysis_for_year(
     year: int,
     strip_to_sensor_map: dict[str, str],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Run the irrigation analysis workflow for one year and return:
-    1. event-level debug table
-    2. targets table
-    3. rec_runtime table
-    """
     df_15min = load_logger_data(year=year, granularity="15min")
 
     if "timestamp" in df_15min.columns:
@@ -75,9 +71,6 @@ def run_irrigation_analysis_for_year(
 
 
 def build_bottom_logger_profile_map() -> dict[str, list[str]]:
-    """
-    Return all bottom-logger VWC columns for each strip and depth.
-    """
     return {
         strip: [f"VWC_{depth_code}_raw_{strip}_B" for depth_code in SENSOR_DEPTH_CODES]
         for strip in STRIPS
@@ -89,7 +82,7 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     Add:
     - depth_inches
     - lag_after_irrigation_hr
-    - avg_flow_gph
+    - avg_flow_gph_strip
     """
     if event_results.empty:
         return event_results.copy()
@@ -110,13 +103,13 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     else:
         out["lag_after_irrigation_hr"] = pd.NA
 
-    if "volume_gal" in out.columns and "event_duration_hours" in out.columns:
-        volume = pd.to_numeric(out["volume_gal"], errors="coerce")
+    if "gallons_strip" in out.columns and "event_duration_hours" in out.columns:
+        gallons_strip = pd.to_numeric(out["gallons_strip"], errors="coerce")
         duration = pd.to_numeric(out["event_duration_hours"], errors="coerce")
-        out["avg_flow_gph"] = volume / duration
-        out.loc[duration <= 0, "avg_flow_gph"] = pd.NA
+        out["avg_flow_gph_strip"] = gallons_strip / duration
+        out.loc[duration <= 0, "avg_flow_gph_strip"] = pd.NA
     else:
-        out["avg_flow_gph"] = pd.NA
+        out["avg_flow_gph_strip"] = pd.NA
 
     return out
 
@@ -127,11 +120,21 @@ def analyze_bottom_logger_all_depths(
     year: int,
     strip_to_profile_sensors: dict[str, list[str]],
 ) -> pd.DataFrame:
-    """
-    Run irrigation-event analysis for all bottom-logger depths in each strip.
-    """
     all_results: list[pd.DataFrame] = []
     all_events = load_irrigation_data()
+
+    required_cols = {
+        "strip",
+        "year",
+        "start_timestamp",
+        "end_timestamp",
+        "gallons_strip",
+    }
+    missing = required_cols - set(all_events.columns)
+    if missing:
+        raise KeyError(
+            f"Clean irrigation data is missing required columns: {sorted(missing)}"
+        )
 
     for strip in strips:
         sensor_cols = strip_to_profile_sensors.get(strip, [])
@@ -144,9 +147,19 @@ def analyze_bottom_logger_all_depths(
             print(f"Skipping {strip}: no configured bottom-logger columns found.")
             continue
 
+        select_cols = [
+            "start_timestamp",
+            "end_timestamp",
+            "gallons_strip",
+        ]
+        if "gallons_group" in all_events.columns:
+            select_cols.append("gallons_group")
+        if "event_id" in all_events.columns:
+            select_cols.append("event_id")
+
         events = all_events.loc[
             (all_events["strip"] == strip) & (all_events["year"] == year),
-            ["start_timestamp", "end_timestamp", "gallons"],
+            select_cols,
         ].copy()
 
         if events.empty:
@@ -157,7 +170,6 @@ def analyze_bottom_logger_all_depths(
             columns={
                 "start_timestamp": "start",
                 "end_timestamp": "end",
-                "gallons": "volume_gal",
             }
         )
 
@@ -167,9 +179,11 @@ def analyze_bottom_logger_all_depths(
             sensor_cols=available_sensor_cols,
             start_col="start",
             end_col="end",
-            volume_col="volume_gal",
+            gallons_strip_col="gallons_strip",
+            gallons_group_col="gallons_group" if "gallons_group" in events.columns else None,
             strip=strip,
             year=year,
+            event_id_col="event_id" if "event_id" in events.columns else None,
         )
 
         if not strip_results.empty:
@@ -187,9 +201,6 @@ def build_enhanced_event_debug_table(
     event_results: pd.DataFrame,
     decimals: int = 2,
 ) -> pd.DataFrame:
-    """
-    Event-level diagnostics with added practical columns.
-    """
     if event_results.empty:
         return pd.DataFrame()
 
@@ -203,9 +214,10 @@ def build_enhanced_event_debug_table(
         "logger_position",
         "irrigation_start",
         "irrigation_end",
-        "volume_gal",
+        "gallons_group",
+        "gallons_strip",
         "event_duration_hours",
-        "avg_flow_gph",
+        "avg_flow_gph_strip",
         "baseline_vwc",
         "peak_vwc",
         "peak_increase",
@@ -214,6 +226,11 @@ def build_enhanced_event_debug_table(
         "time_to_peak_hours",
         "time_to_plateau_hours",
         "lag_after_irrigation_hr",
+        "profile_baseline_storage_gal",
+        "profile_plateau_storage_gal",
+        "event_storage_gal",
+        "efficiency_strip",
+        "estimated_loss_gal_strip",
     ]
     keep_cols = [c for c in keep_cols if c in event_results.columns]
 
@@ -229,21 +246,16 @@ def build_enhanced_runtime_table(
     event_results: pd.DataFrame,
     min_events: int = 3,
 ) -> pd.DataFrame:
-    """
-    Grouped rec_runtime summary using time_to_plateau_hours, plus actual runtime
-    and supporting irrigation metrics.
-    """
     if event_results.empty:
         return pd.DataFrame()
 
     required_group_cols = ["strip", "depth_inches"]
-
     df = event_results.copy()
 
     for col in [
         "time_to_plateau_hours",
         "event_duration_hours",
-        "avg_flow_gph",
+        "avg_flow_gph_strip",
     ]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -263,7 +275,9 @@ def build_enhanced_runtime_table(
         actual_runtime_vals = pd.to_numeric(
             sub["event_duration_hours"], errors="coerce"
         ).dropna()
-        flow_vals = pd.to_numeric(sub["avg_flow_gph"], errors="coerce").dropna()
+        flow_vals = pd.to_numeric(
+            sub["avg_flow_gph_strip"], errors="coerce"
+        ).dropna()
 
         if "lag_after_irrigation_hr" in sub.columns:
             lag_vals = pd.to_numeric(
@@ -292,7 +306,7 @@ def build_enhanced_runtime_table(
             ),
             "source_time_col": "time_to_plateau_hours",
             "summary_stat": "median",
-            "median_avg_flow_gph": (
+            "median_avg_flow_gph_strip": (
                 float(flow_vals.median()) if not flow_vals.empty else pd.NA
             ),
             "median_lag_after_irrigation_hr": (
@@ -413,8 +427,8 @@ else:
 print("\n=== VARIABLE DEFINITIONS ===")
 print(definitions.to_string(index=False))
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = BASE_DIR / "biochar_app" / "data-processed" / "management"
+BASE_DIR = Path(__file__).resolve().parents[3]
+OUTPUT_DIR = BASE_DIR / "biochar_app" / "data-processed" / "management" / "irrigation"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
