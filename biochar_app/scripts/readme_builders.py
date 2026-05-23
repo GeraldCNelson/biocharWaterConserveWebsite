@@ -1238,9 +1238,9 @@ def build_variable_section(
     entries = load_glossary_entries()
 
     if not entries:
-        lines = ["Example columns included in this dataset:"]
-        lines.extend(f"- `{col}`" for col in df.columns[:max_terms])
-        return "\n".join(lines).rstrip()
+        fallback_lines = ["Example columns included in this dataset:"]
+        fallback_lines.extend(f"- `{col}`" for col in df.columns[:max_terms])
+        return "\n".join(fallback_lines).rstrip()
 
     excluded_keys = {"strip", "depth", "logger_location"}
     matched: dict[str, dict[str, Any]] = {}
@@ -1263,9 +1263,9 @@ def build_variable_section(
                 matched[key]["_columns"].append(col_str)
 
     if not matched:
-        lines = ["No glossary terms were matched to these columns."]
-        lines.extend(f"- `{col}`" for col in df.columns[:max_terms])
-        return "\n".join(lines).rstrip()
+        unmatched_lines = ["No glossary terms were matched to these columns."]
+        unmatched_lines.extend(f"- `{col}`" for col in df.columns[:max_terms])
+        return "\n".join(unmatched_lines).rstrip()
 
     lines: list[str] = []
 

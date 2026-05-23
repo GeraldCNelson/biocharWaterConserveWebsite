@@ -220,7 +220,7 @@ class VariableSpec:
     key: str
     label: str
     candidates: Tuple[str, ...]
-    note: str = ""
+    note: str | None = None
     reference_key: Optional[str] = None
 
 

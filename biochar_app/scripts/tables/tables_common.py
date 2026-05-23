@@ -15,8 +15,6 @@ This keeps table "shape" consistent across tabs and prevents drift.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Sequence
-
-from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.scripts.lab.reference_helpers import get_reference_for_varspec
 from biochar_app.scripts.lab.serializers import serialize_reference_bundle
 

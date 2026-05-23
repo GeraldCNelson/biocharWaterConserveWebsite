@@ -1,15 +1,13 @@
 """
 Central metadata registry for lab variables used in the Biochar Fruita CSU dashboard.
-
 This file should describe existing standardized column names.
-
 Do not rename source columns here.
 """
 
 from __future__ import annotations
+from typing import Any
 
 LAB_VARIABLE_METADATA = {
-
     'actinomycetes_biomass': {'display_label': 'Actinomycetes Biomass',
                            'source_label': 'Actinomycetes',
                            'dataset_family': 'soil_biology_plfa',
@@ -1447,11 +1445,17 @@ LAB_VARIABLE_METADATA = {
 
 }
 
-def get_lab_variable_metadata(key: str) -> dict:
-    return LAB_VARIABLE_METADATA.get(key, {})
+def get_lab_variable_metadata(key: str) -> dict[str, Any]:
+    value = LAB_VARIABLE_METADATA.get(key, {})
+    return value if isinstance(value, dict) else {}
 
 def get_display_label(key: str) -> str:
-    return LAB_VARIABLE_METADATA.get(key, {}).get("display_label", key)
+    meta = get_lab_variable_metadata(key)
+    return str(meta.get("display_label", key))
 
 def get_units(key: str) -> str | None:
-    return LAB_VARIABLE_METADATA.get(key, {}).get("units")
+    meta = get_lab_variable_metadata(key)
+    units = meta.get("units")
+    if units is None:
+        return None
+    return str(units)

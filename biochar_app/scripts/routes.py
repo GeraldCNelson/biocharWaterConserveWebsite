@@ -634,7 +634,12 @@ async def api_plot_raw(req: PlotRequest):
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+    start_ts = pd.to_datetime(start)
+    end_ts = pd.to_datetime(end) + pd.Timedelta(days=1)
+    df = df[
+        (df["timestamp"] >= start_ts)
+        & (df["timestamp"] < end_ts)
+        ].copy()
 
     if trace_option == "depth":
         expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS]
@@ -664,12 +669,10 @@ async def api_plot_raw(req: PlotRequest):
         depth=depth,
         trace_option=trace_option,
         unit_system=unit,
-        start=start,
-        end=end,
+        start=start_ts.isoformat(),
+        end=end_ts.isoformat(),
     )
 
-    start_ts = pd.to_datetime(start)
-    end_ts = pd.to_datetime(end)
 
     layout = fig.setdefault("layout", {})
     xaxis = layout.setdefault("xaxis", {})
@@ -713,7 +716,12 @@ async def api_plot_ratio(req: PlotRequest):
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+    start_ts = pd.to_datetime(start)
+    end_ts = pd.to_datetime(end) + pd.Timedelta(days=1)
+    df = df[
+        (df["timestamp"] >= start_ts)
+        & (df["timestamp"] < end_ts)
+    ].copy()
 
     if var == "T":
         fig = make_temperature_delta_figure(
@@ -723,8 +731,8 @@ async def api_plot_ratio(req: PlotRequest):
             unit_system=unit,
             granularity=gran,
             year=year,
-            start=start,
-            end=end,
+            start=start_ts.isoformat(),
+            end=end_ts.isoformat(),
         )
     else:
         fig = make_ratio_figure(
@@ -735,8 +743,8 @@ async def api_plot_ratio(req: PlotRequest):
             unit_system=unit,
             granularity=gran,
             year=year,
-            start=start,
-            end=end,
+            start=start_ts.isoformat(),
+            end=end_ts.isoformat(),
             depth=str(depth),
         )
 
@@ -823,8 +831,14 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     if "timestamp" in df_req.columns and start and end:
         start_dt = pd.to_datetime(start, errors="coerce")
         end_dt = pd.to_datetime(end, errors="coerce")
+
         if pd.notna(start_dt) and pd.notna(end_dt):
-            df_req = df_req[(df_req["timestamp"] >= start_dt) & (df_req["timestamp"] <= end_dt)]
+            end_dt_exclusive = end_dt + pd.Timedelta(days=1)
+
+            df_req = df_req[
+                (df_req["timestamp"] >= start_dt)
+                & (df_req["timestamp"] < end_dt_exclusive)
+                ].copy()
 
     if granularity == "gseason":
         periods_raw = payload.get("periods") or []
@@ -1005,7 +1019,10 @@ async def serve_markdown(filename: str):
 
 @main_router.get("/custom-gseason")
 async def custom_gseason(request: Request):
-    return templates.TemplateResponse("_custom_gseason.html", {"request": request})
+    return templates.TemplateResponse(
+        request,
+        "_custom_gseason.html",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1123,6 +1140,6 @@ async def ward_soil_sha_report():
 @main_router.get("/management/irrigation-entry")
 async def irrigation_entry_page(request: Request):
     return templates.TemplateResponse(
-        "irrigation_entry.html",
-        {"request": request},
+        request,
+        "_custom_gseason.html",
     )

@@ -11,10 +11,11 @@ def metadata_label(key: str, fallback: str | None = None) -> str:
     return label if label != key else (fallback or key)
 
 
-def metadata_note(key: str, fallback: str | None = None) -> str | None:
+def metadata_note(key: str, fallback: str | None = None) -> str:
     meta = get_lab_variable_metadata(key)
-    return (
+    return str(
         meta.get("interpretation_note")
         or meta.get("definition")
         or fallback
+        or ""
     )
