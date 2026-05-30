@@ -125,13 +125,45 @@ def common_xaxis_config(_granularity: str, start: str, end: str) -> Dict[str, An
         "linecolor": "black",
         "linewidth": 1,
         "rangeslider": {"visible": False},
-        "tickfont": {"size": 11},
+        "tickfont": {"size": 10},
     }
 
     try:
         start_ts = pd.to_datetime(start, errors="raise")
         end_ts = pd.to_datetime(end, errors="raise")
     except (TypeError, ValueError):
+        return cfg
+
+    cfg["range"] = [start_ts, end_ts]
+
+    total_hours = (end_ts - start_ts).total_seconds() / 3600.0
+    total_days = total_hours / 24.0
+
+    if total_hours <= 30:
+        cfg.update({
+            "tickmode": "linear",
+            "dtick": 2 * 60 * 60 * 1000,
+            "tickformat": "%m/%d<br>%H:%M",
+            "tickangle": 0,
+        })
+        return cfg
+
+    if total_hours <= 72:
+        cfg.update({
+            "tickmode": "linear",
+            "dtick": 6 * 60 * 60 * 1000,
+            "tickformat": "%m/%d<br>%H:%M",
+            "tickangle": 0,
+        })
+        return cfg
+
+    if total_days <= 31:
+        cfg.update({
+            "tickmode": "linear",
+            "dtick": 24 * 60 * 60 * 1000,
+            "tickformat": "%m/%d",
+            "tickangle": 0,
+        })
         return cfg
 
     is_full_year = (
@@ -141,26 +173,21 @@ def common_xaxis_config(_granularity: str, start: str, end: str) -> Dict[str, An
         and end_ts.day == 31
         and start_ts.year == end_ts.year
     )
-    if not is_full_year:
-        return cfg
 
-    year = int(start_ts.year)
-    month_starts = pd.date_range(f"{year}-01-01", f"{year}-12-01", freq="MS")
-    tickvals = [dt.to_pydatetime() for dt in month_starts]
+    if is_full_year:
+        year = int(start_ts.year)
+        month_starts = pd.date_range(f"{year}-01-01", f"{year}-12-01", freq="MS")
 
-    ticktext: list[str] = [
-        dt.strftime("%b\n%Y") if dt.month in (1, 12) else dt.strftime("%b")
-        for dt in month_starts
-    ]
-
-    cfg.update(
-        {
+        cfg.update({
             "tickmode": "array",
-            "tickvals": tickvals,
-            "ticktext": ticktext,
+            "tickvals": [dt.to_pydatetime() for dt in month_starts],
+            "ticktext": [
+                dt.strftime("%b\n%Y") if dt.month in (1, 12) else dt.strftime("%b")
+                for dt in month_starts
+            ],
             "tickangle": 0,
-        }
-    )
+        })
+
     return cfg
 
 

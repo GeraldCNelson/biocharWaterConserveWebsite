@@ -43,7 +43,6 @@ VALUE_COLS_STANDARD = [
 # ---------------------------------------------------------------------------
 
 SENSOR_DEPTH_CODES = ["1", "2", "3"]
-DEFAULT_SENSOR_DEPTH_CODE = "1"
 
 # User-facing labels
 SENSOR_DEPTH_LABELS = {
@@ -88,6 +87,7 @@ DEFAULT_YEAR = 2025
 DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
 DEFAULT_END_DATE = datetime.date(DEFAULT_YEAR, 12, 31).isoformat()
 
+DEFAULT_SENSOR_DEPTH_CODE = "1"
 DEFAULT_VARIABLE = "VWC"
 DEFAULT_STRIP = "S1"
 DEFAULT_LOGGER_LOCATION = "T"

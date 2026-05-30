@@ -48,8 +48,11 @@ PARQUET_SUMMARY_WEATHER_MONTHLY_DIR = PARQUET_SUMMARY_WEATHER_DIR / "monthly"
 # Lab tests / ancillary datasets
 LAB_TESTS_RAW_DIR = DATA_RAW_DIR / "lab-tests"
 LAB_TESTS_PROCESSED_DIR = DATA_PROCESSED_DIR / "lab-tests"
+HAY_TESTS_RAW_DIR = LAB_TESTS_RAW_DIR / "hay-tests" / "csv-files"
 HAY_TESTS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "hay-tests" / "csv-files"
 SOIL_BIO_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-bio" / "csv-files"
+SOIL_CHEM_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files"
+
 SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files"
 SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
 BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"

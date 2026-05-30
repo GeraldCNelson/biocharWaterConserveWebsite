@@ -601,7 +601,6 @@ def make_ratio_figure(
     depth: str,
 ) -> Dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
-
     is_gs = granularity.lower() == "gseason"
 
     fig = go.Figure()
@@ -613,12 +612,27 @@ def make_ratio_figure(
     y_cols = [
         c
         for c in df.columns
-        if c.startswith(f"{ratio_prefix}_{depth_str}_ratio_") and c.endswith(f"_{logger_location}")
+        if c.startswith(f"{ratio_prefix}_{depth_str}_ratio_")
+        and c.endswith(f"_{logger_location}")
     ]
+
     if not y_cols:
         bad_request("No ratio data available for the selected filters.")
 
     df_plot = convert_units(_ensure_timestamp_datetime(df), usys).copy()
+
+    if not is_gs and "timestamp" in df_plot.columns:
+        df_plot["timestamp"] = pd.to_datetime(df_plot["timestamp"], errors="coerce")
+        df_plot = df_plot.loc[df_plot["timestamp"].notna()].copy()
+
+        start_ts = pd.to_datetime(start, errors="coerce")
+        end_ts = pd.to_datetime(end, errors="coerce")
+
+        if pd.notna(start_ts) and pd.notna(end_ts):
+            df_plot = df_plot.loc[
+                (df_plot["timestamp"] >= start_ts)
+                & (df_plot["timestamp"] <= end_ts)
+            ].copy()
 
     for idx, col in enumerate(y_cols, start=1):
         x = safe_tolist(df_plot.get("period_code")) if is_gs else _x_time_strings(df_plot)
@@ -644,7 +658,16 @@ def make_ratio_figure(
             line_kwargs: Dict[str, Any] = {"width": 2}
             if pair_color:
                 line_kwargs["color"] = pair_color
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=pair_label, line=line_kwargs))
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=y,
+                    mode="lines",
+                    name=pair_label,
+                    line=line_kwargs,
+                )
+            )
 
     title = build_ratio_plot_title(
         granularity=granularity,
@@ -671,7 +694,10 @@ def make_ratio_figure(
         yref="y",
         y0=1,
         y1=1,
-        line=dict(color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"), width=1),
+        line=dict(
+            color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"),
+            width=1,
+        ),
     )
 
     fig.update_layout(
@@ -682,12 +708,22 @@ def make_ratio_figure(
         xaxis=xcfg,
         legend=common_legend_config(f"{abbr} ratio"),
         template="plotly_white",
-        margin=_plot_margin("standard"),
+        margin=_plot_margin(
+            "standard" if is_gs else ("dual_axis_metric" if usys == "metric" else "dual_axis_us")
+        ),
         height=400,
         autosize=True,
     )
 
-    configure_primary_yaxis(fig, df_plot, y_cols, variable, usys, kind="ratio")
+    configure_primary_yaxis(
+        fig=fig,
+        df=df_plot,
+        y_cols=y_cols,
+        variable=variable,
+        unit_system=usys,
+        kind="ratio",
+    )
+
     return prepare_plot_for_json(fig)
 
 
