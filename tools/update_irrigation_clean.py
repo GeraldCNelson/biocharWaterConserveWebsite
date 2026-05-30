@@ -3,6 +3,46 @@
 update_irrigation_clean.py
 
 Update the live irrigation_clean.csv file from raw irrigation event CSV files.
+
+Purpose
+-------
+This script converts raw/group-level irrigation records into the clean,
+strip-level irrigation event table used by plotting and irrigation analysis code.
+
+The script:
+- reads the existing live irrigation_clean.csv file
+- reads a new raw irrigation CSV, by default irrigation_2026_raw.csv
+- normalizes dates, strip groups, locations, volumes, and flow values
+- expands group-level S1_S2 / S3_S4 events into individual strip rows
+- detects new unique strip-level rows
+- backfills missing event_id values
+- writes a timestamped backup before updating the live clean CSV
+
+Important terminology
+---------------------
+gallons_group
+    Water assigned to the active strip pair/group, such as S1_S2 or S3_S4.
+    For older raw files, the input column `gallons` is interpreted as
+    gallons_group.
+
+gallons_strip
+    Estimated water assigned to one individual strip after splitting the group
+    total between the two strips.
+
+total_meter_gallons
+    Total water measured at the meter. For older files this may be the same as
+    gallons_group.
+
+flow_allocation_fraction
+    Fraction of total_meter_gallons assigned to the active strip group.
+
+strip_allocation_fraction
+    Fraction of gallons_group assigned to an individual strip. Default is 0.5.
+
+event_id
+    Stable identifier for one irrigation event, shared by both strip rows from
+    the same strip_group/date/start/end event. Missing event_id values are
+    backfilled from date, start_timestamp, end_timestamp, and strip_group.
 """
 
 from __future__ import annotations
