@@ -3,18 +3,30 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Any, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from biochar_app.scripts.management.irrigation_analysis import (
     DEPTH_INDEX_TO_INCHES,
     _validate_datetime_index,
 )
+
+
+def _is_missing(value: object) -> bool:
+    return bool(pd.Series([value]).isna().iloc[0])
+
+
+def _as_float_or_none(value: object) -> float | None:
+    num = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    if _is_missing(num):
+        return None
+    return float(num)
 
 
 def _safe_filename(text: str) -> str:
@@ -24,10 +36,29 @@ def _safe_filename(text: str) -> str:
 
 
 def _fmt1(value: object) -> str:
-    num = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-    if pd.isna(num):
+    num = _as_float_or_none(value)
+    if num is None:
         return "NA"
-    return f"{float(num):.1f}"
+    return f"{num:.1f}"
+
+
+def _fmt_event_id(value: object) -> str:
+    if value is None or _is_missing(value):
+        return "NA"
+
+    text = str(value)
+    parts = text.split("_")
+
+    if len(parts) >= 4 and re.match(r"^\d{4}-\d{2}-\d{2}$", parts[0]):
+        date_label = pd.to_datetime(cast(Any, parts[0]), errors="coerce")
+        date_text = (
+            pd.Timestamp(date_label).strftime("%b %d")
+            if not _is_missing(date_label)
+            else parts[0]
+        )
+        return f"{parts[1]}/{parts[2]} {date_text}"
+
+    return text[:22] + "…" if len(text) > 24 else text
 
 
 def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
@@ -35,10 +66,10 @@ def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
         return None
 
     if isinstance(value, pd.Timestamp):
-        return None if pd.isna(value) else value
+        return None if _is_missing(value) else value
 
     ts = pd.to_datetime(cast(Any, value), errors="coerce")
-    if pd.isna(ts):
+    if _is_missing(ts):
         return None
 
     return pd.Timestamp(ts)
@@ -54,36 +85,24 @@ def _timestamp_to_mpl_num(ts: pd.Timestamp) -> float:
     return float(mdates.date2num(ts.to_pydatetime()))
 
 
-def _coerce_float_or_na(value: object) -> object:
-    num = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-    return pd.NA if pd.isna(num) else float(num)
-
-
 def _get_strip_volume_and_flow(first_row: pd.Series) -> tuple[object, object, object]:
-    """
-    Return strip-level volume, duration, and strip-level average flow.
-
-    Preferred event_results columns:
-        gallons_strip
-        event_duration_hours
-        avg_flow_gph_strip
-
-    avg_flow_gph_strip is computed here if missing but gallons_strip and
-    event_duration_hours are available.
-    """
-    gallons_strip = _coerce_float_or_na(first_row.get("gallons_strip", pd.NA))
-    duration_hours = _coerce_float_or_na(first_row.get("event_duration_hours", pd.NA))
-    avg_flow_gph_strip = _coerce_float_or_na(first_row.get("avg_flow_gph_strip", pd.NA))
+    gallons_strip = _as_float_or_none(first_row.get("gallons_strip", pd.NA))
+    duration_hours = _as_float_or_none(first_row.get("event_duration_hours", pd.NA))
+    avg_flow_gph_strip = _as_float_or_none(first_row.get("avg_flow_gph_strip", pd.NA))
 
     if (
-        pd.isna(avg_flow_gph_strip)
-        and pd.notna(gallons_strip)
-        and pd.notna(duration_hours)
-        and float(duration_hours) > 0
+        avg_flow_gph_strip is None
+        and gallons_strip is not None
+        and duration_hours is not None
+        and duration_hours > 0
     ):
-        avg_flow_gph_strip = float(gallons_strip) / float(duration_hours)
+        avg_flow_gph_strip = gallons_strip / duration_hours
 
-    return gallons_strip, duration_hours, avg_flow_gph_strip
+    return (
+        pd.NA if gallons_strip is None else gallons_strip,
+        pd.NA if duration_hours is None else duration_hours,
+        pd.NA if avg_flow_gph_strip is None else avg_flow_gph_strip,
+    )
 
 
 def _get_plot_window_series(
@@ -210,15 +229,9 @@ def plot_irrigation_event_inspection(
     if irrigation_start is None:
         raise ValueError("event_row is missing a valid irrigation_start")
 
-    baseline_vwc = pd.to_numeric(
-        pd.Series([event_row.get("baseline_vwc")]), errors="coerce"
-    ).iloc[0]
-    peak_vwc = pd.to_numeric(
-        pd.Series([event_row.get("peak_vwc")]), errors="coerce"
-    ).iloc[0]
-    plateau_vwc = pd.to_numeric(
-        pd.Series([event_row.get("plateau_vwc")]), errors="coerce"
-    ).iloc[0]
+    baseline_vwc = _as_float_or_none(event_row.get("baseline_vwc"))
+    peak_vwc = _as_float_or_none(event_row.get("peak_vwc"))
+    plateau_vwc = _as_float_or_none(event_row.get("plateau_vwc"))
 
     plot_start = irrigation_start - pd.Timedelta(hours=hours_before)
     plot_end = irrigation_start + pd.Timedelta(hours=hours_after)
@@ -275,6 +288,7 @@ def plot_irrigation_event_inspection(
         _timestamp_to_mpl_num(irrigation_start),
         linestyle="--",
         linewidth=1.2,
+        color="tab:blue",
         label="irrigation start",
     )
 
@@ -283,39 +297,41 @@ def plot_irrigation_event_inspection(
             _timestamp_to_mpl_num(irrigation_start),
             _timestamp_to_mpl_num(irrigation_end),
             alpha=0.15,
+            color="tab:blue",
             label="irrigation window",
         )
         ax.axvline(
             _timestamp_to_mpl_num(irrigation_end),
             linestyle="--",
             linewidth=1.2,
+            color="tab:red",
             label="irrigation end",
         )
 
-    if baseline_time is not None and pd.notna(baseline_vwc):
+    if baseline_time is not None and baseline_vwc is not None:
         ax.scatter(
             [_timestamp_to_mpl_num(baseline_time)],
-            [float(baseline_vwc)],
+            [baseline_vwc],
             s=55,
             marker="o",
             label="baseline",
             zorder=5,
         )
 
-    if peak_time is not None and pd.notna(peak_vwc):
+    if peak_time is not None and peak_vwc is not None:
         ax.scatter(
             [_timestamp_to_mpl_num(peak_time)],
-            [float(peak_vwc)],
+            [peak_vwc],
             s=70,
             marker="^",
             label="peak",
             zorder=6,
         )
 
-    if plateau_time is not None and pd.notna(plateau_vwc):
+    if plateau_time is not None and plateau_vwc is not None:
         ax.scatter(
             [_timestamp_to_mpl_num(plateau_time)],
-            [float(plateau_vwc)],
+            [plateau_vwc],
             s=70,
             marker="s",
             label="plateau",
@@ -323,22 +339,24 @@ def plot_irrigation_event_inspection(
         )
 
     title = (
-        f"Irrigation Event Inspection | strip={strip} | sensor={sensor_col} | "
-        f"event_id={event_id} | year={year}"
+        f"Strip: {strip} | Sensor: {sensor_col} | Event: {_fmt_event_id(event_id)} | "
+        f"Year: {year}"
     )
     subtitle = (
-        f"duration_hr={_fmt1(duration_hr)}, "
-        f"time_to_peak_hr={_fmt1(t_peak_hr)}, "
-        f"time_to_plateau_hr={_fmt1(t_plateau_hr)}, "
-        f"plateau_method={plateau_method}"
+        f"Duration (irrigation time): {_fmt1(duration_hr)} hr | "
+        f"time_to_peak: {_fmt1(t_peak_hr)} hr | "
+        f"time_to_plateau: {_fmt1(t_plateau_hr)} hr | "
+        f"plateau_method: {plateau_method}"
     )
 
     ax.set_title(title + "\n" + subtitle)
     ax.set_xlabel("Timestamp")
     ax.set_ylabel("VWC (%)")
     ax.grid(True, alpha=0.3)
+
     ax.xaxis_date()
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M"))
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d\n%H:%M"))
 
     if y_limits is not None:
         ax.set_ylim(*y_limits)
@@ -346,11 +364,11 @@ def plot_irrigation_event_inspection(
     handles1, labels1 = ax.get_legend_handles_labels()
     if ax2 is not None:
         handles2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(handles1 + handles2, labels1 + labels2, loc="best")
+        ax.legend(list(handles1) + list(handles2), list(labels1) + list(labels2), loc="best")
     else:
         ax.legend(loc="best")
 
-    fig.autofmt_xdate()
+    fig.autofmt_xdate(rotation=35, ha="right")
     fig.tight_layout()
 
     if output_path is not None:
@@ -490,22 +508,7 @@ def plot_event_multidepth(
         if (ts := coerce_optional_timestamp(v)) is not None
     }
 
-    fig, ax = plt.subplots(figsize=(13, 6))
-    ax2 = None
-
-    if precip_col and precip_col in sub.columns:
-        precip = pd.to_numeric(sub[precip_col], errors="coerce").fillna(0)
-        if float(precip.max()) > 0:
-            ax2 = ax.twinx()
-            ax2.bar(
-                _datetime_index_to_mpl_nums(precip.index),
-                np.asarray(precip.to_numpy(dtype=float), dtype=float),
-                width=0.009,
-                alpha=0.18,
-                label=precip_col,
-            )
-            ax2.set_ylabel(precip_col)
-
+    fig, ax = plt.subplots(figsize=(14, 7))
     plotted_any = False
 
     for sensor_col, label in cols:
@@ -522,21 +525,18 @@ def plot_event_multidepth(
         plotted_any = True
 
         marker_specs = [
-            (baseline_ts_map.get(sensor_col), "o", 45),
-            (peak_ts_map.get(sensor_col), "^", 60),
-            (plateau_ts_map.get(sensor_col), "s", 55),
+            (baseline_ts_map.get(sensor_col), "o", 50),
+            (peak_ts_map.get(sensor_col), "^", 70),
+            (plateau_ts_map.get(sensor_col), "s", 65),
         ]
 
         for marker_time, marker, size in marker_specs:
             if marker_time is not None and marker_time in sub.index:
-                marker_val = pd.to_numeric(
-                    pd.Series([sub.at[marker_time, sensor_col]]),
-                    errors="coerce",
-                ).iloc[0]
-                if pd.notna(marker_val):
+                marker_val = _as_float_or_none(sub.at[marker_time, sensor_col])
+                if marker_val is not None:
                     ax.scatter(
                         [_timestamp_to_mpl_num(marker_time)],
-                        [float(marker_val)],
+                        [marker_val],
                         s=size,
                         marker=marker,
                         zorder=6,
@@ -549,68 +549,129 @@ def plot_event_multidepth(
         ax.axvline(
             _timestamp_to_mpl_num(irrig_start_ts),
             linestyle="--",
-            linewidth=1.2,
-            label="irrigation start",
+            linewidth=1.3,
+            color="tab:blue",
+            label="Irrigation start",
         )
 
     if irrig_end_ts is not None:
         ax.axvline(
             _timestamp_to_mpl_num(irrig_end_ts),
             linestyle="--",
-            linewidth=1.2,
-            label="irrigation end",
+            linewidth=1.3,
+            color="tab:red",
+            label="Irrigation end",
         )
 
     if irrig_start_ts is not None and irrig_end_ts is not None:
         ax.axvspan(
             _timestamp_to_mpl_num(irrig_start_ts),
             _timestamp_to_mpl_num(irrig_end_ts),
-            alpha=0.15,
-            label="irrigation window",
+            alpha=0.14,
+            color="tab:blue",
+            label="Irrigation window",
         )
 
-    title_bits = [title_prefix]
-    if strip is not None:
-        title_bits.append(f"strip={strip}")
-    if event_id is not None:
-        title_bits.append(f"event_id={event_id}")
-    if year is not None:
-        title_bits.append(f"year={year}")
+    display_event_id = _fmt_event_id(event_id)
 
-    ax.set_title(" | ".join(title_bits))
+    title_bits: List[str] = []
+    if strip is not None:
+        title_bits.append(f"Strip: {strip}")
+    title_bits.append(title_prefix)
+    if event_id is not None:
+        title_bits.append(f"Event: {display_event_id}")
+
+    ax.set_title(" | ".join(title_bits), fontsize=13, fontweight="bold", loc="left")
     ax.set_xlabel("Timestamp")
     ax.set_ylabel("VWC (%)")
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.25)
+
     ax.xaxis_date()
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M"))
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d\n%H:%M"))
 
     if y_limits is not None:
         ax.set_ylim(*y_limits)
 
     marker_handles = [
-        Line2D([0], [0], marker="o", linestyle="None", markersize=8, label="baseline VWC"),
-        Line2D([0], [0], marker="^", linestyle="None", markersize=8, label="peak VWC"),
-        Line2D([0], [0], marker="s", linestyle="None", markersize=8, label="plateau VWC"),
+        Line2D([0], [0], marker="o", linestyle="None", markersize=8, label="Baseline VWC"),
+        Line2D([0], [0], marker="^", linestyle="None", markersize=8, label="Peak VWC"),
+        Line2D([0], [0], marker="s", linestyle="None", markersize=8, label="Plateau VWC"),
     ]
+
+    window_patch = Patch(
+        facecolor="tab:blue",
+        alpha=0.14,
+        edgecolor="none",
+        label="Irrigation window",
+    )
 
     handles1, labels1 = ax.get_legend_handles_labels()
 
-    if ax2 is not None:
-        handles2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(
-            handles1 + handles2 + marker_handles,
-            labels1 + labels2 + [h.get_label() for h in marker_handles],
-            loc="best",
-        )
-    else:
-        ax.legend(
-            handles1 + marker_handles,
-            labels1 + [h.get_label() for h in marker_handles],
-            loc="best",
+    filtered_handles: List[Any] = []
+    filtered_labels: List[str] = []
+    for handle, label in zip(handles1, labels1):
+        if label == "Irrigation window":
+            continue
+        filtered_handles.append(handle)
+        filtered_labels.append(str(label))
+
+    legend_handles: List[Any] = filtered_handles + [window_patch] + marker_handles
+    legend_labels: list[str] = (
+            filtered_labels
+            + ["Irrigation window"]
+            + [str(h.get_label()) for h in marker_handles]
+    )
+
+    ax.legend(
+        legend_handles,
+        legend_labels,
+        loc="center right",
+        frameon=True,
+        framealpha=0.9,
+    )
+
+    if year is not None:
+        ax.text(
+            0.01,
+            -0.18,
+            str(year),
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=10,
+            fontweight="bold",
         )
 
-    fig.autofmt_xdate()
-    fig.tight_layout()
+    ax.text(
+        0.01,
+        -0.27,
+        "All times local",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        style="italic",
+    )
+
+    fig.text(
+        0.50,
+        0.025,
+        "Duration = irrigation time, measured from water start to water shutoff. "
+        "Plot window extends before and after the event to show soil response.",
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        bbox=dict(
+            boxstyle="round,pad=0.45",
+            facecolor="white",
+            edgecolor="0.55",
+            alpha=0.9,
+        ),
+    )
+
+    fig.autofmt_xdate(rotation=35, ha="right")
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.22)
 
     if output_path is not None:
         output_path = Path(output_path)
@@ -621,6 +682,17 @@ def plot_event_multidepth(
         plt.show()
 
     plt.close(fig)
+
+def _event_id_mask(series: pd.Series, event_id: object) -> pd.Series:
+    if _is_missing(event_id):
+        return series.map(_is_missing)
+    return series == event_id
+
+
+def _event_label_for_filename(event_id: object, irrigation_start: pd.Timestamp, strip: str) -> str:
+    if _is_missing(event_id):
+        return f"{irrigation_start:%Y-%m-%d_%H%M}_{strip}"
+    return str(event_id)
 
 
 def plot_event_multidepth_from_results(
@@ -643,7 +715,7 @@ def plot_event_multidepth_from_results(
     work = event_results.copy()
     work = work[
         (work["strip"] == strip)
-        & (work["event_id"] == event_id)
+        & _event_id_mask(work["event_id"], event_id)
         & (work["logger_position"] == logger_position)
     ].copy()
 
@@ -656,22 +728,24 @@ def plot_event_multidepth_from_results(
     first_row = work.iloc[0]
     irrigation_start = coerce_optional_timestamp(first_row.get("irrigation_start"))
     irrigation_end = coerce_optional_timestamp(first_row.get("irrigation_end"))
-    year = first_row.get("year", None)
+
+    year_float = _as_float_or_none(first_row.get("year", None))
+    year = int(year_float) if year_float is not None else None
 
     gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(first_row)
 
-    title_prefix_with_flow = (
-        f"Irrigation Event Multi-depth Inspection | "
-        f"duration={float(duration_hours):.2f} hr | "
-        f"strip_volume={float(gallons_strip):,.0f} gal | "
-        f"strip_flow={float(avg_flow_gph_strip):,.0f} gal/hr"
-        if (
-            pd.notna(gallons_strip)
-            and pd.notna(duration_hours)
-            and pd.notna(avg_flow_gph_strip)
+    gallons_strip_f = _as_float_or_none(gallons_strip)
+    duration_hours_f = _as_float_or_none(duration_hours)
+    avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
+
+    if gallons_strip_f is not None and duration_hours_f is not None and avg_flow_gph_strip_f is not None:
+        title_prefix_with_flow = (
+            f"Duration (irrigation time): {duration_hours_f:.2f} hr | "
+            f"Strip volume: {gallons_strip_f:,.0f} gal | "
+            f"Strip flow: {avg_flow_gph_strip_f:,.0f} gal/hr"
         )
-        else "Irrigation Event Multi-depth Inspection"
-    )
+    else:
+        title_prefix_with_flow = "Multi-depth irrigation response"
 
     if irrigation_start is None:
         raise ValueError("Selected event has no valid irrigation_start.")
@@ -700,16 +774,12 @@ def plot_event_multidepth_from_results(
 
     plot_event_multidepth(
         df=df,
-        cols=_collect_multidepth_cols(
-            strip=strip,
-            logger_position=logger_position,
-            depths=depths,
-        ),
+        cols=_collect_multidepth_cols(strip=strip, logger_position=logger_position, depths=depths),
         start=start,
         end=end,
         event_id=event_id,
         strip=strip,
-        year=year if isinstance(year, int) else None,
+        year=year,
         irrigation_start=irrigation_start,
         irrigation_end=irrigation_end,
         peaks=peaks,
@@ -737,7 +807,6 @@ def save_irrigation_event_multidepth_plots(
     precip_col: Optional[str] = "precip_in",
     use_common_y_axis: bool = True,
 ) -> pd.DataFrame:
-
     log_columns = [
         "event_id",
         "strip",
@@ -791,7 +860,7 @@ def save_irrigation_event_multidepth_plots(
         for _, event_key in unique_events.iterrows():
             sub_rows = work[
                 (work["strip"] == event_key["strip"])
-                & (work["event_id"] == event_key["event_id"])
+                & _event_id_mask(work["event_id"], event_key["event_id"])
                 & (work["logger_position"] == event_key["logger_position"])
             ].copy()
 
@@ -841,7 +910,7 @@ def save_irrigation_event_multidepth_plots(
 
         sub_rows = work[
             (work["strip"] == strip)
-            & (work["event_id"] == event_id)
+            & _event_id_mask(work["event_id"], event_key["event_id"])
             & (work["logger_position"] == logger_position)
         ].copy()
 
@@ -855,6 +924,10 @@ def save_irrigation_event_multidepth_plots(
 
         gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(first_row)
 
+        gallons_strip_f = _as_float_or_none(gallons_strip)
+        duration_hours_f = _as_float_or_none(duration_hours)
+        avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
+
         if irrigation_start is None:
             continue
 
@@ -863,8 +936,10 @@ def save_irrigation_event_multidepth_plots(
 
         irrig_start_str = irrigation_start.strftime("%Y-%m-%d_%H%M")
 
+        event_label = _event_label_for_filename(event_id, irrigation_start, strip)
+
         filename = _safe_filename(
-            f"{irrig_start_str}_{strip}_{logger_position}_event{event_id}.png"
+            f"{irrig_start_str}_{strip}_{logger_position}_event_{event_label}.png"
         )
 
         output_file = out_dir / filename
@@ -900,14 +975,14 @@ def save_irrigation_event_multidepth_plots(
                 "plot_start": plot_start,
                 "plot_end": plot_end,
                 "event_duration_hours": (
-                    round(float(duration_hours), 2) if pd.notna(duration_hours) else pd.NA
+                    round(duration_hours_f, 2) if duration_hours_f is not None else pd.NA
                 ),
                 "gallons_strip": (
-                    round(float(gallons_strip), 0) if pd.notna(gallons_strip) else pd.NA
+                    round(gallons_strip_f, 0) if gallons_strip_f is not None else pd.NA
                 ),
                 "avg_flow_gph_strip": (
-                    round(float(avg_flow_gph_strip), 1)
-                    if pd.notna(avg_flow_gph_strip)
+                    round(avg_flow_gph_strip_f, 1)
+                    if avg_flow_gph_strip_f is not None
                     else pd.NA
                 ),
                 "output_file": str(output_file),

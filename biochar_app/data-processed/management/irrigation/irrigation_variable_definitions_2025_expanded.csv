@@ -1,33 +1,106 @@
 variable_name,source_csv,definition,formula_or_rule
+date,irrigation_clean_2023_2025.csv,,
+end_timestamp,irrigation_clean_2023_2025.csv,,
+gallons,irrigation_clean_2023_2025.csv,,
+location,irrigation_clean_2023_2025.csv,,
+notes,irrigation_clean_2023_2025.csv,,
+start_timestamp,irrigation_clean_2023_2025.csv,,
+strip_group,irrigation_clean_2023_2025.csv,,
+year,irrigation_clean_2023_2025.csv,,
 event_id,irrigation_event_inspection_plot_log_2025.csv,,
 output_file,irrigation_event_inspection_plot_log_2025.csv,,
-sensor_col,irrigation_event_inspection_plot_log_2025.csv,Sensor column used for the grouped summary row.,Name of the logger variable analyzed for that row
+sensor_col,irrigation_event_inspection_plot_log_2025.csv,,
 status,irrigation_event_inspection_plot_log_2025.csv,,
-strip,irrigation_event_inspection_plot_log_2025.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
-actual_runtime_hours,irrigation_runtimes_2025_all_depths.csv,Typical actual irrigation runtime in hours represented by the grouped event history.,Median of event_duration_hours within each group
-actual_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,Typical actual irrigation runtime in minutes represented by the grouped event history.,actual_runtime_hours * 60
+strip,irrigation_event_inspection_plot_log_2025.csv,,
+avg_flow_gph_strip,irrigation_event_multidepth_plot_log_2025.csv,Average strip-level application flow rate during one irrigation event.,gallons_strip / event_duration_hours
+event_duration_hours,irrigation_event_multidepth_plot_log_2025.csv,Length of time irrigation water was running for one event.,"irrigation_end - irrigation_start, in hours"
+event_id,irrigation_event_multidepth_plot_log_2025.csv,,
+gallons_strip,irrigation_event_multidepth_plot_log_2025.csv,Water assigned to one individual strip.,gallons_group * strip_allocation_fraction
+irrigation_end,irrigation_event_multidepth_plot_log_2025.csv,,
+irrigation_start,irrigation_event_multidepth_plot_log_2025.csv,,
+logger_position,irrigation_event_multidepth_plot_log_2025.csv,,
+output_file,irrigation_event_multidepth_plot_log_2025.csv,,
+plot_end,irrigation_event_multidepth_plot_log_2025.csv,,
+plot_start,irrigation_event_multidepth_plot_log_2025.csv,,
+status,irrigation_event_multidepth_plot_log_2025.csv,,
+strip,irrigation_event_multidepth_plot_log_2025.csv,,
+battery_col,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_high_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_low_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_max_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_median_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_min_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_out_of_range_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_event_out_of_range_fraction,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_high_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_low_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_max_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_median_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_min_v,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_out_of_range_count,irrigation_pre_start_response_flags_2025.csv,,
+battery_pre_start_out_of_range_fraction,irrigation_pre_start_response_flags_2025.csv,,
+bottom_response_delay_hr,irrigation_pre_start_response_flags_2025.csv,,
+depth_inches,irrigation_pre_start_response_flags_2025.csv,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
+depth_index,irrigation_pre_start_response_flags_2025.csv,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
+event_duration_hours,irrigation_pre_start_response_flags_2025.csv,Length of time irrigation water was running for one event.,"irrigation_end - irrigation_start, in hours"
+event_id,irrigation_pre_start_response_flags_2025.csv,,
+first_precip_time_pre_start_window,irrigation_pre_start_response_flags_2025.csv,,
+first_vwc,irrigation_pre_start_response_flags_2025.csv,,
+flag_battery_low_event,irrigation_pre_start_response_flags_2025.csv,,
+flag_battery_low_pre_start,irrigation_pre_start_response_flags_2025.csv,,
+flag_battery_out_of_range_event,irrigation_pre_start_response_flags_2025.csv,,
+flag_battery_out_of_range_pre_start,irrigation_pre_start_response_flags_2025.csv,,
+flag_pre_start_response,irrigation_pre_start_response_flags_2025.csv,,
+flag_unexplained_pre_start_response,irrigation_pre_start_response_flags_2025.csv,,
+gallons_strip,irrigation_pre_start_response_flags_2025.csv,Water assigned to one individual strip.,gallons_group * strip_allocation_fraction
+irrigation_end,irrigation_pre_start_response_flags_2025.csv,,
+irrigation_start,irrigation_pre_start_response_flags_2025.csv,,
+last_minus_first,irrigation_pre_start_response_flags_2025.csv,,
+last_pre_start_vwc,irrigation_pre_start_response_flags_2025.csv,,
+last_precip_time_pre_start_window,irrigation_pre_start_response_flags_2025.csv,,
+likely_precip_driven_pre_start_response,irrigation_pre_start_response_flags_2025.csv,,
+location,irrigation_pre_start_response_flags_2025.csv,,
+max_pre_start_time,irrigation_pre_start_response_flags_2025.csv,,
+max_pre_start_vwc,irrigation_pre_start_response_flags_2025.csv,,
+max_precip_in_pre_start_window,irrigation_pre_start_response_flags_2025.csv,,
+possible_battery_or_logger_issue,irrigation_pre_start_response_flags_2025.csv,,
+pre_start_increase,irrigation_pre_start_response_flags_2025.csv,,
+precip_col,irrigation_pre_start_response_flags_2025.csv,,
+precip_threshold_in,irrigation_pre_start_response_flags_2025.csv,,
+sensor_col,irrigation_pre_start_response_flags_2025.csv,,
+strip,irrigation_pre_start_response_flags_2025.csv,,
+strip_group,irrigation_pre_start_response_flags_2025.csv,,
+threshold,irrigation_pre_start_response_flags_2025.csv,,
+time_to_peak_hours,irrigation_pre_start_response_flags_2025.csv,Elapsed time from irrigation_start to peak VWC for one event.,"peak_time - irrigation_start, in hours"
+time_to_plateau_hours,irrigation_pre_start_response_flags_2025.csv,Elapsed time from irrigation_start to plateau attainment for one event.,"plateau_time - irrigation_start, in hours"
+total_precip_in_pre_start_window,irrigation_pre_start_response_flags_2025.csv,,
+vwc_missing_fraction_pre_start_window,irrigation_pre_start_response_flags_2025.csv,,
+window_start,irrigation_pre_start_response_flags_2025.csv,,
+year,irrigation_pre_start_response_flags_2025.csv,,
+actual_runtime_hours,irrigation_runtimes_2025_all_depths.csv,,
+actual_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,,
 depth_inches,irrigation_runtimes_2025_all_depths.csv,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
-median_avg_flow_gph,irrigation_runtimes_2025_all_depths.csv,Median event-level average irrigation flow rate for the grouped events.,Median of avg_flow_gph within each group; avg_flow_gph = volume_gal / event_duration_hours
-median_lag_after_irrigation_hr,irrigation_runtimes_2025_all_depths.csv,Median time between irrigation shutoff and plateau attainment for the grouped events.,Median of lag_after_irrigation_hr within each group; lag_after_irrigation_hr = time_to_plateau_hours - event_duration_hours
-n_events,irrigation_runtimes_2025_all_depths.csv,Number of events contributing usable values to the grouped summary.,Count of non-missing source values within each group
-rec_runtime_hours,irrigation_runtimes_2025_all_depths.csv,Recommended runtime in hours based on historical event response within a group.,Median of time_to_plateau_hours within each group
-rec_runtime_is_trustworthy,irrigation_runtimes_2025_all_depths.csv,Flag indicating whether the recommended runtime summary is based on at least the minimum number of events.,True when n_events >= min_events
-rec_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,Recommended runtime in minutes based on historical event response within a group.,rec_runtime_hours * 60
-source_time_col,irrigation_runtimes_2025_all_depths.csv,Event-level time variable used to compute the recommended runtime summary.,"Set in code to the grouped source time variable, currently time_to_plateau_hours"
-strip,irrigation_runtimes_2025_all_depths.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
-summary_stat,irrigation_runtimes_2025_all_depths.csv,Summary statistic used to convert event-level times into the reported runtime.,Set in code to median
-year,irrigation_runtimes_2025_all_depths.csv,Calendar year of the analyzed irrigation events.,Assigned from the selected analysis year
+median_avg_flow_gph_strip,irrigation_runtimes_2025_all_depths.csv,,
+median_lag_after_irrigation_hr,irrigation_runtimes_2025_all_depths.csv,,
+n_events,irrigation_runtimes_2025_all_depths.csv,,
+rec_runtime_hours,irrigation_runtimes_2025_all_depths.csv,,
+rec_runtime_is_trustworthy,irrigation_runtimes_2025_all_depths.csv,,
+rec_runtime_minutes,irrigation_runtimes_2025_all_depths.csv,,
+source_time_col,irrigation_runtimes_2025_all_depths.csv,,
+strip,irrigation_runtimes_2025_all_depths.csv,,
+summary_stat,irrigation_runtimes_2025_all_depths.csv,,
+year,irrigation_runtimes_2025_all_depths.csv,,
 depth_inches,irrigation_targets_2025_all_depths.csv,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
 depth_index,irrigation_targets_2025_all_depths.csv,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
-k_std,irrigation_targets_2025_all_depths.csv,Multiplier applied to the standard deviation when building the raw target value.,raw_target_value = mean_value + k_std * sd_value
-mean_value,irrigation_targets_2025_all_depths.csv,Mean historical value of the source variable used for target estimation.,Mean of source_value_col within each group
-n_events,irrigation_targets_2025_all_depths.csv,Number of events contributing usable values to the grouped summary.,Count of non-missing source values within each group
-quantile_cap,irrigation_targets_2025_all_depths.csv,Upper cap applied so the target does not exceed an extreme historical value.,Quantile of source_value_col within each group using upper_quantile_cap
-raw_target_value,irrigation_targets_2025_all_depths.csv,Uncapped target calculated from the mean plus a fraction of the standard deviation.,mean_value + k_std * sd_value
-sd_value,irrigation_targets_2025_all_depths.csv,Standard deviation of the historical source values used for target estimation.,Standard deviation of source_value_col within each group with ddof=1; 0.0 if n_events == 1
-sensor_col,irrigation_targets_2025_all_depths.csv,Sensor column used for the grouped summary row.,Name of the logger variable analyzed for that row
-source_value_col,irrigation_targets_2025_all_depths.csv,Event-level variable used to compute the target summary.,"Set in code to the grouped source variable, currently plateau_vwc"
-strip,irrigation_targets_2025_all_depths.csv,Experimental strip associated with the result row.,Strip identifier carried through event analysis and grouping
-target_is_trustworthy,irrigation_targets_2025_all_depths.csv,Flag indicating whether the target summary is based on at least the minimum number of events.,True when n_events >= min_events
-target_value,irrigation_targets_2025_all_depths.csv,Operational target VWC based on historical plateau responses within a group.,"min(mean_value + k_std * sd_value, quantile_cap)"
-year,irrigation_targets_2025_all_depths.csv,Calendar year of the analyzed irrigation events.,Assigned from the selected analysis year
+k_std,irrigation_targets_2025_all_depths.csv,,
+mean_value,irrigation_targets_2025_all_depths.csv,,
+n_events,irrigation_targets_2025_all_depths.csv,,
+quantile_cap,irrigation_targets_2025_all_depths.csv,,
+raw_target_value,irrigation_targets_2025_all_depths.csv,,
+sd_value,irrigation_targets_2025_all_depths.csv,,
+sensor_col,irrigation_targets_2025_all_depths.csv,,
+source_value_col,irrigation_targets_2025_all_depths.csv,,
+strip,irrigation_targets_2025_all_depths.csv,,
+target_is_trustworthy,irrigation_targets_2025_all_depths.csv,,
+target_value,irrigation_targets_2025_all_depths.csv,,
+year,irrigation_targets_2025_all_depths.csv,,
