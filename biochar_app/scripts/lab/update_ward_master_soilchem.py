@@ -63,7 +63,6 @@ SUPPLEMENTAL_SOILCHEM_FILES: Sequence[Path] = [
     ]
 
 
-
 def _snake_col(name: str) -> str:
     text = str(name).strip().lower()
     text = text.replace("%", " pct ")
@@ -89,7 +88,7 @@ def _apply_raw_to_canonical_map(df: pd.DataFrame) -> pd.DataFrame:
     """
     out = df.copy()
 
-    for src, dst in RAW_TO_CANONICAL.items():
+    for src, dst in RAW_TO_CANONICAL_SOILCHEM.items():
         if src not in out.columns:
             continue
 
@@ -101,7 +100,7 @@ def _apply_raw_to_canonical_map(df: pd.DataFrame) -> pd.DataFrame:
             out = out.rename(columns={src: dst})
 
     out = out.drop(
-        columns=[c for c in out.columns if c in DROP_COLUMNS],
+        columns=[c for c in out.columns if c in DROP_COLUMNS_SOILCHEM],
         errors="ignore",
     )
 

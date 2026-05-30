@@ -132,8 +132,11 @@ RAW_TO_CANONICAL_SOILCHEM: dict[str, str] = {
     "date_reported": "date_rept",
 
     # pH / salinity / lime
+    "1_1_soil_ph": "soil_ph_1_1",
     "soil_ph_1_1": "soil_ph_1_1",
     "bph_modified_wdrf": "wdrf_buffer_ph",
+    "bph_modified_wdrf": "wdrf_buffer_ph",
+    "1_1_s_salts_mmho_cm": "ec_1_1",
     "soluble_salts_1_1_mmho_cm": "ec_1_1",
     "excess_lime_rating": "excess_lime",
 
@@ -223,6 +226,8 @@ DROP_COLUMNS_SOILCHEM = {
     "boron_rec_1",
     "chlorine_rec_1",
     "lime_rec_1",
+    "1_1_soil_ph",
+    "1_1_s_salts_mmho_cm",
 }
 
 EXPECTED_SOILCHEM_COLUMNS = [
