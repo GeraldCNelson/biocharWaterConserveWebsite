@@ -3,56 +3,12 @@
 update_irrigation_clean.py
 
 Update the live irrigation_clean.csv file from raw irrigation event CSV files.
-
-Purpose
--------
-This script converts raw/group-level irrigation records into the clean,
-app-facing irrigation event table used by plotting and irrigation analysis code.
-
-Important terminology
----------------------
-gallons_group
-    Water assigned to the active strip pair/group, such as S1_S2 or S3_S4.
-    For older raw files, the input column `gallons` is interpreted as
-    gallons_group.
-
-gallons_strip
-    Estimated water assigned to one individual strip after splitting the group
-    total between the two strips.
-
-total_meter_gallons
-    Total water measured at the meter. For older files this may be the same as
-    gallons_group.
-
-flow_allocation_fraction
-    Fraction of total_meter_gallons assigned to the active strip group.
-
-strip_allocation_fraction
-    Fraction of gallons_group assigned to an individual strip. Default is 0.5.
-
-The clean output intentionally does NOT include a generic `gallons` column,
-because that name is ambiguous.
-
-Usage
------
-Run from repo root:
-
-    python tools/update_irrigation_clean.py
-
-Dry run:
-
-    python tools/update_irrigation_clean.py --dry-run
-
-Optional custom paths:
-
-    python tools/update_irrigation_clean.py \
-      --clean biochar_app/data-processed/management/irrigation/irrigation_clean.csv \
-      --new biochar_app/data-processed/management/irrigation/irrigation_2026_raw.csv
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -65,11 +21,6 @@ from biochar_app.config.paths import (
     IRRIGATION_DIR,
 )
 
-# ------------------------------------------------------------------
-
-# Standardize numeric precision
-
-# ------------------------------------------------------------------
 rounding_map = {
     "total_meter_gallons": 0,
     "flow_allocation_fraction": 3,
@@ -85,7 +36,6 @@ rounding_map = {
     "start_totalizer_gal_x100": 1,
     "end_totalizer_gal_x100": 1,
 }
-
 
 CORE_REQUIRED_COLUMNS: Final[list[str]] = [
     "year",
@@ -135,6 +85,7 @@ CLEAN_OUTPUT_COLUMNS: Final[list[str]] = [
     "event_id",
     "notes",
 ]
+
 
 @dataclass(frozen=True)
 class UpdatePaths:
@@ -356,37 +307,27 @@ def expand_to_strip_level(base: pd.DataFrame, name: str) -> pd.DataFrame:
 
         already_strip_level = existing_strip in group_strips and pd.notna(existing_gallons_strip)
 
-        if already_strip_level:
-            if existing_strip is None:
-                raise ValueError(f"{name} has strip-level row with missing strip: {row.to_dict()}")
-            strips_to_write: list[str] = [existing_strip]
-        else:
-            strips_to_write = list(group_strips)
+        strips_to_write = [existing_strip] if already_strip_level and existing_strip else list(group_strips)
 
         for strip in strips_to_write:
-            if already_strip_level and pd.notna(existing_fraction):
-                strip_fraction = float(existing_fraction)
-            else:
-                strip_fraction = 1.0 / float(len(group_strips))
+            strip_fraction = (
+                float(existing_fraction)
+                if already_strip_level and pd.notna(existing_fraction)
+                else 1.0 / float(len(group_strips))
+            )
 
             if pd.notna(row.get("gallons_group")):
                 gallons_group = float(row["gallons_group"])
-
             elif already_strip_level:
-                if existing_gallons_strip is None or pd.isna(existing_gallons_strip):
-                    raise ValueError(
-                        f"{name} has strip-level row with missing gallons_strip: {row.to_dict()}"
-                    )
                 gallons_group = float(cast(float, existing_gallons_strip)) / strip_fraction
             else:
                 raise ValueError(f"{name} has no gallons_group for row: {row.to_dict()}")
 
-            if already_strip_level:
-                if existing_gallons_strip is None or pd.isna(existing_gallons_strip):
-                    raise ValueError(f"{name} has strip-level row with missing gallons_strip: {row.to_dict()}")
-                gallons_strip = float(cast(float, existing_gallons_strip))
-            else:
-                gallons_strip = gallons_group * strip_fraction
+            gallons_strip = (
+                float(cast(float, existing_gallons_strip))
+                if already_strip_level
+                else gallons_group * strip_fraction
+            )
 
             avg_flow_gpm_group = row.get("avg_flow_gpm_group")
             avg_flow_gpm_strip: float | None = None
@@ -465,16 +406,48 @@ def expand_to_strip_level(base: pd.DataFrame, name: str) -> pd.DataFrame:
         out[col] = pd.to_numeric(out[col], errors="coerce")
 
     out["year"] = pd.to_numeric(out["year"], errors="coerce").astype(int)
-    for col, digits in rounding_map.items():
 
+    for col, digits in rounding_map.items():
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+
     return out
 
 
 def normalize_irrigation_df(df: pd.DataFrame, name: str) -> pd.DataFrame:
     base = normalize_base_events(df, name)
     return expand_to_strip_level(base, name)
+
+
+def backfill_event_ids(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    if "event_id" not in out.columns:
+        out["event_id"] = ""
+
+    key_cols = ["date", "start_timestamp", "end_timestamp", "strip_group"]
+
+    for col in key_cols:
+        if col not in out.columns:
+            raise KeyError(f"Cannot backfill event_id: missing column {col!r}")
+        out[col] = out[col].fillna("").astype(str).str.strip()
+
+    missing_event_id = out["event_id"].fillna("").astype(str).str.strip().eq("")
+
+    grouped = out.groupby(key_cols, dropna=False).groups
+
+    for key, idx in grouped.items():
+        key_text = "|".join(str(x) for x in key)
+        date, _, _, strip_group = key
+
+        suffix = hashlib.sha1(key_text.encode("utf-8")).hexdigest()[:8]
+        event_id = f"{date}_{strip_group}_{suffix}"
+
+        fill_idx = [i for i in idx if bool(missing_event_id.loc[i])]
+        if fill_idx:
+            out.loc[fill_idx, "event_id"] = event_id
+
+    return out
 
 
 def make_backup(clean_csv: Path, backup_dir: Path) -> Path:
@@ -531,6 +504,7 @@ def update_irrigation_clean(paths: UpdatePaths, dry_run: bool = False) -> None:
     new_unique = new_df.loc[is_new].copy()
 
     combined = pd.concat([current_df, new_unique], ignore_index=True)
+    combined = backfill_event_ids(combined)
     combined = sort_clean_df(combined)
 
     print("\n--- Irrigation update summary ---")
@@ -540,6 +514,8 @@ def update_irrigation_clean(paths: UpdatePaths, dry_run: bool = False) -> None:
     print(f"Rows after update                   : {len(combined)}")
 
     if not new_unique.empty:
+        new_unique = backfill_event_ids(new_unique)
+
         print("\nNew rows to append:")
         display_cols = [
             "year",
@@ -548,6 +524,7 @@ def update_irrigation_clean(paths: UpdatePaths, dry_run: bool = False) -> None:
             "end_timestamp",
             "strip_group",
             "strip",
+            "event_id",
             "gallons_group",
             "gallons_strip",
             "avg_flow_gpm_group",
