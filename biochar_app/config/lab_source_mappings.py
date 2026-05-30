@@ -1,5 +1,63 @@
+from __future__ import annotations
+"""
+lab_source_mappings.py
 
-from typing import Dict
+Centralized source-to-canonical column mappings for laboratory datasets.
+
+Purpose
+-------
+This module contains the dataset-specific translation layers used by the
+lab ETL/update scripts. It converts raw column names from Ward Labs and
+other external laboratory sources into the canonical variable names used
+throughout the Biochar dashboard.
+
+The goal is to isolate source-specific terminology from the rest of the
+application. If a laboratory changes report formats, column names, or ifs
+a new analysis provider is added in the future, updates should primarily
+be made in this file rather than throughout the ETL and dashboard code.
+
+Architecture
+------------
+Raw laboratory files
+        ↓
+RAW_TO_CANONICAL_* mappings
+        ↓
+Canonical variable names
+        ↓
+lab_variable_metadata.py
+        ↓
+table/group specifications
+        ↓
+dashboard display
+
+Contents
+--------
+RAW_TO_CANONICAL_NIR
+    Maps raw NIR / forage analysis column names to canonical variables.
+
+RAW_TO_CANONICAL_SOILCHEM
+    Maps raw soil chemistry column names to canonical variables.
+
+RAW_TO_CANONICAL_SOILBIO
+    Maps raw soil biology (PLFA) column names to canonical variables.
+
+DROP_COLUMNS_*
+    Dataset-specific columns that should be removed during ETL.
+
+EXPECTED_*_COLUMNS
+    Canonical columns expected after standardization and cleaning.
+
+Notes
+-----
+- Canonical names should be stable over time.
+- Source-specific names should not appear elsewhere in the application
+  when avoidable.
+- Variable labels, units, descriptions, and references belong in
+  lab_variable_metadata.py, not in this file.
+- Table layout and grouping definitions belong in the dashboard/table
+  specification files, not in this file.
+"""
+
 # -----------------------------------------------------------------------------
 
 RAW_TO_CANONICAL_NIR: dict[str, str] = {
@@ -178,7 +236,7 @@ EXPECTED_SOILCHEM_COLUMNS = [
 # ---------------------------------------------------------------------
 # Canonical soil-bio column mapping
 # ---------------------------------------------------------------------
-RAW_TO_CANONICAL_SOILBIO: Dict[str, str] = {
+RAW_TO_CANONICAL_SOILBIO: dict[str, str] = {
     # dates
     "date_recd": "date_rec",
 

@@ -50,6 +50,13 @@ from biochar_app.config.paths import (
     SOIL_BIO_RAW_DIR,
     WARD_MASTER_SOILBIO_CSV,
 )
+
+from biochar_app.config.lab_source_mappings import (
+    RAW_TO_CANONICAL_SOILBIO,
+    DROP_COLUMNS_SOILBIO,
+    EXPECTED_SOILBIO_COLUMNS,
+)
+
 from biochar_app.scripts.lab.clean_ward_master_common import (
     clean_compiled_workbook,
     standardize_ward_dataframe,
@@ -92,126 +99,6 @@ SUPPLEMENTAL_RAW_BIO_CSVS = [
 FIXED_BEGIN_DEPTH_IN = 0
 FIXED_END_DEPTH_IN = 8
 
-
-# ---------------------------------------------------------------------
-# Canonical soil-bio column mapping
-# ---------------------------------------------------------------------
-SOILBIO_RENAME_MAP: Dict[str, str] = {
-    # dates
-    "date_recd": "date_rec",
-
-    # biomass / percentages
-    "total_biomass": "total_biomass",
-    "total_bacteria_biomass": "total_bacteria_biomass",
-    "bacteria_pct": "bacteria_pct",
-
-    # duplicate "gram" headers: first is Gram (+), second becomes _1 and is Gram (-)
-    "gram_biomass": "gram_pos_biomass",
-    "gram_pct": "gram_pos_pct",
-
-    "actinomycetes_biomass": "actinomycetes_biomass",
-    "actinomycetes_pct": "actinomycetes_pct",
-
-    "gram_biomass_1": "gram_neg_biomass",
-    "gram_pct_1": "gram_neg_pct",
-
-    # Explicit aliases used by some raw/supplemental files
-    "gram_pos_biomass": "gram_pos_biomass",
-    "gram_pos_pct": "gram_pos_pct",
-    "gram_neg_biomass": "gram_neg_biomass",
-    "gram_neg_pct": "gram_neg_pct",
-
-    "rhizobia_biomass": "rhizobia_biomass",
-    "rhizobia_pct": "rhizobia_pct",
-
-    "total_fungi_biomass": "total_fungi_biomass",
-    "total_fungi_pct": "total_fungi_pct",
-
-    "arbuscular_mycorrhizal_biomass": "arbuscular_mycorrhizal_biomass",
-    "arbuscular_mycorrhizal_pct": "arbuscular_mycorrhizal_pct",
-
-    "saprophytic_pct": "saprophytic_pct",
-    "saprophytes_biomass": "saprophytes_biomass",
-
-    "protozoan_pct": "protozoan_pct",
-    "protozoa_biomass": "protozoa_biomass",
-
-    "undifferentiated_pct": "undifferentiated_pct",
-    "undifferentiated_biomass": "undifferentiated_biomass",
-
-    # ratios / lipid fractions
-    "fungi_bacteria": "fungi_bacteria",
-    "predator_prey": "predator_prey",
-    "gram_gram": "gram_pos_gram_neg_ratio",
-    "gram_pos_gram_neg": "gram_pos_gram_neg_ratio",
-    "gram_pos_gram_neg_ratio": "gram_pos_gram_neg_ratio",
-
-    "saturated": "saturated",
-    "unsaturated": "unsaturated",
-    "saturated_unsaturated": "saturated_unsaturated_ratio",
-    "saturated_unsaturated_ratio": "saturated_unsaturated_ratio",
-    "sat_unsat": "saturated_unsaturated_ratio",
-
-    "monounsaturated": "monounsaturated",
-    "polyunsaturated": "polyunsaturated",
-    "monounsaturated_polyunsaturated": "monounsaturated_polyunsaturated_ratio",
-    "monounsaturated_polyunsaturated_ratio": "monounsaturated_polyunsaturated_ratio",
-    "mono_poly": "monounsaturated_polyunsaturated_ratio",
-
-    "pre_16_1_w7c": "pre_16_1_w7c",
-    "cyclo_17_0": "cyclo_17_0",
-    "pre_16_1w7c_cy17_0": "pre_16_1w7c_cy17_0",
-
-    "pre_18_1_w7c": "pre_18_1_w7c",
-    "cyclo_19_0": "cyclo_19_0",
-    "pre_18_1w7c_cy19_0": "pre_18_1w7c_cy19_0",
-
-    "diversity_index": "diversity_index",
-}
-
-EXPECTED_SOILBIO_COLUMNS = [
-    "strip",
-    "date_rec",
-    "begin_depth_in",
-    "end_depth_in",
-    "total_biomass",
-    "total_bacteria_biomass",
-    "bacteria_pct",
-    "gram_pos_biomass",
-    "gram_pos_pct",
-    "actinomycetes_biomass",
-    "actinomycetes_pct",
-    "gram_neg_biomass",
-    "gram_neg_pct",
-    "rhizobia_biomass",
-    "rhizobia_pct",
-    "total_fungi_biomass",
-    "total_fungi_pct",
-    "arbuscular_mycorrhizal_biomass",
-    "arbuscular_mycorrhizal_pct",
-    "saprophytic_pct",
-    "saprophytes_biomass",
-    "protozoan_pct",
-    "protozoa_biomass",
-    "undifferentiated_pct",
-    "undifferentiated_biomass",
-    "fungi_bacteria",
-    "predator_prey",
-    "gram_pos_gram_neg_ratio",
-    "saturated",
-    "unsaturated",
-    "saturated_unsaturated_ratio",
-    "monounsaturated",
-    "polyunsaturated",
-    "monounsaturated_polyunsaturated_ratio",
-    "pre_16_1_w7c",
-    "cyclo_17_0",
-    "pre_16_1w7c_cy17_0",
-    "pre_18_1_w7c",
-    "cyclo_19_0",
-    "pre_18_1w7c_cy19_0",
-    "diversity_index",
-]
 
 
 def _apply_rename_map(df: pd.DataFrame, rename_map: Dict[str, str]) -> pd.DataFrame:
@@ -357,7 +244,7 @@ def update_ward_master_soilbio() -> None:
 
 
     # Dataset-specific canonical names
-    df_clean = _apply_rename_map(df_clean, SOILBIO_RENAME_MAP)
+    df_clean = _apply_rename_map(df_clean, RAW_TO_CANONICAL_SOILBIO)
 
     # Put key columns first
     key_cols = [
