@@ -39,21 +39,21 @@ SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
             VariableSpec(
                 key="soil_ph_1_1",
                 label=metadata_label("soil_ph_1_1", "Soil pH (1:1)"),
-                candidates=("1_1_soil_ph", "soil_ph_1_1", "soil_ph_1:1", "ph_1_1", "ph_1:1"),
+                candidates=("soil_ph_1_1", "1_1_soil_ph", "soil_ph_1:1", "ph_1_1", "ph_1:1"),
                 note=metadata_note("soil_ph_1_1", "Soil pH measured in a 1:1 soil:water slurry."),
                 reference_key="ph",
             ),
             VariableSpec(
                 key="buffer_ph",
                 label=metadata_label("wdrf_buffer_ph", "Buffer pH (WDRF)"),
-                candidates=("wdrf_buffer_ph", "buffer_ph"),
+                candidates=("wdrf_buffer_ph", "buffer_ph", "bph_modified_wdrf"),
                 note=metadata_note("wdrf_buffer_ph", "Buffer pH (WDRF) as provided in the compiled dataset."),
                 reference_key="buffer_ph",
             ),
             VariableSpec(
                 key="ec_1_1",
                 label=metadata_label("ec_1_1", "EC / Salts (mmho/cm, 1:1)"),
-                candidates=("1_1_s_salts_mmho_cm", "ec_1_1", "ec_1:1", "ec"),
+                candidates=("ec_1_1", "1_1_s_salts_mmho_cm", "ec_1:1", "ec"),
                 note=metadata_note("ec_1_1", "Electrical conductivity / soluble salts in a 1:1 soil:water slurry."),
                 reference_key="salinity",
             ),
@@ -315,6 +315,16 @@ SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 candidates=("h2o_no3_n",),
                 note=metadata_note("h2o_no3_n", "Water-extractable nitrate-N."),
                 reference_key="nitrate",
+            ),
+            VariableSpec(
+                key="nh4_no3_ratio",
+                label=metadata_label("nh4_no3_ratio", "NH₄ : NO₃"),
+                candidates=("nh4_no3_ratio", "nh4_no3"),
+                note=metadata_note(
+                    "nh4_no3_ratio",
+                    "Ratio of ammonium to nitrate nitrogen.",
+                ),
+                reference_key=None,
             ),
             VariableSpec(
                 key="h2o_nh4_n",

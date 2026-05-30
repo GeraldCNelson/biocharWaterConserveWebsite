@@ -9,8 +9,8 @@ step for the cleaned soil-bio CSV so the dashboard can tolerate two real-world
 issues we have seen in the Ward/processed files:
 
 1. Missing strip values for the 2025-03-31 rows in the cleaned CSV.
-2. A newer late-2025 raw Ward PLFA file that has not yet been merged into the
-   cleaned master CSV.
+2. Newer raw Ward PLFA files that have not yet been merged into the
+   compiled/all-dates master CSV.
 
 The preparation logic:
 - backfills blank strip values when a date has exactly four blank strip rows
@@ -66,7 +66,8 @@ from biochar_app.scripts.tables.table_metadata_helpers import (
 # -----------------------------------------------------------------------------
 # Shared top-level note (STANDARD)
 # -----------------------------------------------------------------------------
-SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means."
+SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1-4 (0-12 in). Columns: sampling events. Values shown are strip means."
+
 
 # -----------------------------------------------------------------------------
 # Raw Ward biological column aliases -> cleaned machine-readable columns
@@ -155,11 +156,13 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
         "Undifferentiated % Biomass",
     ),
     "gram_pos_biomass": (
+        "Gram (+) Biomass",
         "Gram (+) ng/g",
         "Gram(+) ng/g",
         "Gram Positive ng/g",
     ),
     "gram_pos_pct": (
+        "Gram (+) %",
         "Gram (+) ng/g % Biomass",
         "Gram(+) ng/g % Biomass",
         "Gram (+) % Biomass",
@@ -197,12 +200,14 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
         "Rhizobia ng/g % Biomass",
         "Rhizobia Percent Biomass",
     ),
-    "gram_biomass": (
+    "gram_neg_biomass": (
+        "Gram (-) Biomass",
         "Gram (-) ng/g",
         "Gram(-) ng/g",
         "Gram Negative ng/g",
     ),
-    "gram_pct": (
+    "gram_neg_pct": (
+        "Gram (-) %",
         "Gram (-) ng/g % Biomass",
         "Gram(-) ng/g % Biomass",
         "Gram (-) % Biomass",
@@ -322,7 +327,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
             ),
             VariableSpec(
                 key="gram_neg_biomass",
-                label=metadata_label("gram_neg_biomass", "Gram− Biomass (ng/g)"),
+                label=metadata_label("gram_neg_biomass", "Gram- Biomass (ng/g)"),
                 candidates=(
                     "gram_neg_biomass",
                     "gram_neg_ng_per_g",
@@ -429,7 +434,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
             ),
             VariableSpec(
                 key="gram_pos_gram_neg_ratio",
-                label=metadata_label("gram_pos_gram_neg_ratio", "Gram+ : Gram−"),
+                label=metadata_label("gram_pos_gram_neg_ratio", "Gram+ : Gram-"),
                 candidates=(
                     "gram_pos_gram_neg_ratio",
                     "gram_pos_neg",
@@ -438,7 +443,7 @@ SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
                 ),
                 note=metadata_note(
                     "gram_pos_gram_neg_ratio",
-                    "Ratio of Gram+ to Gram− bacterial biomass (unitless).",
+                    "Ratio of Gram+ to Gram- bacterial biomass (unitless).",
                 ),
                 reference_key="gram_pos_gram_neg_ratio",
             ),
@@ -663,7 +668,7 @@ def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str])
             if strip_value:
                 break
 
-        date_rec = _parse_date_iso(row.get("Date Reported") or row.get("Date Received"))
+        date_rec = _parse_date_iso(row.get("Date Received"))
         date_rept = _parse_date_iso(row.get("Date Reported"))
 
         record: Dict[str, Any] = {

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-clean_ward_master_nir.py
+update_ward_master_nir.py
 
 Clean the compiled Ward NIR / hay master file into a canonical machine-readable
 CSV for the Biochar dashboard, and patch missing 2024 mineral values using
 supplemental Excel workbooks provided by Ward Labs.
 
 Code to run in a terminal
-python -m biochar_app.scripts.clean_ward_master_nir
+python -m biochar_app.scripts.update_ward_master_nir
 
 Ward format
 -----------
@@ -52,6 +52,7 @@ import pandas as pd
 
 from biochar_app.config.paths import (
     LAB_TESTS_RAW_DIR,
+    HAY_TESTS_RAW_DIR,
     HAY_TESTS_PROCESSED_DIR,
 )
 from biochar_app.scripts.lab.clean_ward_master_common import (
@@ -80,6 +81,57 @@ SUPPLEMENT_FILES = [
 
 OUT_CLEAN_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
 OUT_HEADERS_JSON = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_headers_machine_to_human.json"
+SUPPLEMENTAL_NIR_FILES: list[Path] = []
+
+# SUPPLEMENTAL_NIR_FILES = [
+#     HAY_RAW_DIR / "NIR_2026-xx-xx.csv",
+# ]
+
+
+# -----------------------------------------------------------------------------
+# Raw Ward NIR -> canonical names
+# -----------------------------------------------------------------------------
+RAW_TO_CANONICAL_NIR = {
+    # identifiers / dates
+    "sample_id": "sample_id",
+    "date_rec": "date_rec",
+    "date_reported": "date_reported",
+
+    # protein / moisture
+    "crude_protein_pct_db": "crude_protein_pct_db",
+    "moisture_pct": "moisture_pct",
+    "dry_matter_pct": "dry_matter_pct",
+
+    # fiber / energy
+    "adf_pct_db": "adf_pct_db",
+    "ndf_pct_db": "ndf_pct_db",
+    "tdn_pct_db": "tdn_pct_db",
+    "nel_pct_db": "nel_pct_db",
+    "nem_pct_db": "nem_pct_db",
+    "neg_pct_db": "neg_pct_db",
+    "lignin_pct_db": "lignin_pct_db",
+
+    # quality indices
+    "RFV": "rfv",
+    "RFQ": "rfq",
+
+    # minerals
+    "Ca_pct_db": "Ca_pct_db",
+    "P_pct_db": "P_pct_db",
+    "K_pct_db": "K_pct_db",
+    "Mg_pct_db": "Mg_pct_db",
+
+    # additional dry-basis fractions
+    "ash_pct_db": "ash_pct_db",
+    "ndfd48_pctndf_db": "ndfd48_pctndf_db",
+    "ivtdmd48_pctndf_db": "ivtdmd48_pctndf_db",
+    "fat_pct_db": "fat_pct_db",
+    "nfc_pct_db": "nfc_pct_db",
+    "starch_pct_db": "starch_pct_db",
+    "esc_pct_db": "esc_pct_db",
+    "wsc_pct_db": "wsc_pct_db",
+    "fructan_pct_db": "fructan_pct_db",
+}
 
 DROP_COLUMNS = {
     "customer",
@@ -126,6 +178,18 @@ HEADER_MAP_ADDITIONS = {
     "Mg_pct_db": "Magnesium (Dry Basis, %)",
 }
 
+def _apply_raw_to_canonical_map(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    applicable = {
+        src: dst
+        for src, dst in RAW_TO_CANONICAL_NIR.items()
+        if src in out.columns
+    }
+
+    out = out.rename(columns=applicable)
+
+    return out
 
 def _rename_nir_date(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -331,9 +395,13 @@ def _patch_missing_minerals(
     return out
 
 
-def clean_ward_master_nir() -> None:
+def update_ward_master_nir() -> None:
     logger.info(f"📥 Reading Ward NIR master CSV: {IN_MASTER_CSV}")
     df, header_map = read_ward_two_header_csv(IN_MASTER_CSV)
+    df, header_map = read_ward_two_header_csv(IN_MASTER_CSV)
+    df = _apply_raw_to_canonical_map(df)
+
+    logger.info(f"🧠 Loaded {df.shape[0]} rows × {df.shape[1]} columns")
     logger.info(f"🧠 Loaded {df.shape[0]} rows × {df.shape[1]} columns")
 
     if "date_rec" not in df.columns:
@@ -402,4 +470,4 @@ def clean_ward_master_nir() -> None:
 
 
 if __name__ == "__main__":
-    clean_ward_master_nir()
+    update_ward_master_nir()
