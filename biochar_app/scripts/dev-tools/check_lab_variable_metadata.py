@@ -3,7 +3,7 @@
 Validate lab variable metadata coverage and basic structure.
 
 Run:
-python biochar_app/scripts/dev_tools/check_lab_variable_metadata.py
+python biochar_app/scripts/dev-tools/check_lab_variable_metadata.py
 """
 
 from __future__ import annotations

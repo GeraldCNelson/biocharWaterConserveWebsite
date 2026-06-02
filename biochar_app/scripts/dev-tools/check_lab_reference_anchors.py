@@ -25,16 +25,16 @@ Default base URL
 Examples
 --------
 Run against local dev server:
-    python biochar_app/scripts/dev_tools/check_lab_reference_anchors.py
+    python biochar_app/scripts/dev-tools/check_lab_reference_anchors.py
 
 Specify a different host:
-    python biochar_app/scripts/dev_tools/check_lab_reference_anchors.py --base-url http://127.0.0.1:5000
+    python biochar_app/scripts/dev-tools/check_lab_reference_anchors.py --base-url http://127.0.0.1:5000
 
 Only check one guide page:
-    python biochar_app/scripts/dev_tools/check_lab_reference_anchors.py --only /lab-references/ward-guide
+    python biochar_app/scripts/dev-tools/check_lab_reference_anchors.py --only /lab-references/ward-guide
 
 Treat semantic warnings as failures:
-    python biochar_app/scripts/dev_tools/check_lab_reference_anchors.py --strict-semantic
+    python biochar_app/scripts/dev-tools/check_lab_reference_anchors.py --strict-semantic
 
 Notes
 -----
