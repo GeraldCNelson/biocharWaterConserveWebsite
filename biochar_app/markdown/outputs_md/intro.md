@@ -42,7 +42,7 @@ figcaption, caption {
   color: #1f3f73;
   text-decoration: underline;
 }</style></head><h1 id="welcome-to-the-fruita-biochar-project">Welcome to the Fruita Biochar Project</h1>
-<p>The Fruita Biochar Project is beginning its fourth year, 2026. This is the second version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <a href="mailto:nelson.gerald.c@gmail.com">nelson.gerald.c@gmail.com</a>.</p>
+<p>The Fruita Biochar Project is in the middle its fourth year, 2026. This is the third version of this website. It has many new features! Please explore and if you find problems or have a suggestion for improvements, please email <a href="mailto:nelson.gerald.c@gmail.com">nelson.gerald.c@gmail.com</a>.</p>
 <p>This is an introduction to the project and the website. Here’s what you can expect:</p>
 <ul>
 <li><p>An introduction to what biochar is and why it is potentially valuable in western Colorado (and other drought prone areas of the world).</p></li>
@@ -70,7 +70,7 @@ figcaption, caption {
 <figcaption>Figure 1. Scanning electron microscope image of biochar</figcaption>
 </figure>
 <h2 id="plant-biology-and-biochar-structure">Plant biology and biochar structure</h2>
-<p>For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.</p>
+<p>For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provides the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.</p>
 <table>
 <colgroup>
 <col style="width: 52%"/>
