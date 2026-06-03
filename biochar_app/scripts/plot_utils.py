@@ -391,10 +391,22 @@ def configure_primary_yaxis(
     if gmin is None or gmax is None:
         return
 
-    if kind == "ratio" and variable in ("VWC", "SWC"):
+    if kind == "raw" and variable == "VWC":
+        gmin = 0.0
+        gmax = 50.0
+
+    elif kind == "ratio" and variable in ("VWC", "SWC"):
         gmin = min(0.0, gmin)
 
-    fig.update_layout(yaxis=common_yaxis_config(kind, variable, usys, gmin, gmax))
+    fig.update_layout(
+        yaxis=common_yaxis_config(
+            kind,
+            variable,
+            usys,
+            gmin,
+            gmax,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
