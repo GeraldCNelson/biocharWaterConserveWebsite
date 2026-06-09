@@ -9,10 +9,12 @@ import pandas as pd
 from biochar_app.config.core import (
     SENSOR_DEPTH_LABELS,
     COAGMET_VARIABLE_MAP,
-    logger_location_mapping,
-    strip_name_mapping,
-    variable_name_mapping,
+    LOGGER_LOCATION_MAPPING,
+    STRIP_NAME_MAPPING,
+    VARIABLE_NAME_MAPPING,
+    STRIP_DESCRIPTIONS,
 )
+
 
 from biochar_app.config.descriptions import (
     PROJECT_README_TITLE,
@@ -37,7 +39,13 @@ from biochar_app.config.descriptions import (
 )
 
 GLOSSARY_JSON_PATH = Path(__file__).resolve().parents[1] / "static" / "data" / "glossary_terms.json"
+README_FRAGMENT_DIR = Path(__file__).resolve().parents[1] / "markdown" / "readmes"
 
+def load_readme_fragment(name: str) -> str:
+    path = README_FRAGMENT_DIR / f"{name}.md"
+    if not path.exists():
+        return f"[Missing README fragment: {name}]"
+    return path.read_text(encoding="utf-8").strip()
 def format_resolution_label(resolution: str) -> str:
     resolution = str(resolution or "").strip().lower()
     if resolution == "gseason":
@@ -72,6 +80,37 @@ def _normalize_unit_system(unit_system: str = "us") -> str:
 def _unit_system_label(unit_system: str = "us") -> str:
     return "metric" if _normalize_unit_system(unit_system) == "metric" else "US"
 
+
+# ---------------------------------------------------------------------
+# Download README helpers
+# ---------------------------------------------------------------------
+
+def build_download_header(
+    *,
+    title: str,
+    year: int,
+    variable: str,
+    strip: str,
+    granularity: str,
+    unit_system: str,
+    extra_lines: list[str] | None = None,
+) -> str:
+    lines = [
+        title,
+        f"Year: {year}",
+        f"Variable: {variable}",
+        f"Strip: {strip}",
+        f"Granularity: {granularity}",
+        f"Unit system requested: {unit_system}",
+    ]
+
+    if extra_lines:
+        lines.extend(
+            line for line in extra_lines
+            if line and str(line).strip()
+        )
+
+    return "\n".join(lines) + "\n\n"
 
 def _detect_year_span(df: pd.DataFrame) -> str:
     candidate_date_cols = [
@@ -134,22 +173,26 @@ def build_depth_codes_section(unit_system: str = "us") -> str:
 
 def build_logger_location_codes_section() -> str:
     lines = ["Logger location codes:"]
-    for code, label in logger_location_mapping.items():
+    for code, label in LOGGER_LOCATION_MAPPING.items():
         lines.append(f"- {code} = {label} logger position within the strip")
     return "\n".join(lines)
 
 
 def build_logger_variable_codes_section() -> str:
     lines = ["Logger variable codes:"]
-    for code, label in variable_name_mapping.items():
+    for code, label in VARIABLE_NAME_MAPPING.items():
         lines.append(f"- {code} = {label}")
     return "\n".join(lines)
 
 
 def build_strip_codes_section() -> str:
     lines = ["Strip codes:"]
-    for code, label in strip_name_mapping.items():
-        lines.append(f"- {code} = {label}")
+    for code, label in STRIP_NAME_MAPPING.items():
+        desc = STRIP_DESCRIPTIONS.get(code, "")
+        if desc:
+            lines.append(f"- {code} = {label}: {desc}")
+        else:
+            lines.append(f"- {code} = {label}")
     return "\n".join(lines)
 
 
@@ -523,8 +566,11 @@ def build_timeseries_yearly_readme(
         f"Units: {_unit_system_label(unit_system)}",
         f"File type: standardized {resolution_label} dataset (CSV packaged as ZIP)",
         "",
+        load_readme_fragment("bulk_download_notes"),
+        "",
     ]
 
+    
     if df is not None:
         lines.extend([
             "Dataset summary",
@@ -709,6 +755,37 @@ def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
         build_project_reference_note(),
         "",
+    ])
+
+def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
+    coverage = _detect_year_span(df)
+
+    return _join_readme_lines([
+        PROJECT_README_TITLE,
+        "",
+        f"Dataset: {dataset_label}",
+        f"Coverage: {coverage}",
+        "File type: standardized all-years dataset (CSV packaged as ZIP)",
+        "",
+        "Dataset summary",
+        "---------------",
+        _dataset_summary(df),
+        "",
+        "Description",
+        "-----------",
+        HAY_DESCRIPTION,
+        "",
+        HAY_SAMPLE_CONTEXT_NOTE,
+        "",
+        "Variables",
+        "---------",
+        build_hay_variable_section(df),
+        "",
+        "Units",
+        "-----",
+        "Most forage quality, mineral, carbohydrate, digestibility, fat, lignin, and ash variables are reported on a dry matter basis. Moisture and dry matter columns are retained as as-received sample characteristics. RFV and RFQ are unitless index values.",
+        "",
+        build_nir_reference_note(),
     ])
 
 
@@ -1151,36 +1228,18 @@ def build_soilbio_variable_section(df: pd.DataFrame) -> str:
     return "\n".join(line for line in lines if line is not None).rstrip()
 
 
-def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
-    coverage = _detect_year_span(df)
+def build_experiment_lookup_section(unit_system: str = "us") -> str:
+    lines = [
+        "Experiment lookup",
+        "-----------------",
+        build_depth_codes_section(unit_system),
+        "",
+        build_logger_location_codes_section(),
+        "",
+        build_strip_codes_section(),
+    ]
 
-    return _join_readme_lines([
-        PROJECT_README_TITLE,
-        "",
-        f"Dataset: {dataset_label}",
-        f"Coverage: {coverage}",
-        "File type: standardized all-years dataset (CSV packaged as ZIP)",
-        "",
-        "Dataset summary",
-        "---------------",
-        _dataset_summary(df),
-        "",
-        "Description",
-        "-----------",
-        HAY_DESCRIPTION,
-        "",
-        HAY_SAMPLE_CONTEXT_NOTE,
-        "",
-        "Variables",
-        "---------",
-        build_hay_variable_section(df),
-        "",
-        "Units",
-        "-----",
-        "Most forage quality, mineral, carbohydrate, digestibility, fat, lignin, and ash variables are reported on a dry matter basis. Moisture and dry matter columns are retained as as-received sample characteristics. RFV and RFQ are unitless index values.",
-        "",
-        build_nir_reference_note(),
-    ])
+    return _join_readme_lines(lines).rstrip()
 
 
 def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:

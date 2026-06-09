@@ -38,9 +38,9 @@ from biochar_app.config.core import (
     TITLE_FONT_SIZE,
     TRACE_CHOICES,
     bar_width_map,
-    logger_location_mapping,
+    LOGGER_LOCATION_MAPPING,
     SENSOR_DEPTH_LABELS,
-    variable_name_abbrev,
+    VARIABLE_NAME_ABBREV,
 )
 from biochar_app.config.units import (
     UNIT_CONVERSIONS,
@@ -141,7 +141,7 @@ def _depth_display_label(depth_key: str | int, usys: UnitSystem, *, compact: boo
 
 
 def _logger_display_label(logger_location: str) -> str:
-    return str(logger_location_mapping.get(logger_location, logger_location))
+    return str(LOGGER_LOCATION_MAPPING.get(logger_location, logger_location))
 
 
 def _normalize_trace_grouping(trace_option: str) -> str:
@@ -490,7 +490,7 @@ def make_raw_figure(
             )
     else:
         depth_str = str(depth)
-        for loc_key in logger_location_mapping:
+        for loc_key in LOGGER_LOCATION_MAPPING:
             base_col = f"{source_variable}_{depth_str}_raw_{strip}_{loc_key}"
             if base_col not in df_plot.columns:
                 continue
@@ -619,7 +619,7 @@ def make_ratio_figure(
 
     ratio_prefix = "VWC" if variable == "SWC" else variable
     depth_str = str(depth)
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
 
     y_cols = [
         c
@@ -919,7 +919,7 @@ def make_raw_gseason_figure(
         )
 
     human_var = label_name_mapping[variable][usys]
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
     legend_fmt = f"{abbr}, {{}}"
     sensor_cols_plotted: List[str] = []
     depth_str = str(depth)
@@ -949,7 +949,7 @@ def make_raw_gseason_figure(
                     bar_kwargs["marker"] = dict(color=depth_col)
                 fig.add_trace(go.Bar(**bar_kwargs))
         else:
-            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+            for idx, (loc_key, loc_label) in enumerate(LOGGER_LOCATION_MAPPING.items(), start=1):
                 col = f"{base}_{strip}_{loc_key}_{depth_str}"
                 if col not in df2.columns:
                     continue
@@ -988,7 +988,7 @@ def make_raw_gseason_figure(
                     bar_kwargs2["marker"] = dict(color=depth_col)
                 fig.add_trace(go.Bar(**bar_kwargs2))
         else:
-            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+            for idx, (loc_key, loc_label) in enumerate(LOGGER_LOCATION_MAPPING.items(), start=1):
                 col = f"{variable}_{depth_str}_raw_{strip}_{loc_key}"
                 if col not in df2.columns:
                     continue
@@ -1096,7 +1096,7 @@ def make_ratio_gseason_figure(
 
     fig = go.Figure()
 
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
     full_label = label_name_mapping[variable][usys]
     human_base = str(full_label).split(" (")[0]
     depth_str = str(depth)

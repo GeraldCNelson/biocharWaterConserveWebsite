@@ -23,10 +23,10 @@ import pandas as pd
 from fastapi import HTTPException
 
 from biochar_app.config.core import (
-    strip_name_mapping,
-    variable_name_mapping,
+    STRIP_NAME_MAPPING,
+    VARIABLE_NAME_MAPPING,
     SENSOR_DEPTH_LABELS,
-    logger_location_mapping,
+    LOGGER_LOCATION_MAPPING,
 )
 from biochar_app.config.units import UNIT_CONVERSIONS, label_name_mapping
 from biochar_app.scripts.type_utils import UnitSystem
@@ -348,16 +348,16 @@ def parse_sensor_column(col: str, unit_system: UnitSystem) -> dict[str, str]:
         if len(parts) < 6:
             raise ValueError(f"Unrecognized ratio sensor column format: {col!r}")
         strip1_code, strip2_code, loc_code = parts[3], parts[4], parts[5]
-        human_strip = f"{strip_name_mapping[strip1_code]} / {strip_name_mapping[strip2_code]}"
+        human_strip = f"{STRIP_NAME_MAPPING[strip1_code]} / {STRIP_NAME_MAPPING[strip2_code]}"
     elif parts[2] == "raw":
         strip_code, loc_code = parts[3], parts[4]
-        human_strip = strip_name_mapping[strip_code]
+        human_strip = STRIP_NAME_MAPPING[strip_code]
     else:
         raise ValueError(f"Unrecognized sensor column format: {col!r}")
 
-    human_var = variable_name_mapping.get(var_code, var_code)
+    human_var = VARIABLE_NAME_MAPPING.get(var_code, var_code)
     human_depth = SENSOR_DEPTH_LABELS.get(depth_code, {}).get(unit_system, depth_code)
-    human_loc = logger_location_mapping.get(loc_code, loc_code)
+    human_loc = LOGGER_LOCATION_MAPPING.get(loc_code, loc_code)
 
     return {
         "variable": str(human_var),

@@ -13,7 +13,10 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
 )
-
+from biochar_app.scripts.readme_builders import (
+    build_file_dataset_readme,
+    load_readme_fragment,
+)
 
 # -----------------------------------------------------------------------------
 # Registry spec
@@ -27,7 +30,8 @@ class BulkSheetSpec:
     year: Optional[int]       # if set, inject Year column when missing
     filename: str             # CSV filename inside the zip
     csv_path: Optional[str] = None  # if set, load from disk CSV instead of Excel
-
+    readme_fragment: str = "bulk_download_notes"
+    readme_kind: str = "generic"
 
 # -----------------------------------------------------------------------------
 # Loaders

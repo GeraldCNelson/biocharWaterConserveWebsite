@@ -903,7 +903,7 @@
                 endDate
             };
 
-            const response = await fetch("/api/download_data", {
+            const response = await fetch("/api/download_plot_data", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)

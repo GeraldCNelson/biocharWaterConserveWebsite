@@ -162,7 +162,7 @@ export async function downloadTraceData(kind = "all") {
           year,
         ]) + ".zip";
 
-    await postAndDownload("/api/download_data", payload, fname);
+    await postAndDownload("/api/download_plot_data", payload, fname);
   } catch (err) {
     console.error("❌ Error in downloadTraceData:", err);
     alert("Unable to download data. Please check the console for details.");

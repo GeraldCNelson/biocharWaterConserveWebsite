@@ -6,6 +6,7 @@ Core experiment configuration:
 - display name mappings
 - growing season defaults
 - plotting constants (colors, bar widths)
+- Refactor config mappings to uppercase constants
 """
 
 from __future__ import annotations
@@ -16,15 +17,24 @@ from math import pi
 from zoneinfo import ZoneInfo
 import os
 
+from biochar_app.config.experiment_config import (
+    STRIPS,
+    STRIP_DESCRIPTIONS,
+    TREATMENT_PAIRS,
+    LOGGER_LOCATIONS,
+    LOGGER_LOCATION_MAPPING,
+    SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_LABELS,
+    SENSOR_DEPTH_VALUES,
+    VARIABLES,
+    STRIP_NAME_MAPPING,
+)
+
 # ---------------------------------------------------------------------
 # Experiment structure
 # ---------------------------------------------------------------------
 
-STRIPS = ["S1", "S2", "S3", "S4"]
-VARIABLES = ["VWC", "EC", "T", "SWC"]
 YEARS = [2023, 2024, 2025, 2026]
-LOGGER_LOCATIONS = ["T", "M", "B"]
-DATALOGGER_NAMES = ["S1T", "S1M", "S1B", "S2T", "S2M", "S2B", "S3T", "S3B", "S3M", "S4T", "S4M", "S4B"]
 VALUE_COLS_2024_PLUS = [
     "BattV_Min",
     "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
@@ -38,44 +48,24 @@ VALUE_COLS_STANDARD = [
     "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
 ]
 
-# ---------------------------------------------------------------------------
-# Sensor depth definitions
-# ---------------------------------------------------------------------------
-
-SENSOR_DEPTH_CODES = ["1", "2", "3"]
-
-# User-facing labels
-SENSOR_DEPTH_LABELS = {
-    "1": {"us": "6 in", "metric": "15 cm"},
-    "2": {"us": "12 in", "metric": "30 cm"},
-    "3": {"us": "18 in", "metric": "45 cm"},
-}
-
-# Numeric depth values for calculations
-SENSOR_DEPTH_VALUES = {
-    "1": {"us": 6.0, "metric": 15.0},
-    "2": {"us": 12.0, "metric": 30.0},
-    "3": {"us": 18.0, "metric": 45.0},
-}
-
 # Granularities:
 # - first element: UI value
 # - second element: pandas offset alias used in resampling (or None)
 GRANULARITIES = [
-    ("15min",   "15min"),
-    ("hourly",  "h"),
-    ("daily",   "d"),
+    ("15min", "15min"),
+    ("hourly", "h"),
+    ("daily", "d"),
     ("monthly", "ME"),
     ("gseason", None),
 ]
 
 TRACE_CHOICES = ["depths", "locations"]
 PLOT_BASED_ON_OPTIONS = [
-    {"value": "depth",          "label": "Depth"},
+    {"value": "depth", "label": "Depth"},
     {"value": "loggerLocation", "label": "Logger Location"},
 ]
 TRACE_OPTION_MAP: dict[str, str] = {
-    "depth":          "depths",
+    "depth": "depths",
     "loggerLocation": "locations",
 }
 
@@ -110,15 +100,14 @@ DEFAULT_GSEASON_PERIODS = {
     "Q1_Winter": {
         "label": "Winter",
         "start": "11-01",
-        "end":   "03-31",
+        "end": "03-31",
     },
     "Q2_Early_Growing": {
         "label": "Growing Season",
         "start": "04-01",
-        "end":   "10-31",
+        "end": "10-31",
     },
 }
-
 MONTH_ABBR = {
     "01": "Jan",
     "02": "Feb",
@@ -153,50 +142,44 @@ def build_gseason_period_labels(periods: dict) -> list[str]:
         for period in periods.values()
     ]
 
+
 # ---------------------------------------------------------------------
 # Mappings (names)
 # ---------------------------------------------------------------------
 
-logger_location_mapping = {"T": "Top", "M": "Middle", "B": "Bottom"}
 
-variable_name_mapping = {
+VARIABLE_NAME_MAPPING = {
     "VWC": "Vol. Water Content",
-    "T":   "Soil Temperature",
-    "EC":  "Electrical Conductivity",
+    "T": "Soil Temperature",
+    "EC": "Electrical Conductivity",
     "SWC": "Soil Water Content",
 }
-
-strip_name_mapping = {"S1": "Strip 1", "S2": "Strip 2", "S3": "Strip 3", "S4": "Strip 4"}
-
-granularity_name_mapping = {
+GRANULARITY_NAME_MAPPING = {
     "gseason": "Seasonal Periods",
     "monthly": "Monthly",
-    "daily":   "Daily",
-    "15min":   "15 Minute",
-    "hourly":  "Hourly",
+    "daily": "Daily",
+    "15min": "15 Minute",
+    "hourly": "Hourly",
 }
-
-variable_name_abbrev = {
+VARIABLE_NAME_ABBREV = {
     "VWC": "VWC",
-    "EC":  "EC",
+    "EC": "EC",
     "SWC": "SWC",
-    "T":   "Soil Temp.",
+    "T": "Soil Temp.",
     "temp_air": "Air Temp.",
     "precip_mm": "Precip.",
     "irrigation": "Irrigation",
 }
 
-
-
-
 # ---------------------------------------------------------------------
 # Weather data (CoAgMet)
 # ---------------------------------------------------------------------
-
 COAG_STATION = "frt03"
 COLLECT_PERIOD = "5min"
-coagnames_complete = ["t","rh","dewpt","vp","bp_avg","solarRad","rso","precip","wetb","dt","windSpeed","windDir","windStdDev","gustSpeed","gustTime",
-                      "gustDir","st5cm","st15cm","windSpeed10m","windDir10m","windStdDev10m","gustSpeed10m","gustTime10m","gustDir10m"]
+COAGNAMES_COMPLETE = ["t", "rh", "dewpt", "vp", "bp_avg", "solarRad", "rso", "precip", "wetb", "dt", "windSpeed",
+                      "windDir", "windStdDev", "gustSpeed", "gustTime",
+                      "gustDir", "st5cm", "st15cm", "windSpeed10m", "windDir10m", "windStdDev10m", "gustSpeed10m",
+                      "gustTime10m", "gustDir10m"]
 COAGMET_VARIABLE_MAP = {
     "t": "temp_air",
     "rh": "rh",
@@ -224,9 +207,9 @@ IRR_COLOR = "rgba(160, 82, 45, 0.55)"  # semi-transparent sienna
 
 ms_per_day = 24 * 3600 * 1000
 bar_width_map = {
-    "15min":  15 * 60 * 1000,
+    "15min": 15 * 60 * 1000,
     "hourly": 3600 * 1000,
-    "daily":  ms_per_day * 0.8,
+    "daily": ms_per_day * 0.8,
     "monthly": 30 * ms_per_day * 0.8,
 }
 
@@ -279,8 +262,9 @@ PLOT_COLORS = {
 # SWC geometry (kept here because it’s conceptually “core experiment”)
 # ---------------------------------------------------------------------
 
-SWC_CYLINDER_LENGTH_CM = 10   # reliable probe length
-SWC_CYLINDER_RADIUS_CM = 4    # midpoint of 3–5 cm
+SWC_CYLINDER_LENGTH_CM = 10  # reliable probe length
+SWC_CYLINDER_RADIUS_CM = 4  # midpoint of 3–5 cm
+
 
 def cylinder_volume_m3(length_cm: float = SWC_CYLINDER_LENGTH_CM,
                        radius_cm: float = SWC_CYLINDER_RADIUS_CM) -> float:
@@ -288,6 +272,7 @@ def cylinder_volume_m3(length_cm: float = SWC_CYLINDER_LENGTH_CM,
     h = length_cm / 100.0
     r = radius_cm / 100.0
     return pi * r * r * h
+
 
 LOGGER_TIMEZONE = "America/Denver"  # semantic only, do NOT apply tzinfo
 DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
@@ -311,9 +296,9 @@ FIELD_GEOMETRY = {
 
 # --- Unit conversions ---
 
-ACRE_TO_FT2:float = 43560.0          # square feet per acre
-INCH_TO_FT:float = 1.0 / 12.0        # feet per inch
-FT3_TO_GALLONS:float = 7.48052       # gallons per cubic foo
+ACRE_TO_FT2: float = 43560.0  # square feet per acre
+INCH_TO_FT: float = 1.0 / 12.0  # feet per inch
+FT3_TO_GALLONS: float = 7.48052  # gallons per cubic foo
 
 GALLONS_PER_ACRE_INCH = ACRE_TO_FT2 * INCH_TO_FT * FT3_TO_GALLONS
 

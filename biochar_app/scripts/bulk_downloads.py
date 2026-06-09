@@ -27,7 +27,7 @@ from typing import Any, Optional
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from biochar_app.config.core import granularity_name_mapping
+from biochar_app.config.core import GRANULARITY_NAME_MAPPING
 
 
 from biochar_app.config.paths import (
@@ -336,7 +336,7 @@ def bulk_download_manifest() -> dict[str, Any]:
     manifest_granularities = [
         {
             "value": g,
-            "label": granularity_name_mapping.get(g, g),
+            "label": GRANULARITY_NAME_MAPPING.get(g, g),
         }
         for g in sorted({str(item["resolution"]) for item in items if item.get("resolution")})
     ]
