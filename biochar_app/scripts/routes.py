@@ -493,8 +493,11 @@ def _load_ancillary_df_for_year(xlsx_path: Path | str, dataset_key: str, year: i
 
     return df
 
-
-def _build_ancillary_zip_bytes(xlsx_path: Path | str, dataset_key: str, year: int) -> bytes:
+def _build_ancillary_zip_bytes(
+    xlsx_path: Path | str,
+    dataset_key: str,
+    year: int,
+) -> bytes:
     df = _load_ancillary_df_for_year(xlsx_path, dataset_key, year)
 
     csv_name = ANCILLARY_DATASETS[dataset_key]["csv"]
@@ -514,6 +517,7 @@ def _build_ancillary_zip_bytes(xlsx_path: Path | str, dataset_key: str, year: in
             df=df,
             unit_system="us",
         )
+
     elif dataset_key == "soil_chem":
         readme_text = build_soilchem_readme(dataset_label, df)
     elif dataset_key == "soil_bio":
@@ -521,35 +525,22 @@ def _build_ancillary_zip_bytes(xlsx_path: Path | str, dataset_key: str, year: in
     elif dataset_key == "biomass":
         readme_text = build_hay_readme(dataset_label, df)
     else:
-        notes = load_readme_fragment("bulk_download_notes")
-
-        readme_text = (
-            build_download_header(
-                title="Biochar Project — Bulk Download",
-                year=year,
-                variable="not applicable",
-                strip="not applicable",
-                granularity="not applicable",
-                unit_system="us",
-                extra_lines=[
-                    f"Dataset: {dataset_label}",
-                    f"Source: {Path(xlsx_path).name}",
-                ],
-            )
-            + notes
-            + "\n"
+        raise ValueError(
+            f"No README builder defined for ancillary dataset: {dataset_key}"
         )
-
     readme = readme_text.encode("utf-8")
-
     out = BytesIO()
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+
+    with zipfile.ZipFile(
+        out,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as zf:
         zf.writestr(csv_name, csv_bytes)
         zf.writestr("README.txt", readme)
 
     out.seek(0)
     return out.getvalue()
-
 
 def _ancillary_available_for_year(xlsx_path: Path | str, dataset_key: str, year: int) -> bool:
     try:
@@ -1077,9 +1068,9 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
     notes = load_readme_fragment("summary_download_notes")
     readme = (
         readme_header
-             + notes
-             + "\n\n"
-             + build_experiment_lookup_section(req.unitSystem)
+         + notes
+         + "\n\n"
+         + build_experiment_lookup_section(req.unitSystem)
          + "\n"
     )
     if mode == "raw":

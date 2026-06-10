@@ -46,6 +46,7 @@ def load_readme_fragment(name: str) -> str:
     if not path.exists():
         return f"[Missing README fragment: {name}]"
     return path.read_text(encoding="utf-8").strip()
+
 def format_resolution_label(resolution: str) -> str:
     resolution = str(resolution or "").strip().lower()
     if resolution == "gseason":
@@ -69,17 +70,14 @@ def build_nir_reference_note() -> str:
 def _join_readme_lines(lines: list[str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
-
 def _normalize_unit_system(unit_system: str = "us") -> str:
     unit_system = str(unit_system or "us").strip().lower()
     if unit_system in {"metric", "m", "si"}:
         return "metric"
     return "us"
 
-
 def _unit_system_label(unit_system: str = "us") -> str:
     return "metric" if _normalize_unit_system(unit_system) == "metric" else "US"
-
 
 # ---------------------------------------------------------------------
 # Download README helpers
@@ -142,7 +140,6 @@ def _detect_year_span(df: pd.DataFrame) -> str:
 
     return "unknown"
 
-
 def _dataset_summary(df: pd.DataFrame) -> str:
     return _join_readme_lines([
         f"Rows: {len(df)}",
@@ -170,20 +167,17 @@ def build_depth_codes_section(unit_system: str = "us") -> str:
         lines.append(f"- {depth_code} = {label}")
     return "\n".join(lines)
 
-
 def build_logger_location_codes_section() -> str:
     lines = ["Logger location codes:"]
     for code, label in LOGGER_LOCATION_MAPPING.items():
         lines.append(f"- {code} = {label} logger position within the strip")
     return "\n".join(lines)
 
-
 def build_logger_variable_codes_section() -> str:
     lines = ["Logger variable codes:"]
     for code, label in VARIABLE_NAME_MAPPING.items():
         lines.append(f"- {code} = {label}")
     return "\n".join(lines)
-
 
 def build_strip_codes_section() -> str:
     lines = ["Strip codes:"]
@@ -194,7 +188,6 @@ def build_strip_codes_section() -> str:
         else:
             lines.append(f"- {code} = {label}")
     return "\n".join(lines)
-
 
 def build_weather_variable_codes_section() -> str:
     lines = [
@@ -207,7 +200,6 @@ def build_weather_variable_codes_section() -> str:
     for source_code, exported_name in COAGMET_VARIABLE_MAP.items():
         lines.append(f"- {source_code} → `{exported_name}`")
     return "\n".join(lines)
-
 
 def build_logger_units_section(unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
@@ -241,7 +233,6 @@ def build_logger_units_section(unit_system: str = "us") -> str:
     lines.extend(f"- {name}: {unit}" for name, unit in rows)
     return _join_readme_lines(lines).rstrip()
 
-
 def build_weather_units_section(unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
 
@@ -261,7 +252,6 @@ def build_weather_units_section(unit_system: str = "us") -> str:
     lines = ["Variable units", "--------------"]
     lines.extend(f"- {name}: {unit}" for name, unit in rows)
     return _join_readme_lines(lines).rstrip()
-
 
 def build_management_units_section(dataset: str, unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
@@ -289,7 +279,6 @@ def build_management_units_section(dataset: str, unit_system: str = "us") -> str
     lines.extend(f"- {name}: {unit}" for name, unit in rows)
     return _join_readme_lines(lines).rstrip()
 
-
 def build_units_text(dataset: str, unit_system: str = "us") -> str:
     dataset = str(dataset or "").strip().lower()
 
@@ -303,7 +292,6 @@ def build_units_text(dataset: str, unit_system: str = "us") -> str:
         return build_management_units_section(dataset, unit_system)
 
     return "Units are reported as stored in the standardized source dataset."
-
 
 def build_logger_column_naming_section(unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
@@ -344,7 +332,6 @@ def build_logger_column_naming_section(unit_system: str = "us") -> str:
         build_logger_location_codes_section(),
     ]).rstrip()
 
-
 def _example_columns(cols: list[str], max_columns: int = 4) -> str:
     if not cols:
         return ""
@@ -358,7 +345,6 @@ def _example_columns(cols: list[str], max_columns: int = 4) -> str:
 
     return text
 
-
 def _variable_line(label: str, cols: list[str], units: str = "") -> list[str]:
     if not cols:
         return []
@@ -369,14 +355,12 @@ def _variable_line(label: str, cols: list[str], units: str = "") -> list[str]:
     lines.append(f"  Example columns: {_example_columns(cols)}")
     return lines
 
-
 def _glossary_definition_for_key(key: str) -> str:
     entries = load_glossary_entries()
     for entry in entries:
         if str(entry.get("key", "")).strip() == key:
             return str(entry.get("definition", "")).strip()
     return ""
-
 
 def _variable_line_from_glossary(
     label: str,
@@ -399,7 +383,6 @@ def _variable_line_from_glossary(
 
     lines.append(f"  Example columns: {_example_columns(cols)}")
     return lines
-
 
 def build_logger_variable_section(df: pd.DataFrame, unit_system: str = "us") -> str:
     unit_system = _normalize_unit_system(unit_system)
@@ -526,7 +509,6 @@ def build_logger_variable_section(df: pd.DataFrame, unit_system: str = "us") -> 
 
     return "\n".join(lines).rstrip()
 
-
 def build_timeseries_yearly_readme(
     *,
     dataset: str,
@@ -631,7 +613,6 @@ def build_timeseries_yearly_readme(
 
     return _join_readme_lines(lines)
 
-
 def build_management_readme(
     *,
     dataset: str,
@@ -661,42 +642,48 @@ def build_management_readme(
     else:
         description = f"This file contains standardized management records for {dataset_label} for {years_text}."
 
-    return _join_readme_lines([
-        PROJECT_README_TITLE,
-        "",
-        f"Dataset: {dataset_label}",
-        f"Coverage: {years_text}",
-        f"Units: {_unit_system_label(unit_system)}",
-        "File type: standardized all-years dataset (CSV packaged as ZIP)",
-        "",
-        "Dataset summary",
-        "---------------",
-        _dataset_summary(df),
-        "",
-        "Description",
-        "-----------",
-        description,
-        "",
-        "Variables",
-        "---------",
-        build_variable_section(df),
-        "",
-        "Units",
-        "-----",
-        build_units_text(dataset_key, unit_system),
-        "",
-    ])
+    return _join_readme_lines(
+        [
+            PROJECT_README_TITLE,
+            "",
+            f"Dataset: {dataset_label}",
+            f"Coverage: {years_text}",
+            f"Units: {_unit_system_label(unit_system)}",
+            "File type: standardized all-years dataset (CSV packaged as ZIP)",
+            "",
+            load_readme_fragment("bulk_download_notes"),
+            "",
+            "Dataset summary",
+            "---------------",
+            _dataset_summary(df),
+            "",
+            "Description",
+            "-----------",
+            description,
+            "",
+            "Variables",
+            "---------",
+            build_variable_section(df),
+            "",
+            "Units",
+            "-----",
+            build_units_text(dataset_key, unit_system),
+            "",
+        ]
+    )
 
 
 def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
-
+    
     return _join_readme_lines([
         PROJECT_README_TITLE,
         "",
         f"Dataset: {dataset_label}",
         f"Coverage: {coverage}",
         "File type: standardized all-years dataset (CSV packaged as ZIP)",
+        "",
+        load_readme_fragment("bulk_download_notes"),
         "",
         "Dataset summary",
         "---------------",
@@ -722,71 +709,78 @@ def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
         "",
     ])
 
-
 def build_soilbio_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
-    return _join_readme_lines([
-        PROJECT_README_TITLE,
-        "",
-        f"Dataset: {dataset_label}",
-        f"Coverage: {coverage}",
-        "File type: standardized all-years dataset (CSV packaged as ZIP)",
-        "",
-        "Dataset summary",
-        "---------------",
-        _dataset_summary(df),
-        "",
-        "Description",
-        "-----------",
-        SOIL_BIOLOGY_DESCRIPTION,
-        "",
-        SOIL_BIOLOGY_SCOPE_NOTE,
-        "",
-        PROJECT_SAMPLE_CONTEXT_NOTE,
-        "",
-        "Variables",
-        "---------",
-        build_soilbio_variable_section(df),
-        "",
-        "Units",
-        "-----",
-        "Units vary by variable and include biomass measures, percentages, ratios, and index values depending on the variable.",
-        "",
-        build_project_reference_note(),
-        "",
-    ])
+    return _join_readme_lines(
+        [
+            PROJECT_README_TITLE,
+            "",
+            f"Dataset: {dataset_label}",
+            f"Coverage: {coverage}",
+            "File type: standardized all-years dataset (CSV packaged as ZIP)",
+            "",
+            load_readme_fragment("bulk_download_notes"),
+            "",
+            "Dataset summary",
+            "---------------",
+            _dataset_summary(df),
+            "",
+            "Description",
+            "-----------",
+            SOIL_BIOLOGY_DESCRIPTION,
+            "",
+            SOIL_BIOLOGY_SCOPE_NOTE,
+            "",
+            PROJECT_SAMPLE_CONTEXT_NOTE,
+            "",
+            "Variables",
+            "---------",
+            build_soilbio_variable_section(df),
+            "",
+            "Units",
+            "-----",
+            "Units vary by variable and include biomass measures, percentages, ratios, and index values depending on the variable.",
+            "",
+            build_project_reference_note(),
+            "",
+        ]
+    )
 
 def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
-    return _join_readme_lines([
-        PROJECT_README_TITLE,
-        "",
-        f"Dataset: {dataset_label}",
-        f"Coverage: {coverage}",
-        "File type: standardized all-years dataset (CSV packaged as ZIP)",
-        "",
-        "Dataset summary",
-        "---------------",
-        _dataset_summary(df),
-        "",
-        "Description",
-        "-----------",
-        HAY_DESCRIPTION,
-        "",
-        HAY_SAMPLE_CONTEXT_NOTE,
-        "",
-        "Variables",
-        "---------",
-        build_hay_variable_section(df),
-        "",
-        "Units",
-        "-----",
-        "Most forage quality, mineral, carbohydrate, digestibility, fat, lignin, and ash variables are reported on a dry matter basis. Moisture and dry matter columns are retained as as-received sample characteristics. RFV and RFQ are unitless index values.",
-        "",
-        build_nir_reference_note(),
-    ])
+    return _join_readme_lines(
+        [
+            PROJECT_README_TITLE,
+            "",
+            f"Dataset: {dataset_label}",
+            f"Coverage: {coverage}",
+            "File type: standardized all-years dataset (CSV packaged as ZIP)",
+            "",
+            load_readme_fragment("bulk_download_notes"),
+            "",
+            "Dataset summary",
+            "---------------",
+            _dataset_summary(df),
+            "",
+            "Description",
+            "-----------",
+            HAY_DESCRIPTION,
+            "",
+            HAY_SAMPLE_CONTEXT_NOTE,
+            "",
+            "Variables",
+            "---------",
+            build_hay_variable_section(df),
+            "",
+            "Units",
+            "-----",
+            "Most forage quality, mineral, carbohydrate, digestibility, fat, lignin, and ash variables are reported on a dry matter basis. Moisture and dry matter columns are retained as as-received sample characteristics. RFV and RFQ are unitless index values.",
+            "",
+            build_nir_reference_note(),
+        ]
+    )
 
 
 def build_hay_variable_section(df: pd.DataFrame) -> str:
@@ -897,7 +891,6 @@ def build_hay_variable_section(df: pd.DataFrame) -> str:
     ))
 
     return "\n".join(line for line in lines if line is not None).rstrip()
-
 
 def build_soilchem_variable_section(df: pd.DataFrame) -> str:
     cols = [str(c) for c in df.columns]
@@ -1092,7 +1085,6 @@ def build_soilchem_variable_section(df: pd.DataFrame) -> str:
 
     return "\n".join(line for line in lines if line is not None).rstrip()
 
-
 def build_soilbio_variable_section(df: pd.DataFrame) -> str:
     cols = [str(c) for c in df.columns]
 
@@ -1227,7 +1219,6 @@ def build_soilbio_variable_section(df: pd.DataFrame) -> str:
 
     return "\n".join(line for line in lines if line is not None).rstrip()
 
-
 def build_experiment_lookup_section(unit_system: str = "us") -> str:
     lines = [
         "Experiment lookup",
@@ -1241,34 +1232,37 @@ def build_experiment_lookup_section(unit_system: str = "us") -> str:
 
     return _join_readme_lines(lines).rstrip()
 
-
 def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
 
-    return _join_readme_lines([
-        PROJECT_README_TITLE,
-        "",
-        f"Dataset: {dataset_label}",
-        f"Coverage: {coverage}",
-        "File type: standardized all-years dataset (CSV packaged as ZIP)",
-        "",
-        "Dataset summary",
-        "---------------",
-        _dataset_summary(df),
-        "",
-        "Description",
-        "-----------",
-        GENERIC_FILE_DESCRIPTION,
-        "",
-        "Variables",
-        "---------",
-        build_variable_section(df),
-        "",
-        "Units",
-        "-----",
-        "Units vary by variable and follow the standardized units stored in the exported CSV.",
-        "",
-    ])
+    return _join_readme_lines(
+        [
+            PROJECT_README_TITLE,
+            "",
+            f"Dataset: {dataset_label}",
+            f"Coverage: {coverage}",
+            "File type: standardized all-years dataset (CSV packaged as ZIP)",
+            "",
+            load_readme_fragment("bulk_download_notes"),
+            "",
+            "Dataset summary",
+            "---------------",
+            _dataset_summary(df),
+            "",
+            "Description",
+            "-----------",
+            GENERIC_FILE_DESCRIPTION,
+            "",
+            "Variables",
+            "---------",
+            build_variable_section(df),
+            "",
+            "Units",
+            "-----",
+            "Units vary by variable and follow the standardized units stored in the exported CSV.",
+            "",
+        ]
+    )
 
 
 def build_file_dataset_readme(
@@ -1286,7 +1280,6 @@ def build_file_dataset_readme(
         return build_hay_readme(dataset_label, df)
 
     return build_generic_file_readme(dataset_label, df)
-
 
 def build_variable_section(
     df: pd.DataFrame,
@@ -1370,7 +1363,6 @@ def build_variable_section(
 
     return "\n".join(lines).rstrip()
 
-
 def _display_glossary_term(entry: dict[str, Any]) -> str:
     term = str(entry.get("term", "")).strip()
     abbreviation = str(entry.get("abbreviation", "")).strip()
@@ -1379,12 +1371,11 @@ def _display_glossary_term(entry: dict[str, Any]) -> str:
         return f"{term} ({abbreviation})"
     return term or abbreviation
 
-
 def _normalize_match_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
-
 @lru_cache(maxsize=1)
+
 def load_glossary_entries() -> list[dict[str, Any]]:
     if not GLOSSARY_JSON_PATH.exists():
         return []
@@ -1410,7 +1401,6 @@ def load_glossary_entries() -> list[dict[str, Any]]:
             entries.append(entry)
 
     return entries
-
 
 def _entry_matches_column(entry: dict[str, Any], column_name: str) -> bool:
     col_norm = _normalize_match_text(column_name)
