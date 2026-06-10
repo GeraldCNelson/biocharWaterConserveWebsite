@@ -133,6 +133,16 @@ class UpdatePaths:
     new_csv: Path
     backup_dir: Path
 
+def infer_strip_group_from_location(location: object) -> str | None:
+    loc = normalize_location(location)
+
+    if loc == "west":
+        return "S1_S2"
+
+    if loc == "east":
+        return "S3_S4"
+
+    return None
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -239,6 +249,12 @@ def normalize_base_events(df: pd.DataFrame, name: str) -> pd.DataFrame:
 
     out["strip_group"] = out["strip_group"].map(normalize_strip_group)
     out["location"] = out["location"].map(normalize_location)
+
+    missing_strip_group = out["strip_group"].isna()
+
+    out.loc[missing_strip_group, "strip_group"] = out.loc[
+        missing_strip_group, "location"
+    ].map(infer_strip_group_from_location)
     out["notes"] = out["notes"].map(normalize_notes)
 
     if "gallons_group" in out.columns:
