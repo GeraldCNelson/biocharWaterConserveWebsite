@@ -1,4 +1,4 @@
-<!-- Auto-generated from `CR650_sensor_summary.tex` -->
+<!-- Auto-generated from `CS650_sensor_summary.tex` -->
 <!-- math via MathJax -->
 
 <!DOCTYPE html>
