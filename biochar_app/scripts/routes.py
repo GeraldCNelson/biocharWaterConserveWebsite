@@ -26,16 +26,23 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from biochar_app.scripts.bulk_downloads import bulk_router
-from biochar_app.scripts.biomass_field_tables import get_biomass_field_table_payload
+from biochar_app.scripts.lab.biomass_field_tables import get_biomass_field_table_payload
 
 from biochar_app.scripts.bulk_download_utils import default_bulk_registry
 from biochar_app.scripts.bulk_download_utils import build_manifest, build_zip_for_selection
-
 from biochar_app.scripts.routes_utils import (
     load_gseason_df,
-    load_logger_year,
     periods_to_list_of_dicts,
 )
+
+from biochar_app.scripts.readme_builders import (
+    build_experiment_lookup_section,
+    build_download_header,
+    load_readme_fragment,
+)
+
+from biochar_app.scripts.data_loading import load_logger_data
+
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
     get_flat_gseason_summary,
@@ -61,21 +68,36 @@ from biochar_app.config.core import (
     DEFAULT_LOGGER_LOCATION,
     DEFAULT_GRANULARITY,
     YEARS,
+    MONTH_ABBR,
     PLOT_BASED_ON_OPTIONS,
     TRACE_OPTION_MAP,
     DEFAULT_GSEASON_PERIODS,
     DEFAULT_SENSOR_DEPTH_CODE,
     SENSOR_DEPTH_CODES,
-    logger_location_mapping,
-    variable_name_mapping,
-    granularity_name_mapping,
-    strip_name_mapping,
+    LOGGER_LOCATIONS,
+    SENSOR_DEPTH_LABELS,
+    STRIP_DESCRIPTIONS,
+    LOGGER_LOCATION_MAPPING,
+    VARIABLE_NAME_MAPPING,
+    GRANULARITY_NAME_MAPPING,
+    STRIP_NAME_MAPPING,
 )
 from biochar_app.config import (
     BIOCHAR_MASTER_WORKBOOK,
     WARD_MASTER_NIR_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_SOILCHEM_CSV,
+)
+
+from biochar_app.scripts.readme_builders import (
+    build_depth_codes_section,
+    build_logger_location_codes_section,
+    build_strip_codes_section,
+    build_logger_column_naming_section,
+    build_management_readme,
+    build_soilchem_readme,
+    build_soilbio_readme,
+    build_hay_readme,
 )
 
 from biochar_app.config.units import (
@@ -85,14 +107,12 @@ from biochar_app.config.units import (
 
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
-    PARQUET_DIR,
-    DOWNLOADS_BASE_DIR,
     LOGGER_DOWNLOADS_DIR,
     WARD_HTML_DIR,
     WARD_PDF_DIR,
     WEATHER_DOWNLOADS_DIR,
 )
-from biochar_app.scripts.markdown_config import build_markdown_mapping
+from biochar_app.markdown.tools.markdown_config import build_markdown_mapping
 
 from types import SimpleNamespace
 
@@ -239,7 +259,7 @@ def _select_trace_columns(
     else:
         raw_expected = {
             f"{source_var}_{depth}_raw_{strip}_{loc}"
-            for loc in logger_location_mapping
+            for loc in LOGGER_LOCATION_MAPPING
         }
 
     def is_ratio_col(col: str) -> bool:
@@ -473,27 +493,54 @@ def _load_ancillary_df_for_year(xlsx_path: Path | str, dataset_key: str, year: i
 
     return df
 
-
-def _build_ancillary_zip_bytes(xlsx_path: Path | str, dataset_key: str, year: int) -> bytes:
+def _build_ancillary_zip_bytes(
+    xlsx_path: Path | str,
+    dataset_key: str,
+    year: int,
+) -> bytes:
     df = _load_ancillary_df_for_year(xlsx_path, dataset_key, year)
 
     csv_name = ANCILLARY_DATASETS[dataset_key]["csv"]
     csv_bytes = df.to_csv(index=False).encode("utf-8")
 
-    readme = (
-        f"Biochar Project — Bulk Download\n"
-        f"Dataset: {dataset_key}\n"
-        f"Year: {year}\n\n"
-        f"Source: {Path(xlsx_path).name}\n"
-    ).encode("utf-8")
+    dataset_label = {
+        "irrigation": "Irrigation records",
+        "soil_chem": "Soil chemistry",
+        "soil_bio": "Soil biology",
+        "biomass": "Biomass / hay data",
+    }.get(dataset_key, dataset_key)
 
+    if dataset_key == "irrigation":
+        readme_text = build_management_readme(
+            dataset="irrigation",
+            dataset_label=dataset_label,
+            df=df,
+            unit_system="us",
+        )
+
+    elif dataset_key == "soil_chem":
+        readme_text = build_soilchem_readme(dataset_label, df)
+    elif dataset_key == "soil_bio":
+        readme_text = build_soilbio_readme(dataset_label, df)
+    elif dataset_key == "biomass":
+        readme_text = build_hay_readme(dataset_label, df)
+    else:
+        raise ValueError(
+            f"No README builder defined for ancillary dataset: {dataset_key}"
+        )
+    readme = readme_text.encode("utf-8")
     out = BytesIO()
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+
+    with zipfile.ZipFile(
+        out,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as zf:
         zf.writestr(csv_name, csv_bytes)
         zf.writestr("README.txt", readme)
+
     out.seek(0)
     return out.getvalue()
-
 
 def _ancillary_available_for_year(xlsx_path: Path | str, dataset_key: str, year: int) -> bool:
     try:
@@ -515,11 +562,11 @@ async def get_markdown_files():
 @api_router.get("/get_defaults_and_options")
 async def get_defaults_and_options():
     years = YEARS
-    strips = [{"value": k, "label": strip_name_mapping[k]} for k in strip_name_mapping]
-    variables = [{"value": k, "label": variable_name_mapping[k]} for k in variable_name_mapping]
+    strips = [{"value": k, "label": STRIP_NAME_MAPPING[k]} for k in STRIP_NAME_MAPPING]
+    variables = [{"value": k, "label": VARIABLE_NAME_MAPPING[k]} for k in VARIABLE_NAME_MAPPING]
     depths = [{"value": str(d), "label": SENSOR_DEPTH_LABELS[d]["us"]} for d in SENSOR_DEPTH_LABELS]
-    logger_locations = [{"value": k, "label": logger_location_mapping[k]} for k in logger_location_mapping]
-    granularities = [{"value": g, "label": granularity_name_mapping[g]} for g in granularity_name_mapping]
+    logger_locations = [{"value": k, "label": LOGGER_LOCATION_MAPPING[k]} for k in LOGGER_LOCATION_MAPPING]
+    granularities = [{"value": g, "label": GRANULARITY_NAME_MAPPING[g]} for g in GRANULARITY_NAME_MAPPING]
 
     r = state.DATE_RANGES.get(int(DEFAULT_YEAR), {}).get(str(DEFAULT_GRANULARITY))
 
@@ -549,9 +596,11 @@ async def get_defaults_and_options():
         "depths": depths,
         "loggerLocations": logger_locations,
         "granularities": granularities,
+        "granularity_name_mapping": GRANULARITY_NAME_MAPPING,
         "traceOptions": PLOT_BASED_ON_OPTIONS,
         "depthMapping": SENSOR_DEPTH_LABELS,
         "gseasonPeriods": DEFAULT_GSEASON_PERIODS,
+        "monthAbbr": MONTH_ABBR,
         "label_name_mapping": label_name_mapping,
         "dateRanges": state.DATE_RANGES,
     }
@@ -583,6 +632,31 @@ class PlotRequest(BaseModel):
     periods: Optional[List[PeriodSpec]] = Field(default=None)
 
 
+class DownloadDataRequest(BaseModel):
+    year: int
+    variable: str
+    strip: str
+    granularity: str
+    depth: str
+    unitSystem: str = "us"
+    downloadType: str = "all"
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    loggerLocation: str = DEFAULT_LOGGER_LOCATION
+    traceOption: str = "depth"
+
+logger.info("DEBUG load_logger_data object = %r", load_logger_data)
+logger.info("DEBUG load_logger_data module = %s", getattr(load_logger_data, "__module__", "unknown"))
+
+class DownloadSummaryDataRequest(BaseModel):
+    year: int
+    variable: str
+    strip: str
+    granularity: str
+    depth: str
+    unitSystem: str = "us"
+    mode: str = "all"
+    summaryStats: Dict[str, Any] | None = None
 # ---------------------------------------------------------------------------
 # Plot routes
 # ---------------------------------------------------------------------------
@@ -625,18 +699,23 @@ async def api_plot_raw(req: PlotRequest):
         return JSONResponse(fig)
 
     t0 = perf_counter()
-    df = load_logger_year(year, gran)
-    logger.info("⏱ load_logger_year(%s) %.3fs", gran, perf_counter() - t0)
+    df = load_logger_data(year, gran)
+    logger.info("⏱ load_logger_data(%s) %.3fs", gran, perf_counter() - t0)
 
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+    start_ts = pd.to_datetime(start)
+    end_ts = pd.to_datetime(end) + pd.Timedelta(days=1)
+    df = df[
+        (df["timestamp"] >= start_ts)
+        & (df["timestamp"] < end_ts)
+        ].copy()
 
     if trace_option == "depth":
         expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS]
     else:
-        expected = [f"{source_var}_{depth}_raw_{strip}_{lkey}" for lkey in logger_location_mapping]
+        expected = [f"{source_var}_{depth}_raw_{strip}_{lkey}" for lkey in LOGGER_LOCATION_MAPPING]
 
     present = [c for c in expected if c in df.columns]
     non_empty = [c for c in present if df[c].notna().any()]
@@ -661,12 +740,10 @@ async def api_plot_raw(req: PlotRequest):
         depth=depth,
         trace_option=trace_option,
         unit_system=unit,
-        start=start,
-        end=end,
+        start=start_ts.isoformat(),
+        end=end_ts.isoformat(),
     )
 
-    start_ts = pd.to_datetime(start)
-    end_ts = pd.to_datetime(end)
 
     layout = fig.setdefault("layout", {})
     xaxis = layout.setdefault("xaxis", {})
@@ -706,11 +783,16 @@ async def api_plot_ratio(req: PlotRequest):
         )
         return JSONResponse(fig)
 
-    df = load_logger_year(year, gran)
+    df = load_logger_data(year, gran)
     if "timestamp" not in df.columns:
         raise HTTPException(400, "No timestamp column in data")
 
-    df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+    start_ts = pd.to_datetime(start)
+    end_ts = pd.to_datetime(end) + pd.Timedelta(days=1)
+    df = df[
+        (df["timestamp"] >= start_ts)
+        & (df["timestamp"] < end_ts)
+    ].copy()
 
     if var == "T":
         fig = make_temperature_delta_figure(
@@ -720,8 +802,8 @@ async def api_plot_ratio(req: PlotRequest):
             unit_system=unit,
             granularity=gran,
             year=year,
-            start=start,
-            end=end,
+            start=start_ts.isoformat(),
+            end=end_ts.isoformat(),
         )
     else:
         fig = make_ratio_figure(
@@ -732,8 +814,8 @@ async def api_plot_ratio(req: PlotRequest):
             unit_system=unit,
             granularity=gran,
             year=year,
-            start=start,
-            end=end,
+            start=start_ts.isoformat(),
+            end=end_ts.isoformat(),
             depth=str(depth),
         )
 
@@ -781,9 +863,9 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         pretty_var = str(label_entry)
 
     title = (
-        f"{granularity_name_mapping.get(granularity, granularity)} Summary for "
+        f"{GRANULARITY_NAME_MAPPING.get(granularity, granularity)} Summary for "
         f"{pretty_var}, "
-        f"{strip_name_mapping.get(strip, strip)}, "
+        f"{STRIP_NAME_MAPPING.get(strip, strip)}, "
         f"{depth_label}, "
         f"{year}"
     )
@@ -793,7 +875,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     df_base = _LOADED_LOGGER_CACHE.get(cache_key)
     if df_base is None:
-        df_base = load_logger_year(year, source_granularity)
+        df_base = load_logger_data(year, source_granularity)
         if df_base is not None and not getattr(df_base, "empty", True):
             if "timestamp" in df_base.columns:
                 df_base = df_base.copy()
@@ -820,8 +902,14 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
     if "timestamp" in df_req.columns and start and end:
         start_dt = pd.to_datetime(start, errors="coerce")
         end_dt = pd.to_datetime(end, errors="coerce")
+
         if pd.notna(start_dt) and pd.notna(end_dt):
-            df_req = df_req[(df_req["timestamp"] >= start_dt) & (df_req["timestamp"] <= end_dt)]
+            end_dt_exclusive = end_dt + pd.Timedelta(days=1)
+
+            df_req = df_req[
+                (df_req["timestamp"] >= start_dt)
+                & (df_req["timestamp"] < end_dt_exclusive)
+                ].copy()
 
     if granularity == "gseason":
         periods_raw = payload.get("periods") or []
@@ -918,6 +1006,117 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
         }
     )
 
+@api_router.post("/download_summary_data")
+async def api_download_summary_data(req: DownloadSummaryDataRequest):
+    mode = str(req.mode or "all").lower()
+
+    if mode not in ("raw", "ratio", "all", "zip"):
+        raise HTTPException(status_code=400, detail=f"Invalid summary download mode: {mode}")
+
+    payload = req.summaryStats or {}
+
+    raw_stats = payload.get("raw_statistics") or {}
+    ratio_stats = payload.get("ratio_statistics") or {}
+    gseason_stats = payload.get("gseason_stats") or []
+
+    def _stats_dict_to_df(stats: Any) -> pd.DataFrame:
+        if isinstance(stats, list):
+            return pd.DataFrame(stats)
+
+        if not isinstance(stats, dict) or not stats:
+            return pd.DataFrame()
+
+        rows = []
+        for row_name, values in stats.items():
+            if isinstance(values, dict):
+                rows.append({"Row": row_name, **values})
+            else:
+                rows.append({"Row": row_name, "value": values})
+
+        return pd.DataFrame(rows)
+
+    if req.granularity.lower() == "gseason":
+        raw_df = pd.DataFrame(gseason_stats)
+        ratio_df = pd.DataFrame()
+    else:
+        raw_df = _stats_dict_to_df(raw_stats)
+        ratio_df = _stats_dict_to_df(ratio_stats)
+
+    depth_info = SENSOR_DEPTH_LABELS.get(str(req.depth))
+    depth_label_us = depth_info["us"] if depth_info else f"Depth {req.depth}"
+    depth_label_metric = depth_info.get("metric", "") if depth_info else ""
+    selected_depth_text = (
+        f"{depth_label_us} / {depth_label_metric}"
+        if depth_label_metric
+        else depth_label_us
+    )
+
+    readme_header = build_download_header(
+        title="Biochar Project — Summary Statistics Download",
+        year=req.year,
+        variable=req.variable,
+        strip=req.strip,
+        granularity=req.granularity,
+        unit_system=req.unitSystem,
+        extra_lines=[
+            f"Depth code: {req.depth}",
+            f"Depth: {selected_depth_text}",
+            f"Download mode: {mode}",
+        ],
+    )
+
+    notes = load_readme_fragment("summary_download_notes")
+    readme = (
+        readme_header
+         + notes
+         + "\n\n"
+         + build_experiment_lookup_section(req.unitSystem)
+         + "\n"
+    )
+    if mode == "raw":
+        csv_bytes = raw_df.to_csv(index=False).encode("utf-8")
+        filename = (
+            f"summary_{req.granularity}_{req.variable}_{req.strip}_"
+            f"depth{req.depth}_{req.year}_raw.csv"
+        )
+
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    if mode == "ratio":
+        csv_bytes = ratio_df.to_csv(index=False).encode("utf-8")
+        filename = (
+            f"summary_{req.granularity}_{req.variable}_{req.strip}_"
+            f"depth{req.depth}_{req.year}_ratio.csv"
+        )
+
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if mode in ("all", "zip"):
+            zf.writestr("raw_summary.csv", raw_df.to_csv(index=False))
+            zf.writestr("ratio_summary.csv", ratio_df.to_csv(index=False))
+            zf.writestr("README.txt", readme)
+
+    out.seek(0)
+
+    filename = (
+        f"summary_{req.granularity}_{req.variable}_{req.strip}_"
+        f"depth{req.depth}_{req.year}.zip"
+    )
+    return Response(
+        content=out.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 # ---------------------------------------------------------------------------
 # Lab table routes (NIR + Soil) — STANDARD
@@ -991,7 +1190,7 @@ async def api_get_nir_table():
 # ---------------------------------------------------------------------------
 @main_router.get("/markdown/{filename}")
 async def serve_markdown(filename: str):
-    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown")
+    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown", "outputs_md")
     fullpath = os.path.abspath(os.path.join(md_dir, filename))
 
     if not os.path.exists(fullpath):
@@ -1002,7 +1201,10 @@ async def serve_markdown(filename: str):
 
 @main_router.get("/custom-gseason")
 async def custom_gseason(request: Request):
-    return templates.TemplateResponse("_custom_gseason.html", {"request": request})
+    return templates.TemplateResponse(
+        request,
+        "_custom_gseason.html",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1050,6 +1252,176 @@ async def api_get_biomass_field_table():
     payload = get_biomass_field_table_payload(BIOMASS_FIELD_CSV, min_year=2023)
     return JSONResponse(payload)
 
+def _download_depth_lookup_text(unit_system: str = "us") -> str:
+    rows = []
+    for code, labels in SENSOR_DEPTH_LABELS.items():
+        us = labels.get("us", "")
+        metric = labels.get("metric", "")
+        rows.append(f"  {code}: {us} / {metric}")
+    return "\n".join(rows)
+
+@api_router.post("/download_plot_data")
+async def api_download_plot_data(req: DownloadDataRequest):
+    year = int(req.year)
+    granularity = str(req.granularity).lower()
+    variable = str(req.variable)
+    strip = str(req.strip)
+    depth = str(req.depth)
+    unit_system: UnitSystem = _normalize_unit_system(req.unitSystem)
+    download_type = str(req.downloadType or "all").lower()
+    logger_location = str(req.loggerLocation or DEFAULT_LOGGER_LOCATION)
+
+    trace_option_raw = str(req.traceOption or "depth").strip().lower()
+    trace_option = TRACE_OPTION_MAP.get(trace_option_raw, trace_option_raw)
+
+    is_grouped_by_depth = (
+        trace_option_raw in {"depth", "depths"}
+        or str(trace_option).strip().lower() in {"depth", "depths"}
+    )
+
+    if download_type not in ("raw", "ratio", "all"):
+        raise HTTPException(status_code=400, detail=f"Invalid downloadType: {download_type}")
+
+    _ensure_year_allowed(year)
+
+    try:
+        df = load_logger_data(year, granularity)
+    except Exception as e:
+        logger.exception("❌ Failed to load logger data for download")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if df is None or df.empty:
+        raise HTTPException(status_code=404, detail="No data found for this selection.")
+
+    df = df.copy()
+
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+        if req.startDate:
+            start_dt = pd.to_datetime(req.startDate, errors="coerce")
+            if pd.notna(start_dt):
+                df = df[df["timestamp"] >= start_dt]
+
+        if req.endDate:
+            end_dt = pd.to_datetime(req.endDate, errors="coerce")
+            if pd.notna(end_dt):
+                df = df[df["timestamp"] <= end_dt]
+
+    df_out = _select_trace_columns(
+        df=df,
+        variable=variable,
+        strip=strip,
+        depth=depth,
+        logger_location=logger_location,
+        trace_option=trace_option,
+        kind=download_type,
+    )
+
+    df_out = _round_ratio_columns(df_out)
+    df_out = _add_unit_suffixes_for_download(df_out, variable)
+
+    logger_location_label = {
+        "T": "Top",
+        "M": "Middle",
+        "B": "Bottom",
+    }.get(logger_location, logger_location)
+
+    depth_info = SENSOR_DEPTH_LABELS.get(depth)
+    depth_label_us = depth_info["us"] if depth_info else f"Depth {depth}"
+    depth_label_metric = depth_info.get("metric", "") if depth_info else ""
+    selected_depth_text = (
+        f"{depth_label_us} / {depth_label_metric}"
+        if depth_label_metric
+        else depth_label_us
+    )
+
+    if is_grouped_by_depth:
+        csv_name = (
+            f"biochar_{download_type}_{variable}_{strip}_"
+            f"logger{logger_location}_{granularity}_{year}.csv"
+        )
+        zip_filename = (
+            f"biochar_{download_type}_{variable}_{strip}_"
+            f"logger{logger_location}_{granularity}_{year}.zip"
+        )
+        location_selection_text = (
+            f"Selected logger location: {logger_location} ({logger_location_label})"
+        )
+        depth_selection_text = ""
+        grouping_text = (
+            "Plot grouping\n"
+            "-------------\n"
+            "Top Plot grouped by: Depth\n"
+        )
+    else:
+        csv_name = (
+            f"biochar_{download_type}_{variable}_{strip}_"
+            f"depth{depth}_{granularity}_{year}.csv"
+        )
+        zip_filename = (
+            f"biochar_{download_type}_{variable}_{strip}_"
+            f"depth{depth}_{granularity}_{year}.zip"
+        )
+        location_selection_text = ""
+        depth_selection_text = (
+            f"Selected depth code: {depth}\n"
+            f"Selected depth: {selected_depth_text}"
+        )
+        grouping_text = (
+            "Plot grouping\n"
+            "-------------\n"
+            "Top Plot grouped by: Logger location\n"
+        )
+
+    if download_type == "all":
+        depth_selection_text = (
+            f"Selected depth code for ratio columns: {depth}\n"
+            f"Selected depth for ratio columns: {selected_depth_text}"
+        )
+
+    readme_header = build_download_header(
+        title="Biochar Project — Interactive Plot Data Download",
+        year=year,
+        variable=variable,
+        strip=strip,
+        granularity=granularity,
+        unit_system=unit_system,
+        extra_lines=[
+            location_selection_text,
+            depth_selection_text,
+            f"Download type: {download_type}",
+        ],
+    )
+
+    notes = load_readme_fragment(f"plot_download_{download_type}_notes")
+    readme = (
+        readme_header
+        + grouping_text
+        + "\n"
+        + notes
+        + "\n\n"
+        + build_experiment_lookup_section(unit_system)
+        + "\n"
+    )
+
+    out = BytesIO()
+
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(csv_name, df_out.to_csv(index=False))
+        zf.writestr("README.txt", readme)
+
+    out.seek(0)
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{zip_filename}"'
+    }
+
+    return Response(
+        content=out.getvalue(),
+        media_type="application/zip",
+        headers=headers,
+    )
 
 # ---------------------------------------------------------------------------
 # Lab table routes (generic) — NEW
@@ -1116,3 +1488,10 @@ async def ward_nirs_report():
 async def ward_soil_sha_report():
     file_path = get_latest_ward_html("ward_soil_sha_report_*.html")
     return file_path.read_text(encoding="utf-8")
+
+@main_router.get("/management/irrigation-entry")
+async def irrigation_entry_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "_custom_gseason.html",
+    )

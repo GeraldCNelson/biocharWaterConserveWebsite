@@ -1,0 +1,7 @@
+year,date,start_timestamp,end_timestamp,strip_group,location,gallons,notes,total_meter_gallons,flow_allocation_fraction,start_totalizer_gal_x100,end_totalizer_gal_x100,start_flow_gpm,end_flow_gpm,avg_flow_gpm,entered_by,event_id,start_photo,end_photo
+2026,4/21/26,2026-04-21T14:54,2026-04-22T08:52,S1_S2,west,221700,,443400,0.5,224578,229012,410,310,360,GCN,2026-04-21_S1_S2_bbe65f90,,
+2026,4/21/26,2026-04-21T14:54,2026-04-22T08:52,S3_S4,east,221700,,443400,0.5,224578,229012,410,310,360,GCN,2026-04-21_S3_S4_18bfec4f,,
+2026,5/8/26,2026-05-08T09:00,2026-05-08T19:14,S3_S4,east,180700,,180700,0.5,,,240,375,307.5,GCN,,,
+2026,5/20/26,2026-05-20T11:23,2026-05-20T17:53,S1_S2,west,108800,,108800,0.5,,,250,275,262.5,GCN,,,
+2026,5/21/26,2026-05-21T13:26,2026-05-21T19:54,S3_S4,east,119700,,119700,0.5,,,325,300,312.5,GCN,,,
+2026,6/5/26,2026-06-05T14:19,2026-06-05T20:47,S3_S4,east,107800,,107800,0.5,,,260,250,255,GCN,,,

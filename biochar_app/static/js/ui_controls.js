@@ -2,6 +2,23 @@
 // ui_controls.js
 
 /**
+ * @typedef {Window & {
+ *   dateRanges?: Record<string, any>,
+ *   dropdownOptions?: Record<string, any>,
+ *   depthMapping?: Record<string, any>,
+ *   loggerLocationMapping?: Record<string, any>,
+ *   variableNameMapping?: Record<string, any>,
+ *   labelNameMapping?: Record<string, any>,
+ *   gseasonPeriods?: Record<string, any>,
+ *   unitSystem?: string,
+ *   mainDatepickers?: { start: HTMLInputElement, end: HTMLInputElement }
+ * }} UiWindow
+ */
+
+/** @type {UiWindow} */
+const uiWindow = /** @type {UiWindow} */ (window);
+
+/**
  * Define which dropdowns live on each tab and
  * where to pull their options from the server payload.
  */
@@ -88,7 +105,7 @@ export function wireMainDateRangeListeners() {
   const applyDefaults = () => {
     const year = yearEl.value;
     const granularity = granEl.value;
-    applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
+    applyDateRangeFromDefaults(year, granularity, uiWindow.dateRanges || {});
   };
 
   applyDefaults();
@@ -126,32 +143,32 @@ export async function fetchDefaultsAndOptions() {
       throw new Error("🚨 Defaults not found in response!");
     }
 
-    window.dropdownOptions = options;
-    window.depthMapping = options.depthMapping;
-    window.loggerLocationMapping = options.loggerLocations?.reduce(
+    uiWindow.dropdownOptions = options;
+    uiWindow.depthMapping = options.depthMapping;
+    uiWindow.loggerLocationMapping = options.loggerLocations?.reduce(
       /** @param {Record<string, string>} m @param {{value:string,label:string}} o */
       (m, o) => ({ ...m, [o.value]: o.label }),
       {}
     ) || {};
 
-    window.dateRanges =
+    uiWindow.dateRanges =
       options.defaults.dateRanges ||
       options.dateRanges ||
       {};
 
-    window.variableNameMapping =
+    uiWindow.variableNameMapping =
       options.variableNameMapping || options.variable_name_mapping || {};
 
-    window.labelNameMapping =
+    uiWindow.labelNameMapping =
       options.labelNameMapping || options.label_name_mapping || {};
 
-    window.gseasonPeriods =
+    uiWindow.gseasonPeriods =
       options.gseasonPeriods || options.gseason_periods || {};
 
-    console.log("🧭 depthMapping from backend:", window.depthMapping);
-    console.log("🗓️ dateRanges from backend:", window.dateRanges);
-    console.log("🌱 gseasonPeriods from backend:", window.gseasonPeriods);
-    console.log("🏷️ labelNameMapping from backend:", window.labelNameMapping);
+    console.log("🧭 depthMapping from backend:", uiWindow.depthMapping);
+    console.log("🗓️ dateRanges from backend:", uiWindow.dateRanges);
+    console.log("🌱 gseasonPeriods from backend:", uiWindow.gseasonPeriods);
+    console.log("🏷️ labelNameMapping from backend:", uiWindow.labelNameMapping);
 
     return options;
   } catch (err) {
@@ -391,7 +408,7 @@ export function getSelectedFilters(tab) {
   }
 
   if (tab === "main") {
-    filters.unitSystem = window.unitSystem || "us";
+    filters.unitSystem = uiWindow.unitSystem || "us";
   }
 
   return filters;
@@ -405,10 +422,10 @@ export function getSelectedFilters(tab) {
  */
 export function updateDepthLabels(unitSystem) {
   console.log("🔁 [updateDepthLabels] unitSystem =", unitSystem);
-  console.log("🔁 [updateDepthLabels] depthMapping =", window.depthMapping);
+  console.log("🔁 [updateDepthLabels] depthMapping =", uiWindow.depthMapping);
 
-  if (!window.depthMapping) {
-    console.warn("[updateDepthLabels] ❗ window.depthMapping is missing");
+  if (!uiWindow.depthMapping) {
+    console.warn("[updateDepthLabels] ❗ uiWindow.depthMapping is missing");
     return;
   }
 
@@ -428,11 +445,11 @@ export function updateDepthLabels(unitSystem) {
     Array.from(select.options).forEach((opt, idx) => {
       const rawValue = opt.value;
       const key =
-        rawValue && window.depthMapping[rawValue]
+        rawValue && uiWindow.depthMapping?.[rawValue]
           ? rawValue
           : String(idx + 1);
 
-      const mapping = window.depthMapping[key];
+      const mapping = uiWindow.depthMapping?.[key];
 
       if (mapping && mapping[unitSystem]) {
         const oldText = opt.text;
@@ -452,7 +469,7 @@ export function updateDepthLabels(unitSystem) {
  * Uses DATE_RANGES if available; falls back to defaults.
  */
 export function initializeMainDatepickers() {
-  if (!window.dropdownOptions?.defaults) return;
+  if (!uiWindow.dropdownOptions?.defaults) return;
 
   const startEl = /** @type {HTMLInputElement | null} */ (
     document.getElementById("main-startDate")
@@ -493,11 +510,11 @@ export function initializeMainDatepickers() {
     return "";
   }
 
-  const defaults = window.dropdownOptions.defaults;
+  const defaults = uiWindow.dropdownOptions.defaults;
   const year = String(defaults.year);
   const granularity = defaults.granularity;
 
-  applyDateRangeFromDefaults(year, granularity, window.dateRanges || {});
+  applyDateRangeFromDefaults(year, granularity, uiWindow.dateRanges || {});
 
   startEl.value = toIsoDate(startEl.value) || `${year}-01-01`;
   endEl.value = toIsoDate(endEl.value) || `${year}-12-31`;
@@ -508,7 +525,7 @@ export function initializeMainDatepickers() {
   if (startFallback) startEl.value = startFallback;
   if (endFallback) endEl.value = endFallback;
 
-  window.mainDatepickers = { start: startEl, end: endEl };
+  uiWindow.mainDatepickers = { start: startEl, end: endEl };
 }
 
 /**

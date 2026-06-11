@@ -2074,7 +2074,7 @@ PREDATOR_PREY_REFERENCE = VariableReferenceBundle(
     ),
 )
 
-GRAM_POS_GRAM_REFERENCE = VariableReferenceBundle(
+GRAM_POS_GRAM_NEG_RATIO_REFERENCE = VariableReferenceBundle(
     short_note=(
         "The Gram(+):Gram(-) ratio summarizes the relative dominance of Gram-positive and Gram-negative bacteria."
     ),
@@ -2341,7 +2341,7 @@ LAB_REFERENCES = {
     "diversity_index": DIVERSITY_INDEX_REFERENCE,
     "fungi_bacteria": FUNGI_BACTERIA_REFERENCE,
     "predator_prey": PREDATOR_PREY_REFERENCE,
-    "gram_pos_gram": GRAM_POS_GRAM_REFERENCE,
+    "gram_pos_gram_neg_ratio": GRAM_POS_GRAM_NEG_RATIO_REFERENCE,
     "mycorrhizae_biomass": MYCORRHIZAE_BIOMASS_REFERENCE,
 
     # -----------------------------------------------------------------
@@ -2357,8 +2357,8 @@ LAB_REFERENCES = {
     # -----------------------------------------------------------------
     "pre_16_1w7c_cy17_0": PLFA_STRESS_REFERENCE,
     "pre_18_1w7c_cy19_0": PLFA_STRESS_REFERENCE,
-    "sat_unsat": PLFA_STRESS_REFERENCE,
-    "mono_poly": PLFA_STRESS_REFERENCE,
+    "saturated_unsaturated_ratio": PLFA_STRESS_REFERENCE,
+    "monounsaturated_polyunsaturated_ratio": PLFA_STRESS_REFERENCE,
 
     # -----------------------------------------------------------------
     # NIR / forage primary keys

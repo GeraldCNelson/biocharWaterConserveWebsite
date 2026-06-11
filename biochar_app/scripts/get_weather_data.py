@@ -104,7 +104,7 @@ def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
         dict[base_name, final_name]
         e.g. "temp_air" -> "temp_air_degF", "precip" -> "precip_in"
     """
-    from biochar_app.scripts.config import US_UNITS, METRIC_UNITS
+    from biochar_app.config.units import US_UNITS, METRIC_UNITS
 
     unit_map = US_UNITS if units == "us" else METRIC_UNITS
 

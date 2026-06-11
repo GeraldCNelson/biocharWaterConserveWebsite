@@ -1,0 +1,50 @@
+logger,install_date,end_date,end_reason,reason_description,chemistry,nominal_voltage_v,capacity_ah,brand,model,install_location,notes
+
+# ================= ACTIVE / HISTORICAL BATTERY RECORDS =================
+# One row per battery installation event.
+# Leave end_date and end_reason blank for currently active batteries.
+# Dates must be YYYY-MM-DD format.
+
+# Example rows (delete or edit as needed):
+
+S3M,2024-12-17,2025-06-03,replaced,"Winter battery swap",lead_acid,12,18,Interstate,SLI-12,field_box,""
+S3M,2025-06-03,,active,"Current battery",lead_acid,12,18,Interstate,SLI-12,field_box,""
+
+
+# ================= CONTROLLED VOCABULARY =================
+# Valid values for end_reason:
+
+# active
+#   Battery currently installed (no end_date required)
+
+# replaced
+#   Routine replacement (working but swapped)
+
+# failed
+#   Battery unable to maintain charge overnight
+
+# decommissioned
+#   Logger permanently retired
+
+# temporary_remove
+#   Removed temporarily (maintenance, winter storage, etc.)
+
+# unknown
+#   Ended but reason not documented
+
+
+# ================= CHEMISTRY VOCABULARY =================
+# lead_acid
+# agm
+# lithium
+# lifepo4
+# other
+
+
+# ================= FIELD ENTRY NOTES =================
+# 1. Always record install_date.
+# 2. If replacing a battery:
+#      - Set end_date on the old battery row
+#      - Add a NEW row for the new battery
+# 3. Dates must be ISO format: YYYY-MM-DD
+# 4. Keep logger names in format: S1T, S2M, S3B, etc.

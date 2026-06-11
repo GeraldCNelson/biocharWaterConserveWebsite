@@ -40,8 +40,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from biochar_app.scripts.tables.tables_common import build_variable_meta
+
 import pandas as pd
+
+from biochar_app.scripts.tables.tables_common import build_variable_meta
 
 
 # -----------------------------------------------------------------------------
@@ -218,11 +220,14 @@ class VariableSpec:
     key: str
     label: str
     candidates: Tuple[str, ...]
-    note: str = ""
+    note: str | None = None
     reference_key: Optional[str] = None
 
 
-def _pick_first_existing_column(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
+def _pick_first_existing_column(
+    df: pd.DataFrame,
+    candidates: Sequence[str],
+) -> Optional[str]:
     """
     Prefer exact candidate matches, but allow a case-insensitive fallback.
     """
@@ -271,8 +276,9 @@ def _aggregate_value(series: pd.Series) -> Any:
         return f if f is not None else _norm(only_orig)
 
     floats = [_to_float(v) for v in vals]
-    if all(f is not None for f in floats):
-        return float(sum(floats) / len(floats))
+    float_vals: List[float] = [f for f in floats if f is not None]
+    if len(float_vals) == len(floats) and float_vals:
+        return float(sum(float_vals) / len(float_vals))
 
     return None
 
@@ -280,7 +286,7 @@ def _aggregate_value(series: pd.Series) -> Any:
 def _compute_ratio(numer: Any, denom: Any) -> Optional[float]:
     n = _to_float(numer)
     d = _to_float(denom)
-    if n is None or d in (None, 0.0):
+    if n is None or d is None or d == 0.0:
         return None
     return n / d
 

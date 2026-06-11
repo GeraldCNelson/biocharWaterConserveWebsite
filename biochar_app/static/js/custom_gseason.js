@@ -7,11 +7,17 @@
  * @param {{
  *   defaultYear: number,
  *   years: number[],
- *   defaultPeriods: Array<{code:string,label:string,start:string,end:string}>
+ *   defaultPeriods: Array<{code:string,label:string,start:string,end:string}>,
+ *   monthAbbr?: Record<string, string>
  * }} cfg
  */
 export function initCustomGseason(cfg) {
-  const { defaultYear, years, defaultPeriods } = cfg;
+  const {
+    defaultYear,
+    years,
+    defaultPeriods,
+    monthAbbr = {},
+  } = cfg;
 
   /** @type {Array<{
    *   code: string,
@@ -39,14 +45,49 @@ export function initCustomGseason(cfg) {
     return () => periodsData;
   }
 
+  const yearSelectEl = yearSelect;
+  const addPeriodBtnEl = addPeriodBtn;
+  const containerEl = container;
+
+  function formatDateLabel(dateString) {
+    if (!dateString) return "";
+
+    const parts = dateString.split("-");
+    if (parts.length !== 3) return dateString;
+
+    const month = monthAbbr?.[parts[1]] || parts[1];
+    const day = parseInt(parts[2], 10);
+
+    return `${month} ${day}`;
+  }
+
+  function updateSeasonalPeriodSummary() {
+    const summaryEl = document.getElementById("seasonal-period-summary");
+    if (!summaryEl) return;
+
+    if (!periodsData.length) {
+      summaryEl.textContent = "";
+      return;
+    }
+
+    const labels = periodsData
+      .filter((p) => p.label && p.start && p.end)
+      .map((p) => `${p.label}: ${formatDateLabel(p.start)}–${formatDateLabel(p.end)}`);
+
+    summaryEl.innerHTML = `
+      <strong>Current seasonal periods:</strong>
+      ${labels.join("; ")}
+    `;
+  }
+
   // 1) populate anchor-year dropdown
-  yearSelect.innerHTML = "";
+  yearSelectEl.innerHTML = "";
   years.forEach((y) => {
     const opt = document.createElement("option");
     opt.value = String(y);
     opt.textContent = String(y);
     if (y === defaultYear) opt.selected = true;
-    yearSelect.appendChild(opt);
+    yearSelectEl.appendChild(opt);
   });
 
   // 2) initialize periodsData from defaults
@@ -72,11 +113,10 @@ export function initCustomGseason(cfg) {
 
   // 3) render all period rows
   function renderPeriods() {
-    container.innerHTML = "";
-    const anchor = parseInt(yearSelect.value, 10);
+    containerEl.innerHTML = "";
+    const anchor = parseInt(yearSelectEl.value, 10);
 
     periodsData.forEach((p, idx) => {
-      // if default, recompute on year change
       if (p.isDefault && p.startMD && p.endMD) {
         const [sm] = p.startMD.split("-");
         const [em] = p.endMD.split("-");
@@ -127,7 +167,7 @@ export function initCustomGseason(cfg) {
           </div>
         </div>
       `;
-      container.appendChild(row);
+      containerEl.appendChild(row);
 
       const removeBtn = /** @type {HTMLButtonElement | null} */ (
         row.querySelector(".remove-period")
@@ -153,28 +193,35 @@ export function initCustomGseason(cfg) {
         labelInput.oninput = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
           periodsData[idx].label = target?.value || "";
+          updateSeasonalPeriodSummary();
         };
       }
 
       if (startInput) {
-        startInput.onchange = (e) => {
+        startInput.oninput = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
           periodsData[idx].start = target?.value || "";
+          periodsData[idx].isDefault = false;
+          updateSeasonalPeriodSummary();
         };
       }
 
       if (endInput) {
-        endInput.onchange = (e) => {
+        endInput.oninput = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
           periodsData[idx].end = target?.value || "";
+          periodsData[idx].isDefault = false;
+          updateSeasonalPeriodSummary();
         };
       }
-    });
+          });
+
+    updateSeasonalPeriodSummary();
   }
 
   // 4) “+ Add Period” button
-  addPeriodBtn.onclick = () => {
-    const anchor = parseInt(yearSelect.value, 10);
+  addPeriodBtnEl.onclick = () => {
+    const anchor = parseInt(yearSelectEl.value, 10);
     const newIdx = periodsData.length + 1;
 
     periodsData.push({
@@ -189,7 +236,7 @@ export function initCustomGseason(cfg) {
   };
 
   // 5) re-render on anchor-year change
-  yearSelect.onchange = renderPeriods;
+  yearSelectEl.onchange = renderPeriods;
 
   // 6) initial bootstrap
   initPeriodsData();

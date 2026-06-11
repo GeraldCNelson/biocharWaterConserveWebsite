@@ -38,9 +38,9 @@ from biochar_app.config.core import (
     TITLE_FONT_SIZE,
     TRACE_CHOICES,
     bar_width_map,
-    logger_location_mapping,
+    LOGGER_LOCATION_MAPPING,
     SENSOR_DEPTH_LABELS,
-    variable_name_abbrev,
+    VARIABLE_NAME_ABBREV,
 )
 from biochar_app.config.units import (
     UNIT_CONVERSIONS,
@@ -141,7 +141,7 @@ def _depth_display_label(depth_key: str | int, usys: UnitSystem, *, compact: boo
 
 
 def _logger_display_label(logger_location: str) -> str:
-    return str(logger_location_mapping.get(logger_location, logger_location))
+    return str(LOGGER_LOCATION_MAPPING.get(logger_location, logger_location))
 
 
 def _normalize_trace_grouping(trace_option: str) -> str:
@@ -293,7 +293,7 @@ def add_irrigation_shapes(
                 if ts is None or ts < start_ts or ts > end_ts:
                     continue
                 try:
-                    total += float(ev.get("volume_gal", 0) or 0.0)
+                    total += float(ev.get("gallons_strip", 0) or 0.0)
                 except (TypeError, ValueError):
                     pass
 
@@ -345,7 +345,7 @@ def add_irrigation_shapes(
             )
 
             try:
-                vol = float(ev.get("volume_gal", 0) or 0.0)
+                vol = float(ev.get("gallons_strip", 0) or 0.0)
             except (TypeError, ValueError):
                 continue
 
@@ -391,10 +391,22 @@ def configure_primary_yaxis(
     if gmin is None or gmax is None:
         return
 
-    if kind == "ratio" and variable in ("VWC", "SWC"):
+    if kind == "raw" and variable == "VWC":
+        gmin = 0.0
+        gmax = 50.0
+
+    elif kind == "ratio" and variable in ("VWC", "SWC"):
         gmin = min(0.0, gmin)
 
-    fig.update_layout(yaxis=common_yaxis_config(kind, variable, usys, gmin, gmax))
+    fig.update_layout(
+        yaxis=common_yaxis_config(
+            kind,
+            variable,
+            usys,
+            gmin,
+            gmax,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +490,7 @@ def make_raw_figure(
             )
     else:
         depth_str = str(depth)
-        for loc_key in logger_location_mapping:
+        for loc_key in LOGGER_LOCATION_MAPPING:
             base_col = f"{source_variable}_{depth_str}_raw_{strip}_{loc_key}"
             if base_col not in df_plot.columns:
                 continue
@@ -527,7 +539,6 @@ def make_raw_figure(
                     y=safe_tolist(to_float_series(df_plot[temp_col])),
                     mode="lines",
                     name="Air Temp",
-                    yaxis="y2",
                     line=dict(
                         dash="dot",
                         color=PLOT_COLORS.get("air_temp", None),
@@ -535,12 +546,12 @@ def make_raw_figure(
                     ),
                 )
             )
-            use_secondary_y = True
 
     if use_secondary_y:
         fig.update_layout(yaxis2=common_yaxis2_config(usys))
 
-    add_irrigation_shapes(fig, strip, year, usys)
+    if display_variable in ("VWC", "SWC"):
+        add_irrigation_shapes(fig, strip, year, usys)
 
     title_text = build_raw_plot_title(
         granularity=granularity,
@@ -602,24 +613,38 @@ def make_ratio_figure(
     depth: str,
 ) -> Dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
-
     is_gs = granularity.lower() == "gseason"
 
     fig = go.Figure()
 
     ratio_prefix = "VWC" if variable == "SWC" else variable
     depth_str = str(depth)
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
 
     y_cols = [
         c
         for c in df.columns
-        if c.startswith(f"{ratio_prefix}_{depth_str}_ratio_") and c.endswith(f"_{logger_location}")
+        if c.startswith(f"{ratio_prefix}_{depth_str}_ratio_")
+        and c.endswith(f"_{logger_location}")
     ]
+
     if not y_cols:
         bad_request("No ratio data available for the selected filters.")
 
     df_plot = convert_units(_ensure_timestamp_datetime(df), usys).copy()
+
+    if not is_gs and "timestamp" in df_plot.columns:
+        df_plot["timestamp"] = pd.to_datetime(df_plot["timestamp"], errors="coerce")
+        df_plot = df_plot.loc[df_plot["timestamp"].notna()].copy()
+
+        start_ts = pd.to_datetime(start, errors="coerce")
+        end_ts = pd.to_datetime(end, errors="coerce")
+
+        if pd.notna(start_ts) and pd.notna(end_ts):
+            df_plot = df_plot.loc[
+                (df_plot["timestamp"] >= start_ts)
+                & (df_plot["timestamp"] <= end_ts)
+            ].copy()
 
     for idx, col in enumerate(y_cols, start=1):
         x = safe_tolist(df_plot.get("period_code")) if is_gs else _x_time_strings(df_plot)
@@ -645,7 +670,16 @@ def make_ratio_figure(
             line_kwargs: Dict[str, Any] = {"width": 2}
             if pair_color:
                 line_kwargs["color"] = pair_color
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=pair_label, line=line_kwargs))
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=y,
+                    mode="lines",
+                    name=pair_label,
+                    line=line_kwargs,
+                )
+            )
 
     title = build_ratio_plot_title(
         granularity=granularity,
@@ -672,7 +706,10 @@ def make_ratio_figure(
         yref="y",
         y0=1,
         y1=1,
-        line=dict(color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"), width=1),
+        line=dict(
+            color=PLOT_COLORS.get("zero_line", "rgba(0,0,0,0.5)"),
+            width=1,
+        ),
     )
 
     fig.update_layout(
@@ -683,12 +720,22 @@ def make_ratio_figure(
         xaxis=xcfg,
         legend=common_legend_config(f"{abbr} ratio"),
         template="plotly_white",
-        margin=_plot_margin("standard"),
+        margin=_plot_margin(
+            "standard" if is_gs else ("dual_axis_metric" if usys == "metric" else "dual_axis_us")
+        ),
         height=400,
         autosize=True,
     )
 
-    configure_primary_yaxis(fig, df_plot, y_cols, variable, usys, kind="ratio")
+    configure_primary_yaxis(
+        fig=fig,
+        df=df_plot,
+        y_cols=y_cols,
+        variable=variable,
+        unit_system=usys,
+        kind="ratio",
+    )
+
     return prepare_plot_for_json(fig)
 
 
@@ -872,7 +919,7 @@ def make_raw_gseason_figure(
         )
 
     human_var = label_name_mapping[variable][usys]
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
     legend_fmt = f"{abbr}, {{}}"
     sensor_cols_plotted: List[str] = []
     depth_str = str(depth)
@@ -902,7 +949,7 @@ def make_raw_gseason_figure(
                     bar_kwargs["marker"] = dict(color=depth_col)
                 fig.add_trace(go.Bar(**bar_kwargs))
         else:
-            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+            for idx, (loc_key, loc_label) in enumerate(LOGGER_LOCATION_MAPPING.items(), start=1):
                 col = f"{base}_{strip}_{loc_key}_{depth_str}"
                 if col not in df2.columns:
                     continue
@@ -941,7 +988,7 @@ def make_raw_gseason_figure(
                     bar_kwargs2["marker"] = dict(color=depth_col)
                 fig.add_trace(go.Bar(**bar_kwargs2))
         else:
-            for idx, (loc_key, loc_label) in enumerate(logger_location_mapping.items(), start=1):
+            for idx, (loc_key, loc_label) in enumerate(LOGGER_LOCATION_MAPPING.items(), start=1):
                 col = f"{variable}_{depth_str}_raw_{strip}_{loc_key}"
                 if col not in df2.columns:
                     continue
@@ -1049,7 +1096,7 @@ def make_ratio_gseason_figure(
 
     fig = go.Figure()
 
-    abbr = variable_name_abbrev.get(variable, variable)
+    abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
     full_label = label_name_mapping[variable][usys]
     human_base = str(full_label).split(" (")[0]
     depth_str = str(depth)

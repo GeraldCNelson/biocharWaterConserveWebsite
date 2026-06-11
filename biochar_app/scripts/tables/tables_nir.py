@@ -10,6 +10,10 @@ import pandas as pd
 from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.config.paths import WARD_MASTER_NIR_CSV
 from biochar_app.scripts.tables.tables_common import build_variable_meta
+from biochar_app.scripts.tables.table_metadata_helpers import (
+    metadata_label,
+    metadata_note,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +29,10 @@ NIR_MAX_YEAR = 2025  # inclusive
 NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="crude_protein_pct_db",
-        label="Crude Protein (Dry Basis, %)",
+        label=metadata_label(
+            "crude_protein_pct_db",
+            "Crude Protein (Dry Basis, %)",
+        ),
         candidates=(
             "crude_protein_pct_db",
             "cp_pct_db",
@@ -34,12 +41,18 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "Crude Protein Dry Basis %",
             "Crude Protein (Dry Basis, %)",
         ),
-        note="Crude protein estimates the total protein-related nitrogen content of the forage.",
+        note=metadata_note(
+            "crude_protein_pct_db",
+            "Crude protein estimates the total protein-related nitrogen content of the forage.",
+        ),
         reference_key="crude_protein_pct_db",
     ),
     LabVarSpec(
         key="adf_pct_db",
-        label="Acid Detergent Fiber (Dry Basis, %)",
+        label=metadata_label(
+            "adf_pct_db",
+            "Acid Detergent Fiber (Dry Basis, %)",
+        ),
         candidates=(
             "adf_pct_db",
             "Acid Detergent Fiber Dry Basis",
@@ -47,15 +60,19 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "ADF Dry Basis",
             "ADF (Dry Basis, %)",
         ),
-        note=(
+        note=metadata_note(
+            "adf_pct_db",
             "Acid Detergent Fiber is the least digestible portion of a feed and is inversely "
-            "related to digestibility and energy value."
+            "related to digestibility and energy value.",
         ),
         reference_key="adf_pct_db",
     ),
     LabVarSpec(
         key="ndf_pct_db",
-        label="Neutral Detergent Fiber (Dry Basis, %)",
+        label=metadata_label(
+            "ndf_pct_db",
+            "Neutral Detergent Fiber (Dry Basis, %)",
+        ),
         candidates=(
             "ndf_pct_db",
             "Neutral Detergent Fiber Dry Basis",
@@ -63,15 +80,19 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "NDF Dry Basis",
             "NDF (Dry Basis, %)",
         ),
-        note=(
+        note=metadata_note(
+            "ndf_pct_db",
             "Neutral Detergent Fiber estimates the total cell wall fraction and is commonly used "
-            "as an indicator of intake potential."
+            "as an indicator of intake potential.",
         ),
         reference_key="ndf_pct_db",
     ),
     LabVarSpec(
         key="tdn_pct_db",
-        label="Total Digestible Nutrients (Dry Basis, %)",
+        label=metadata_label(
+            "tdn_pct_db",
+            "Total Digestible Nutrients (Dry Basis, %)",
+        ),
         candidates=(
             "tdn_pct_db",
             "TDN Est. Dry Basis",
@@ -79,14 +100,23 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
             "Total Digestible Nutrients Dry Basis",
             "Total Digestible Nutrients (Dry Basis, %)",
         ),
-        note="Total Digestible Nutrients is a traditional energy-related measure used to estimate feed value.",
+        note=metadata_note(
+            "tdn_pct_db",
+            "Total Digestible Nutrients is a traditional energy-related measure used to estimate feed value.",
+        ),
         reference_key="tdn_pct_db",
     ),
     LabVarSpec(
         key="rfv",
-        label="Relative Feed Value (RFV, unitless index)",
+        label=metadata_label(
+            "rfv",
+            "Relative Feed Value (RFV, unitless index)",
+        ),
         candidates=("rfv", "RFV", "Relative Feed Value"),
-        note="Relative Feed Value is an index used to compare forage quality.",
+        note=metadata_note(
+            "rfv",
+            "Relative Feed Value is an index used to compare forage quality.",
+        ),
         reference_key="rfv",
     ),
 ]
@@ -94,7 +124,7 @@ NIR_VARIABLES_SET1: Sequence[LabVarSpec] = [
 NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="nfc_pct_db",
-        label="Non-Fiber Carbohydrates (Dry Basis, %)",
+        label=metadata_label("nfc_pct_db", "Non-Fiber Carbohydrates (Dry Basis, %)"),
         candidates=(
             "nfc_pct_db",
             "NFC Dry Basis",
@@ -102,22 +132,24 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Non-Fiber Carbohydrates Dry Basis",
             "Non-Fiber Carbohydrates (Dry Basis, %)",
         ),
+        note=metadata_note("nfc_pct_db"),
         reference_key="nfc_pct_db",
     ),
     LabVarSpec(
         key="starch_pct_db",
-        label="Starch (Dry Basis, %)",
+        label=metadata_label("starch_pct_db", "Starch (Dry Basis, %)"),
         candidates=(
             "starch_pct_db",
             "Starch Dry Basis",
             "Starch Dry Basis (%)",
             "Starch (Dry Basis, %)",
         ),
+        note=metadata_note("starch_pct_db"),
         reference_key="starch_pct_db",
     ),
     LabVarSpec(
         key="wsc_pct_db",
-        label="Water-Soluble Carbohydrates (Dry Basis, %)",
+        label=metadata_label("wsc_pct_db", "Water-Soluble Carbohydrates (Dry Basis, %)"),
         candidates=(
             "wsc_pct_db",
             "WSC Dry Basis",
@@ -125,22 +157,24 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Water-Soluble Carbohydrates Dry Basis",
             "Water-Soluble Carbohydrates (Dry Basis, %)",
         ),
+        note=metadata_note("wsc_pct_db"),
         reference_key="wsc_pct_db",
     ),
     LabVarSpec(
         key="fructan_pct_db",
-        label="Fructans (Dry Basis, %)",
+        label=metadata_label("fructan_pct_db", "Fructans (Dry Basis, %)"),
         candidates=(
             "fructan_pct_db",
             "Fructan Dry Basis",
             "Fructan Dry Basis (%)",
             "Fructans (Dry Basis, %)",
         ),
+        note=metadata_note("fructan_pct_db"),
         reference_key="fructan_pct_db",
     ),
     LabVarSpec(
         key="nel_pct_db",
-        label="Net Energy for Lactation (Dry Basis, %)",
+        label=metadata_label("nel_pct_db", "Net Energy for Lactation (Dry Basis, %)"),
         candidates=(
             "nel_pct_db",
             "NEL Dry Basis",
@@ -148,11 +182,12 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Lactation Dry Basis",
             "Net Energy for Lactation (Dry Basis, %)",
         ),
+        note=metadata_note("nel_pct_db"),
         reference_key="nel_pct_db",
     ),
     LabVarSpec(
         key="nem_pct_db",
-        label="Net Energy for Maintenance (Dry Basis, %)",
+        label=metadata_label("nem_pct_db", "Net Energy for Maintenance (Dry Basis, %)"),
         candidates=(
             "nem_pct_db",
             "NEM Dry Basis",
@@ -160,11 +195,12 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Maintenance Dry Basis",
             "Net Energy for Maintenance (Dry Basis, %)",
         ),
+        note=metadata_note("nem_pct_db"),
         reference_key="nem_pct_db",
     ),
     LabVarSpec(
         key="neg_pct_db",
-        label="Net Energy for Gain (Dry Basis, %)",
+        label=metadata_label("neg_pct_db", "Net Energy for Gain (Dry Basis, %)"),
         candidates=(
             "neg_pct_db",
             "NEG Dry Basis",
@@ -172,6 +208,7 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
             "Net Energy for Gain Dry Basis",
             "Net Energy for Gain (Dry Basis, %)",
         ),
+        note=metadata_note("neg_pct_db"),
         reference_key="neg_pct_db",
     ),
 ]
@@ -179,18 +216,19 @@ NIR_VARIABLES_SET2: Sequence[LabVarSpec] = [
 NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="ash_pct_db",
-        label="Ash (Dry Basis, %)",
+        label=metadata_label("ash_pct_db", "Ash (Dry Basis, %)"),
         candidates=(
             "ash_pct_db",
             "Ash Dry Basis",
             "Ash Dry Basis (%)",
             "Ash (Dry Basis, %)",
         ),
+        note=metadata_note("ash_pct_db"),
         reference_key="ash_pct_db",
     ),
     LabVarSpec(
         key="ca_pct_db",
-        label="Calcium (Dry Basis, %)",
+        label=metadata_label("ca_pct_db", "Calcium (Dry Basis, %)"),
         candidates=(
             "ca_pct_db",
             "Ca_pct_db",
@@ -198,11 +236,12 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Calcium Dry Basis (%)",
             "Calcium (Dry Basis, %)",
         ),
+        note=metadata_note("ca_pct_db"),
         reference_key="ca_pct_db",
     ),
     LabVarSpec(
         key="p_pct_db",
-        label="Phosphorus (Dry Basis, %)",
+        label=metadata_label("p_pct_db", "Phosphorus (Dry Basis, %)"),
         candidates=(
             "p_pct_db",
             "P_pct_db",
@@ -210,11 +249,12 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Phosphorus Dry Basis (%)",
             "Phosphorus (Dry Basis, %)",
         ),
+        note=metadata_note("p_pct_db"),
         reference_key="p_pct_db",
     ),
     LabVarSpec(
         key="k_pct_db",
-        label="Potassium (Dry Basis, %)",
+        label=metadata_label("k_pct_db", "Potassium (Dry Basis, %)"),
         candidates=(
             "k_pct_db",
             "K_pct_db",
@@ -222,11 +262,12 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Potassium Dry Basis (%)",
             "Potassium (Dry Basis, %)",
         ),
+        note=metadata_note("k_pct_db"),
         reference_key="k_pct_db",
     ),
     LabVarSpec(
         key="mg_pct_db",
-        label="Magnesium (Dry Basis, %)",
+        label=metadata_label("mg_pct_db", "Magnesium (Dry Basis, %)"),
         candidates=(
             "mg_pct_db",
             "Mg_pct_db",
@@ -234,6 +275,7 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
             "Magnesium Dry Basis (%)",
             "Magnesium (Dry Basis, %)",
         ),
+        note=metadata_note("mg_pct_db"),
         reference_key="mg_pct_db",
     ),
 ]
@@ -241,18 +283,25 @@ NIR_VARIABLES_SET3: Sequence[LabVarSpec] = [
 NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
     LabVarSpec(
         key="ndfd48_pctndf_db",
-        label="NDF Digestibility at 48h (% of NDF)",
+        label=metadata_label(
+            "ndfd48_pctndf_db",
+            "NDF Digestibility at 48h (% of NDF)",
+        ),
         candidates=(
             "ndfd48_pctndf_db",
             "NDFD48 %NDF DB",
             "NDF Digestibility at 48h",
             "NDF Digestibility at 48h (% of NDF)",
         ),
+        note=metadata_note("ndfd48_pctndf_db"),
         reference_key="ndfd48_pctndf_db",
     ),
     LabVarSpec(
         key="ivtdmd48_pctndf_db",
-        label="In Vitro True Digestibility at 48 hours (%)",
+        label=metadata_label(
+            "ivtdmd48_pctndf_db",
+            "In Vitro True Digestibility at 48 hours (%)",
+        ),
         candidates=(
             "ivtdmd48_pctndf_db",
             "IVTDMD 48 hr (in vitro true digestibility), %",
@@ -260,11 +309,15 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
             "In Vitro True Digestibility",
             "In Vitro True Digestibility at 48h (%)",
         ),
+        note=metadata_note("ivtdmd48_pctndf_db"),
         reference_key="ivtdmd48_pctndf_db",
     ),
     LabVarSpec(
         key="fat_pct_db",
-        label="Crude Fat (Dry Basis, %)",
+        label=metadata_label(
+            "fat_pct_db",
+            "Crude Fat (Dry Basis, %)",
+        ),
         candidates=(
             "fat_pct_db",
             "Fat Dry Basis",
@@ -272,24 +325,35 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
             "Crude Fat Dry Basis",
             "Crude Fat (Dry Basis, %)",
         ),
+        note=metadata_note("fat_pct_db"),
         reference_key="fat_pct_db",
     ),
     LabVarSpec(
         key="lignin_pct_db",
-        label="Lignin (Dry Basis, %)",
+        label=metadata_label(
+            "lignin_pct_db",
+            "Lignin (Dry Basis, %)",
+        ),
         candidates=(
             "lignin_pct_db",
             "Lignin Dry Basis",
             "Lignin Dry Basis (%)",
             "Lignin (Dry Basis, %)",
         ),
+        note=metadata_note("lignin_pct_db"),
         reference_key="lignin_pct_db",
     ),
     LabVarSpec(
         key="rfq",
-        label="Relative Forage Quality (RFQ)",
+        label=metadata_label(
+            "rfq",
+            "Relative Forage Quality (RFQ)",
+        ),
         candidates=("rfq", "RFQ", "Relative Forage Quality"),
-        note="Relative Forage Quality is a forage quality index intended to improve on RFV by incorporating digestibility.",
+        note=metadata_note(
+            "rfq",
+            "Relative Forage Quality is a forage quality index intended to improve on RFV by incorporating digestibility.",
+        ),
         reference_key="rfq",
     ),
 ]

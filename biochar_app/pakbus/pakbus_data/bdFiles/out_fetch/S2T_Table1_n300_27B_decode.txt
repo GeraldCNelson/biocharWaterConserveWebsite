@@ -1,3 +1,0 @@
-decoded_rows=0
-reason=no plausible 10-float rows found at common offsets/endian
-suggestion: try --last-n 441 or 461

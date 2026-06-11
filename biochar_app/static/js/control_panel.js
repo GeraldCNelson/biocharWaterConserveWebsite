@@ -7,6 +7,18 @@ import { updateSummaryStatistics } from "./tab_summary.js";
 import { renderMainPlots } from "./plots.js";
 
 /**
+ * @typedef {Window & {
+ *   Plotly?: {
+ *     purge: (el: Element) => void
+ *   },
+ *   unitSystem?: "us" | "metric"
+ * }} ControlPanelWindow
+ */
+
+/** @type {ControlPanelWindow} */
+const controlWindow = /** @type {ControlPanelWindow} */ (window);
+
+/**
  * Keep both top-plot controls available.
  *
  * Current UI behavior:
@@ -17,6 +29,7 @@ import { renderMainPlots } from "./plots.js";
  * So we no longer disable either control here.
  *
  * @param {string} traceOption
+ * @returns {void}
  */
 function updateMainTraceControlState(traceOption) {
   const depthEl = /** @type {HTMLSelectElement | null} */ (
@@ -40,15 +53,17 @@ function updateMainTraceControlState(traceOption) {
 
 /**
  * Clear stale plot output when an invalid date/filter cancels an update.
+ *
+ * @returns {void}
  */
 function clearMainPlots() {
   const p1 = document.getElementById("plot-1");
   const p2 = document.getElementById("plot-2");
 
   try {
-    if (window.Plotly) {
-      if (p1) window.Plotly.purge(p1);
-      if (p2) window.Plotly.purge(p2);
+    if (controlWindow.Plotly) {
+      if (p1) controlWindow.Plotly.purge(p1);
+      if (p2) controlWindow.Plotly.purge(p2);
     }
   } catch (err) {
     console.warn("⚠️ Plotly purge failed while clearing plots:", err);
@@ -69,6 +84,8 @@ function clearMainPlots() {
  *
  * We still react to changes so helper text / future logic can stay synced,
  * but we no longer disable Depth or Logger Location.
+ *
+ * @returns {void}
  */
 export function initializeTraceOptionControls() {
   const traceEl = /** @type {HTMLSelectElement | null} */ (
@@ -86,12 +103,13 @@ export function initializeTraceOptionControls() {
     updateMainTraceControlState(value);
   });
 
-  // Initialize immediately using current value
   updateMainTraceControlState(traceEl.value);
 }
 
 /**
  * Wire the "Update Plots" and "Update Summary" buttons.
+ *
+ * @returns {void}
  */
 export function initializeUpdateButtons() {
   console.log("🔘 Initializing update buttons");
@@ -134,6 +152,7 @@ export function initializeUpdateButtons() {
  *  - summary tables
  *
  * @param {"us"|"metric"} initialUnitSystem
+ * @returns {void}
  */
 export function setupUnitToggleHandlers(initialUnitSystem) {
   console.log("🔄 Setting up unit toggle handlers");
@@ -147,6 +166,7 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
 
   /**
    * @param {boolean} isMetric
+   * @returns {void}
    */
   function mirrorToggles(isMetric) {
     if (mainToggle) {
@@ -159,6 +179,7 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
 
   /**
    * @param {Event} event
+   * @returns {Promise<void>}
    */
   async function onToggleChange(event) {
     const src = /** @type {HTMLInputElement | null} */ (event.target);
@@ -166,22 +187,23 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
 
     const isMetric = !!src.checked;
     const sourceId = src.id || "(unknown-toggle)";
+    /** @type {"us" | "metric"} */
     const newSystem = isMetric ? "metric" : "us";
 
-    if (window.unitSystem === newSystem) {
+    if (controlWindow.unitSystem === newSystem) {
       mirrorToggles(isMetric);
-      updateDepthLabels(window.unitSystem);
+      updateDepthLabels(controlWindow.unitSystem);
       return;
     }
 
-    window.unitSystem = newSystem;
+    controlWindow.unitSystem = newSystem;
     console.log(
-      `🌡 Unit system changed to ${window.unitSystem} ` +
+      `🌡 Unit system changed to ${controlWindow.unitSystem} ` +
       `(source: ${sourceId}, checked=${isMetric})`
     );
 
     mirrorToggles(isMetric);
-    updateDepthLabels(window.unitSystem);
+    updateDepthLabels(controlWindow.unitSystem);
 
     await renderMainPlots();
     updateSummaryStatistics();
@@ -197,20 +219,22 @@ export function setupUnitToggleHandlers(initialUnitSystem) {
     summaryToggle.dataset.unitToggleBound = "true";
   }
 
-  if (!window.unitSystem) {
-    window.unitSystem = initialUnitSystem === "metric" ? "metric" : "us";
-    console.log("🌡 Initial unitSystem =", window.unitSystem);
+  if (!controlWindow.unitSystem) {
+    controlWindow.unitSystem = initialUnitSystem === "metric" ? "metric" : "us";
+    console.log("🌡 Initial unitSystem =", controlWindow.unitSystem);
   } else {
-    console.log("🌡 Preserving existing unitSystem =", window.unitSystem);
+    console.log("🌡 Preserving existing unitSystem =", controlWindow.unitSystem);
   }
 
-  const isMetricCurrent = window.unitSystem === "metric";
+  const isMetricCurrent = controlWindow.unitSystem === "metric";
   mirrorToggles(isMetricCurrent);
-  updateDepthLabels(window.unitSystem);
+  updateDepthLabels(controlWindow.unitSystem);
 }
 
 /**
  * Convenience helper used elsewhere to trigger both updates.
+ *
+ * @returns {void}
  */
 export function triggerUpdates() {
   console.log("🔁 triggerUpdates called");

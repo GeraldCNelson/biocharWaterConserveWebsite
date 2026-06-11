@@ -24,7 +24,7 @@ import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
  * @returns {any}
  */
 function getPlotly() {
-  return /** @type {any} */ (window.Plotly);
+  return /** @type {any} */ (window).Plotly;
 }
 
 /**
@@ -38,17 +38,39 @@ function getPlotly() {
  */
 
 /**
+ * @typedef {Window & {
+ *   _plotRenderWidth?: number | null,
+ *   _plotRightGutter?: number | null,
+ *   _plotLeftMargin?: number | null,
+ *   _plotLegendMode?: "right" | "below" | null,
+ *   _initialXRange?: any,
+ *   _biocharResizePlotsInstalled?: boolean
+ * }} PlotWindow
+ */
+
+/** @type {PlotWindow} */
+const plotWindow = /** @type {PlotWindow} */ (window);
+
+/**
  * Pause until each of the given dropdown IDs exists in the DOM
  * and has been populated with at least one <option>.
- * @param {string[]} ids – array of element IDs
+ *
+ * @param {string[]} ids Array of element IDs.
+ * @returns {Promise<void>}
  */
 export async function waitForAllDropdowns(ids) {
+  /**
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
   while (true) {
     const missing = ids.filter((id) => {
       const el = /** @type {HTMLSelectElement | null} */ (document.getElementById(id));
       return !(el && el.options && el.options.length > 0);
     });
+
     if (missing.length === 0) break;
     await delay(50);
   }
@@ -67,9 +89,11 @@ let isSyncingZoom = false;
 
 /**
  * Apply the x-axis range from one plot to another.
+ *
  * @param {PlotlyGraphDiv | null} sourceDiv
  * @param {PlotlyGraphDiv | null} targetDiv
- * @param {any} eventData
+ * @param {Record<string, any> | null | undefined} eventData
+ * @returns {void}
  */
 function syncZoom(sourceDiv, targetDiv, eventData) {
   void sourceDiv;
@@ -88,11 +112,20 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
   console.log("🔁 syncing x-range →", newRange);
 
   isSyncingZoom = true;
-  const Plotly = getPlotly();
-  Plotly.relayout(targetDiv, { "xaxis.range": newRange })
-    .catch((err) => {
-      console.error("❌ Error syncing zoom:", err);
-    })
+
+  /** @type {any} */
+  const plotly = getPlotly();
+
+  plotly
+    .relayout(targetDiv, { "xaxis.range": newRange })
+    .catch(
+      /**
+       * @param {unknown} err
+       */
+      (err) => {
+        console.error("❌ Error syncing zoom:", err);
+      }
+    )
     .finally(() => {
       isSyncingZoom = false;
     });
@@ -100,23 +133,32 @@ function syncZoom(sourceDiv, targetDiv, eventData) {
 
 /**
  * Once both plots exist, attach relayout handlers in both directions.
+ *
+ * @returns {void}
  */
 function maybeAttachZoomSyncHandlers() {
   if (zoomHandlersAttached) return;
   if (!rawPlotDiv || !ratioPlotDiv) return;
   if (typeof rawPlotDiv.on !== "function" || typeof ratioPlotDiv.on !== "function") return;
 
-  const makeHandler = (source, target, label) => (ev) => {
-    const payload = ev;
-    console.log(`📐 ${label} relayout →`, payload);
-    syncZoom(source, target, payload);
-  };
+  /**
+   * @param {PlotlyGraphDiv} source
+   * @param {PlotlyGraphDiv} target
+   * @param {string} label
+   * @returns {(ev: Record<string, any>) => void}
+   */
+  const makeHandler = (source, target, label) =>
+    /**
+     * @param {Record<string, any>} ev
+     */
+    (ev) => {
+      const payload = ev;
+      console.log(`📐 ${label} relayout →`, payload);
+      syncZoom(source, target, payload);
+    };
 
   rawPlotDiv.on("plotly_relayout", makeHandler(rawPlotDiv, ratioPlotDiv, "raw"));
-  ratioPlotDiv.on(
-    "plotly_relayout",
-    makeHandler(ratioPlotDiv, rawPlotDiv, "ratio")
-  );
+  ratioPlotDiv.on("plotly_relayout", makeHandler(ratioPlotDiv, rawPlotDiv, "ratio"));
 
   zoomHandlersAttached = true;
   console.log("✅ Zoom sync handlers attached (raw ↔ ratio)");
@@ -149,12 +191,12 @@ function getSharedPlotWidth(targetId, container) {
   const measured = Math.round(measurePlotWidth(container));
 
   if (targetId === "plot-1") {
-    window._plotRenderWidth = measured;
+    plotWindow._plotRenderWidth = measured;
     return measured;
   }
 
-  if (targetId === "plot-2" && typeof window._plotRenderWidth === "number") {
-    return window._plotRenderWidth;
+  if (targetId === "plot-2" && typeof plotWindow._plotRenderWidth === "number") {
+    return plotWindow._plotRenderWidth;
   }
 
   return measured;
@@ -165,29 +207,41 @@ function getSharedPlotWidth(targetId, container) {
 /* ------------------------------------------------------------------ */
 
 /**
- * @param {any} containerOrGd
+ * @param {HTMLElement | PlotlyGraphDiv | null} containerOrGd
  * @param {string} plotType
  * @param {any} [plotLayout=null]
- * @param {any} [plotData=null]
+ * @param {any[] | null} [plotData=null]
+ * @returns {number}
+ */
+/**
+ * @param {HTMLElement | PlotlyGraphDiv | null} containerOrGd
+ * @param {string} plotType
+ * @param {any} [plotLayout=null]
+ * @param {any[] | null} [plotData=null]
  * @returns {number}
  */
 export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null, plotData = null) {
   void plotType;
-  const el = /** @type {any} */ (containerOrGd);
+
+  const el = /** @type {PlotlyGraphDiv | null} */ (containerOrGd);
   const w = el?.clientWidth || 1200;
 
   const fullLayout = el?._fullLayout || null;
   const fullData = el?._fullData || el?.data || null;
 
   const layout = fullLayout || plotLayout || {};
-  const data = fullData || plotData || [];
+  const data = Array.isArray(fullData)
+    ? fullData
+    : (Array.isArray(plotData) ? plotData : []);
 
-  const layoutHasY2 = !!layout?.yaxis2;
-  const dataUsesY2 = Array.isArray(data) && data.some((t) => (t?.yaxis || "") === "y2");
+  const layoutAny = /** @type {any} */ (layout);
+  const dataAny = /** @type {any[]} */ (data);
+
+  const layoutHasY2 = !!layoutAny?.yaxis2;
+  const dataUsesY2 = dataAny.some((t) => (t?.yaxis || "") === "y2");
   const hasY2 = layoutHasY2 || dataUsesY2;
 
   if (!hasY2) return 20;
-
   if (isMobileDevice()) return 20;
 
   if (w >= 1400) return 160;
@@ -197,7 +251,6 @@ export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null,
 
   return 20;
 }
-
 /**
  * Choose a single legend mode for the pair.
  * plot-1 decides, plot-2 follows.
@@ -207,15 +260,20 @@ export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null,
  * @returns {"right" | "below"}
  */
 function chooseSharedLegendMode(targetId, rightGutterPx) {
-  const mode = rightGutterPx >= 100 ? "right" : "below";
+  const el = document.getElementById(targetId);
+  const plotWidth = el ? el.clientWidth : 0;
+
+  /** @type {"right" | "below"} */
+  const mode = (plotWidth >= 900 && rightGutterPx >= 70) ? "right" : "below";
 
   if (targetId === "plot-1") {
-    window._plotLegendMode = mode;
+    plotWindow._plotLegendMode = mode;
     return mode;
   }
 
-  if (targetId === "plot-2" && window._plotLegendMode) {
-    return /** @type {"right" | "below"} */ (window._plotLegendMode);
+  const sharedMode = plotWindow._plotLegendMode;
+  if (targetId === "plot-2" && sharedMode) {
+    return sharedMode;
   }
 
   return mode;
@@ -260,9 +318,12 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
 /* Pair geometry sync                                                 */
 /* ------------------------------------------------------------------ */
 
+/**
+ * @returns {Promise<void>}
+ */
 async function syncPairGeometryFromRaw() {
-  const p1 = /** @type {any} */ (document.getElementById("plot-1"));
-  const p2 = /** @type {any} */ (document.getElementById("plot-2"));
+  const p1 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-1"));
+  const p2 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-2"));
 
   if (!p1?._fullLayout || !p2?._fullLayout) return;
 
@@ -272,10 +333,10 @@ async function syncPairGeometryFromRaw() {
   const srcMargin = p1._fullLayout.margin || {};
   const srcWidth =
     p1._fullLayout.width ||
-    window._plotRenderWidth ||
+    plotWindow._plotRenderWidth ||
     Math.round(measurePlotWidth(p1));
 
-  const legendMode = window._plotLegendMode || "below";
+  const legendMode = plotWindow._plotLegendMode || "below";
   const syncedRightMargin =
     legendMode === "right"
       ? Math.max(srcMargin.r ?? 20, 160)
@@ -291,13 +352,16 @@ async function syncPairGeometryFromRaw() {
     "yaxis.automargin": false,
   };
 
-  if (p2._fullLayout?.yaxis2) update["yaxis2.automargin"] = false;
+  if (p2._fullLayout?.yaxis2) {
+    update["yaxis2.automargin"] = false;
+  }
 
   console.log("📏 syncing pair geometry from raw → ratio", update);
 
-  const Plotly = getPlotly();
-  await Plotly.relayout(p2, update);
-  Plotly.Plots.resize(p2);
+  /** @type {any} */
+  const plotly = getPlotly();
+  await plotly.relayout(p2, update);
+  plotly.Plots.resize(p2);
 }
 
 /* ------------------------------------------------------------------ */
@@ -305,8 +369,9 @@ async function syncPairGeometryFromRaw() {
 /* ------------------------------------------------------------------ */
 
 /**
- * @param {"raw"|"ratio"} plotType
+ * @param {"raw" | "ratio"} plotType
  * @param {string} plotDivId
+ * @returns {Promise<void>}
  */
 export async function fetchAndRenderPlot(plotType, plotDivId) {
   const targetId = plotDivId || `plot-${plotType}`;
@@ -353,15 +418,16 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       return;
     }
 
+    /** @type {{ data?: any[], layout?: any }} */
     const plotData = JSON.parse(text);
 
     if (plotType === "raw" && targetId === "plot-1") {
-      window._initialXRange = plotData?.layout?.xaxis?.range || null;
+      plotWindow._initialXRange = plotData?.layout?.xaxis?.range || null;
     }
-    if (plotType === "ratio" && targetId === "plot-2" && window._initialXRange) {
+    if (plotType === "ratio" && targetId === "plot-2" && plotWindow._initialXRange) {
       plotData.layout = plotData.layout || {};
       plotData.layout.xaxis = plotData.layout.xaxis || {};
-      plotData.layout.xaxis.range = window._initialXRange;
+      plotData.layout.xaxis.range = plotWindow._initialXRange;
     }
 
     if (!Array.isArray(plotData.data)) {
@@ -370,20 +436,27 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     }
 
     container.innerHTML = "";
-    await new Promise((r) => requestAnimationFrame(r));
-    const Plotly = getPlotly();
-    Plotly.purge(container);
+    await new Promise(
+      /**
+       * @param {FrameRequestCallback} r
+       */
+      (r) => requestAnimationFrame(r)
+    );
+
+    /** @type {any} */
+    const plotly = getPlotly();
+    plotly.purge(container);
 
     const renderWidth = getSharedPlotWidth(targetId, container);
 
     const leftMargin = 60;
-    window._plotLeftMargin = leftMargin;
+    plotWindow._plotLeftMargin = leftMargin;
 
     let rightGutter = computeRightGutterPx(container, plotType, plotData.layout, plotData.data);
 
-    if (targetId === "plot-1") window._plotRightGutter = rightGutter;
-    if (targetId === "plot-2" && typeof window._plotRightGutter === "number") {
-      rightGutter = window._plotRightGutter;
+    if (targetId === "plot-1") plotWindow._plotRightGutter = rightGutter;
+    if (targetId === "plot-2" && typeof plotWindow._plotRightGutter === "number") {
+      rightGutter = plotWindow._plotRightGutter;
     }
 
     const legendAdjust = { legend: plotData.layout?.legend || {} };
@@ -421,20 +494,23 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     };
 
     const gd = /** @type {PlotlyGraphDiv} */ (
-      await Plotly.newPlot(container, plotData.data, layout, plotConfig)
+      await plotly.newPlot(container, plotData.data, layout, plotConfig)
     );
 
     if (targetId === "plot-1") rawPlotDiv = gd;
     if (targetId === "plot-2") ratioPlotDiv = gd;
 
+    /**
+     * @returns {Promise<number | null>}
+     */
     const refineGutter = async () => {
       if (!gd) return null;
 
       let g = computeRightGutterPx(gd, plotType, null, null);
 
-      if (targetId === "plot-1") window._plotRightGutter = g;
-      if (targetId === "plot-2" && typeof window._plotRightGutter === "number") {
-        g = window._plotRightGutter;
+      if (targetId === "plot-1") plotWindow._plotRightGutter = g;
+      if (targetId === "plot-2" && typeof plotWindow._plotRightGutter === "number") {
+        g = plotWindow._plotRightGutter;
       }
 
       const tmp = { legend: gd.layout?.legend || {} };
@@ -446,23 +522,25 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       );
 
       const sharedWidth =
-        targetId === "plot-2" && typeof window._plotRenderWidth === "number"
-          ? window._plotRenderWidth
+        targetId === "plot-2" && typeof plotWindow._plotRenderWidth === "number"
+          ? plotWindow._plotRenderWidth
           : renderWidth;
 
       /** @type {Record<string, any>} */
       const update = {
         width: sharedWidth,
-        "margin.l": window._plotLeftMargin ?? 60,
+        "margin.l": plotWindow._plotLeftMargin ?? 60,
         "margin.r": effectiveRightAfterRender,
         "margin.b": Math.max(gd.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
         "yaxis.automargin": false,
         legend: tmp.legend,
       };
-      if (gd.layout?.yaxis2) update["yaxis2.automargin"] = false;
+      if (gd.layout?.yaxis2) {
+        update["yaxis2.automargin"] = false;
+      }
 
-      await Plotly.relayout(gd, update);
-      Plotly.Plots.resize(gd);
+      await plotly.relayout(gd, update);
+      plotly.Plots.resize(gd);
 
       return g;
     };
@@ -470,16 +548,29 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     await refineGutter();
 
     if (targetId === "plot-2") {
-      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise(
+        /**
+         * @param {FrameRequestCallback} r
+         */
+        (r) => requestAnimationFrame(r)
+      );
       await syncPairGeometryFromRaw();
     }
 
-    if (!window._biocharResizePlotsInstalled) {
-      window._biocharResizePlotsInstalled = true;
+    if (!plotWindow._biocharResizePlotsInstalled) {
+      plotWindow._biocharResizePlotsInstalled = true;
 
       /** @type {number | null} */
       let t = null;
 
+      /**
+       * @param {PlotlyGraphDiv | null} el
+       * @param {"raw" | "ratio"} kind
+       * @param {string} targetIdForLegend
+       * @param {number | null} [forceGutter=null]
+       * @param {number | null} [forceWidth=null]
+       * @returns {Promise<number | null>}
+       */
       const relayoutOne = async (el, kind, targetIdForLegend, forceGutter = null, forceWidth = null) => {
         if (!el || !el.layout) return null;
 
@@ -494,14 +585,12 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
             : computeRightGutterPx(el, kind, el.layout, el.data);
 
         if (el.id === "plot-1") {
-          window._plotRightGutter = gutter;
-          window._plotRenderWidth = w;
+          plotWindow._plotRightGutter = gutter;
+          plotWindow._plotRenderWidth = w;
         }
 
-        if (el.id === "plot-2") {
-          if (typeof window._plotRightGutter === "number") {
-            gutter = window._plotRightGutter;
-          }
+        if (el.id === "plot-2" && typeof plotWindow._plotRightGutter === "number") {
+          gutter = plotWindow._plotRightGutter;
         }
 
         const tmp = { legend: el.layout?.legend || {} };
@@ -515,33 +604,41 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
         /** @type {Record<string, any>} */
         const update = {
           width: w,
-          "margin.l": window._plotLeftMargin ?? 60,
+          "margin.l": plotWindow._plotLeftMargin ?? 60,
           "margin.r": effectiveRightOnResize,
           "margin.b": Math.max(el.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
           "yaxis.automargin": false,
           legend: tmp.legend,
         };
-        if (el.layout?.yaxis2) update["yaxis2.automargin"] = false;
+        if (el.layout?.yaxis2) {
+          update["yaxis2.automargin"] = false;
+        }
 
-        await Plotly.relayout(el, update);
-        Plotly.Plots.resize(el);
+        await plotly.relayout(el, update);
+        plotly.Plots.resize(el);
 
         return gutter;
       };
 
-      window.addEventListener("resize", () => {
-        if (t) window.clearTimeout(t);
-        t = window.setTimeout(async () => {
-          const p1 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-1"));
-          const p2 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-2"));
+      window.addEventListener(
+        "resize",
+        /**
+         * @returns {void}
+         */
+        () => {
+          if (t) window.clearTimeout(t);
+          t = window.setTimeout(async () => {
+            const p1 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-1"));
+            const p2 = /** @type {PlotlyGraphDiv | null} */ (document.getElementById("plot-2"));
 
-          const masterWidth = Math.round(measurePlotWidth(p1));
-          const gutter = await relayoutOne(p1, "raw", "plot-1", null, masterWidth);
-          await relayoutOne(p2, "ratio", "plot-2", gutter, masterWidth);
+            const masterWidth = Math.round(measurePlotWidth(p1));
+            const gutter = await relayoutOne(p1, "raw", "plot-1", null, masterWidth);
+            await relayoutOne(p2, "ratio", "plot-2", gutter, masterWidth);
 
-          await syncPairGeometryFromRaw();
-        }, 90);
-      });
+            await syncPairGeometryFromRaw();
+          }, 90);
+        }
+      );
     }
 
     maybeAttachZoomSyncHandlers();
@@ -557,6 +654,9 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 /* Public helper to render both main plots                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * @returns {Promise<void>}
+ */
 export async function renderMainPlots() {
   console.group("▶️ Rendering Interactive Plots…");
 
@@ -571,11 +671,11 @@ export async function renderMainPlots() {
     rawPlotDiv = null;
     ratioPlotDiv = null;
 
-    window._plotRenderWidth = null;
-    window._plotRightGutter = null;
-    window._plotLeftMargin = 60;
-    window._plotLegendMode = null;
-    window._initialXRange = null;
+    plotWindow._plotRenderWidth = null;
+    plotWindow._plotRightGutter = null;
+    plotWindow._plotLeftMargin = 60;
+    plotWindow._plotLegendMode = null;
+    plotWindow._initialXRange = null;
 
     await fetchAndRenderPlot("raw", "plot-1");
     await fetchAndRenderPlot("ratio", "plot-2");
@@ -590,6 +690,8 @@ export async function renderMainPlots() {
 /**
  * Optional explicit hook for existing callers.
  * The handlers are also attached automatically after both plots render.
+ *
+ * @returns {void}
  */
 export function wireMainPlotZoomSync() {
   maybeAttachZoomSyncHandlers();

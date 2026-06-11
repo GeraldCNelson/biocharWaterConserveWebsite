@@ -1063,12 +1063,18 @@ def safe_series_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd
     return ratio
 
 
-def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+def calculate_ratios(df_in: pd.DataFrame) -> pd.DataFrame:
     """
+    Build a ratio-only dataframe.
+
+    Output contains:
+      - the same index as df_in
+      - only ratio columns (no raw logger columns)
+
     For VWC/EC compute (S1/S2) and (S3/S4) per depth and logger location.
     Also compute SWC ratios using SWC_vol_gal_* columns if present.
     """
-    df = df_in.copy() if copy else df_in
+    ratio_df = pd.DataFrame(index=df_in.index.copy())
     pairings = [("S1", "S2"), ("S3", "S4")]
     ratio_vars = ["VWC", "EC"]
 
@@ -1079,10 +1085,11 @@ def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
                     c1 = f"{var}_{d}_raw_{s1}_{loc}"
                     c2 = f"{var}_{d}_raw_{s2}_{loc}"
                     out_col = f"{var}_{d}_ratio_{s1}_{s2}_{loc}"
-                    if c1 in df.columns and c2 in df.columns:
-                        df[out_col] = safe_series_ratio(df[c1], df[c2])
+
+                    if c1 in df_in.columns and c2 in df_in.columns:
+                        ratio_df[out_col] = safe_series_ratio(df_in[c1], df_in[c2])
                     else:
-                        df[out_col] = pd.NA
+                        ratio_df[out_col] = pd.NA
 
     # SWC ratios (gallons)
     for s1, s2 in pairings:
@@ -1091,12 +1098,13 @@ def calculate_ratios(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
                 c1 = f"SWC_vol_gal_{s1}_{loc}_{d}"
                 c2 = f"SWC_vol_gal_{s2}_{loc}_{d}"
                 out_col = f"SWC_vol_gal_{d}_ratio_{s1}_{s2}_{loc}"
-                if c1 in df.columns and c2 in df.columns:
-                    df[out_col] = safe_series_ratio(df[c1], df[c2])
-                else:
-                    df[out_col] = pd.NA
 
-    return df
+                if c1 in df_in.columns and c2 in df_in.columns:
+                    ratio_df[out_col] = safe_series_ratio(df_in[c1], df_in[c2])
+                else:
+                    ratio_df[out_col] = pd.NA
+
+    return ratio_df
 
 
 if __name__ == "__main__":

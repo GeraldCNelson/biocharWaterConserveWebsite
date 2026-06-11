@@ -8,6 +8,15 @@ import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
 import { fetchJson } from "./api_requests.js";
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
+/**
+ * @param {{
+ *   containerId: string,
+ *   endpoint: string,
+ *   fallbackLabel: string,
+ *   subtitleText?: string
+ * }} param0
+ * @returns {Promise<void>}
+ */
 async function renderSoilTab({
   containerId,
   endpoint,
@@ -43,7 +52,7 @@ async function renderSoilTab({
 
     for (const setPayload of payload.sets) {
       const label = setPayload.label || fallbackLabel;
-      const note = setPayload.notes || setPayload.note || subtitleText || "";
+      const note =  setPayload.note || subtitleText || "";
 
       const setWrapper = document.createElement("div");
       setWrapper.className = "mb-4";

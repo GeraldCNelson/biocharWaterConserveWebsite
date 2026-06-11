@@ -1,947 +1,1030 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Biochar Project</title>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Biochar Project</title>
 
-  <!-- Core CSS -->
-  <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}"/>
+    <!-- Core CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}"/>
     <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
-/>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}"/>
-  <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}"/>
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}"/>
+    <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}"/>
 
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@300;400;600;700&display=swap"
+          rel="stylesheet"/>
 
-  <!-- Vendor JS (classic, order matters) -->
-  <script src="{{ url_for('static', path='js/jquery.min.js') }}"></script>
-  <script src="{{ url_for('static', path='js/vendor/popper.min.js') }}"></script>
-  <script src="{{ url_for('static', path='js/vendor/bootstrap.bundle.min.js') }}"></script>
-  <script src="{{ url_for('static', path='js/vendor/tippy.min.js') }}"></script>
+    <!-- Vendor JS (classic, order matters) -->
+    <script src="{{ url_for('static', path='js/jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/vendor/popper.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/vendor/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/vendor/tippy.min.js') }}"></script>
 
-  <!-- Plotly & Markdown -->
-  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-  <script src="{{ url_for('static', path='js/vendor/marked.min.js') }}"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+    <!-- Plotly & Markdown -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="{{ url_for('static', path='js/vendor/marked.min.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
 
-  <!-- Tippy init -->
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      /* global tippy */
-      tippy("[data-tippy-content]", {
-        theme: "light",
-        animation: "scale",
-        arrow: true,
-      });
-    });
-  </script>
+    <!-- Tippy init -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            /* global tippy */
+            tippy("[data-tippy-content]", {
+                theme: "light",
+                animation: "scale",
+                arrow: true,
+            });
+        });
+    </script>
 
-  <!-- Custom season defaults -->
-  <script>
-    window.CUSTOM_GSEASON_CONFIG = {
-      defaultYear:    {{ DEFAULT_YEAR }},
-      years:          {{ YEARS | tojson }},
-      defaultPeriods: {{ DEFAULT_GSEASON_PERIODS | tojson }}
-    };
-  </script>
+    <!-- Custom season defaults -->
+    <script>
+        window.CUSTOM_GSEASON_CONFIG = {
+            defaultYear: {{ DEFAULT_YEAR }},
+            years: {{ YEARS | tojson }},
+            defaultPeriods: {{ DEFAULT_GSEASON_PERIODS | tojson }},
+            monthAbbr: {{ MONTH_ABBR | default({}, true) | tojson }}
+        };
+    </script>
 
-  <!-- 🚨 SINGLE ES MODULE ENTRYPOINT -->
-  <script type="module" src="{{ url_for('static', path='js/main.js') }}"></script>
+    <!-- 🚨 SINGLE ES MODULE ENTRYPOINT -->
+    <script type="module" src="{{ url_for('static', path='js/main.js') }}"></script>
 
-  <!-- MathJax -->
-  <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [["$", "$"], ["\\(", "\\)"]],
-        displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-        processEscapes: true
-      },
-      options: { renderActions: { addMenu: [] } }
-    };
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+    <!-- MathJax -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [["$", "$"], ["\\(", "\\)"]],
+                displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+                processEscapes: true
+            },
+            options: { renderActions: { addMenu: [] } }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 
-  <!-- Sticky header styling (kept inline so index.html alone does the job) -->
-  <style>
-    #sticky-header {
-      position: sticky;
-      top: 0;
-      z-index: 1030; /* above content; below modals */
-      background: #ffffff;
-      border-bottom: 1px solid rgba(0,0,0,0.08);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-    }
-  </style>
+    <!-- Sticky header styling (kept inline so index.html alone does the job) -->
+    <style>
+        #sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 1030; /* above content; below modals */
+            background: #ffffff;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+        }
+    </style>
 </head>
 
 <body>
 
 <div class="container-fluid p-0">
 
-  <div id="boot-loading" class="boot-loading" role="status" aria-live="polite">
-    <div class="boot-loading-inner">
-      <span>Loading site</span><span class="dots"></span>
+    <div id="boot-loading" class="boot-loading" role="status" aria-live="polite">
+        <div class="boot-loading-inner">
+            <span>Loading site</span><span class="dots"></span>
+        </div>
     </div>
-  </div>
 
-  <!-- Sticky header: Tabs stay fixed at top -->
-  <div id="sticky-header">
-    <div class="container-fluid pt-3">
-      <!-- Navigation Tabs -->
-      <ul class="nav nav-tabs" role="tablist">
+    <!-- Sticky header: Tabs stay fixed at top -->
+    <div id="sticky-header">
+        <div class="container-fluid pt-3">
+            <!-- Navigation Tabs -->
+            <ul class="nav nav-tabs" role="tablist">
 
-        <!-- Intro -->
-        <li class="nav-item" role="presentation">
-          <button id="intro-tab" class="nav-link active" type="button" data-bs-toggle="tab"
-                  data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="true">
-            Introduction
-          </button>
-        </li>
+                <!-- Intro -->
+                <li class="nav-item" role="presentation">
+                    <button id="intro-tab" class="nav-link active" type="button" data-bs-toggle="tab"
+                            data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="true">
+                        Introduction
+                    </button>
+                </li>
 
-        <!-- Experiment Design -->
-        <li class="nav-item" role="presentation">
-          <button id="experiment-tab" class="nav-link" type="button" data-bs-toggle="tab"
-                  data-bs-target="#experiment" role="tab" aria-controls="experiment" aria-selected="false">
-            Experiment Design
-          </button>
-        </li>
+                <!-- Experiment Design -->
+                <li class="nav-item" role="presentation">
+                    <button id="experiment-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#experiment" role="tab" aria-controls="experiment" aria-selected="false">
+                        Experiment Design
+                    </button>
+                </li>
 
-        <!-- Continuous Monitoring (dropdown) -->
-        <li class="nav-item dropdown" role="presentation">
-          <button class="nav-link dropdown-toggle"
-                  id="monitoringDropdown"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false">
-            Continuous Monitoring Results
-          </button>
-          <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
-            <li>
-              <button id="main-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#main" role="tab" aria-controls="main" aria-selected="false">
-                Interactive Plots
-              </button>
-            </li>
-            <li>
-              <button id="summary-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#summary" role="tab" aria-controls="summary" aria-selected="false">
-                Summary Statistics
-              </button>
-            </li>
-            <li>
-              <button id="gseason-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#gseason" role="tab" aria-controls="gseason" aria-selected="false">
-                Custom Season
-              </button>
-            </li>
-          </ul>
-        </li>
+                <!-- Continuous Monitoring (dropdown) -->
+                <li class="nav-item dropdown" role="presentation">
+                    <button class="nav-link dropdown-toggle"
+                            id="monitoringDropdown"
+                            type="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        Continuous Monitoring Results
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
+                        <li>
+                            <button id="main-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#main" role="tab" aria-controls="main" aria-selected="false">
+                                Interactive Plots
+                            </button>
+                        </li>
+                        <li>
+                            <button id="summary-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#summary" role="tab" aria-controls="summary" aria-selected="false">
+                                Summary Statistics
+                            </button>
+                        </li>
+                        <li>
+                            <button id="gseason-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#gseason" role="tab" aria-controls="gseason" aria-selected="false">
+                                Custom Season
+                            </button>
+                        </li>
+                    </ul>
+                </li>
 
-        <!-- Lab-Based Results (dropdown) -->
-        <li class="nav-item dropdown" role="presentation">
-          <button class="nav-link dropdown-toggle"
-                  id="labDropdown"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false">
-            Lab-Based Results
-          </button>
-          <ul class="dropdown-menu" aria-labelledby="labDropdown">
-            <li>
-              <button id="nir-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#nir" role="tab" aria-controls="nir" aria-selected="false">
-                Pasture Quality Metrics
-              </button>
-            </li>
-            <li>
-              <button id="biomass-field-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
-                Biomass (Field Samples)
-              </button>
-            </li>
-            <li>
-              <button id="soilbio-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#soilbio" role="tab" aria-controls="soilbio" aria-selected="false">
-                Soil Biological Health
-              </button>
-            </li>
-            <li>
-              <button id="soilchem-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
-                      data-bs-target="#soilchem" role="tab" aria-controls="soilchem" aria-selected="false">
-                Soil Chemistry
-              </button>
-            </li>
-          </ul>
-        </li>
+                <!-- Lab-Based Results (dropdown) -->
+                <li class="nav-item dropdown" role="presentation">
+                    <button class="nav-link dropdown-toggle"
+                            id="labDropdown"
+                            type="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                        Lab-Based Results
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="labDropdown">
+                        <li>
+                            <button id="nir-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#nir" role="tab" aria-controls="nir" aria-selected="false">
+                                Pasture Quality Metrics
+                            </button>
+                        </li>
+                        <li>
+                            <button id="biomass-field-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
+                                Biomass (Field Samples)
+                            </button>
+                        </li>
+                        <li>
+                            <button id="soilbio-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#soilbio" role="tab" aria-controls="soilbio" aria-selected="false">
+                                Soil Biological Health
+                            </button>
+                        </li>
+                        <li>
+                            <button id="soilchem-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
+                                    data-bs-target="#soilchem" role="tab" aria-controls="soilchem" aria-selected="false">
+                                Soil Chemistry
+                            </button>
+                        </li>
+                    </ul>
+                </li>
 
-        <!-- Technical Details -->
-        <li class="nav-item" role="presentation">
-          <button id="tech-details-tab" class="nav-link" type="button" data-bs-toggle="tab"
-                  data-bs-target="#tech-details" role="tab" aria-controls="tech-details" aria-selected="false">
-            Technical Details
-          </button>
-        </li>
+                <!-- Technical Details -->
+                <li class="nav-item" role="presentation">
+                    <button id="tech-details-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#tech-details" role="tab" aria-controls="tech-details" aria-selected="false">
+                        Technical Details
+                    </button>
+                </li>
 
-        <!-- Bulk Downloads -->
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="bulk-tab" type="button" data-bs-toggle="tab"
-                  data-bs-target="#bulk-pane" role="tab" aria-controls="bulk-pane" aria-selected="false">
-            Bulk Downloads
-          </button>
-        </li>
+                <!-- Bulk Downloads -->
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="bulk-tab" type="button" data-bs-toggle="tab"
+                            data-bs-target="#bulk-pane" role="tab" aria-controls="bulk-pane" aria-selected="false">
+                        Bulk Downloads
+                    </button>
+                </li>
 
-                    <!-- Glossary -->
-        <li class="nav-item" role="presentation">
-          <button id="acknowledgements-tab" class="nav-link" type="button" data-bs-toggle="tab"
-                  data-bs-target="#glossary" role="tab" aria-controls="glossary-details" aria-selected="false">
-            Glossary
-          </button>
-        </li>
+                <!-- Glossary -->
+                <li class="nav-item" role="presentation">
+                    <button id="glossary-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#glossary" role="tab" aria-controls="glossary-details" aria-selected="false">
+                        Glossary
+                    </button>
+                </li>
 
-          <!-- Acknowledgements -->
-        <li class="nav-item" role="presentation">
-          <button id="acknowledgements-tab" class="nav-link" type="button" data-bs-toggle="tab"
-                  data-bs-target="#acknowledgements" role="tab" aria-controls="acknowledgements-details" aria-selected="false">
-            Acknowledgements
-          </button>
-        </li>
+                <!-- Acknowledgements -->
+                <li class="nav-item" role="presentation">
+                    <button id="acknowledgements-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#acknowledgements" role="tab" aria-controls="acknowledgements-details" aria-selected="false">
+                        Acknowledgements
+                    </button>
+                </li>
 
-      </ul>
+            </ul>
+        </div>
     </div>
-  </div>
 
-  <!-- Main content (scrolls while tabs stay sticky) -->
-  <div class="container-fluid">
-    <div class="tab-content">
+    <!-- Main content (scrolls while tabs stay sticky) -->
+    <div class="container-fluid">
+        <div class="tab-content">
 
-      <!-- Introduction Pane -->
-      <div class="tab-pane fade show active" id="intro" role="tabpanel" aria-labelledby="intro-tab">
-        <div id="intro-status" class="text-muted mb-2" style="display:none;"></div>
-        <div id="intro-content" class="markdown-content"></div>
-      </div>
-
-      <!-- Experiment Design Pane -->
-      <div class="tab-pane fade" id="experiment" role="tabpanel" aria-labelledby="experiment-tab">
-        <div id="experiment-status" class="text-muted mb-2" style="display:none;"></div>
-        <div id="experiment-content" class="markdown-content"></div>
-      </div>
-
-      <!-- Custom Growing-Season Pane -->
-      <div class="tab-pane fade" id="gseason" role="tabpanel" aria-labelledby="gseason-tab">
-        <div id="gseason-content" class="markdown-content">
-          <div id="gseason-status" class="text-muted mb-2" style="display:none;"></div>
-          {% include "_custom_gseason.html" %}
-        </div>
-      </div>
-
-      <!-- Main Data Display Pane -->
-      <div class="tab-pane fade" id="main" role="tabpanel" aria-labelledby="main-tab">
-        <div class="row mt-2">
-          <div id="control-col" class="col-md-2">
-            <div class="control-panel p-3">
-
-              <div class="mb-2">
-                <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#infoModalMain">
-                  Readme first!
-                </button>
-              </div>
-
-              <div class="mb-3">
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" id="units-toggle_main"/>
-                  <label class="form-check-label ms-1" for="units-toggle_main">
-                    Metric Units
-                  </label>
-                </div>
-              </div>
-
-              <h5>Plot Options</h5>
-
-              <div id="main-date-controls">
-                <label for="main-year" class="form-label">
-                  Year
-                  <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
-                </label>
-                <select id="main-year" class="year-dropdown form-select mb-2" data-tab="main"></select>
-
-                <label for="main-startDate" class="form-label">
-                  Start Date
-                  <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
-                </label>
-                <input type="date" id="main-startDate" class="form-control mb-2" inputmode="none">
-
-                <label for="main-endDate" class="form-label">
-                  End Date
-                  <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
-                </label>
-                <input type="date" id="main-endDate" class="form-control mb-2" inputmode="none">
-              </div>
-
-              <label for="main-granularity" class="form-label">
-                Data time resolution
-                <span class="info-icon"
-                      data-tippy-content="Choose data resolution (15 min, hourly, daily, monthly, growing season).">&#9432;</span>
-              </label>
-              <select id="main-granularity" class="granularity-dropdown form-select mb-2" data-tab="main">
-                <option value="15min">15 Minute</option>
-                <option value="hourly">Hourly</option>
-                <option value="daily">Daily</option>
-                <option value="monthly">Monthly</option>
-                <option value="gseason">Growing Season</option>
-              </select>
-
-              <label for="main-variable" class="form-label">
-                Variable
-                <span class="info-icon"
-                      data-tippy-content="Choose which variable to plot (e.g., VWC, Temperature).">&#9432;</span>
-              </label>
-              <select id="main-variable" class="variable-dropdown form-select mb-2" data-tab="main"></select>
-
-              <label for="main-strip" class="form-label">
-                Strip
-                <span class="info-icon"
-                      data-tippy-content="Choose the strip - S1 (west), S4 (east).">&#9432;</span>
-              </label>
-              <select id="main-strip" class="strip-dropdown form-select mb-2" data-tab="main"></select>
-
-              <label for="main-loggerLocation" class="form-label">
-                Logger Location
-                <span class="info-icon"
-                      data-tippy-content="Choose the logger position in the strip (Top, Middle, Bottom). This selection is always used in the ratio plot, and may also be the fixed filter for the top plot.">&#9432;</span>
-              </label>
-              <select id="main-loggerLocation" class="loggerLocation-dropdown form-select mb-2" data-tab="main"></select>
-
-              <label for="main-depth" class="form-label">
-                Depth
-                <span class="info-icon"
-                      data-tippy-content="Choose the sensor depth. This selection is always used in the ratio plot, and may also be the fixed filter for the top plot.">&#9432;</span>
-              </label>
-              <select id="main-depth" class="depth-dropdown form-select mb-2" data-tab="main"></select>
-
-              <label for="main-traceOption" class="form-label">
-                Top Plot grouped by
-                <span class="info-icon"
-                      data-tippy-content="Choose what the top-plot lines represent. The other selection stays fixed and appears in the top-plot title.">&#9432;</span>
-              </label>
-              <select id="main-traceOption" name="traceOption" class="form-select mb-1"></select>
-
-              <!-- Dynamic helper text -->
-              <small id="traceOption-help" class="text-muted d-block mb-3">
-                Top plot shows one line per depth. Logger Location is the fixed filter for the top plot.
-              </small>
-
-              <!-- Ratio plot explanation -->
-              <div class="mb-3">
-                <small class="text-muted">
-                  <strong>Ratio Plot:</strong> Always uses the selected Logger Location and selected Depth. Both are shown in the ratio-plot title.
-                </small>
-              </div>
-
-              <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
-
-              <div class="d-flex flex-column">
-
-                <div class="dropdown mb-2">
-                  <button class="btn btn-secondary w-100 dropdown-toggle"
-                          type="button"
-                          id="downloadDataDropdown"
-                          data-bs-toggle="dropdown"
-                          aria-expanded="false">
-                    Download Data
-                  </button>
-                  <ul class="dropdown-menu w-100" aria-labelledby="downloadDataDropdown">
-                    <li>
-                      <a class="dropdown-item" href="#" onclick="downloadTraceData('raw'); return false;">
-                        Raw Data (CSV)
-                      </a>
-                    </li>
-                    <li>
-                      <a class="dropdown-item" href="#" onclick="downloadTraceData('ratio'); return false;">
-                        Ratio Data (CSV)
-                      </a>
-                    </li>
-                    <li>
-                      <a class="dropdown-item" href="#" onclick="downloadTraceData('all'); return false;">
-                        All Data (CSV)
-                      </a>
-                    </li>
-
-                    <li><hr class="dropdown-divider"></li>
-
-                    <li>
-                      <a class="dropdown-item" href="#" onclick="downloadTraceBundleZip(); return false;">
-                        ZIP bundle (All data CSV + README)
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-
-                <div class="dropdown mb-2">
-                  <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
-                          id="downloadPlotTop" data-bs-toggle="dropdown" aria-expanded="false">
-                    Download Top Plot
-                  </button>
-                  <ul class="dropdown-menu w-100" aria-labelledby="downloadPlotTop">
-                    <li><h6 class="dropdown-header">Match Screen Size</h6></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','png','screen'); return false;">PNG (screen size)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','jpeg','screen'); return false;">JPEG (screen size)</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','png','fixed'); return false;">PNG (high-res)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','jpeg','fixed'); return false;">JPEG (high-res)</a></li>
-                  </ul>
-                </div>
-
-                <div class="dropdown mb-1">
-                  <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
-                          id="downloadPlotBottom" data-bs-toggle="dropdown" aria-expanded="false">
-                    Download Bottom Plot
-                  </button>
-                  <ul class="dropdown-menu w-100" aria-labelledby="downloadPlotBottom">
-                    <li><h6 class="dropdown-header">Match Screen Size</h6></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','png','screen'); return false;">PNG (screen size)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','jpeg','screen'); return false;">JPEG (screen size)</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','png','fixed'); return false;">PNG (high-res)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','jpeg','fixed'); return false;">JPEG (high-res)</a></li>
-                  </ul>
-                </div>
-
-                <small class="text-muted">
-                  Downloaded files are saved by your web browser, usually in your
-                  <code>Downloads</code> folder.
-                </small>
-              </div>
-
+            <!-- Introduction Pane -->
+            <div class="tab-pane fade show active" id="intro" role="tabpanel" aria-labelledby="intro-tab">
+                <div id="intro-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="intro-content" class="markdown-content"></div>
             </div>
-          </div>
 
-          <div class="col-md-10">
-            <div class="plot-panel">
-              <div id="plots-status" class="text-muted mb-2" style="display:none;"></div>
-
-              <div class="mb-4">
-                <div id="plot-1"></div>
-              </div>
-              <div id="plot-2"></div>
+            <!-- Experiment Design Pane -->
+            <div class="tab-pane fade" id="experiment" role="tabpanel" aria-labelledby="experiment-tab">
+                <div id="experiment-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="experiment-content" class="markdown-content"></div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Summary Statistics Pane -->
-      <div class="tab-pane fade" id="summary" role="tabpanel" aria-labelledby="summary-tab">
-        <div class="row mt-2">
-          <div class="col-md-3">
-            <div class="control-panel p-3 summary-panel">
-              <button class="btn btn-info mb-3" data-bs-toggle="modal" data-bs-target="#infoModalSummary">
-                Readme first!
-              </button>
-
-              <div class="mb-3">
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" id="units-toggle_summary"/>
-                  <label class="form-check-label ms-1" for="units-toggle_summary">
-                    Metric Units
-                  </label>
+            <!-- Custom Growing-Season Pane -->
+            <div class="tab-pane fade" id="gseason" role="tabpanel" aria-labelledby="gseason-tab">
+                <div id="gseason-content" class="markdown-content">
+                    <div id="gseason-status" class="text-muted mb-2" style="display:none;"></div>
+                    {% include "_custom_gseason.html" %}
                 </div>
-              </div>
+            </div>
 
-              <h5>Summary Options</h5>
+            <!-- Main Data Display Pane -->
+            <div class="tab-pane fade" id="main" role="tabpanel" aria-labelledby="main-tab">
+                <div class="row mt-2">
+                    <div id="control-col" class="col-md-2">
+                        <div class="control-panel p-3">
 
-              <label for="summary-year" class="form-label">
-                Year <span class="info-icon" data-tippy-content="Select the year for summary statistics.">&#9432;</span>
-              </label>
-              <select id="summary-year" class="year-dropdown form-select mb-2" data-tab="summary"></select>
+                            <div class="mb-2">
+                                <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#infoModalMain">
+                                    Readme first!
+                                </button>
+                            </div>
 
-              <label for="summary-granularity" class="form-label">
-                Time averages <span class="info-icon" data-tippy-content="Choose aggregation level.">&#9432;</span>
-              </label>
-              <select id="summary-granularity" class="granularity-dropdown form-select mb-2" data-tab="summary"></select>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="units-toggle_main"/>
+                                    <label class="form-check-label ms-1" for="units-toggle_main">
+                                        Metric Units
+                                    </label>
+                                </div>
+                            </div>
 
-              <label for="summary-variable" class="form-label">
-                Variable <span class="info-icon" data-tippy-content="Pick variable to summarize.">&#9432;</span>
-              </label>
-              <select id="summary-variable" class="variable-dropdown form-select mb-2" data-tab="summary"></select>
+                            <h5>Plot Options</h5>
 
-              <label for="summary-strip" class="form-label">
-                Strip <span class="info-icon" data-tippy-content="Choose the strip (S1–S4).">&#9432;</span>
-              </label>
-              <select id="summary-strip" class="strip-dropdown form-select mb-2" data-tab="summary"></select>
+                            <div id="main-date-controls">
+                                <label for="main-year" class="form-label">
+                                    Year
+                                    <span class="info-icon" data-tippy-content="Select the data collection year.">&#9432;</span>
+                                </label>
+                                <select id="main-year" class="year-dropdown form-select mb-2" data-tab="main"></select>
 
-              <label for="summary-depth" class="form-label">
-                Depth <span class="info-icon" data-tippy-content="Select depth for summary.">&#9432;</span>
-              </label>
-              <select id="summary-depth" class="depth-dropdown form-select mb-3" data-tab="summary"></select>
+                                <label for="main-startDate" class="form-label">
+                                    Start Date
+                                    <span class="info-icon" data-tippy-content="First date for the data range.">&#9432;</span>
+                                </label>
+                                <input type="date" id="main-startDate" class="form-control mb-2" inputmode="none">
 
-              <button id="update-summary" class="btn btn-primary w-100 mb-2">Update Summary</button>
+                                <label for="main-endDate" class="form-label">
+                                    End Date
+                                    <span class="info-icon" data-tippy-content="Last date for the data range.">&#9432;</span>
+                                </label>
+                                <input type="date" id="main-endDate" class="form-control mb-2" inputmode="none">
+                            </div>
 
-              <div class="d-flex flex-column">
-                <div class="dropdown mb-1">
-                  <button class="btn btn-secondary w-100 dropdown-toggle"
-                          type="button" id="downloadSummaryBtn" data-bs-toggle="dropdown" aria-expanded="false">
-                    Download Summary
-                  </button>
-                  <ul class="dropdown-menu w-100" aria-labelledby="downloadSummaryBtn">
-                    <li><a class="dropdown-item" href="#" id="download-summary-raw">Raw Summary (CSV)</a></li>
-                    <li><a class="dropdown-item" href="#" id="download-summary-ratio">Ratio Summary (CSV)</a></li>
-                    <li><a class="dropdown-item" href="#" id="download-summary-all">All Summary (CSV)</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="#" id="download-summary-zip">ZIP bundle (Summary CSV + README)</a></li>
-                  </ul>
+                            <label for="main-granularity" class="form-label">
+                                Data time resolution
+                                <span class="info-icon"
+                                      data-tippy-content="Choose data resolution (15 min, hourly, daily, monthly, growing season).">&#9432;</span>
+                            </label>
+                            <select id="main-granularity" class="granularity-dropdown form-select mb-2" data-tab="main">
+                                <option value="15min">15 Minute</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="daily">Daily</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="gseason">Growing Season</option>
+                            </select>
+
+                            <label for="main-variable" class="form-label">
+                                Variable
+                                <span class="info-icon"
+                                      data-tippy-content="Choose which variable to plot (e.g., VWC, Temperature).">&#9432;</span>
+                            </label>
+                            <select id="main-variable" class="variable-dropdown form-select mb-2" data-tab="main"></select>
+
+                            <label for="main-strip" class="form-label">
+                                Strip
+                                <span class="info-icon"
+                                      data-tippy-content="Choose the strip - S1 (west), S4 (east).">&#9432;</span>
+                            </label>
+                            <select id="main-strip" class="strip-dropdown form-select mb-2" data-tab="main"></select>
+
+                            <label for="main-loggerLocation" class="form-label">
+                                Logger Location
+                                <span class="info-icon"
+                                      data-tippy-content="Choose the logger position in the strip (Top, Middle, Bottom). This selection is always used in the ratio plot, and may also be the fixed filter for the top plot.">&#9432;</span>
+                            </label>
+                            <select id="main-loggerLocation" class="loggerLocation-dropdown form-select mb-2" data-tab="main"></select>
+
+                            <label for="main-depth" class="form-label">
+                                Depth
+                                <span class="info-icon"
+                                      data-tippy-content="Choose the sensor depth. This selection is always used in the ratio plot, and may also be the fixed filter for the top plot.">&#9432;</span>
+                            </label>
+                            <select id="main-depth" class="depth-dropdown form-select mb-2" data-tab="main"></select>
+
+                            <label for="main-traceOption" class="form-label">
+                                Top Plot grouped by
+                                <span class="info-icon"
+                                      data-tippy-content="Choose what the top-plot lines represent. The other selection stays fixed and appears in the top-plot title.">&#9432;</span>
+                            </label>
+                            <select id="main-traceOption" name="traceOption" class="form-select mb-1"></select>
+
+                            <!-- Dynamic helper text -->
+                            <small id="traceOption-help" class="text-muted d-block mb-3">
+                                Top plot shows one line per depth. Logger Location is the fixed filter for the top plot.
+                            </small>
+
+                            <!-- Ratio plot explanation -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <strong>Ratio Plot:</strong> Always uses the selected Logger Location and selected Depth. Both are shown in the ratio-plot title.
+                                </small>
+                            </div>
+
+                            <button id="update-plots" class="btn btn-primary w-100 mb-2">Update Plots</button>
+
+                            <div class="d-flex flex-column">
+
+                                <div class="dropdown mb-2">
+                                    <button class="btn btn-secondary w-100 dropdown-toggle"
+                                            type="button"
+                                            id="downloadDataDropdown"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false">
+                                        Download Data
+                                    </button>
+                                    <ul class="dropdown-menu w-100" aria-labelledby="downloadDataDropdown">
+                                        <li>
+                                            <a class="dropdown-item" href="#" onclick="downloadTraceData('raw'); return false;">
+                                                Raw Data (CSV)
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="#" onclick="downloadTraceData('ratio'); return false;">
+                                                Ratio Data (CSV)
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="#" onclick="downloadTraceData('all'); return false;">
+                                                All Data (CSV)
+                                            </a>
+                                        </li>
+
+                                        <li><hr class="dropdown-divider"></li>
+
+                                        <li>
+                                            <a class="dropdown-item" href="#" onclick="downloadTraceBundleZip(); return false;">
+                                                ZIP bundle (All data CSV + README)
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="dropdown mb-2">
+                                    <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
+                                            id="downloadPlotTop" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Download Top Plot
+                                    </button>
+                                    <ul class="dropdown-menu w-100" aria-labelledby="downloadPlotTop">
+                                        <li><h6 class="dropdown-header">Match Screen Size</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','png','screen'); return false;">PNG (screen size)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','jpeg','screen'); return false;">JPEG (screen size)</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','png','fixed'); return false;">PNG (high-res)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('top','jpeg','fixed'); return false;">JPEG (high-res)</a></li>
+                                    </ul>
+                                </div>
+
+                                <div class="dropdown mb-1">
+                                    <button class="btn btn-secondary w-100 dropdown-toggle" type="button"
+                                            id="downloadPlotBottom" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Download Bottom Plot
+                                    </button>
+                                    <ul class="dropdown-menu w-100" aria-labelledby="downloadPlotBottom">
+                                        <li><h6 class="dropdown-header">Match Screen Size</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','png','screen'); return false;">PNG (screen size)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','jpeg','screen'); return false;">JPEG (screen size)</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">High-Resolution (Fixed)</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','png','fixed'); return false;">PNG (high-res)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="downloadPlot('bottom','jpeg','fixed'); return false;">JPEG (high-res)</a></li>
+                                    </ul>
+                                </div>
+
+                                <small class="text-muted">
+                                    Downloaded files are saved by your web browser, usually in your
+                                    <code>Downloads</code> folder.
+                                </small>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="col-md-10">
+                        <div class="plot-panel">
+                            <div id="plots-status" class="text-muted mb-2" style="display:none;"></div>
+
+                            <div class="mb-4">
+                                <div id="plot-1"></div>
+                            </div>
+                            <div id="plot-2"></div>
+                        </div>
+                    </div>
                 </div>
-
-                <small class="text-muted">
-                  Downloaded files are saved by your web browser, usually in your
-                  <code>Downloads</code> folder.
-                </small>
-              </div>
             </div>
-          </div>
 
-          <div class="col-md-9">
-            <h5 id="summary-title">Summary Statistics</h5>
+            <!-- Summary Statistics Pane -->
+            <div class="tab-pane fade" id="summary" role="tabpanel" aria-labelledby="summary-tab">
+                <div class="row mt-2">
+                    <div class="col-md-3">
+                        <div class="control-panel p-3 summary-panel">
+                            <button class="btn btn-info mb-3" data-bs-toggle="modal" data-bs-target="#infoModalSummary">
+                                Readme first!
+                            </button>
 
-            <!-- Status line controlled by JS; hidden by default -->
-            <div id="summary-status" class="text-muted mb-2" style="display:none;"></div>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="units-toggle_summary"/>
+                                    <label class="form-check-label ms-1" for="units-toggle_summary">
+                                        Metric Units
+                                    </label>
+                                </div>
+                            </div>
 
-            <div id="summary-table-container" class="mt-2">
-              <p class="text-muted">Summary statistics will appear here…</p>
-            </div>
-          </div>
-        </div>
-      </div>
+                            <h5>Summary Options</h5>
 
-      <!-- Pasture Quality Metrics Pane -->
-      <div class="tab-pane fade" id="nir" role="tabpanel" aria-labelledby="nir-tab">
-        <div class="container-fluid mt-2">
-          <h4 class="mb-2">Pasture Quality Metrics</h4>
-          <p class="text-muted mb-2">
-            Rows: STRIP 1–4 plus ratios (S1/S2 and S3/S4). Columns: sampling events.
-          </p>
-          <div class="nir-scroll">
-            <div id="nir-content" class="nir-content"></div>
-          </div>
-        </div>
-      </div>
+                            <label for="summary-year" class="form-label">
+                                Year <span class="info-icon" data-tippy-content="Select the year for summary statistics.">&#9432;</span>
+                            </label>
+                            <select id="summary-year" class="year-dropdown form-select mb-2" data-tab="summary"></select>
 
-      <!-- Biomass (Field Samples) Pane -->
-      <div class="tab-pane fade" id="biomass-field" role="tabpanel" aria-labelledby="biomass-field-tab">
-        <div class="container-fluid mt-2">
-          <h4 class="mb-2">Biomass (Field Samples)</h4>
-          <p class="text-muted mb-2">
-            Rows: field locations (e.g., S1M, S1B). Columns: sampling dates.
-          </p>
-          <div class="nir-scroll">
-            <div id="biomass-field-content" class="nir-content"></div>
-          </div>
-        </div>
-      </div>
+                            <label for="summary-granularity" class="form-label">
+                                Time averages <span class="info-icon" data-tippy-content="Choose aggregation level.">&#9432;</span>
+                            </label>
+                            <select id="summary-granularity" class="granularity-dropdown form-select mb-2" data-tab="summary"></select>
 
-      <!-- Soil Biological Health Pane -->
-      <div class="tab-pane fade" id="soilbio" role="tabpanel" aria-labelledby="soilbio-tab">
-        <div class="container-fluid mt-2">
-          <h4 class="mb-2">Soil Biological Health</h4>
-          <p class="text-muted mb-2">
-            Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.
-          </p>
-          <div class="nir-scroll">
-            <div id="soilbio-content" class="nir-content"></div>
-          </div>
-        </div>
-      </div>
+                            <label for="summary-variable" class="form-label">
+                                Variable <span class="info-icon" data-tippy-content="Pick variable to summarize.">&#9432;</span>
+                            </label>
+                            <select id="summary-variable" class="variable-dropdown form-select mb-2" data-tab="summary"></select>
 
-      <!-- Soil Chemistry Pane -->
-      <div class="tab-pane fade" id="soilchem" role="tabpanel" aria-labelledby="soilchem-tab">
-        <div class="container-fluid mt-2">
-          <h4 class="mb-2">Soil Chemistry</h4>
-          <p class="text-muted mb-2">
-            Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means.
-          </p>
-          <div class="nir-scroll">
-            <div id="soilchem-content" class="nir-content"></div>
-          </div>
-        </div>
-      </div>
+                            <label for="summary-strip" class="form-label">
+                                Strip <span class="info-icon" data-tippy-content="Choose the strip (S1–S4).">&#9432;</span>
+                            </label>
+                            <select id="summary-strip" class="strip-dropdown form-select mb-2" data-tab="summary"></select>
 
-      <!-- Technical Details Pane -->
-      <div class="tab-pane fade" id="tech-details" role="tabpanel" aria-labelledby="tech-details-tab">
-        <div id="tech-status" class="text-muted mb-2" style="display:none;"></div>
-        <div id="tech-content" class="markdown-content"></div>
-      </div>
+                            <label for="summary-depth" class="form-label">
+                                Depth <span class="info-icon" data-tippy-content="Select depth for summary.">&#9432;</span>
+                            </label>
+                            <select id="summary-depth" class="depth-dropdown form-select mb-3" data-tab="summary"></select>
 
-      <!-- Bulk Downloads pane -->
-      <div class="tab-pane fade" id="bulk-pane" role="tabpanel" aria-labelledby="bulk-tab">
-        <div class="container-fluid mt-2">
-          <div class="row g-3">
-            <div class="col-12 col-xl-10 col-xxl-9">
-              <p class="mb-2">
-                Download datasets as ZIP archives that include CSV export(s) plus a README.
-              </p>
+                            <button id="update-summary" class="btn btn-primary w-100 mb-2">Update Summary</button>
 
-              <div class="card">
-                <div class="card-header">Bulk Downloads</div>
+                            <div class="d-flex flex-column">
+                                <div class="dropdown mb-1">
+                                    <button class="btn btn-secondary w-100 dropdown-toggle"
+                                            type="button" id="downloadSummaryBtn" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Download Summary
+                                    </button>
+                                    <ul class="dropdown-menu w-100" aria-labelledby="downloadSummaryBtn">
+                                        <li><a class="dropdown-item" href="#" id="download-summary-raw">Raw Summary (CSV)</a></li>
+                                        <li><a class="dropdown-item" href="#" id="download-summary-ratio">Ratio Summary (CSV)</a></li>
+                                        <li><a class="dropdown-item" href="#" id="download-summary-all">All Summary (CSV)</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" id="download-summary-zip">ZIP bundle (Summary CSV + README)</a></li>
+                                    </ul>
+                                </div>
 
-                <div class="card-body">
-
-                  <div class="alert alert-secondary py-2 mb-3">
-                    <small>
-                      <b>Year + Granularity apply to:</b> Logger and Weather downloads.<br/>
-                      <b>Year applies to:</b> Irrigation and Fertilizing downloads.<br/>
-                      <b>All-years files:</b> Soil chemistry/biology and Biomass/Hay downloads include all available years (when available).
-                    </small>
-                  </div>
-
-                  <div class="row g-3">
-                    <div class="col-12 col-md-6">
-                      <label for="bulk-year" class="form-label">Year</label>
-                      <select id="bulk-year" class="form-select"></select>
-                      <div class="form-text">
-                        Choose a year to enable irrigation, fertilizer, and biomass downloads.
-                      </div>
+                                <small class="text-muted">
+                                    Downloaded files are saved by your web browser, usually in your
+                                    <code>Downloads</code> folder.
+                                </small>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="col-12 col-md-6">
-                      <label for="bulk-granularity" class="form-label">Granularity</label>
-                      <select id="bulk-granularity" class="form-select"></select>
-                      <small class="text-muted d-block mt-1">
-                        Used only for Logger + Weather downloads.
-                      </small>
+                    <div class="col-md-9">
+                        <h5 id="summary-title">Summary Statistics</h5>
+
+                        <!-- Status line controlled by JS; hidden by default -->
+                        <div id="summary-status" class="text-muted mb-2" style="display:none;"></div>
+
+                        <div id="summary-table-container" class="mt-2">
+                            <p class="text-muted">Summary statistics will appear here…</p>
+                        </div>
                     </div>
-                  </div>
-
-                  <hr class="my-3"/>
-
-                  <div class="row g-2">
-                    <div class="col-12 col-lg-6">
-                      <button id="bulk-download-loggers"
-                              class="btn btn-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="loggers"
-                              disabled>
-                        Download logger data (CSV + ratios, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12 col-lg-6">
-                      <button id="bulk-download-weather"
-                              class="btn btn-secondary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="weather"
-                              disabled>
-                        Download weather data (CSV, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12"><hr class="my-2"/></div>
-
-                    <div class="col-12 col-lg-6">
-                      <button id="bulk-download-irrigation"
-                              class="btn btn-outline-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="irrigation"
-                              disabled>
-                        Download irrigation (CSV, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12 col-lg-6">
-                      <button id="bulk-download-fertilizing"
-                              class="btn btn-outline-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="fertilizing"
-                              disabled>
-                        Download fertilizer use (CSV, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12"><hr class="my-2"/></div>
-
-                    <div class="col-12 col-lg-4">
-                      <button id="bulk-download-soil-chem"
-                              class="btn btn-outline-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="soil_chem"
-                              disabled>
-                        Download soil chemistry (all years, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12 col-lg-4">
-                      <button id="bulk-download-soil-bio"
-                              class="btn btn-outline-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="soil_bio"
-                              disabled>
-                        Download soil biology (all years, zipped)
-                      </button>
-                    </div>
-
-                    <div class="col-12 col-lg-4">
-                      <button id="bulk-download-biomass"
-                              class="btn btn-outline-primary bulk-download-btn w-100"
-                              type="button"
-                              data-dataset="biomass"
-                              disabled>
-                        Download biomass / hay (all years, zipped)
-                      </button>
-                    </div>
-                  </div>
-
-                  <small class="text-muted d-block mt-2">
-                    Each download is a ZIP bundle with CSV export(s) plus a README.
-                  </small>
-
                 </div>
-              </div>
-
             </div>
-          </div>
-        </div>
-      </div>
 
-        <!-- Glossary Pane -->
-        <div class="tab-pane fade" id="glossary" role="tabpanel" aria-labelledby="glossary-tab">
-          <div id="glossary-status" class="text-muted mb-2" style="display:none;"></div>
-          <div id="glossary-content" class="glossary-content"></div>
-        </div>
+            <!-- Pasture Quality Metrics Pane -->
+            <div class="tab-pane fade" id="nir" role="tabpanel" aria-labelledby="nir-tab">
+                <div class="container-fluid mt-2">
+                    <h4 class="mb-2">Pasture Quality Metrics</h4>
+                    <p class="text-muted mb-2">
+                        Rows: STRIP 1–4 plus ratios (S1/S2 and S3/S4). Columns: sampling events.
+                    </p>
+                    <div class="nir-scroll">
+                        <div id="nir-content" class="nir-content"></div>
+                    </div>
+                </div>
+            </div>
 
+            <!-- Biomass (Field Samples) Pane -->
+            <div class="tab-pane fade" id="biomass-field" role="tabpanel" aria-labelledby="biomass-field-tab">
+                <div class="container-fluid mt-2">
+                    <h4 class="mb-2">Biomass (Field Samples)</h4>
+                    <p class="text-muted mb-2">
+                        Rows: field locations (e.g., S1M, S1B). Columns: sampling dates.
+                    </p>
+                    <div class="nir-scroll">
+                        <div id="biomass-field-content" class="nir-content"></div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Acknowledgements Pane -->
-      <div class="tab-pane fade" id="acknowledgements" role="tabpanel" aria-labelledby="tech-details-tab">
-        <div id="acknowledgements-status" class="text-muted mb-2" style="display:none;"></div>
-        <div id="acknowledgements-content" class="markdown-content"></div>
-      </div>
+            <!-- Soil Biological Health Pane -->
+            <div class="tab-pane fade" id="soilbio" role="tabpanel" aria-labelledby="soilbio-tab">
+                <div class="container-fluid mt-2">
+                    <h4 class="mb-2">Soil Biological Health</h4>
+                    <p class="text-muted mb-2">
+                        Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means.
+                    </p>
+                    <div class="nir-scroll">
+                        <div id="soilbio-content" class="nir-content"></div>
+                    </div>
+                </div>
+            </div>
 
-    </div> <!-- /tab-content -->
-  </div> <!-- /container-fluid (content) -->
+            <!-- Soil Chemistry Pane -->
+            <div class="tab-pane fade" id="soilchem" role="tabpanel" aria-labelledby="soilchem-tab">
+                <div class="container-fluid mt-2">
+                    <h4 class="mb-2">Soil Chemistry</h4>
+                    <p class="text-muted mb-2">
+                        Rows: STRIP 1–4 (0–12 in). Columns: sampling events. Values shown are strip means.
+                    </p>
+                    <div class="nir-scroll">
+                        <div id="soilchem-content" class="nir-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Details Pane -->
+            <div class="tab-pane fade" id="tech-details" role="tabpanel" aria-labelledby="tech-details-tab">
+                <div id="tech-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="tech-content" class="markdown-content"></div>
+            </div>
+
+            <!-- Bulk Downloads pane -->
+            <div class="tab-pane fade" id="bulk-pane" role="tabpanel" aria-labelledby="bulk-tab">
+                <div class="container-fluid mt-2">
+                    <div class="row g-3">
+                        <div class="col-12 col-xl-10 col-xxl-9">
+
+                            <p class="mb-3">
+                                Download datasets as ZIP archives that include CSV export(s) plus a README.
+                            </p>
+
+                            <div class="form-check form-switch mb-3">
+                                <input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    id="units-toggle_bulk"
+                                >
+                                <label class="form-check-label ms-1" for="units-toggle_bulk">
+                                    Metric Units
+                                </label>
+                            </div>
+
+                                        <!-- ========================================================= -->
+                                        <!-- Continuous Monitoring Results -->
+                                        <!-- ========================================================= -->
+                                        <div class="card mb-4">
+                                            <div class="card-header">
+                                                <strong>Continuous Monitoring Results</strong>
+                                            </div>
+
+                                            <div class="card-body">
+                                                <p class="mb-3 text-muted">
+                                                    Time-series and field-management datasets. The <strong>Year</strong> and
+                                                    <strong>Granularity</strong> controls below apply to logger and weather downloads only.
+                                                    Irrigation and fertilizer downloads are available as all-years files.
+                                                </p>
+
+                                                <div class="row g-3 mb-3">
+                                                    <div class="col-12 col-md-6">
+                                                        <label for="bulk-year" class="form-label">Year</label>
+                                                        <select id="bulk-year" class="form-select"></select>
+                                                        <div class="form-text">
+                                                            Used only for logger and weather downloads.
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-12 col-md-6">
+                                                        <label for="bulk-granularity" class="form-label">Granularity</label>
+                                                        <select id="bulk-granularity" class="form-select"></select>
+                                                        <div class="form-text">
+                                                            Used only for logger and weather downloads.
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="alert alert-secondary py-2 mb-3">
+                                                    <small>
+                                                        <b>Logger + Weather:</b> use both year and granularity.<br/>
+                                                        <b>Irrigation + Fertilizer:</b> all-years files.
+                                                    </small>
+                                                </div>
+
+                                                <div class="row g-2">
+                                                    <div class="col-12 col-lg-6">
+                                                        <button id="bulk-download-loggers"
+                                                                class="btn btn-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="loggers"
+                                                                disabled>
+                                                            Download logger data (CSV + ratios, zipped)
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="col-12 col-lg-6">
+                                                        <button id="bulk-download-weather"
+                                                                class="btn btn-secondary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="weather"
+                                                                disabled>
+                                                            Download weather data (CSV, zipped)
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="col-12"><hr class="my-2"/></div>
+
+                                                    <div class="col-12 col-lg-6">
+                                                        <button id="bulk-download-irrigation"
+                                                                class="btn btn-outline-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="irrigation"
+                                                                disabled>
+                                                            Download irrigation (all years, zipped)
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="col-12 col-lg-6">
+                                                        <button id="bulk-download-fertilizer"
+                                                                class="btn btn-outline-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="fertilizer"
+                                                                disabled>
+                                                            Download fertilizer use (all years, zipped)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- ========================================================= -->
+                                        <!-- Lab-Based Results -->
+                                        <!-- ========================================================= -->
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <strong>Lab-Based Results</strong>
+                                            </div>
+
+                                            <div class="card-body">
+                                                <p class="mb-3 text-muted">
+                                                    Laboratory and harvest datasets. These downloads include all available
+                                                    years when data are available.
+                                                </p>
+
+                                                <div class="alert alert-secondary py-2 mb-3">
+                                                    <small>
+                                                        <b>All-years files:</b> Soil chemistry, soil biology, and biomass / hay
+                                                        downloads include all available years.
+                                                    </small>
+                                                </div>
+
+                                                <div class="row g-2">
+                                                    <div class="col-12 col-lg-4">
+                                                        <button id="bulk-download-soil-chem"
+                                                                class="btn btn-outline-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="soil_chem"
+                                                                disabled>
+                                                            Download soil chemistry (all years, zipped)
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="col-12 col-lg-4">
+                                                        <button id="bulk-download-soil-bio"
+                                                                class="btn btn-outline-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="soil_bio"
+                                                                disabled>
+                                                            Download soil biology (all years, zipped)
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="col-12 col-lg-4">
+                                                        <button id="bulk-download-biomass"
+                                                                class="btn btn-outline-primary bulk-download-btn w-100"
+                                                                type="button"
+                                                                data-dataset="biomass"
+                                                                disabled>
+                                                            Download biomass / hay (all years, zipped)
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <small class="text-muted d-block mt-3">
+                                                    Each download is a ZIP bundle with CSV export(s) plus a README.
+                                                </small>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+            <!-- Glossary Pane -->
+            <div class="tab-pane fade" id="glossary" role="tabpanel" aria-labelledby="glossary-tab">
+                <div id="glossary-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="glossary-content" class="glossary-content"></div>
+            </div>
+
+            <!-- Acknowledgements Pane -->
+            <div class="tab-pane fade" id="acknowledgements" role="tabpanel" aria-labelledby="tech-details-tab">
+                <div id="acknowledgements-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="acknowledgements-content" class="markdown-content"></div>
+            </div>
+
+        </div> <!-- /tab-content -->
+    </div> <!-- /container-fluid (content) -->
 
 </div> <!-- /container-fluid (page) -->
 
 <!-- Modals for Directions -->
 <div class="modal fade" id="infoModalMain" tabindex="-1" aria-labelledby="infoModalMainLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="infoModalMainLabel">Directions: Main Data Display</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="modal-main-help" class="markdown-container">Loading help…</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
+    <div class="modal-dialog modal-dialog-scrollable modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="infoModalMainLabel">Directions: Main Data Display</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-main-help" class="markdown-container">Loading help…</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="infoModalSummary" tabindex="-1" aria-labelledby="infoModalSummaryLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="infoModalSummaryLabel">Directions: Summary Statistics</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="modal-summary-help" class="markdown-container">Loading help…</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
+    <div class="modal-dialog modal-dialog-scrollable modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="infoModalSummaryLabel">Directions: Summary Statistics</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-summary-help" class="markdown-container">Loading help…</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="referenceModal" tabindex="-1" aria-labelledby="referenceModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="referenceModalLabel">Reference</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="referenceModalBody"></div>
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="referenceModalLabel">Reference</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="referenceModalBody"></div>
+        </div>
     </div>
-  </div>
 </div>
 
 <!-- Toggle disabling of date controls when Growing Season is chosen -->
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const gran = document.getElementById("main-granularity");
-    const dateControls = document.getElementById("main-date-controls");
+    document.addEventListener("DOMContentLoaded", () => {
+        const gran = document.getElementById("main-granularity");
+        const dateControls = document.getElementById("main-date-controls");
 
-    function toggleDateControls() {
-      const disable = gran && gran.value === "gseason";
-      if (!dateControls) return;
-      dateControls.querySelectorAll("select, input").forEach(el => {
-        el.disabled = disable;
-        el.classList.toggle("disabled", disable);
-      });
-    }
+        function toggleDateControls() {
+            const disable = gran && gran.value === "gseason";
+            if (!dateControls) return;
+            dateControls.querySelectorAll("select, input").forEach(el => {
+                el.disabled = disable;
+                el.classList.toggle("disabled", disable);
+            });
+        }
 
-    gran?.addEventListener("change", toggleDateControls);
-    toggleDateControls();
-  });
+        gran?.addEventListener("change", toggleDateControls);
+        toggleDateControls();
+    });
 </script>
 
 <!-- Keep dropdown parents visually "active" when a child tab is active -->
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const monitoringToggle = document.getElementById("monitoringDropdown");
-    const labToggle = document.getElementById("labDropdown");
+    document.addEventListener("DOMContentLoaded", () => {
+        const monitoringToggle = document.getElementById("monitoringDropdown");
+        const labToggle = document.getElementById("labDropdown");
 
-    function clearActive() {
-      monitoringToggle?.classList.remove("active");
-      labToggle?.classList.remove("active");
-    }
-
-    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(el => {
-      el.addEventListener("shown.bs.tab", (e) => {
-        const target =
-          e.target?.getAttribute("data-bs-target") ||
-          e.target?.getAttribute("href") ||
-          "";
-
-        clearActive();
-
-        if (["#main", "#summary", "#gseason"].includes(target)) {
-          monitoringToggle?.classList.add("active");
-        } else if (["#nir", "#biomass-field", "#soilbio", "#soilchem"].includes(target)) {
-          labToggle?.classList.add("active");
+        function clearActive() {
+            monitoringToggle?.classList.remove("active");
+            labToggle?.classList.remove("active");
         }
-      });
+
+        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(el => {
+            el.addEventListener("shown.bs.tab", (e) => {
+                const target =
+                    e.target?.getAttribute("data-bs-target") ||
+                    e.target?.getAttribute("href") ||
+                    "";
+
+                clearActive();
+
+                if (["#main", "#summary", "#gseason"].includes(target)) {
+                    monitoringToggle?.classList.add("active");
+                } else if (["#nir", "#biomass-field", "#soilbio", "#soilchem"].includes(target)) {
+                    labToggle?.classList.add("active");
+                }
+            });
+        });
     });
-  });
 </script>
 
 <!-- Global helper for ZIP bundle download from Main tab -->
 <script>
-  function getMainUnitSystem() {
-    const toggle = document.getElementById("units-toggle_main");
-    return toggle && toggle.checked ? "metric" : "us";
-  }
-
-  async function downloadTraceBundleZip() {
-    try {
-      const yearEl  = document.getElementById("main-year");
-      const varEl   = document.getElementById("main-variable");
-      const stripEl = document.getElementById("main-strip");
-      const depthEl = document.getElementById("main-depth");
-      const granEl  = document.getElementById("main-granularity");
-      const startEl = document.getElementById("main-startDate");
-      const endEl   = document.getElementById("main-endDate");
-
-      const year        = yearEl && yearEl.value ? parseInt(yearEl.value, 10) : null;
-      const variable    = varEl ? varEl.value : "";
-      const strip       = stripEl ? stripEl.value : "";
-      const depth       = depthEl ? depthEl.value : "";
-      const granularity = granEl ? granEl.value : "";
-      const unitSystem  = getMainUnitSystem();
-      const startDate   = startEl ? (startEl.value || null) : null;
-      const endDate     = endEl ? (endEl.value || null) : null;
-
-      if (!year || !variable || !strip || !depth || !granularity) {
-        alert("Please select Year, Variable, Strip, Depth, and Granularity before downloading.");
-        return;
-      }
-
-      const payload = {
-        year,
-        variable,
-        strip,
-        granularity,
-        depth,
-        unitSystem,
-        downloadType: "all",
-        startDate,
-        endDate
-      };
-
-      const response = await fetch("/api/download_data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        console.error("Download failed:", response.status, text);
-        alert("Download failed: " + (text || ("HTTP " + response.status)));
-        return;
-      }
-
-      const blob = await response.blob();
-
-      const disposition = response.headers.get("Content-Disposition") || "";
-      let filename = "biochar_data_bundle.zip";
-      const match = /filename\*?=([^;]+)/i.exec(disposition);
-      if (match) {
-        filename = match[1].trim().replace(/^utf-8''/i, "");
-        filename = filename.replace(/^"|"$/g, "");
-      }
-
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-    } catch (err) {
-      console.error("Error during ZIP bundle download:", err);
-      alert("An unexpected error occurred while preparing the ZIP download.");
+    function getMainUnitSystem() {
+        const toggle = document.getElementById("units-toggle_main");
+        return toggle && toggle.checked ? "metric" : "us";
     }
-  }
+
+    async function downloadTraceBundleZip() {
+        try {
+            const yearEl = document.getElementById("main-year");
+            const varEl = document.getElementById("main-variable");
+            const stripEl = document.getElementById("main-strip");
+            const depthEl = document.getElementById("main-depth");
+            const granEl = document.getElementById("main-granularity");
+            const startEl = document.getElementById("main-startDate");
+            const endEl = document.getElementById("main-endDate");
+
+            const year = yearEl && yearEl.value ? parseInt(yearEl.value, 10) : null;
+            const variable = varEl ? varEl.value : "";
+            const strip = stripEl ? stripEl.value : "";
+            const depth = depthEl ? depthEl.value : "";
+            const granularity = granEl ? granEl.value : "";
+            const unitSystem = getMainUnitSystem();
+            const startDate = startEl ? (startEl.value || null) : null;
+            const endDate = endEl ? (endEl.value || null) : null;
+
+            if (!year || !variable || !strip || !depth || !granularity) {
+                alert("Please select Year, Variable, Strip, Depth, and Granularity before downloading.");
+                return;
+            }
+
+            const payload = {
+                year,
+                variable,
+                strip,
+                granularity,
+                depth,
+                unitSystem,
+                downloadType: "all",
+                startDate,
+                endDate
+            };
+
+            const response = await fetch("/api/download_plot_data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error("Download failed:", response.status, text);
+                alert("Download failed: " + (text || ("HTTP " + response.status)));
+                return;
+            }
+
+            const blob = await response.blob();
+
+            const disposition = response.headers.get("Content-Disposition") || "";
+            let filename = "biochar_data_bundle.zip";
+            const match = /filename\*?=([^;]+)/i.exec(disposition);
+            if (match) {
+                filename = match[1].trim().replace(/^utf-8''/i, "");
+                filename = filename.replace(/^"|"$/g, "");
+            }
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+        } catch (err) {
+            console.error("Error during ZIP bundle download:", err);
+            alert("An unexpected error occurred while preparing the ZIP download.");
+        }
+    }
 </script>
 
 <!-- Optional DOM sanity check -->
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const requiredIds = [
-      "main-year","main-variable","main-strip","main-granularity","main-loggerLocation","main-depth","main-traceOption",
-      "summary-year","summary-variable","summary-strip","summary-granularity","summary-depth",
-      "plot-1","plot-2",
-      "nir-content","soilbio-content","soilchem-content","biomass-field-content",
-      "intro-content","experiment-content","tech-content", "glossary-content", "acknowledgements-content"
-    ];
-    const missing = requiredIds.filter(id => !document.getElementById(id));
-    if (missing.length) console.warn("🚨 index.html missing required elements:", missing);
-  });
+    document.addEventListener("DOMContentLoaded", () => {
+        const requiredIds = [
+            "main-year", "main-variable", "main-strip", "main-granularity", "main-loggerLocation", "main-depth", "main-traceOption",
+            "summary-year", "summary-variable", "summary-strip", "summary-granularity", "summary-depth",
+            "plot-1", "plot-2",
+            "nir-content", "soilbio-content", "soilchem-content", "biomass-field-content",
+            "intro-content", "experiment-content", "tech-content", "glossary-content", "acknowledgements-content"
+        ];
+        const missing = requiredIds.filter(id => !document.getElementById(id));
+        if (missing.length) console.warn("🚨 index.html missing required elements:", missing);
+    });
 </script>
 
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const traceEl = document.getElementById("main-traceOption");
-    const helpEl  = document.getElementById("traceOption-help");
+    document.addEventListener("DOMContentLoaded", () => {
+        const traceEl = document.getElementById("main-traceOption");
+        const helpEl = document.getElementById("traceOption-help");
 
-    function updateTraceHelp() {
-      if (!traceEl || !helpEl) return;
+        function updateTraceHelp() {
+            if (!traceEl || !helpEl) return;
 
-      const val = (traceEl.value || "").toLowerCase();
+            const val = (traceEl.value || "").toLowerCase();
 
-      if (val === "depth") {
-        helpEl.textContent =
-          "Top plot shows one line per depth. Logger Location is the fixed filter for the top plot.";
-      } else if (val === "loggerlocation") {
-        helpEl.textContent =
-          "Top plot shows one line per logger location. Depth is the fixed filter for the top plot.";
-      } else {
-        helpEl.textContent = "";
-      }
-    }
+            if (val === "depth") {
+                helpEl.textContent =
+                    "Top plot shows one line per depth. Logger Location is the fixed filter for the top plot.";
+            } else if (val === "loggerlocation") {
+                helpEl.textContent =
+                    "Top plot shows one line per logger location. Depth is the fixed filter for the top plot.";
+            } else {
+                helpEl.textContent = "";
+            }
+        }
 
-    traceEl?.addEventListener("change", updateTraceHelp);
-    updateTraceHelp();
-  });
+        traceEl?.addEventListener("change", updateTraceHelp);
+        updateTraceHelp();
+    });
 </script>
 
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const groupCheckboxes = document.querySelectorAll(".strip-group-check");
+  const flowSelect = document.getElementById("flow-allocation");
+
+  if (!flowSelect || groupCheckboxes.length === 0) return;
+
+  function updateFlowAllocationUI() {
+    const selected = Array.from(groupCheckboxes).filter(cb => cb.checked);
+
+    if (selected.length === 0) {
+      flowSelect.value = "1";
+      flowSelect.disabled = true;
+      return;
+    }
+
+    if (selected.length === 1) {
+      // 🔴 FORCE correct state
+      flowSelect.value = "1";
+      flowSelect.disabled = true;
+      return;
+    }
+
+    if (selected.length === 2) {
+      flowSelect.disabled = false;
+
+      // Only auto-switch if currently invalid
+      if (flowSelect.value !== "0.5") {
+        flowSelect.value = "0.5";
+      }
+    }
+  }
+
+  // 🔧 IMPORTANT: run once AFTER DOM settles
+  setTimeout(updateFlowAllocationUI, 0);
+
+  // Attach listeners
+  groupCheckboxes.forEach(cb => {
+    cb.addEventListener("change", updateFlowAllocationUI);
+  });
+});
+</script>
 
 </body>
 </html>

@@ -29,7 +29,6 @@ ENV/
 ############################
 # OS junk
 ############################
-.DS_Store
 Thumbs.db
 
 ############################
@@ -85,10 +84,32 @@ biochar_app/data-processed/**
 !biochar_app/data-processed/ward-html/**
 
 ############################
+# Management: exclude large/generated artifacts
+############################
+biochar_app/data-processed/management/**/backup/
+biochar_app/data-processed/management/**/backups/
+biochar_app/data-processed/management/**/*.sqlite
+biochar_app/data-processed/management/**/*.jpg
+biochar_app/data-processed/management/**/*.jpeg
+biochar_app/data-processed/management/**/*.png
+biochar_app/data-processed/management/**/*.mp4
+
+############################
 # Processed data we still ignore
 ############################
 biochar_app/data-processed/parquet/
 biochar_app/data-processed/downloads/
+
+############################
+
+# Generated diagnostics/results
+
+############################
+biochar_app/diagnostics/plots/
+biochar_app/diagnostics/reports/
+biochar_app/results/
+biochar_app/special_plots/
+biochar_app/pakbus/pakbus_data/
 
 ############################
 # Archives
@@ -108,11 +129,24 @@ package-lock.json
 *.xlsx
 *.docx
 *.pdf
+~$*.xlsx
+~$*.docx
 
 ############################
 # Compressed bundles / scratch exports
 ############################
 *.zip
+
+############################
+# Geospatial rasters
+############################
+biochar_app/geospatial/**/*.img
+biochar_app/geospatial/**/*.tif
+biochar_app/geospatial/**/*.tiff
+biochar_app/geospatial/**/*.laz
+biochar_app/geospatial/**/*.las
+biochar_app/geospatial/**/*.qgz
+biochar_app/geospatial/**/*.gpkg
 
 ############################
 # Optional: large local-only exports

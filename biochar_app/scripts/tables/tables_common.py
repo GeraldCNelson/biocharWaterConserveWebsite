@@ -15,8 +15,6 @@ This keeps table "shape" consistent across tabs and prevents drift.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Sequence
-
-from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.scripts.lab.reference_helpers import get_reference_for_varspec
 from biochar_app.scripts.lab.serializers import serialize_reference_bundle
 
@@ -119,7 +117,7 @@ def build_grouped_tab_payload(
     }
 
 
-def build_variable_meta(var_spec: LabVarSpec) -> Dict[str, Any]:
+def build_variable_meta(var_spec: Any) -> Dict[str, Any]:
     """
     Build a standard variable metadata payload, including optional Ward reference info.
 
@@ -130,6 +128,10 @@ def build_variable_meta(var_spec: LabVarSpec) -> Dict[str, Any]:
     - reference key
     - whether a reference exists
     - serialized reference bundle (if present)
+
+    `var_spec` is intentionally typed broadly because this helper is used by
+    multiple table builders whose variable-spec classes are structurally similar
+    but not always the same concrete type.
     """
     bundle = get_reference_for_varspec(var_spec)
 
@@ -137,7 +139,7 @@ def build_variable_meta(var_spec: LabVarSpec) -> Dict[str, Any]:
         "key": var_spec.key,
         "label": var_spec.label,
         "note": bundle.short_note if bundle else "",
-        "reference_key": var_spec.reference_key,
+        "reference_key": getattr(var_spec, "reference_key", None),
         "has_reference": bundle is not None,
         "reference": serialize_reference_bundle(bundle),
     }

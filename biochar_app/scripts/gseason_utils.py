@@ -27,6 +27,7 @@ from biochar_app.scripts.config import (
     PARQUET_DIR,
     UNIT_CONVERSIONS,
 )
+from biochar_app.scripts.data_loading import load_irrigation_data
 
 logger = logging.getLogger(__name__)
 
@@ -644,51 +645,63 @@ def add_gseason_irrigation_from_events(
     periods_raw=None,
 ) -> pd.DataFrame:
     """
-    Attach seasonal irrigation totals to the growing-season dataframe.
+    Attach seasonal strip-level irrigation totals to the growing-season dataframe.
 
-    Reads harmonized irrigation events from:
-        DATA_PROCESSED_DIR / f"Harmonized_Irrigation_Data_{year}.csv"
+    Uses canonical cleaned irrigation data from load_irrigation_data().
 
-    For each growing-season period, sums 'gallons' for the requested strip
-    over the period window (handling wrap-around seasons), and writes:
+    Required canonical irrigation fields:
+        - strip
+        - year
+        - start_timestamp
+        - gallons_strip
 
-        - irrigation_gal
-        - irrigation_kgal  (thousands of gallons, for labels/plot)
-
-    Assumes df_gs has one row per period, in the same order as periods_raw
-    (or DEFAULT_GSEASON_PERIODS if periods_raw is None).
+    Writes:
+        - irrigation_gal   = sum of gallons_strip for the requested strip
+        - irrigation_kgal  = irrigation_gal / 1000
     """
     periods = periods_to_list_of_dicts(periods_raw or DEFAULT_GSEASON_PERIODS)
 
-    irr_path = Path(DATA_PROCESSED_DIR) / f"Harmonized_Irrigation_Data_{year}.csv"
-    if not irr_path.exists():
-        # no irrigation file → just add NaNs to keep schema consistent
-        df_out = df_gs.copy()
+    df_out = df_gs.copy()
+
+    try:
+        irr = load_irrigation_data()
+    except Exception as exc:
+        logger.warning("Could not load irrigation data for gseason totals: %s", exc)
         df_out["irrigation_gal"] = np.nan
         df_out["irrigation_kgal"] = np.nan
         return df_out
 
-    irr = pd.read_csv(irr_path)
-    # adapt these column names if your CSV uses slightly different headings
-    # e.g., 'Strip', 'Gallons', 'start_timestamp', etc.
-    strip_col = "strip" if "strip" in irr.columns else "Strip"
-    gallons_col = "gallons" if "gallons" in irr.columns else "Gallons"
-    ts_col = "start_timestamp" if "start_timestamp" in irr.columns else "start"
+    if irr.empty:
+        df_out["irrigation_gal"] = np.nan
+        df_out["irrigation_kgal"] = np.nan
+        return df_out
 
-    irr[ts_col] = pd.to_datetime(irr[ts_col], errors="coerce")
-    irr = irr.dropna(subset=[ts_col])
-    irr = irr[irr[strip_col] == strip]
+    required_cols = {"strip", "year", "start_timestamp", "gallons_strip"}
+    missing = required_cols - set(irr.columns)
+    if missing:
+        raise KeyError(
+            f"Canonical irrigation data is missing required columns: {sorted(missing)}"
+        )
 
-    irrigation_totals = []
+    irr = irr.copy()
+    irr["start_timestamp"] = pd.to_datetime(irr["start_timestamp"], errors="coerce")
+    irr["gallons_strip"] = pd.to_numeric(irr["gallons_strip"], errors="coerce")
+
+    irr = irr.dropna(subset=["start_timestamp", "gallons_strip"]).copy()
+    irr = irr[
+        (irr["strip"] == strip)
+        & (pd.to_numeric(irr["year"], errors="coerce") == int(year))
+    ].copy()
+
+    irrigation_totals: list[float] = []
 
     for p in periods:
-        start_mmdd = str(p["start"])  # e.g. "11-01"
-        end_mmdd = str(p["end"])  # e.g. "04-30"
+        start_mmdd = str(p["start"])
+        end_mmdd = str(p["end"])
 
         sm, sd = map(int, start_mmdd.split("-"))
         em, ed = map(int, end_mmdd.split("-"))
 
-        # wrap-around if start month > end month (e.g. Nov→Apr)
         if sm > em:
             start_ts = pd.Timestamp(year - 1, sm, sd)
             end_ts = pd.Timestamp(year, em, ed)
@@ -696,16 +709,13 @@ def add_gseason_irrigation_from_events(
             start_ts = pd.Timestamp(year, sm, sd)
             end_ts = pd.Timestamp(year, em, ed)
 
-        # inclusive end-of-day
         end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
-        mask = (irr[ts_col] >= start_ts) & (irr[ts_col] <= end_ts)
-        total_gal = float(
-            pd.to_numeric(irr.loc[mask, gallons_col], errors="coerce").sum()
-        )
+        mask = (irr["start_timestamp"] >= start_ts) & (irr["start_timestamp"] <= end_ts)
+
+        total_gal = float(irr.loc[mask, "gallons_strip"].sum())
         irrigation_totals.append(total_gal)
 
-    df_out = df_gs.copy()
     df_out["irrigation_gal"] = irrigation_totals
     df_out["irrigation_kgal"] = np.round(df_out["irrigation_gal"] / 1000.0, 3)
 

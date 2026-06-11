@@ -17,10 +17,19 @@ export {
   waitForAllDropdowns,
 };
 
+/**
+ * @param {"raw" | "ratio"} plotType
+ * @param {string} plotDivId
+ * @returns {Promise<void>}
+ */
 export async function updatePlot(plotType, plotDivId) {
   return fetchAndRenderPlot(plotType, plotDivId);
 }
 
+/**
+ * @param {string} s
+ * @returns {string}
+ */
 export function capitalize(s) {
   return String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
 }

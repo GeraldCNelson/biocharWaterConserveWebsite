@@ -1,4 +1,4 @@
 *.js text eol=lf
 *.py text eol=lf
-*.html text eol=lf
+*.outputs_html text eol=lf
 *.css text eol=lf

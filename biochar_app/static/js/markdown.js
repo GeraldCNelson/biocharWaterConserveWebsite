@@ -1,3 +1,4 @@
+// @ts-check
 // static/js/markdown.js
 // Handles loading Markdown from the backend and inserting it into
 // the appropriate DOM containers (Intro, Experiment Design, Tech Details,
@@ -7,13 +8,35 @@
 import { debugLog } from "./debug_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
+/**
+ * @typedef {{
+ *   render: (text: string) => string
+ * }} MarkdownRenderer
+ */
+
+/**
+ * @typedef {Window & {
+ *   markdownit?: (options?: Record<string, any>) => MarkdownRenderer,
+ *   MathJax?: {
+ *     typesetPromise?: (elements?: Element[]) => Promise<void>
+ *   }
+ * }} MarkdownWindow
+ */
+
+/** @type {MarkdownWindow} */
+const markdownWindow = /** @type {MarkdownWindow} */ (window);
+
+/** @type {MarkdownRenderer | null} */
 let markdownRenderer = null;
 
+/**
+ * @returns {MarkdownRenderer | null}
+ */
 function getMarkdownRenderer() {
   if (!markdownRenderer) {
-    if (window.markdownit) {
-      markdownRenderer = window.markdownit({
-        html: true, // allow embedded HTML (figures, tables, etc.)
+    if (markdownWindow.markdownit) {
+      markdownRenderer = markdownWindow.markdownit({
+        html: true,
         linkify: true,
         breaks: false,
       });
@@ -24,6 +47,10 @@ function getMarkdownRenderer() {
   return markdownRenderer;
 }
 
+/**
+ * @param {string} containerId
+ * @returns {string}
+ */
 function prettyNameFromContainerId(containerId) {
   if (containerId === "intro-content") return "introduction";
   if (containerId === "experiment-content") return "experiment design";
@@ -36,6 +63,10 @@ function prettyNameFromContainerId(containerId) {
 /**
  * Fetch a Markdown file, render it to HTML, and inject into the container.
  * Then, if MathJax is present, re-typeset that container so TeX equations render.
+ *
+ * @param {string} containerId
+ * @param {string} markdownPath
+ * @returns {Promise<void>}
  */
 export async function loadMarkdownContent(containerId, markdownPath) {
   const container = document.getElementById(containerId);
@@ -46,15 +77,12 @@ export async function loadMarkdownContent(containerId, markdownPath) {
 
   debugLog(`📖 Loading markdown for #${containerId} from ${markdownPath} …`);
 
-  // ✅ Status line convention:
-  // For "intro-content" we look for "intro-status" (NOT "intro-content-status")
   const baseId = containerId.replace(/-content$/i, "");
   const statusEl = document.getElementById(`${baseId}-status`);
 
   const pretty = prettyNameFromContainerId(containerId);
 
   try {
-    // ✅ Animated overlay (dots) on the container itself
     showLoadingOverlay(container, `Loading ${pretty}`);
 
     if (statusEl) {
@@ -62,7 +90,6 @@ export async function loadMarkdownContent(containerId, markdownPath) {
       statusEl.style.display = "";
     }
 
-    // fetch markdown/html produced by backend
     const resp = await fetch(markdownPath, { cache: "no-store" });
     if (!resp.ok) {
       const msg = `Failed to fetch ${markdownPath}: HTTP ${resp.status}`;
@@ -74,18 +101,20 @@ export async function loadMarkdownContent(containerId, markdownPath) {
     const text = await resp.text();
     const renderer = getMarkdownRenderer();
 
-    // markdown-it will render markdown; if you are serving raw HTML, it's still safe
-    // because html:true allows it through.
     const html = renderer ? renderer.render(text) : text;
 
     container.classList.add("markdown-content");
     container.innerHTML = html;
 
-    // Re-run MathJax in this container
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      window.MathJax.typesetPromise([container]).catch((err) => {
-        console.error("❌ MathJax typeset error:", err);
-      });
+    if (markdownWindow.MathJax && markdownWindow.MathJax.typesetPromise) {
+      markdownWindow.MathJax.typesetPromise([container]).catch(
+        /**
+         * @param {unknown} err
+         */
+        (err) => {
+          console.error("❌ MathJax typeset error:", err);
+        }
+      );
     }
 
     debugLog(`✅ Markdown loaded into #${containerId}`);

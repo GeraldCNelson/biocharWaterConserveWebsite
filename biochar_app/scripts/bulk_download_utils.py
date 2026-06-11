@@ -13,7 +13,10 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
 )
-
+from biochar_app.scripts.readme_builders import (
+    build_file_dataset_readme,
+    load_readme_fragment,
+)
 
 # -----------------------------------------------------------------------------
 # Registry spec
@@ -27,7 +30,8 @@ class BulkSheetSpec:
     year: Optional[int]       # if set, inject Year column when missing
     filename: str             # CSV filename inside the zip
     csv_path: Optional[str] = None  # if set, load from disk CSV instead of Excel
-
+    readme_fragment: str = "bulk_download_notes"
+    readme_kind: str = "generic"
 
 # -----------------------------------------------------------------------------
 # Loaders
@@ -161,11 +165,14 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
     ]
 
 
-def build_manifest(xlsx_path: str | Path) -> List[Dict[str, Any]]:
+def build_manifest(xlsx_path: str | Path) -> Dict[str, Any]:
     """
-    Compatibility wrapper for routes.py (if still used somewhere).
+    Compatibility wrapper for routes.py.
+    Returns the full bulk download manifest, including:
+    - entries
+    - years
+    - granularities
     """
     from biochar_app.scripts.bulk_downloads import bulk_download_manifest
     manifest = bulk_download_manifest()
-    entries = manifest.get("entries") if isinstance(manifest, dict) else manifest
-    return entries if isinstance(entries, list) else []
+    return manifest if isinstance(manifest, dict) else {"entries": manifest}

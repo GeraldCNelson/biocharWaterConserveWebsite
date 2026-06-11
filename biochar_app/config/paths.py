@@ -48,8 +48,11 @@ PARQUET_SUMMARY_WEATHER_MONTHLY_DIR = PARQUET_SUMMARY_WEATHER_DIR / "monthly"
 # Lab tests / ancillary datasets
 LAB_TESTS_RAW_DIR = DATA_RAW_DIR / "lab-tests"
 LAB_TESTS_PROCESSED_DIR = DATA_PROCESSED_DIR / "lab-tests"
+HAY_TESTS_RAW_DIR = LAB_TESTS_RAW_DIR / "hay-tests" / "csv-files"
 HAY_TESTS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "hay-tests" / "csv-files"
 SOIL_BIO_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-bio" / "csv-files"
+SOIL_CHEM_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files"
+
 SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files"
 SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
 BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"
@@ -64,8 +67,12 @@ BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
 
 MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
-IRRIGATION_CSV = MANAGEMENT_PROCESSED_DIR / "irrigation_clean.csv"
-FERTILIZER_CSV = MANAGEMENT_PROCESSED_DIR / "fertilizer_clean.csv"
+IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR/ "irrigation"
+IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean.csv"
+FERTILIZER_DIR = MANAGEMENT_PROCESSED_DIR/ "fertilizer"
+FERTILIZER_CSV_OUT = FERTILIZER_DIR / "fertilizer_clean.csv"
+FERTILIZER_DATA_IN = FERTILIZER_DIR / "fertilizer_data_raw.xlsx"
+
 
 DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
