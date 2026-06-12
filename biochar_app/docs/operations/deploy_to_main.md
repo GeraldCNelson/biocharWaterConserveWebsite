@@ -1,98 +1,277 @@
 # Deploying Updates to the Biochar Website
 
-Test site:
+This document describes the standard workflow for moving approved code and data from development into production.
+
+Development is normally performed using PyCharm, but deployment itself uses Git, SSH, rsync, and standard Linux command-line tools.
+
+---
+
+# Website URLs
+
+## Test site
+
+Initial destination for testing new code and data:
 
 - https://test.biocharresearch.org
 
-Main site:
+## Production site
+
+Public-facing website:
 
 - https://biocharresearch.org
 
+---
 
-## Key idea
+# Current Python Virtual Environments
 
-Deployment has two parts:
+A Python virtual environment is an isolated folder that contains its own Python interpreter and installed packages. It allows project-specific dependencies to be managed independently of the operating system Python installation.
 
-1. Git updates for tracked code/config/templates/docs.
-2. `rsync` updates for data files that are not reliably managed through Git.
+Current locations:
 
-A `git pull` on the server will not automatically bring every locally generated or untracked data file.
+### Local development computer
 
-## Github branch workflow
+```text
+~/.biochar_py313
+```
 
-Normal development should happen on the `etl-refactor` branch used by https://test.biocharresearch.org.
+### Test server
 
-The `main` branch represents the production website state used by `https://biocharresearch.org`.
+```text
+~/.biochar_py313
+```
 
-Typical workflow:
+### Production server
 
-1. Make code and data-processing changes on `etl-refactor`.
-2. Test locally.
-3. Deploy/test on `test.biocharresearch.org` when needed.
-4. When everything is working, merge `etl-refactor` into `main`.
-5. Push `main`.
-6. Pull `main` on the production server.
+```text
+~/biocharWaterConserveWebsite/venv
+```
 
-## 1. Local checks before deployment
+Commands in the production sections below assume the production venv path.
 
-Run from the local project root on the Mac:
+## Future goal
+
+Standardize both servers on:
+
+```text
+~/biocharWaterConserveWebsite/venv
+```
+
+---
+
+# Key Idea
+
+Deployment consists of two separate activities.
+
+## 1. Git updates
+
+Git manages:
+
+- source code
+- configuration files
+- templates
+- documentation
+
+GitHub repository:
+
+```text
+https://github.com/GeraldCNelson/biocharWaterConserveWebsite
+```
+
+The production branch is:
+
+```text
+main
+```
+
+## 2. Data updates
+
+Many generated data products are not reliably managed through Git.
+
+Examples include:
+
+- parquet files
+- download packages
+- lab-test outputs
+- irrigation outputs
+
+These files are transferred using:
+
+```bash
+rsync
+```
+
+A `git pull` only updates files tracked by Git. It does not automatically update generated data files.
+
+---
+
+# GitHub Branch Workflow
+
+Normal development occurs on:
+
+```text
+etl-refactor
+```
+
+The test website runs from:
+
+```text
+etl-refactor
+```
+
+The production website runs from:
+
+```text
+main
+```
+
+## Typical Workflow
+
+1. Make code and data-processing changes locally on the `etl-refactor` branch.
+2. Commit periodically and push to GitHub.
+3. Transfer updated data files to the test server using `rsync`.
+4. Verify behavior locally.
+5. Verify behavior on https://test.biocharresearch.org.
+6. Run Playwright smoke tests locally and on the test server.
+7. When everything works correctly on the test server, merge `etl-refactor` into `main`.
+8. Push `main` to GitHub.
+9. Pull `main` on the production server.
+10. Transfer approved data from the test server to the production server.
+11. Restart the production website.
+12. Verify https://biocharresearch.org.
+
+---
+
+# 1. Local Checks Before Deployment
+
+Run from the local project root:
 
 ```bash
 git status
+
 python biochar_app/tests/playwright_smoke.py
 ```
 
-If the smoke test passes (✅ Playwright smoke test completed), push `main`:
+Expected result:
 
-```bash
-git push origin main
+```text
+✅ Playwright smoke test completed
 ```
 
-## 2. Copy required data files to the production server
+If the smoke test passes:
 
-Run from the local project root on the Mac.
+```bash
+git add <changed files>
 
-Downloads:
+git commit -m "Brief description"
+
+git push origin etl-refactor
+```
+
+---
+
+# 2. Test Server Validation
+
+Update the test server:
+
+```bash
+ssh biochar-test-fetch
+
+cd ~/biocharWaterConserveWebsite
+
+git checkout etl-refactor
+
+git pull origin etl-refactor
+
+source ~/.biochar_py313/bin/activate
+
+python biochar_app/tests/playwright_smoke.py
+```
+
+Expected result:
+
+```text
+✅ Playwright smoke test completed
+```
+
+Verify that the test website behaves correctly:
+
+- interactive plots
+- downloads
+- soil chemistry
+- soil biology
+- management data
+- irrigation overlays
+- any newly added functionality
+
+---
+
+# 3. Promote etl-refactor to main
+
+Run locally:
+
+```bash
+git checkout main
+
+git pull origin main
+
+git merge etl-refactor
+
+python biochar_app/tests/playwright_smoke.py
+
+git push origin main
+
+git checkout etl-refactor
+```
+
+---
+
+# 4. Transfer Approved Data to Production
+
+After the test server has been verified, it becomes the approved source for production data.
+
+Run these commands from the local computer.
+
+## Downloads
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar_app/data-processed/downloads/ \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/ \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/
 ```
 
-Parquet files:
+## Parquet files
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar_app/data-processed/parquet/ \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/ \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/
 ```
 
-Lab-test files:
+## Lab-test files
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar_app/data-processed/lab-tests/ \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/lab-tests/ \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/lab-tests/
 ```
 
-Irrigation clean file:
+## Irrigation clean file
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar_app/data-processed/management/irrigation/irrigation_clean.csv \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/management/irrigation/irrigation_clean.csv \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/management/irrigation/
 ```
 
-## 3. SSH to the production server
+---
 
-Run from the local Mac:
+# 5. SSH to the Production Server
 
 ```bash
 ssh biochar-webserver
 ```
 
-Server aliases such as `biochar-webserver` are defined locally in:
+SSH aliases are defined in:
 
 ```bash
 ~/.ssh/config
@@ -104,35 +283,29 @@ To edit:
 nano ~/.ssh/config
 ```
 
-## 4. Pull code on the production server
+---
 
-Run on the server:
+# 6. Pull Code on the Production Server
+
+Run on the production server:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
+
 git status
+
 git pull origin main
 ```
 
-If `git pull` fails because local files would be overwritten, do not force anything immediately. First preserve local server files:
+---
 
-```bash
-git stash push -u -m "server-local-files-before-main-pull"
-```
+# 7. Update the Production Python Environment
 
-If obsolete CR1000 test files block the pull, remove them:
-
-```bash
-rm -f tests/test_1_pakbus.py tests/test_2_utils.py tests/test_3_device.py
-git pull origin main
-```
-
-## 5. Update the server Python environment
-
-The app runs inside the project virtual environment:
+Activate the project virtual environment:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
+
 source venv/bin/activate
 ```
 
@@ -140,35 +313,56 @@ Verify:
 
 ```bash
 which python
+
 which pip
 ```
 
-Expected paths should start with:
+Expected:
 
 ```text
-/home/ubuntu/biocharWaterConserveWebsite/venv/bin/
+/home/ubuntu/biocharWaterConserveWebsite/venv/bin/python
+/home/ubuntu/biocharWaterConserveWebsite/venv/bin/pip
 ```
 
-Install or update Python packages inside the venv:
+Install any updated requirements:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Important: do not use system `pip install` outside the venv. Ubuntu may block it with an `externally-managed-environment` error.
+Important:
 
-## 6. Restart the website service
+Do not use system-wide `pip install` commands outside the virtual environment.
 
-Run on the server:
+Ubuntu may return:
+
+```text
+externally-managed-environment
+```
+
+if the virtual environment is not activated.
+
+---
+
+# 8. Restart the Production Website
 
 ```bash
 sudo systemctl restart biochar
+
 sudo systemctl status biochar
 ```
 
-## 7. If the site shows 502 Bad Gateway
+Confirm that the service status is:
 
-Check the app logs:
+```text
+active (running)
+```
+
+---
+
+# 9. Troubleshooting 502 Bad Gateway Errors
+
+Check application logs:
 
 ```bash
 sudo journalctl -u biochar -n 80 --no-pager
@@ -182,74 +376,106 @@ sudo tail -n 80 /var/log/nginx/error.log
 
 Common causes:
 
-- missing Python package in `venv`
-- app import error
+- missing Python package
+- import error
 - missing data file
 - Gunicorn worker crash
+- incorrect virtual environment
 
-Example fix for missing multipart support:
+Example:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
+
 source venv/bin/activate
+
 pip install python-multipart
+
 sudo systemctl restart biochar
 ```
 
-## 8. Server maintenance
+---
 
-Periodic maintenance:
+# 10. Server Maintenance
+
+Update operating-system packages periodically:
 
 ```bash
 sudo apt update
+
 sudo apt upgrade -y
 ```
 
-Only reboot if required:
+Check whether a reboot is required:
 
 ```bash
 [ -f /var/run/reboot-required ] && echo "Reboot required"
 ```
 
-If reboot is required:
+Reboot if necessary:
 
 ```bash
 sudo reboot
 ```
 
-## 9. Optional log cleanup
+---
 
-Clear nginx error log before testing:
+# 11. Optional Log Cleanup
+
+Clear nginx error logs before testing:
 
 ```bash
 sudo truncate -s 0 /var/log/nginx/error.log
 ```
 
-## 10. Post-deployment checks
+---
+
+# 12. Post-Deployment Verification
 
 Open:
 
 - https://biocharresearch.org
 
-Check:
+Verify:
 
-- Home page loads
-- Interactive plots load
-- Bulk downloads work
-- Soil chemistry tab loads
-- Soil biology tab loads
-- No obvious layout problems
-- No 502 errors
+- home page loads
+- interactive plots load
+- bulk downloads work
+- soil chemistry tab loads
+- soil biology tab loads
+- irrigation data displays correctly
+- no obvious layout problems
+- no 502 errors
 
 Useful server checks:
 
 ```bash
 sudo systemctl status biochar
+
 sudo tail -n 100 /var/log/nginx/error.log
 ```
 
-## Notes
+---
 
-Playwright smoke tests are currently run locally on the Mac before deployment.
+# Notes
+
+Playwright smoke tests currently run:
+
+- locally
+- on the test server
 
 Playwright is not currently installed on the production server.
+
+These instructions assume:
+
+- macOS or Linux
+- Git installed
+- SSH configured
+- rsync available
+
+Windows users can run the same workflow using:
+
+- Git Bash
+- WSL (Windows Subsystem for Linux)
+
+Most local development for this project is performed using PyCharm.
