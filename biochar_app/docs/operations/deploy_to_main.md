@@ -22,6 +22,27 @@ Public-facing website:
 
 ---
 
+# Hosting Architecture
+
+The Biochar website is hosted on Amazon Lightsail.
+
+Current servers:
+
+- biochar-test-fetch
+  - Test environment
+  - Runs the `etl-refactor` branch
+  - URL: https://test.biocharresearch.org
+
+- biochar-webserver
+  - Production environment
+  - Runs the `main` branch
+  - URL: https://biocharresearch.org
+
+Both servers run Ubuntu Linux and are accessed through SSH aliases defined in:
+
+```bash
+~/.ssh/config
+
 # Current Python Virtual Environments
 
 A Python virtual environment is an isolated folder that contains its own Python interpreter and installed packages. It allows project-specific dependencies to be managed independently of the operating system Python installation.
