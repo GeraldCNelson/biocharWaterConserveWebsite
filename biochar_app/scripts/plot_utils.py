@@ -28,6 +28,8 @@ from biochar_app.scripts.type_utils import (
     to_float_series,
 )
 
+from biochar_app.config.core import TRACE_OPTION_MAP
+
 if TYPE_CHECKING:
     from biochar_app.scripts.routes import PeriodSpec  # noqa: F401
 
@@ -145,12 +147,8 @@ def _logger_display_label(logger_location: str) -> str:
 
 
 def _normalize_trace_grouping(trace_option: str) -> str:
-    mode = str(trace_option or "").strip().lower()
-    if mode in {"depth", "depths"}:
-        return "depth"
-    if mode in {"loggerlocation", "logger_location", "logger-location"}:
-        return "loggerLocation"
-    return mode
+    mode = str(trace_option or "").strip()
+    return TRACE_OPTION_MAP.get(mode, TRACE_OPTION_MAP.get(mode.lower(), mode))
 
 
 def build_raw_plot_title(
@@ -217,12 +215,22 @@ def add_precipitation_bars(
     usys: UnitSystem = coerce_unit_system(unit_system)
     df = _ensure_timestamp_datetime(df)
 
-    bw = bar_width_map.get(granularity, bar_width_map.get("daily", 0))
-    if granularity == "daily":
-        try:
-            bw = int(float(bw) * 1.5)
-        except (TypeError, ValueError):
-            pass
+    gran = str(granularity or "").strip().lower()
+
+    bw = bar_width_map.get(gran, bar_width_map.get("daily", 0))
+
+    width_multiplier = {
+        "15min": 50.0,
+        "15minute": 50.0,
+        "15-minute": 50.0,
+        "hourly": 2.5,
+        "daily": 1.5,
+    }.get(gran, 1.0)
+
+    try:
+        bw = int(float(bw) * width_multiplier)
+    except (TypeError, ValueError):
+        pass
 
     primary = {"metric": "precip_mm", "us": "precip_in"}[usys]
     fallback = {"metric": "precip_in", "us": "precip_mm"}[usys]

@@ -1,6 +1,38 @@
 # irrigation_plots.py
 from __future__ import annotations
 
+"""
+Irrigation plotting utilities.
+
+Purpose
+-------
+This module creates diagnostic plots for irrigation response analysis. It should
+not perform the core irrigation-event calculations; those belong in
+irrigation_analysis.py.
+
+Expected inputs
+---------------
+1. Event-level output tables from irrigation_analysis.py.
+2. 15-minute logger data, usually loaded from processed parquet files.
+3. Clean irrigation event data, usually loaded through:
+       biochar_app.scripts.data_loading.load_irrigation_data()
+
+Typical plots
+-------------
+- VWC response around irrigation events.
+- Pre-irrigation baseline vs post-irrigation peak/plateau.
+- Estimated water deficit by event.
+- Applied irrigation volume vs estimated storage/excess.
+- Strip/group comparisons across years.
+- Seasonal summaries.
+
+Notes
+-----
+This module is intended for exploratory analysis and QA figures. Website-facing
+plots should stay in the main plotting utilities unless they are promoted from
+analysis to production.
+"""
+
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast

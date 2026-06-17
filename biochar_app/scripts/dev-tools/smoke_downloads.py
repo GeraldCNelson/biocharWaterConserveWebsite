@@ -166,7 +166,18 @@ def content_disposition_filename(response: requests.Response) -> str:
     return header
 
 
+def normalize_trace_option_for_test(trace_option: str) -> str:
+    mode = str(trace_option or "").strip()
+    if mode in {"depth", "depths"}:
+        return "depth"
+    if mode in {"loggerLocation", "logger_location", "logger-location"}:
+        return "loggerLocation"
+    return mode
+
+
 def assert_filename_rules(filename: str, trace_option: str) -> None:
+    trace_option = normalize_trace_option_for_test(trace_option)
+
     if trace_option == "depth":
         assert "logger" in filename, (
             f"Depth-grouped download should include logger location in filename: {filename}"

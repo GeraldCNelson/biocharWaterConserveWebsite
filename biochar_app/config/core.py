@@ -59,14 +59,21 @@ GRANULARITIES = [
     ("gseason", None),
 ]
 
-TRACE_CHOICES = ["depths", "locations"]
+TRACE_CHOICES = ["depth", "loggerLocation"]
+
 PLOT_BASED_ON_OPTIONS = [
     {"value": "depth", "label": "Depth"},
     {"value": "loggerLocation", "label": "Logger Location"},
 ]
+
 TRACE_OPTION_MAP: dict[str, str] = {
-    "depth": "depths",
-    "loggerLocation": "locations",
+    "depth": "depth",
+    "depths": "depth",
+    "loggerLocation": "loggerLocation",
+    "logger_location": "loggerLocation",
+    "logger-location": "loggerLocation",
+    "locations": "loggerLocation",
+    "location": "loggerLocation",
 }
 
 # ---------------------------------------------------------------------

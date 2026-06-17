@@ -39,6 +39,7 @@ from biochar_app.scripts.readme_builders import (
     build_experiment_lookup_section,
     build_download_header,
     load_readme_fragment,
+    build_plot_download_readme,
 )
 
 from biochar_app.scripts.data_loading import load_logger_data
@@ -251,15 +252,16 @@ def _select_trace_columns(
     source_var = "VWC" if variable == "SWC" else variable
     raw_expected: set[str] = set()
 
-    if trace_option == "depth":
+    is_grouped_by_depth = str(trace_option).strip().lower() in {"depth", "depths"}
+
+    if is_grouped_by_depth:
         raw_expected = {
             f"{source_var}_{d}_raw_{strip}_{logger_location}"
             for d in SENSOR_DEPTH_CODES
         }
     else:
         raw_expected = {
-            f"{source_var}_{depth}_raw_{strip}_{loc}"
-            for loc in LOGGER_LOCATION_MAPPING
+            f"{source_var}_{depth}_raw_{strip}_{loc}" for loc in LOGGER_LOCATION_MAPPING
         }
 
     def is_ratio_col(col: str) -> bool:
@@ -342,7 +344,6 @@ def _add_unit_suffixes_for_download(df: pd.DataFrame, variable: str) -> pd.DataF
 # ---------------------------------------------------------------------------
 @main_router.get("/bulk_download/options")
 async def get_bulk_download_options():
-    logger.info("📦 get_bulk_download_options() called")
 
     available: Dict[str, Dict[str, bool]] = {}
 
@@ -712,10 +713,17 @@ async def api_plot_raw(req: PlotRequest):
         & (df["timestamp"] < end_ts)
         ].copy()
 
-    if trace_option == "depth":
-        expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS]
+    is_grouped_by_depth = str(trace_option).strip().lower() in {"depth", "depths"}
+
+    if is_grouped_by_depth:
+        expected = [
+            f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS
+        ]
     else:
-        expected = [f"{source_var}_{depth}_raw_{strip}_{lkey}" for lkey in LOGGER_LOCATION_MAPPING]
+        expected = [
+            f"{source_var}_{depth}_raw_{strip}_{lkey}"
+            for lkey in LOGGER_LOCATION_MAPPING
+        ]
 
     present = [c for c in expected if c in df.columns]
     non_empty = [c for c in present if df[c].notna().any()]
@@ -1269,10 +1277,21 @@ async def api_download_plot_data(req: DownloadDataRequest):
     depth = str(req.depth)
     unit_system: UnitSystem = _normalize_unit_system(req.unitSystem)
     download_type = str(req.downloadType or "all").lower()
-    logger_location = str(req.loggerLocation or DEFAULT_LOGGER_LOCATION)
+
+    logger_location = str(
+        req.loggerLocation
+        or getattr(req, "logger_location", None)
+        or DEFAULT_LOGGER_LOCATION
+    ).upper()
 
     trace_option_raw = str(req.traceOption or "depth").strip().lower()
     trace_option = TRACE_OPTION_MAP.get(trace_option_raw, trace_option_raw)
+
+    logger.info(
+        "trace_option_raw=%s -> trace_option=%s",
+        trace_option_raw,
+        trace_option,
+    )
 
     is_grouped_by_depth = (
         trace_option_raw in {"depth", "depths"}
@@ -1280,7 +1299,10 @@ async def api_download_plot_data(req: DownloadDataRequest):
     )
 
     if download_type not in ("raw", "ratio", "all"):
-        raise HTTPException(status_code=400, detail=f"Invalid downloadType: {download_type}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid downloadType: {download_type}",
+        )
 
     _ensure_year_allowed(year)
 
@@ -1308,6 +1330,16 @@ async def api_download_plot_data(req: DownloadDataRequest):
             if pd.notna(end_dt):
                 df = df[df["timestamp"] <= end_dt]
 
+    logger.info(
+        "DOWNLOAD REQUEST: variable=%s strip=%s depth=%s logger=%s trace_option=%s kind=%s",
+        variable,
+        strip,
+        depth,
+        logger_location,
+        trace_option,
+        download_type,
+    )
+    
     df_out = _select_trace_columns(
         df=df,
         variable=variable,
@@ -1318,6 +1350,7 @@ async def api_download_plot_data(req: DownloadDataRequest):
         kind=download_type,
     )
 
+    logger.info("DOWNLOAD OUTPUT COLUMNS: %s", list(df_out.columns))
     df_out = _round_ratio_columns(df_out)
     df_out = _add_unit_suffixes_for_download(df_out, variable)
 
@@ -1354,6 +1387,19 @@ async def api_download_plot_data(req: DownloadDataRequest):
             "-------------\n"
             "Top Plot grouped by: Depth\n"
         )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by depth and logger location "
+            f"{logger_location} ({logger_location_label}) is selected, raw "
+            f"{variable} columns should include all three depths for that logger:\n\n"
+            f"- {variable}_1_raw_{strip}_{logger_location}_pct = 6 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_2_raw_{strip}_{logger_location}_pct = 12 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_3_raw_{strip}_{logger_location}_pct = 18 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+        )
     else:
         csv_name = (
             f"biochar_{download_type}_{variable}_{strip}_"
@@ -1373,6 +1419,19 @@ async def api_download_plot_data(req: DownloadDataRequest):
             "-------------\n"
             "Top Plot grouped by: Logger location\n"
         )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by logger location and depth "
+            f"{depth} ({depth_label_us}) is selected, raw {variable} columns "
+            f"should include Top, Middle, and Bottom logger locations:\n\n"
+            f"- {variable}_{depth}_raw_{strip}_T_pct = {depth_label_us} sensor, "
+            f"{strip}, Top logger\n"
+            f"- {variable}_{depth}_raw_{strip}_M_pct = {depth_label_us} sensor, "
+            f"{strip}, Middle logger\n"
+            f"- {variable}_{depth}_raw_{strip}_B_pct = {depth_label_us} sensor, "
+            f"{strip}, Bottom logger\n"
+        )
 
     if download_type == "all":
         depth_selection_text = (
@@ -1380,29 +1439,16 @@ async def api_download_plot_data(req: DownloadDataRequest):
             f"Selected depth for ratio columns: {selected_depth_text}"
         )
 
-    readme_header = build_download_header(
-        title="Biochar Project — Interactive Plot Data Download",
+    readme = build_plot_download_readme(
+        download_type=download_type,
         year=year,
         variable=variable,
         strip=strip,
         granularity=granularity,
         unit_system=unit_system,
-        extra_lines=[
-            location_selection_text,
-            depth_selection_text,
-            f"Download type: {download_type}",
-        ],
-    )
-
-    notes = load_readme_fragment(f"plot_download_{download_type}_notes")
-    readme = (
-        readme_header
-        + grouping_text
-        + "\n"
-        + notes
-        + "\n\n"
-        + build_experiment_lookup_section(unit_system)
-        + "\n"
+        logger_location=logger_location,
+        trace_option=trace_option,
+        depth=depth,
     )
 
     out = BytesIO()

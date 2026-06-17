@@ -422,20 +422,12 @@ def compute_event_storage_metrics(
             "event_storage_gal": None,
             "efficiency_strip": None,
             "estimated_loss_gal_strip": None,
+            "swc_missing_cols": "",
         }
 
     swc_cols = _build_profile_swc_gal_cols(strip_from_col, logger_position)
-    print("\n=== SWC DEBUG ===")
-    print("sensor:", sensor_meta.get("sensor_col"))
-    print("strip:", strip_from_col)
-    print("logger_position:", logger_position)
-    print("swc_cols:", swc_cols)
-
-    existing_cols = [c for c in swc_cols if c in df.columns]
     missing_cols = [c for c in swc_cols if c not in df.columns]
 
-    print("existing_cols:", existing_cols)
-    print("missing_cols:", missing_cols)
     baseline_values = [
         value
         for col in swc_cols
@@ -467,6 +459,7 @@ def compute_event_storage_metrics(
         "event_storage_gal": event_storage_gal,
         "efficiency_strip": efficiency_strip,
         "estimated_loss_gal_strip": estimated_loss_gal_strip,
+        "swc_missing_cols": "; ".join(missing_cols),
     }
 
 
@@ -862,6 +855,10 @@ def analyze_irrigation_events(
         "irrigation_end",
     ]
 
+    def count_numeric_values(s: pd.Series) -> int:
+        numeric = pd.to_numeric(s, errors="coerce")
+        return int(numeric.notna().sum())
+
     profile = (
         out.groupby(group_cols, dropna=False)
         .agg(
@@ -879,7 +876,7 @@ def analyze_irrigation_events(
             ),
             n_profile_depths_used=(
                 "event_storage_in_layer",
-                lambda s: int(pd.to_numeric(s, errors="coerce").notna().sum()),
+                count_numeric_values
             ),
             gallons_strip_profile=(
                 "gallons_strip",
@@ -1038,7 +1035,17 @@ def analyze_bottom_logger_controls(
 def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     if event_results.empty:
         return event_results.copy()
-
+    round_cols = [
+        "baseline_vwc",
+        "plateau_vwc",
+        "profile_baseline_storage_in",
+        "profile_plateau_storage_in",
+        "event_storage_in",
+        "profile_baseline_storage_gal",
+        "profile_plateau_storage_gal",
+        "event_storage_gal",
+    ]
+    event_results[round_cols] = event_results[round_cols].round(2)
     out = event_results.copy()
 
     if "depth_index" in out.columns:
