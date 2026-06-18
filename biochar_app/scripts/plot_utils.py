@@ -59,13 +59,17 @@ from biochar_app.scripts.plot_helpers import (
     load_irrigation_events,
 )
 
+# TODO:
+# Move plot layout constants (margins, heights, fonts, colors)
+# into config/plot_config.py after plot refactoring stabilizes.
+
 PLOT_MARGINS = {
-    "standard": {"l": 60, "r": 120, "t": 60, "b": 40},
-    "standard_tall": {"l": 60, "r": 120, "t": 70, "b": 40},
-    "dual_axis_us": {"l": 60, "r": 150, "t": 60, "b": 40},
-    "dual_axis_metric": {"l": 60, "r": 165, "t": 60, "b": 40},
-    "dual_axis_tall_us": {"l": 60, "r": 150, "t": 70, "b": 40},
-    "dual_axis_tall_metric": {"l": 60, "r": 165, "t": 70, "b": 40},
+    "standard": {"l": 60, "r": 120, "t": 60, "b": 70},
+    "standard_tall": {"l": 60, "r": 120, "t": 70, "b": 70},
+    "dual_axis_us": {"l": 60, "r": 150, "t": 60, "b": 70},
+    "dual_axis_metric": {"l": 60, "r": 165, "t": 60, "b": 70},
+    "dual_axis_tall_us": {"l": 60, "r": 150, "t": 70, "b": 70},
+    "dual_axis_tall_metric": {"l": 60, "r": 165, "t": 70, "b": 70},
 }
 
 
