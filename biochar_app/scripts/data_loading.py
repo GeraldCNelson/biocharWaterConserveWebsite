@@ -169,6 +169,23 @@ def load_weather_data(year: int, granularity: Optional[str] = None) -> pd.DataFr
     df = df.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
     return df
 
+def _parse_irrigation_timestamp(series: pd.Series) -> pd.Series:
+    parsed = pd.to_datetime(
+        series,
+        format="%m/%d/%y %H:%M",
+        errors="coerce",
+    )
+
+    missing = parsed.isna() & series.notna()
+
+    if missing.any():
+        parsed.loc[missing] = pd.to_datetime(
+            series.loc[missing],
+            format="%Y-%m-%d %H:%M:%S",
+            errors="coerce",
+        )
+
+    return parsed
 
 def load_irrigation_data() -> pd.DataFrame:
     """
@@ -231,8 +248,8 @@ def load_irrigation_data() -> pd.DataFrame:
             "('strip', 'gallons_strip') or legacy group-level 'gallons'."
         )
 
-    df["start_timestamp"] = pd.to_datetime(df["start_timestamp"], errors="coerce")
-    df["end_timestamp"] = pd.to_datetime(df["end_timestamp"], errors="coerce")
+    df["start_timestamp"] = _parse_irrigation_timestamp(df["start_timestamp"])
+    df["end_timestamp"] = _parse_irrigation_timestamp(df["end_timestamp"])
 
     overnight = (
         (df["end_timestamp"] < df["start_timestamp"])

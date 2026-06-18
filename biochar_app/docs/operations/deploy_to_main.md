@@ -194,6 +194,20 @@ git push origin etl-refactor
 
 Update the test server:
 
+Transfer large files directly to the test server
+
+```bash
+rsync -av --exclude='.DS_Store' \
+  biochar_app/data-processed/downloads/ \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/
+  
+rsync -av --exclude='.DS_Store' \
+  biochar_app/data-processed/parquet/ \
+  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/
+```
+
+ssh to the test server and transfer new files stored in from the etl-refactor branch of the biochar website git.
+
 ```bash
 ssh biochar-test-fetch
 

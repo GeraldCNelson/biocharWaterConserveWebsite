@@ -295,38 +295,23 @@ html {
     font-weight: 600;
 }
 
-/* Dropdown parent tab-buttons:
+/* Dropdown parent tab buttons:
    match the other nav tabs, but do not behave like solid blue buttons */
 .nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle,
 .nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle,
 .navbar .nav-link.dropdown-toggle {
-    appearance: none;
-    -webkit-appearance: none;
     background: transparent !important;
     background-color: transparent !important;
-    color: #0d6efd !important;      /* blue like other tabs */
-    font-weight: 600;               /* bolded */
+    color: #0d6efd !important;
+    font-weight: 600;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     text-decoration: none !important;
-    padding: 0.28rem 0.45rem !important;   /* slightly larger click area */
-    font-size: 1.02rem !important;         /* a touch larger */
+    padding: 0.28rem 0.45rem !important;
+    font-size: 1.02rem !important;
     line-height: 1.2 !important;
     cursor: pointer;
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
-    touch-action: manipulation;
-}
-
-/* Prevent long-press / text selection lookup on dropdown-parent text */
-.nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle *,
-.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle *,
-.navbar .nav-link.dropdown-toggle * {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
 }
 
 /* Keep the same look on hover/focus */
@@ -338,14 +323,15 @@ html {
 .navbar .nav-link.dropdown-toggle:focus {
     background: transparent !important;
     background-color: transparent !important;
-    color: #0a58ca !important;   /* slightly darker blue on hover */
+    color: #0a58ca !important;
     box-shadow: none !important;
     outline: none !important;
 }
 
 /* Preserve active look if parent is marked active */
 .nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle.active,
-.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle.active {
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle.active,
+.navbar .nav-link.dropdown-toggle.active {
     background: transparent !important;
     color: #0d6efd !important;
     font-weight: 600;
@@ -353,8 +339,9 @@ html {
     box-shadow: none !important;
 }
 
-/* Make caret a bit larger too */
+/* Slightly enlarge the Bootstrap dropdown caret */
 .nav-tabs .nav-item.dropdown > .nav-link.dropdown-toggle::after,
+.nav-pills .nav-item.dropdown > .nav-link.dropdown-toggle::after,
 .navbar .nav-link.dropdown-toggle::after {
     font-size: 1.05em;
     margin-left: 0.35em;
@@ -549,17 +536,23 @@ html {
    ============================================================================= */
 
 .control-panel {
-    flex: 0 1 220px;      /* ✅ allow shrink */
-    width: 220px;         /* keeps your “normal” look */
-    max-width: 260px;     /* optional: allow a little growth */
-    min-width: 200px;     /* ✅ prevent it becoming absurdly narrow */
+    position: relative;
+    z-index: 20;
+
+    flex: 0 1 220px;
+    width: 220px;
+    max-width: 260px;
+    min-width: 200px;
+
     height: auto;
     padding: 12px;
     background-color: #f8f9fa;
     border-radius: 5px;
+
     display: flex;
     flex-direction: column;
     gap: 8px;
+
     box-sizing: border-box;
     font-family: inherit;
 }
@@ -568,8 +561,22 @@ html {
 .control-panel button,
 .control-panel input {
     font-size: 14px;
-    padding: 4px 6px;
     width: 100%;
+}
+
+.control-panel select.form-select {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 6px;
+    padding-right: 2.25rem;
+}
+
+.control-panel input.form-control {
+    padding: 4px 6px;
+}
+
+.control-panel button {
+    padding: 4px 6px;
 }
 
 .control-panel .form-control {
@@ -587,10 +594,21 @@ html {
 }
 
 .plot-panel {
-    flex: 1 1 0;      /* ✅ */
-    min-width: 0;     /* ✅ critical for Plotly/flex */
+    position: relative;
+    z-index: 1;
+
+    flex: 1 1 0;
+    min-width: 0;
+
+    overflow: hidden;
     box-sizing: border-box;
-    padding: 10px;
+    padding: 10px 10px 10px 24px;
+}
+
+.plot-container,
+.plotly,
+.svg-container {
+    max-width: 100%;
 }
 
 .graph-container:last-child {
@@ -605,11 +623,22 @@ html {
     margin-top: 16px;
 }
 
-.info-icon {
+/*.info-icon {
     font-size: 16px;
     color: #007bff;
     cursor: pointer;
     margin-left: 6px;
+}*/
+
+.info-icon {
+    display: inline-block;
+    font-size: 16px;
+    color: #007bff;
+    cursor: pointer;
+    margin-left: 6px;
+    position: relative;
+    z-index: 20;
+    pointer-events: auto;
 }
 
 .info-icon:hover {
