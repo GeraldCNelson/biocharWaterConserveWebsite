@@ -68,3 +68,15 @@ SENSOR_DEPTH_VALUES = {
     "2": {"us": 12.0, "metric": 30.0},
     "3": {"us": 18.0, "metric": 45.0},
 }
+
+LOGGER_GEOMETRY = {
+    "T": {
+        "distance_from_furrow_start_ft": 54,
+    },
+    "M": {
+        "distance_from_furrow_start_ft": 169,
+    },
+    "B": {
+        "distance_from_furrow_start_ft": 284,
+    },
+}

@@ -1,6 +1,4 @@
-# irrigation_plots.py
-from __future__ import annotations
-
+#!/usr/bin/env python3
 """
 Irrigation plotting utilities.
 
@@ -9,29 +7,9 @@ Purpose
 This module creates diagnostic plots for irrigation response analysis. It should
 not perform the core irrigation-event calculations; those belong in
 irrigation_analysis.py.
-
-Expected inputs
----------------
-1. Event-level output tables from irrigation_analysis.py.
-2. 15-minute logger data, usually loaded from processed parquet files.
-3. Clean irrigation event data, usually loaded through:
-       biochar_app.scripts.data_loading.load_irrigation_data()
-
-Typical plots
--------------
-- VWC response around irrigation events.
-- Pre-irrigation baseline vs post-irrigation peak/plateau.
-- Estimated water deficit by event.
-- Applied irrigation volume vs estimated storage/excess.
-- Strip/group comparisons across years.
-- Seasonal summaries.
-
-Notes
------
-This module is intended for exploratory analysis and QA figures. Website-facing
-plots should stay in the main plotting utilities unless they are promoted from
-analysis to production.
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 import re
@@ -41,14 +19,34 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
+from biochar_app.config.experiment_config import LOGGER_LOCATION_MAPPING
 from biochar_app.scripts.management.irrigation_analysis import (
     DEPTH_INDEX_TO_INCHES,
     _validate_datetime_index,
 )
 
+from biochar_app.config.irrigation_config import (
+    ARRIVAL_RESPONSE_THRESHOLD_VWC,
+)
+
+from biochar_app.config.core import PLOT_COLORS
+
+DEPTH_COLORS = {
+    "1": PLOT_COLORS["depth_1"],
+    "2": PLOT_COLORS["depth_2"],
+    "3": PLOT_COLORS["depth_3"],
+}
+
+def _depth_color_for_sensor(sensor_col: str) -> str:
+    depth_match = re.search(r"VWC_(\d)_", sensor_col)
+    if not depth_match:
+        return PLOT_COLORS["depth_1"]
+    depth_idx = depth_match.group(1)
+    return DEPTH_COLORS.get(depth_idx, PLOT_COLORS["depth_1"])
 
 def _is_missing(value: object) -> bool:
     return bool(pd.Series([value]).isna().iloc[0])
@@ -177,6 +175,22 @@ def _collect_multidepth_cols(
     return cols
 
 
+def _event_id_mask(series: pd.Series, event_id: object) -> pd.Series:
+    if _is_missing(event_id):
+        return series.map(_is_missing)
+    return series == event_id
+
+
+def _event_label_for_filename(
+    event_id: object,
+    irrigation_start: pd.Timestamp,
+    strip: str,
+) -> str:
+    if _is_missing(event_id):
+        return f"{irrigation_start:%Y-%m-%d_%H%M}_{strip}"
+    return str(event_id)
+
+
 def compute_event_plot_ylim(
     df: pd.DataFrame,
     event_results: pd.DataFrame,
@@ -247,7 +261,7 @@ def plot_irrigation_event_inspection(
     precip_col: Optional[str] = "precip_in",
 ) -> None:
     _validate_datetime_index(df)
-
+    breakpoint()
     sensor_col = str(event_row["sensor_col"])
     if sensor_col not in df.columns:
         raise KeyError(f"Sensor column not found in dataframe: {sensor_col}")
@@ -257,7 +271,8 @@ def plot_irrigation_event_inspection(
     baseline_time = coerce_optional_timestamp(event_row.get("baseline_time"))
     peak_time = coerce_optional_timestamp(event_row.get("peak_time"))
     plateau_time = coerce_optional_timestamp(event_row.get("plateau_time"))
-
+    line_color = _depth_color_for_sensor(sensor_col)
+    
     if irrigation_start is None:
         raise ValueError("event_row is missing a valid irrigation_start")
 
@@ -289,11 +304,13 @@ def plot_irrigation_event_inspection(
     t_peak_hr = event_row.get("time_to_peak_hours", pd.NA)
     t_plateau_hr = event_row.get("time_to_plateau_hours", pd.NA)
 
-    fig, ax = plt.subplots(figsize=(13, 6))
+    fig, ax_obj = plt.subplots(figsize=(13, 6))
+    ax = cast(Axes, ax_obj)
 
     ax.plot(
         _datetime_index_to_mpl_nums(sub.index),
         np.asarray(sub.to_numpy(dtype=float), dtype=float),
+        color=line_color,
         linewidth=1.8,
         label=sensor_col,
     )
@@ -320,7 +337,7 @@ def plot_irrigation_event_inspection(
         _timestamp_to_mpl_num(irrigation_start),
         linestyle="--",
         linewidth=1.2,
-        color="tab:blue",
+        color=PLOT_COLORS["irrigation"],  # black
         label="irrigation start",
     )
 
@@ -329,14 +346,14 @@ def plot_irrigation_event_inspection(
             _timestamp_to_mpl_num(irrigation_start),
             _timestamp_to_mpl_num(irrigation_end),
             alpha=0.15,
-            color="tab:blue",
+            color=PLOT_COLORS["precip"],      # sky blue
             label="irrigation window",
         )
         ax.axvline(
             _timestamp_to_mpl_num(irrigation_end),
-            linestyle="--",
+            linestyle=":",
             linewidth=1.2,
-            color="tab:red",
+            color=PLOT_COLORS["air_temp"],  # reddish purple
             label="irrigation end",
         )
 
@@ -346,8 +363,11 @@ def plot_irrigation_event_inspection(
             [baseline_vwc],
             s=55,
             marker="o",
-            label="baseline",
+            # label="baseline",
             zorder=5,
+            facecolors="none",
+            edgecolors=line_color,
+            label="_nolegend_",
         )
 
     if peak_time is not None and peak_vwc is not None:
@@ -356,8 +376,11 @@ def plot_irrigation_event_inspection(
             [peak_vwc],
             s=70,
             marker="^",
-            label="peak",
+            # label="peak",
             zorder=6,
+            facecolors="none",
+            edgecolors=line_color,
+            label="_nolegend_",
         )
 
     if plateau_time is not None and plateau_vwc is not None:
@@ -366,16 +389,18 @@ def plot_irrigation_event_inspection(
             [plateau_vwc],
             s=70,
             marker="s",
-            label="plateau",
             zorder=6,
+            facecolors="none",
+            edgecolors=line_color,
+            label="_nolegend_",
         )
 
     title = (
-        f"Strip: {strip} | Sensor: {sensor_col} | Event: {_fmt_event_id(event_id)} | "
-        f"Year: {year}"
+        f"Strip: {strip} |  Sensor: {sensor_col} | "
+        f"Event: {_fmt_event_id(event_id)} | Year: {year}"
     )
     subtitle = (
-        f"Duration (irrigation time): {_fmt1(duration_hr)} hr | "
+        f"Duration: {_fmt1(duration_hr)} hr | "
         f"time_to_peak: {_fmt1(t_peak_hr)} hr | "
         f"time_to_plateau: {_fmt1(t_plateau_hr)} hr | "
         f"plateau_method: {plateau_method}"
@@ -396,7 +421,11 @@ def plot_irrigation_event_inspection(
     handles1, labels1 = ax.get_legend_handles_labels()
     if ax2 is not None:
         handles2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(list(handles1) + list(handles2), list(labels1) + list(labels2), loc="best")
+        ax.legend(
+            list(handles1) + list(handles2),
+            list(labels1) + list(labels2),
+            loc="best",
+        )
     else:
         ax.legend(loc="best")
 
@@ -505,17 +534,21 @@ def plot_event_multidepth(
     end: pd.Timestamp | str,
     event_id: Optional[object] = None,
     strip: Optional[str] = None,
+    logger_position: Optional[str] = None,
     year: Optional[int] = None,
     irrigation_start: Optional[pd.Timestamp | str] = None,
     irrigation_end: Optional[pd.Timestamp | str] = None,
     peaks: Optional[Mapping[str, pd.Timestamp | str]] = None,
     baselines: Optional[Mapping[str, pd.Timestamp | str]] = None,
     plateaus: Optional[Mapping[str, pd.Timestamp | str]] = None,
+    arrivals: Optional[Mapping[str, pd.Timestamp | str]] = None,
+    alt_arrivals: Optional[Mapping[str, pd.Timestamp | str]] = None,
     output_path: Optional[str | Path] = None,
     show: bool = False,
     precip_col: Optional[str] = "precip_in",
     y_limits: Optional[Tuple[float, float]] = None,
     title_prefix: str = "Event Multi-depth VWC",
+    response_threshold: float = ARRIVAL_RESPONSE_THRESHOLD_VWC,
 ) -> None:
     sub = _prepare_plot_window_df(df, start=start, end=end)
     if sub.empty:
@@ -539,40 +572,66 @@ def plot_event_multidepth(
         for k, v in (plateaus or {}).items()
         if (ts := coerce_optional_timestamp(v)) is not None
     }
+    arrival_ts_map = {
+        k: ts
+        for k, v in (arrivals or {}).items()
+        if (ts := coerce_optional_timestamp(v)) is not None
+    }
+    alt_arrival_ts_map = {
+        k: ts
+        for k, v in (alt_arrivals or {}).items()
+        if (ts := coerce_optional_timestamp(v)) is not None
+    }
 
-    fig, ax = plt.subplots(figsize=(14, 7))
+    fig, ax_obj = plt.subplots(figsize=(14, 7))
+    ax = cast(Axes, ax_obj)
     plotted_any = False
+
+    marker_specs = [
+        # marker_type, map_name, marker, size, zorder
+        ("baseline", baseline_ts_map, "o", 42, 6),
+        ("arrival", arrival_ts_map, "o", 80, 8),
+        ("alt_arrival", alt_arrival_ts_map, "D", 72, 9),
+        ("peak", peak_ts_map, "^", 70, 7),
+        ("plateau", plateau_ts_map, "s", 65, 7),
+    ]
 
     for sensor_col, label in cols:
         if sensor_col not in sub.columns:
             continue
 
+        line_color = _depth_color_for_sensor(sensor_col)
         series = pd.to_numeric(sub[sensor_col], errors="coerce")
+
         ax.plot(
             _datetime_index_to_mpl_nums(series.index),
             np.asarray(series.to_numpy(dtype=float), dtype=float),
             linewidth=2.0,
+            color=line_color,
             label=label,
         )
         plotted_any = True
 
-        marker_specs = [
-            (baseline_ts_map.get(sensor_col), "o", 50),
-            (peak_ts_map.get(sensor_col), "^", 70),
-            (plateau_ts_map.get(sensor_col), "s", 65),
-        ]
+        for marker_type, ts_map, marker, size, zorder in marker_specs:
+            marker_time = ts_map.get(sensor_col)
+            if marker_time is None or marker_time not in sub.index:
+                continue
 
-        for marker_time, marker, size in marker_specs:
-            if marker_time is not None and marker_time in sub.index:
-                marker_val = _as_float_or_none(sub.at[marker_time, sensor_col])
-                if marker_val is not None:
-                    ax.scatter(
-                        [_timestamp_to_mpl_num(marker_time)],
-                        [marker_val],
-                        s=size,
-                        marker=marker,
-                        zorder=6,
-                    )
+            marker_val = _as_float_or_none(sub.at[marker_time, sensor_col])
+            if marker_val is None:
+                continue
+
+            ax.scatter(
+                [_timestamp_to_mpl_num(marker_time)],
+                [marker_val],
+                s=size,
+                marker=marker,
+                facecolors="none",
+                edgecolors=line_color,
+                linewidths=1.5,
+                zorder=zorder,
+                label="_nolegend_",
+            )
 
     if not plotted_any:
         raise ValueError("None of the requested VWC columns were found in the plot window.")
@@ -582,7 +641,7 @@ def plot_event_multidepth(
             _timestamp_to_mpl_num(irrig_start_ts),
             linestyle="--",
             linewidth=1.3,
-            color="tab:blue",
+            color=PLOT_COLORS["precip"],
             label="Irrigation start",
         )
 
@@ -591,7 +650,7 @@ def plot_event_multidepth(
             _timestamp_to_mpl_num(irrig_end_ts),
             linestyle="--",
             linewidth=1.3,
-            color="tab:red",
+            color=PLOT_COLORS["air_temp"],
             label="Irrigation end",
         )
 
@@ -600,17 +659,33 @@ def plot_event_multidepth(
             _timestamp_to_mpl_num(irrig_start_ts),
             _timestamp_to_mpl_num(irrig_end_ts),
             alpha=0.14,
-            color="tab:blue",
+            color=PLOT_COLORS["precip"],
             label="Irrigation window",
         )
 
     display_event_id = _fmt_event_id(event_id)
 
     title_bits: List[str] = []
+
+    if year is not None:
+        title_bits.append(str(year))
+
     if strip is not None:
         title_bits.append(f"Strip: {strip}")
+
+    if logger_position is not None:
+        logger_code = str(logger_position).strip()
+        logger_label = LOGGER_LOCATION_MAPPING.get(logger_code, logger_code)
+        title_bits.append(f"Logger: {logger_label}")
+
     title_bits.append(title_prefix)
-    if event_id is not None:
+
+    if irrig_start_ts is not None:
+        date_label = irrig_start_ts.strftime("%B %-d")
+
+        title_bits.append(f"Event: {date_label}")
+
+    elif event_id is not None:
         title_bits.append(f"Event: {display_event_id}")
 
     ax.set_title(" | ".join(title_bits), fontsize=13, fontweight="bold", loc="left")
@@ -626,13 +701,65 @@ def plot_event_multidepth(
         ax.set_ylim(*y_limits)
 
     marker_handles = [
-        Line2D([0], [0], marker="o", linestyle="None", markersize=8, label="Baseline VWC"),
-        Line2D([0], [0], marker="^", linestyle="None", markersize=8, label="Peak VWC"),
-        Line2D([0], [0], marker="s", linestyle="None", markersize=8, label="Plateau VWC"),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            markersize=7,
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markeredgewidth=1.5,
+            label="Baseline VWC",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            markersize=8,
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markeredgewidth=1.5,
+            label=f"Standard arrival (+{response_threshold:.2f}% VWC)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="D",
+            linestyle="None",
+            markersize=7,
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markeredgewidth=1.5,
+            label="Alternate arrival",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="^",
+            linestyle="None",
+            markersize=8,
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markeredgewidth=1.5,
+            label="Peak VWC",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            linestyle="None",
+            markersize=8,
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markeredgewidth=1.5,
+            label="Plateau VWC",
+        ),
     ]
 
     window_patch = Patch(
-        facecolor="tab:blue",
+        facecolor=PLOT_COLORS["precip"],
         alpha=0.14,
         edgecolor="none",
         label="Irrigation window",
@@ -642,17 +769,23 @@ def plot_event_multidepth(
 
     filtered_handles: List[Any] = []
     filtered_labels: List[str] = []
+    seen_labels: set[str] = set()
+
     for handle, label in zip(handles1, labels1):
-        if label == "Irrigation window":
+        label = str(label)
+        if label in {"Irrigation window", "_nolegend_"}:
+            continue
+        if label in seen_labels:
             continue
         filtered_handles.append(handle)
-        filtered_labels.append(str(label))
+        filtered_labels.append(label)
+        seen_labels.add(label)
 
     legend_handles: List[Any] = filtered_handles + [window_patch] + marker_handles
     legend_labels: list[str] = (
-            filtered_labels
-            + ["Irrigation window"]
-            + [str(h.get_label()) for h in marker_handles]
+        filtered_labels
+        + ["Irrigation window"]
+        + [str(h.get_label()) for h in marker_handles]
     )
 
     ax.legend(
@@ -663,47 +796,76 @@ def plot_event_multidepth(
         framealpha=0.9,
     )
 
-    if year is not None:
-        ax.text(
-            0.01,
-            -0.18,
-            str(year),
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=10,
-            fontweight="bold",
-        )
+    arrival_parts: list[str] = []
+    for sensor_col, arrival_ts in arrival_ts_map.items():
+        depth_match = re.search(r"VWC_(\d)_", sensor_col)
+        if depth_match:
+            depth_idx = depth_match.group(1)
+            depth_in = DEPTH_INDEX_TO_INCHES.get(depth_idx, depth_idx)
+            arrival_parts.append(f"{depth_in}in={arrival_ts.strftime('%H:%M')}")
 
-    ax.text(
-        0.01,
-        -0.27,
-        "All times local",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9,
-        style="italic",
+    arrival_text = ", ".join(arrival_parts) if arrival_parts else "None"
+
+    plot_start_str = pd.Timestamp(start).strftime("%b %d %H:%M")
+    plot_end_str = pd.Timestamp(end).strftime("%b %d %H:%M")
+    irrig_start_str = (
+        irrig_start_ts.strftime("%b %d %H:%M")
+        if irrig_start_ts is not None
+        else "NA"
     )
+    irrig_end_str = (
+        irrig_end_ts.strftime("%b %d %H:%M")
+        if irrig_end_ts is not None
+        else "NA"
+    )
+
+    footer_lines = [
+        f"Plot: {plot_start_str} → {plot_end_str}",
+        f"Irrigation: {irrig_start_str} → {irrig_end_str}",
+        f"Standard arrival (+{response_threshold:.2f}% VWC): {arrival_text}",
+        "Standard arrival = first sustained response after irrigation start.",
+        "Plateau VWC is used for estimating stored water after irrigation.",
+        "Strip volume = total water applied to the strip during the event.",
+    ]
 
     fig.text(
         0.50,
         0.025,
-        "Duration = irrigation time, measured from water start to water shutoff. "
-        "Plot window extends before and after the event to show soil response.",
+        "\n".join(footer_lines),
         ha="center",
         va="bottom",
-        fontsize=9,
+        fontsize=8.5,
         bbox=dict(
             boxstyle="round,pad=0.45",
             facecolor="white",
             edgecolor="0.55",
-            alpha=0.9,
+            alpha=0.90,
         ),
     )
 
+    if arrival_ts_map:
+        first_arrival_col = sorted(arrival_ts_map)[0]
+        first_arrival_ts = arrival_ts_map[first_arrival_col]
+        if first_arrival_col in sub.columns and first_arrival_ts in sub.index:
+            arrival_y = _as_float_or_none(sub.at[first_arrival_ts, first_arrival_col])
+            if arrival_y is not None:
+                ax.annotate(
+                    (
+                        "Standard arrival defined as\n"
+                        "first sustained response after\n"
+                        "irrigation start."
+                    ),
+                    xy=(_timestamp_to_mpl_num(first_arrival_ts), arrival_y),
+                    xytext=(0.18, 0.63),
+                    textcoords="axes fraction",
+                    arrowprops=dict(arrowstyle="->", linewidth=1.0),
+                    fontsize=9,
+                    ha="left",
+                    va="center",
+                )
+
     fig.autofmt_xdate(rotation=35, ha="right")
-    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.22)
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.32)
 
     if output_path is not None:
         output_path = Path(output_path)
@@ -715,17 +877,6 @@ def plot_event_multidepth(
 
     plt.close(fig)
 
-def _event_id_mask(series: pd.Series, event_id: object) -> pd.Series:
-    if _is_missing(event_id):
-        return series.map(_is_missing)
-    return series == event_id
-
-
-def _event_label_for_filename(event_id: object, irrigation_start: pd.Timestamp, strip: str) -> str:
-    if _is_missing(event_id):
-        return f"{irrigation_start:%Y-%m-%d_%H%M}_{strip}"
-    return str(event_id)
-
 
 def plot_event_multidepth_from_results(
     df: pd.DataFrame,
@@ -734,8 +885,8 @@ def plot_event_multidepth_from_results(
     event_id: object,
     logger_position: str = "B",
     depths: Sequence[int] = (1, 2, 3),
-    hours_before: float = 6.0,
-    hours_after: float = 36.0,
+    hours_before: float = 12.0,
+    hours_after: float = 30.0,
     output_path: Optional[str | Path] = None,
     show: bool = False,
     precip_col: Optional[str] = "precip_in",
@@ -744,11 +895,14 @@ def plot_event_multidepth_from_results(
     if event_results.empty:
         raise ValueError("event_results is empty.")
 
+    strip = str(strip).strip()
+    logger_position = str(logger_position).strip()
+
     work = event_results.copy()
     work = work[
-        (work["strip"] == strip)
+        (work["strip"].astype(str).str.strip() == strip)
         & _event_id_mask(work["event_id"], event_id)
-        & (work["logger_position"] == logger_position)
+        & (work["logger_position"].astype(str).str.strip() == logger_position)
     ].copy()
 
     if work.empty:
@@ -758,29 +912,36 @@ def plot_event_multidepth_from_results(
         )
 
     first_row = work.iloc[0]
+
     irrigation_start = coerce_optional_timestamp(first_row.get("irrigation_start"))
     irrigation_end = coerce_optional_timestamp(first_row.get("irrigation_end"))
+
+    if irrigation_start is None:
+        raise ValueError("Selected event has no valid irrigation_start.")
 
     year_float = _as_float_or_none(first_row.get("year", None))
     year = int(year_float) if year_float is not None else None
 
-    gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(first_row)
+    gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(
+        first_row
+    )
 
     gallons_strip_f = _as_float_or_none(gallons_strip)
     duration_hours_f = _as_float_or_none(duration_hours)
     avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
 
-    if gallons_strip_f is not None and duration_hours_f is not None and avg_flow_gph_strip_f is not None:
+    if (
+        gallons_strip_f is not None
+        and duration_hours_f is not None
+        and avg_flow_gph_strip_f is not None
+    ):
         title_prefix_with_flow = (
-            f"Duration (irrigation time): {duration_hours_f:.2f} hr | "
+            f"Duration: {duration_hours_f:.2f} hr | "
             f"Strip volume: {gallons_strip_f:,.0f} gal | "
             f"Strip flow: {avg_flow_gph_strip_f:,.0f} gal/hr"
         )
     else:
         title_prefix_with_flow = "Multi-depth irrigation response"
-
-    if irrigation_start is None:
-        raise ValueError("Selected event has no valid irrigation_start.")
 
     start = irrigation_start - pd.Timedelta(hours=hours_before)
     end = irrigation_start + pd.Timedelta(hours=hours_after)
@@ -789,34 +950,51 @@ def plot_event_multidepth_from_results(
     peaks: Dict[str, pd.Timestamp] = {}
     plateaus: Dict[str, pd.Timestamp] = {}
 
+    arrivals: Dict[str, pd.Timestamp] = {}
     for _, row in work.iterrows():
         sensor_col = str(row["sensor_col"])
 
         baseline_time = coerce_optional_timestamp(row.get("baseline_time"))
+
         if baseline_time is not None:
             baselines[sensor_col] = baseline_time
 
         peak_time = coerce_optional_timestamp(row.get("peak_time"))
+
         if peak_time is not None:
             peaks[sensor_col] = peak_time
 
         plateau_time = coerce_optional_timestamp(row.get("plateau_time"))
+
         if plateau_time is not None:
             plateaus[sensor_col] = plateau_time
 
+        arrival_time = coerce_optional_timestamp(row.get("arrival_time"))
+
+        if arrival_time is not None:
+            arrivals[sensor_col] = arrival_time
+
+    cols = _collect_multidepth_cols(
+        strip=strip,
+        logger_position=logger_position,
+        depths=depths,
+    )
+
     plot_event_multidepth(
         df=df,
-        cols=_collect_multidepth_cols(strip=strip, logger_position=logger_position, depths=depths),
+        cols=cols,
         start=start,
         end=end,
         event_id=event_id,
         strip=strip,
+        logger_position=logger_position,
         year=year,
         irrigation_start=irrigation_start,
         irrigation_end=irrigation_end,
         peaks=peaks,
         baselines=baselines,
         plateaus=plateaus,
+        arrivals=arrivals,
         output_path=output_path,
         show=show,
         precip_col=precip_col,
@@ -833,8 +1011,8 @@ def save_irrigation_event_multidepth_plots(
     event_ids: Optional[Sequence[object]] = None,
     logger_position: str = "B",
     depths: Sequence[int] = (1, 2, 3),
-    hours_before: float = 6.0,
-    hours_after: float = 36.0,
+    hours_before: float = 12.0,
+    hours_after: float = 30.0,
     max_plots: Optional[int] = None,
     precip_col: Optional[str] = "precip_in",
     use_common_y_axis: bool = True,
@@ -954,7 +1132,9 @@ def save_irrigation_event_multidepth_plots(
         irrigation_start = coerce_optional_timestamp(first_row.get("irrigation_start"))
         irrigation_end = coerce_optional_timestamp(first_row.get("irrigation_end"))
 
-        gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(first_row)
+        gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(
+            first_row
+        )
 
         gallons_strip_f = _as_float_or_none(gallons_strip)
         duration_hours_f = _as_float_or_none(duration_hours)
@@ -967,7 +1147,6 @@ def save_irrigation_event_multidepth_plots(
         plot_end = irrigation_start + pd.Timedelta(hours=hours_after)
 
         irrig_start_str = irrigation_start.strftime("%Y-%m-%d_%H%M")
-
         event_label = _event_label_for_filename(event_id, irrigation_start, strip)
 
         filename = _safe_filename(
