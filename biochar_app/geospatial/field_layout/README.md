@@ -104,3 +104,19 @@ Instead:
 3. Replace the generated GeoPackage.
 
 This ensures that all derived spatial products remain reproducible.
+
+## Regenerating the GeoPackage
+
+The GeoPackage is a generated product and is not maintained manually.
+
+To regenerate it:
+
+```bash
+python biochar_app/geospatial/build_field_layout.py
+```
+
+This recreates:
+
+```
+Fruita_Biochar_Field_Layout.gpkg
+```
