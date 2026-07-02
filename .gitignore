@@ -138,15 +138,28 @@ package-lock.json
 *.zip
 
 ############################
-# Geospatial rasters
+# Geospatial data
+############################
 ############################
 biochar_app/geospatial/**/*.img
 biochar_app/geospatial/**/*.tif
 biochar_app/geospatial/**/*.tiff
-biochar_app/geospatial/**/*.laz
 biochar_app/geospatial/**/*.las
+biochar_app/geospatial/**/*.laz
 biochar_app/geospatial/**/*.qgz
-biochar_app/geospatial/**/*.gpkg
+
+############################
+# Temporary GIS outputs
+############################
+biochar_app/geospatial/lidar/clipped/**
+biochar_app/geospatial/lidar/hillshade/**
+biochar_app/geospatial/drone/processed/**
+
+############################
+# Permanent GIS products ARE tracked
+############################
+!biochar_app/geospatial/field_layout/*.gpkg
+!biochar_app/geospatial/field_layout/*.geojson
 
 ############################
 # Optional: large local-only exports
