@@ -13,22 +13,22 @@ Important:
 
 Workflow:
 1. Put photos/videos in:
-   biochar_app/data-processed/management/photos/irrigation/photos_2023
+   biochar_app/data-processed/management/irrigation/photos_meter_readings
 
 2. Run once to create a review CSV:
-   python biochar_app/scripts/extract_irrigation_photo_events.py --year 2023
+   python biochar_app/scripts/management/extract_irrigation_photo_events.py --year 2026
 
 3. Open:
-   biochar_app/data-processed/management/photos/irrigation/photo_review_2023.csv
+   biochar_app/data-processed/management/photos/irrigation/photo_review_2026.csv
 
 4. Fill in meter_reading_x100 for each usable image.
    Optional: set exclude = TRUE for bad/unusable photos.
 
 5. Run again:
-   python biochar_app/scripts/extract_irrigation_photo_events.py --year 2023 --use-review
+   python biochar_app/scripts/extract_irrigation_photo_events.py --year 2026 --use-review
 
 6. Review suggested event pairs:
-   biochar_app/data-processed/management/photos/irrigation/suggested_irrigation_events_2023.csv
+   biochar_app/data-processed/management/photos/irrigation/suggested_irrigation_events_2026.csv
 """
 
 from __future__ import annotations
@@ -51,9 +51,8 @@ from biochar_app.config.paths import DATA_PROCESSED_DIR
 DEFAULT_PHOTO_DIR = (
         DATA_PROCESSED_DIR
         / "management"
-        / "photos"
         / "irrigation"
-        / "photos_2023"
+        / "photos_meter_readings"
 )
 
 SUPPORTED_IMAGE_EXTENSIONS = {
@@ -92,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--year",
         type=int,
-        default=2023,
+        default=2026,
         help="Year used for output filenames.",
     )
     parser.add_argument(
@@ -121,7 +120,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--irrigation-csv",
         type=Path,
-        default=DATA_PROCESSED_DIR / "management" / "irrigation_2023.csv",
+        default=DATA_PROCESSED_DIR / "management" / "irrigation_clean.csv",
         help="Clean irrigation CSV used to match photos to known irrigation events.",
     )
 
@@ -239,9 +238,9 @@ def parse_video_datetime(raw: str) -> str | None:
     Parse common exiftool video date strings.
 
     Examples:
-    - 2023:06:15 10:12:34-06:00
-    - 2023:06:15 10:12:34
-    - 2023-06-15T10:12:34
+    - 2026:06:15 10:12:34-06:00
+    - 2026:06:15 10:12:34
+    - 2026-06-15T10:12:34
     """
     raw = raw.strip()
     if not raw:

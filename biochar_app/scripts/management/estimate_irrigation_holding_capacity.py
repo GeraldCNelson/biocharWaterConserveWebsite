@@ -850,7 +850,6 @@ def build_irrigation_arrival_times(
         )
 
     return out
-
 def build_irrigation_event_response_summary(
     arrival_times: pd.DataFrame,
     event_results: pd.DataFrame,
@@ -858,9 +857,15 @@ def build_irrigation_event_response_summary(
     """
     Build one summary row per logger position for each irrigation event.
 
-    Uses only columns that are actually present in event_results, so this
-    function will not fail when older years or intermediate result tables
-    lack storage/target fields.
+    Uses one row per event × strip × logger_position and pivots depth-level
+    values into 6in / 12in / 18in columns.
+
+    Adds:
+      - VWC response by depth
+      - SWC response by depth
+      - upper-zone vs deep-zone storage partitioning
+      - storage efficiency
+      - vertical arrival timing spread
     """
     if arrival_times.empty or event_results.empty:
         return pd.DataFrame()
@@ -878,27 +883,30 @@ def build_irrigation_event_response_summary(
         "event_duration_hours",
         "gallons_strip",
         "avg_flow_gph_strip",
+
         "baseline_vwc",
         "pre_vwc",
         "target_vwc",
         "peak_vwc",
         "delta_vwc",
-        "baseline_swc",
+
+        # SWC, canonical analysis names
+        "baseline_swc_gal",
         "peak_swc_gal",
         "delta_swc_gal",
         "baseline_swc_L",
         "peak_swc_L",
         "delta_swc_L",
+
         "pre_storage_gal",
         "target_storage_gal",
         "delta_storage_gal",
     ]
 
     available_cols = [c for c in desired_cols if c in event_results.columns]
-
     summary = event_results[available_cols].copy()
 
-    # Normalize baseline/pre-irrigation naming.
+    # Normalize baseline/pre-irrigation VWC naming.
     if "pre_vwc" not in summary.columns and "baseline_vwc" in summary.columns:
         summary["pre_vwc"] = summary["baseline_vwc"]
 
@@ -950,15 +958,18 @@ def build_irrigation_event_response_summary(
             "target_vwc",
             "peak_vwc",
             "delta_vwc",
-            "baseline_swc",
+
+            "baseline_swc_gal",
             "peak_swc_gal",
             "delta_swc_gal",
             "baseline_swc_L",
             "peak_swc_L",
             "delta_swc_L",
+
             "pre_storage_gal",
             "target_storage_gal",
             "delta_storage_gal",
+
             "arrival_minutes_after_irrigation_start",
             "arrival_vwc",
             "alt_arrival_minutes_after_irrigation_start",
@@ -983,14 +994,19 @@ def build_irrigation_event_response_summary(
     ]
 
     wide = wide.reset_index()
+
+    # ------------------------------------------------------------------
+    # Antecedent VWC profile summary
+    # ------------------------------------------------------------------
     pre_cols = [c for c in wide.columns if c.startswith("pre_vwc_")]
     if pre_cols:
         wide["pre_profile_vwc_mean"] = wide[pre_cols].mean(axis=1)
         wide["pre_profile_vwc_min"] = wide[pre_cols].min(axis=1)
         wide["pre_profile_vwc_max"] = wide[pre_cols].max(axis=1)
 
-    # NEW: compute VWC response (peak - pre) for each depth
-
+    # ------------------------------------------------------------------
+    # VWC response by depth: peak - pre
+    # ------------------------------------------------------------------
     for depth_code in SENSOR_DEPTH_CODES:
         depth_inches = DEPTH_INDEX_TO_INCHES[depth_code]
 
@@ -999,20 +1015,156 @@ def build_irrigation_event_response_summary(
         delta_col = f"delta_vwc_{depth_inches}in"
 
         if pre_col in wide.columns and peak_col in wide.columns:
-            wide[delta_col] = pd.to_numeric(
-                wide[peak_col], errors="coerce"
-            ) - pd.to_numeric(wide[pre_col], errors="coerce")
+            wide[delta_col] = (
+                pd.to_numeric(wide[peak_col], errors="coerce")
+                - pd.to_numeric(wide[pre_col], errors="coerce")
+            )
 
     delta_vwc_cols = [c for c in wide.columns if c.startswith("delta_vwc_")]
     if delta_vwc_cols:
         wide["delta_profile_vwc_mean"] = wide[delta_vwc_cols].mean(axis=1)
 
+    # ------------------------------------------------------------------
+    # SWC response by depth: peak - baseline
+    # ------------------------------------------------------------------
+    for depth_code in SENSOR_DEPTH_CODES:
+        depth_inches = DEPTH_INDEX_TO_INCHES[depth_code]
+
+        baseline_col = f"baseline_swc_gal_{depth_inches}in"
+        peak_col = f"peak_swc_gal_{depth_inches}in"
+        delta_col = f"delta_swc_gal_{depth_inches}in"
+
+        if baseline_col in wide.columns and peak_col in wide.columns:
+            wide[delta_col] = (
+                pd.to_numeric(wide[peak_col], errors="coerce")
+                - pd.to_numeric(wide[baseline_col], errors="coerce")
+            )
+
+        baseline_col_L = f"baseline_swc_L_{depth_inches}in"
+        peak_col_L = f"peak_swc_L_{depth_inches}in"
+        delta_col_L = f"delta_swc_L_{depth_inches}in"
+
+        if baseline_col_L in wide.columns and peak_col_L in wide.columns:
+            wide[delta_col_L] = (
+                pd.to_numeric(wide[peak_col_L], errors="coerce")
+                - pd.to_numeric(wide[baseline_col_L], errors="coerce")
+            )
+
+    # ------------------------------------------------------------------
+    # Profile SWC summaries
+    # ------------------------------------------------------------------
+    swc_pre_cols = [
+        c for c in wide.columns if c.startswith("baseline_swc_gal_")
+    ]
+    if swc_pre_cols:
+        wide["pre_profile_swc_gal"] = wide[swc_pre_cols].sum(
+            axis=1,
+            min_count=1,
+        )
+
+    swc_peak_cols = [
+        c for c in wide.columns if c.startswith("peak_swc_gal_")
+    ]
+    if swc_peak_cols:
+        wide["peak_profile_swc_gal"] = wide[swc_peak_cols].sum(
+            axis=1,
+            min_count=1,
+        )
+
+    swc_delta_cols = [
+        c for c in wide.columns if c.startswith("delta_swc_gal_")
+    ]
+    if swc_delta_cols:
+        wide["total_delta_swc_gal"] = wide[swc_delta_cols].sum(
+            axis=1,
+            min_count=1,
+        )
+
+    # ------------------------------------------------------------------
+    # Upper-zone vs deep-zone storage partitioning
+    # Treat 6 + 12 in as upper/root-zone response and 18 in as deep response.
+    # ------------------------------------------------------------------
+    upper_cols = [
+        c
+        for c in [
+            "delta_swc_gal_6in",
+            "delta_swc_gal_12in",
+        ]
+        if c in wide.columns
+    ]
+
+    if upper_cols:
+        wide["upper_zone_delta_swc_gal"] = wide[upper_cols].sum(
+            axis=1,
+            min_count=1,
+        )
+
+    if "delta_swc_gal_18in" in wide.columns:
+        wide["deep_zone_delta_swc_gal"] = wide["delta_swc_gal_18in"]
+
+    if (
+        "upper_zone_delta_swc_gal" in wide.columns
+        or "deep_zone_delta_swc_gal" in wide.columns
+    ):
+        upper = pd.to_numeric(
+            wide.get("upper_zone_delta_swc_gal", pd.Series(np.nan, index=wide.index)),
+            errors="coerce",
+        )
+        deep = pd.to_numeric(
+            wide.get("deep_zone_delta_swc_gal", pd.Series(np.nan, index=wide.index)),
+            errors="coerce",
+        )
+
+        wide["total_partition_delta_swc_gal"] = (
+            pd.concat([upper, deep], axis=1).sum(axis=1, min_count=1)
+        )
+
+        total = pd.to_numeric(
+            wide["total_partition_delta_swc_gal"],
+            errors="coerce",
+        )
+
+        wide["upper_storage_fraction"] = np.where(
+            total > 0,
+            upper / total,
+            np.nan,
+        )
+
+        wide["deep_storage_fraction"] = np.where(
+            total > 0,
+            deep / total,
+            np.nan,
+        )
+
+    # ------------------------------------------------------------------
+    # Storage efficiency: stored SWC response divided by applied water.
+    # ------------------------------------------------------------------
+    if "total_partition_delta_swc_gal" in wide.columns and "gallons_strip" in wide.columns:
+        total_delta = pd.to_numeric(
+            wide["total_partition_delta_swc_gal"],
+            errors="coerce",
+        )
+        applied = pd.to_numeric(wide["gallons_strip"], errors="coerce")
+
+        wide["storage_efficiency"] = np.where(
+            applied > 0,
+            total_delta / applied,
+            np.nan,
+        )
+
+    # Keep older storage summary if present.
     delta_storage_cols = [
         c for c in wide.columns if c.startswith("delta_storage_gal_")
     ]
     if delta_storage_cols:
-        wide["delta_storage_profile_gal"] = wide[delta_storage_cols].sum(axis=1)
+        wide["delta_storage_profile_gal"] = wide[delta_storage_cols].sum(
+            axis=1,
+            min_count=1,
+        )
 
+    # ------------------------------------------------------------------
+    # Arrival timing summary
+    # ------------------------------------------------------------------
     arrival_cols = [
         c
         for c in wide.columns
