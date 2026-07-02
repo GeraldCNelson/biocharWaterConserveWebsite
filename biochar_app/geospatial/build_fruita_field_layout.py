@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import geopandas as gpd
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Point, Polygon
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,13 @@ REQUIRED_FEATURES = {
     "field_ne",
     "field_se",
     "field_sw",
+}
+
+STRIP_METADATA = {
+    "S1": {"treatment": "Biochar", "irrigation": "Monthly", "biochar": True,  "strip_order": 1},
+    "S2": {"treatment": "Control", "irrigation": "Monthly", "biochar": False, "strip_order": 2},
+    "S3": {"treatment": "Biochar", "irrigation": "Biweekly", "biochar": True,  "strip_order": 3},
+    "S4": {"treatment": "Control", "irrigation": "Biweekly", "biochar": False, "strip_order": 4},
 }
 
 
@@ -116,6 +123,85 @@ def build_field_edges(points: dict[str, object]) -> list[dict[str, object]]:
         },
     ]
 
+def interpolate_point(a: Point, b: Point, fraction: float) -> Point:
+    """Return point a + fraction * (b - a)."""
+    return Point(
+        a.x + (b.x - a.x) * fraction,
+        a.y + (b.y - a.y) * fraction,
+    )
+
+
+def build_strip_polygons(points: dict[str, Point]) -> list[dict[str, object]]:
+    """
+    Build S1-S4 polygons by dividing the north and south field edges
+    into four equal-width strips.
+
+    Assumes:
+        west-to-east order: S1, S2, S3, S4
+        north edge: field_nw -> field_ne
+        south edge: field_sw -> field_se
+    """
+    north_points = [
+        interpolate_point(points["field_nw"], points["field_ne"], i / 4.0)
+        for i in range(5)
+    ]
+    south_points = [
+        interpolate_point(points["field_sw"], points["field_se"], i / 4.0)
+        for i in range(5)
+    ]
+
+    strips = []
+    for idx, strip in enumerate(["S1", "S2", "S3", "S4"]):
+        polygon = Polygon(
+            [
+                north_points[idx],
+                north_points[idx + 1],
+                south_points[idx + 1],
+                south_points[idx],
+                north_points[idx],
+            ]
+        )
+
+        strips.append(
+            {
+                "strip": strip,
+                **STRIP_METADATA[strip],
+                "geometry": polygon,
+            }
+        )
+
+    return strips
+
+
+def build_strip_centerlines(points: dict[str, Point]) -> list[dict[str, object]]:
+    """
+    Build strip centerlines from midpoint of each strip on the north edge
+    to midpoint of each strip on the south edge.
+    """
+    center_fractions = [0.125, 0.375, 0.625, 0.875]
+
+    centerlines = []
+    for strip, fraction in zip(["S1", "S2", "S3", "S4"], center_fractions):
+        north_center = interpolate_point(
+            points["field_nw"],
+            points["field_ne"],
+            fraction,
+        )
+        south_center = interpolate_point(
+            points["field_sw"],
+            points["field_se"],
+            fraction,
+        )
+
+        centerlines.append(
+            {
+                "strip": strip,
+                **STRIP_METADATA[strip],
+                "geometry": LineString([north_center, south_center]),
+            }
+        )
+
+    return centerlines
 
 def write_layers(control_points: gpd.GeoDataFrame) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -147,6 +233,19 @@ def write_layers(control_points: gpd.GeoDataFrame) -> None:
     field_edges["length_m"] = field_edges.geometry.length
     field_edges["length_ft"] = field_edges["length_m"] * 3.280839895
 
+    strip_polygons = gpd.GeoDataFrame(
+        build_strip_polygons(points),
+        crs=WORKING_CRS,
+    )
+    strip_polygons["area_m2"] = strip_polygons.geometry.area
+    strip_polygons["area_sqft"] = strip_polygons["area_m2"] * 10.76391041671
+
+    strip_centerlines = gpd.GeoDataFrame(
+        build_strip_centerlines(points),
+        crs=WORKING_CRS,
+    )
+    strip_centerlines["length_m"] = strip_centerlines.geometry.length
+    strip_centerlines["length_ft"] = strip_centerlines["length_m"] * 3.280839895
     # Save the original control points too, but projected to the working CRS.
     control_points_out = control_points_m.copy()
 
@@ -157,6 +256,8 @@ def write_layers(control_points: gpd.GeoDataFrame) -> None:
     field_boundary.to_file(OUTPUT_GPKG, layer="field_boundary", driver="GPKG")
     field_edges.to_file(OUTPUT_GPKG, layer="field_edges", driver="GPKG")
     control_points_out.to_file(OUTPUT_GPKG, layer="control_points", driver="GPKG")
+    strip_polygons.to_file(OUTPUT_GPKG, layer="strip_polygons", driver="GPKG")
+    strip_centerlines.to_file(OUTPUT_GPKG, layer="strip_centerlines", driver="GPKG")
 
     print(f"Wrote: {OUTPUT_GPKG}")
     print()
@@ -166,6 +267,13 @@ def write_layers(control_points: gpd.GeoDataFrame) -> None:
     print()
     print("Field edges:")
     print(field_edges[["edge_id", "length_ft"]].to_string(index=False))
+    print()
+    print("Strip polygons:")
+    print(strip_polygons[["strip", "area_sqft"]].to_string(index=False))
+
+    print()
+    print("Strip centerlines:")
+    print(strip_centerlines[["strip", "length_ft"]].to_string(index=False))
 
 
 def main() -> None:
