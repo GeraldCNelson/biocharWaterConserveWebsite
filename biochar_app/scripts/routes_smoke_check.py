@@ -1,5 +1,5 @@
 import pytest
-from biochar_app.app import app
+from biochar_app.scripts.app import app
 
 @pytest.fixture
 def client():

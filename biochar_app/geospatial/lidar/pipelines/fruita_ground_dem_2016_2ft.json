@@ -1,0 +1,22 @@
+{
+  "description": "Generate a 2-foot ground DEM from the 2016 Mesa County QL2 LiDAR using ground-classified (Classification == 2) points.",
+
+  "pipeline": [
+    {
+      "type": "readers.las",
+      "filename": "biochar_app/geospatial/lidar/LiDAR_2026-05-18T17_33_27.925Z/290235.las"
+    },
+    {
+      "type": "filters.expression",
+      "expression": "Classification == 2"
+    },
+    {
+      "type": "writers.gdal",
+      "filename": "biochar_app/geospatial/lidar/clipped/Fruita_Field_DEM_2016_2ft_from_las.tif",
+      "resolution": 2.0,
+      "output_type": "min",
+      "nodata": -9999,
+      "data_type": "double"
+    }
+  ]
+}
