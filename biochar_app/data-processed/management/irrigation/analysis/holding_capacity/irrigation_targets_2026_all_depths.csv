@@ -1,0 +1,13 @@
+year,strip,sensor_col,depth_index,depth_inches,n_events,mean_value,sd_value,raw_target_value,quantile_cap,target_value,target_is_trustworthy,source_value_col,k_std
+2026.00,S1,VWC_1_raw_S1_B,1,6.00,3.00,30.83,1.38,31.52,32.17,31.52,True,plateau_vwc,0.50
+2026.00,S1,VWC_2_raw_S1_B,2,12.00,3.00,34.26,2.92,35.72,37.13,35.72,True,plateau_vwc,0.50
+2026.00,S1,VWC_3_raw_S1_B,3,18.00,3.00,19.06,3.55,20.84,22.47,20.84,True,plateau_vwc,0.50
+2026.00,S2,VWC_1_raw_S2_B,1,6.00,3.00,34.84,0.99,35.33,35.81,35.33,True,plateau_vwc,0.50
+2026.00,S2,VWC_2_raw_S2_B,2,12.00,3.00,32.10,2.25,33.23,34.27,33.23,True,plateau_vwc,0.50
+2026.00,S2,VWC_3_raw_S2_B,3,18.00,3.00,36.65,1.75,37.52,38.32,37.52,True,plateau_vwc,0.50
+2026.00,S3,VWC_1_raw_S3_B,1,6.00,4.00,34.69,0.54,34.96,35.10,34.96,True,plateau_vwc,0.50
+2026.00,S3,VWC_2_raw_S3_B,2,12.00,5.00,31.70,2.50,32.95,35.09,32.95,True,plateau_vwc,0.50
+2026.00,S3,VWC_3_raw_S3_B,3,18.00,5.00,30.31,4.39,32.51,36.03,32.51,True,plateau_vwc,0.50
+2026.00,S4,VWC_1_raw_S4_B,1,6.00,5.00,40.75,3.52,42.52,45.52,42.52,True,plateau_vwc,0.50
+2026.00,S4,VWC_2_raw_S4_B,2,12.00,5.00,35.63,1.39,36.32,36.96,36.32,True,plateau_vwc,0.50
+2026.00,S4,VWC_3_raw_S4_B,3,18.00,5.00,41.23,2.22,42.34,44.10,42.34,True,plateau_vwc,0.50

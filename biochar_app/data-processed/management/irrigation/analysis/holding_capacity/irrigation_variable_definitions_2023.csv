@@ -1,0 +1,21 @@
+variable,definition,formula_or_rule
+baseline_vwc,Pre-irrigation reference VWC for one event.,Median VWC over the lookback window before irrigation_start; baseline_time is the last timestamp in that lookback window.
+peak_vwc,Maximum post-irrigation VWC found in the search window for one event.,Maximum VWC after irrigation_start within the peak search window.
+peak_increase,Increase from baseline to peak for one event.,peak_vwc - baseline_vwc
+plateau_vwc,Estimated stabilized VWC below the maximum peak after irrigation for one event.,"Median VWC over the detected plateau window; if no flat segment is found, use the fallback window after peak."
+time_to_peak_hours,Elapsed time from irrigation_start to peak VWC for one event.,"peak_time - irrigation_start, in hours"
+time_to_plateau_hours,Elapsed time from irrigation_start to plateau attainment for one event.,"plateau_time - irrigation_start, in hours"
+lag_after_irrigation_hr,Additional time after irrigation shutoff before plateau is reached for one event.,time_to_plateau_hours - event_duration_hours
+event_duration_hours,Length of time irrigation water was running for one event.,"irrigation_end - irrigation_start, in hours"
+gallons_group,Water delivered to the active strip pair/group.,Read from clean irrigation events table.
+gallons_strip,Water assigned to one individual strip.,gallons_group * strip_allocation_fraction
+avg_flow_gph_strip,Average strip-level application flow rate during one irrigation event.,gallons_strip / event_duration_hours
+plateau_method,Method used to estimate plateau_vwc for one event.,flat_segment = sustained low-slope zone found; fallback_window = delayed post-peak summary window used; no_peak = no meaningful wetting peak detected.
+depth_index,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
+depth_inches,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
+event_storage_gal,Change in estimated profile water storage during one event.,profile_plateau_storage_gal - profile_baseline_storage_gal
+efficiency_strip,Fraction of strip-applied irrigation volume retained in measured profile storage.,event_storage_gal / gallons_strip
+estimated_loss_gal_strip,Applied strip volume not accounted for as measured profile storage gain.,gallons_strip - event_storage_gal
+target_vwc,Operational target VWC based on historical plateau responses.,"min(mean_value + k_std * sd_value, quantile_cap)"
+runtime_hours,Recommended runtime in hours based on historical event response.,"Median, mean, or p75 of time_to_plateau_hours within each group"
+runtime_minutes,Recommended runtime in minutes based on historical event response.,runtime_hours * 60
