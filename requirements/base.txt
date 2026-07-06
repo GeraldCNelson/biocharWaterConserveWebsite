@@ -10,6 +10,8 @@ fastparquet==2024.11.0
 duckdb==1.4.4
 openpyxl==3.1.5
 
+python-docx
+
 plotly==6.3.0
 matplotlib==3.10.8
 pillow==12.2.0
