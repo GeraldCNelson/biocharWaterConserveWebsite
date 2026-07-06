@@ -1,48 +1,35 @@
-from pathlib import Path
-
-from biochar_app.config.paths import BASE_DIR, IRRIGATION_DIR
-
 """
 Irrigation configuration.
 
 Purpose
 -------
-Centralizes irrigation-analysis paths and tuning parameters so they are not
-hard-coded in analysis scripts or plotting utilities.
+Centralizes irrigation-analysis tuning parameters and irrigation-specific
+derived paths so they are not hard-coded in analysis scripts or plotting
+utilities.
 
-Scope
------
-This file is for irrigation-specific analysis settings, including:
-- processed irrigation output directories
-- holding-capacity analysis directories
-- diagnostic plot windows
-- pre-start response thresholds
-- peak / plateau search windows
+Filesystem root paths should come from config.paths. This file may define
+irrigation-specific subdirectories derived from those canonical paths.
 
 Field-design metadata such as strip IDs, logger locations, and sensor-depth
 definitions should remain in experiment_config.py or core.py.
-
-Notes
------
-Changing values here can affect generated CSV diagnostics, holding-capacity
-summaries, and event inspection plots. Re-run the irrigation analysis after
-changing any timing or threshold parameter.
 """
 
+from pathlib import Path
+
+from biochar_app.config.core import YEARS
+from biochar_app.config.paths import (
+    HOLDING_CAPACITY_DIR,
+    IRRIGATION_ANALYSIS_DIR,
+    IRRIGATION_DIAGNOSTICS_DIR,
+    IRRIGATION_FIGURES_DIR,
+)
 
 # ============================================================
 # Directories
 # ============================================================
-from biochar_app.config.core import YEARS
 
-ANALYSIS_DIR = IRRIGATION_DIR / "analysis"
-HOLDING_CAPACITY_DIR = ANALYSIS_DIR / "holding_capacity"
-DIAGNOSTICS_DIR = ANALYSIS_DIR / "diagnostics"
-FIGURES_DIR = ANALYSIS_DIR / "figures"
-
-MULTIDEPTH_PLOT_DIR = FIGURES_DIR / "event_multidepth"
-TIMESTAMP_DIAGNOSTICS_DIR = DIAGNOSTICS_DIR / "timestamp_diagnostics"
-
+MULTIDEPTH_PLOT_DIR = IRRIGATION_FIGURES_DIR / "event_multidepth"
+TIMESTAMP_DIAGNOSTICS_DIR = IRRIGATION_DIAGNOSTICS_DIR / "timestamp_diagnostics"
 
 # ============================================================
 # Event-plot windows
@@ -51,7 +38,6 @@ TIMESTAMP_DIAGNOSTICS_DIR = DIAGNOSTICS_DIR / "timestamp_diagnostics"
 EVENT_PLOT_HOURS_BEFORE = 12.0
 EVENT_PLOT_HOURS_AFTER = 30.0
 
-
 # ============================================================
 # Irrigation-response analysis windows
 # ============================================================
@@ -59,7 +45,6 @@ EVENT_PLOT_HOURS_AFTER = 30.0
 BASELINE_LOOKBACK_HOURS = 6.0
 PEAK_SEARCH_HOURS_AFTER_START = 24.0
 PLATEAU_SEARCH_HOURS = 24.0
-
 
 # ============================================================
 # Diagnostic thresholds
@@ -79,9 +64,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DATA_BACKUP_DIR = (
     PROJECT_ROOT.parent
     / "BiocharBackups"
-    /    "biochar_data_raw"
+    / "biochar_data_raw"
 )
 
 RAW_DATA_BACKUP_STATE = RAW_DATA_BACKUP_DIR / ".backup_state.json"
-DEFAULT_ETL_YEAR = max(YEARS) # uses the last year in the list of YEARS as the default for backing up
+DEFAULT_ETL_YEAR = max(YEARS)
 RAW_DATA_BACKUP_INTERVAL_DAYS = 30

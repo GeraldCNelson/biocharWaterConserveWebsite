@@ -67,18 +67,35 @@ BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
 
 MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
-IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR/ "irrigation"
+
+IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR / "irrigation"
 IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean.csv"
-FERTILIZER_DIR = MANAGEMENT_PROCESSED_DIR/ "fertilizer"
+IRRIGATION_ANALYSIS_DIR = IRRIGATION_DIR / "analysis"
+HOLDING_CAPACITY_DIR = IRRIGATION_ANALYSIS_DIR / "holding_capacity"
+IRRIGATION_DIAGNOSTICS_DIR = IRRIGATION_ANALYSIS_DIR / "diagnostics"
+IRRIGATION_FIGURES_DIR = IRRIGATION_ANALYSIS_DIR / "figures"
+IRRIGATION_REPORTS_DIR = IRRIGATION_ANALYSIS_DIR / "reports"
+
+FERTILIZER_DIR = MANAGEMENT_PROCESSED_DIR / "fertilizer"
 FERTILIZER_CSV_OUT = FERTILIZER_DIR / "fertilizer_clean.csv"
 FERTILIZER_DATA_IN = FERTILIZER_DIR / "fertilizer_data_raw.xlsx"
 
-
-DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
-LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
-WEATHER_DOWNLOADS_DIR = DOWNLOADS_DIR / "weather"
-
-WARD_HTML_DIR = BASE_DIR / "data-processed" / "ward-html"
-
 WARD_BIOLOGICAL_REPORT_HTML_FILE = WARD_HTML_DIR / "ward-biological-report.html"
 WARD_BIOLOGICAL_REPORT_DOCX_FILE = BASE_DIR / "data-processed" / "ward-docx" / "Biological 2024-11-05.docx"
+
+# =============================================================================
+# Geospatial directories
+# =============================================================================
+
+GEOSPATIAL_DIR = BASE_DIR / "geospatial"
+
+FIELD_LAYOUT_DIR = GEOSPATIAL_DIR / "field_layout"
+LIDAR_DIR = GEOSPATIAL_DIR / "lidar"
+LIDAR_RAW_DIR = LIDAR_DIR / "raw"
+LIDAR_TERRAIN_DIR = LIDAR_DIR / "terrain"
+LIDAR_CLIPPED_DIR = LIDAR_DIR / "clipped"
+LIDAR_HILLSHADE_DIR = LIDAR_DIR / "hillshade"
+LIDAR_ANALYSIS_DIR = LIDAR_DIR / "analysis"
+LIDAR_PIPELINES_DIR = LIDAR_DIR / "pipelines"
+DRONE_DIR = GEOSPATIAL_DIR / "drone"
+

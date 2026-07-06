@@ -53,11 +53,21 @@ ARRIVAL_RESPONSE_THRESHOLD_VWC = 0.25
 # possible wetting that occurred before the recorded irrigation start.
 # A larger threshold reduces false detections from noise or gradual drift.
 ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC = 0.50
+
+# TODO: Continue refactoring the irrigation analysis workflow.
+#
+# Remaining work:
+# - separate intermediate and final analysis products
+# - reduce responsibilities of this script by moving reusable routines
+#   into smaller modules
+# - distinguish diagnostic outputs from publication-quality outputs
+# - integrate water-deficit estimation with the holding-capacity workflow
+#   once the methodology is finalized
 """
 
 from pathlib import Path
 import pandas as pd
-from typing import Any, cast
+from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -109,8 +119,9 @@ from biochar_app.config.irrigation_config import (
     EVENT_PLOT_HOURS_AFTER,
     MULTIDEPTH_PLOT_DIR,
     HOLDING_CAPACITY_DIR,
-    DIAGNOSTICS_DIR,
-    FIGURES_DIR,
+    IRRIGATION_FIGURES_DIR,
+    IRRIGATION_DIAGNOSTICS_DIR,
+    IRRIGATION_FIGURES_DIR,
     TIMESTAMP_DIAGNOSTICS_DIR,
     ARRIVAL_RESPONSE_THRESHOLD_VWC,
     ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC,
@@ -121,8 +132,8 @@ profile_area_sqft = PROFILE_AREA_SQFT
 
 for d in [
     HOLDING_CAPACITY_DIR,
-    DIAGNOSTICS_DIR,
-    FIGURES_DIR,
+    IRRIGATION_DIAGNOSTICS_DIR,
+    IRRIGATION_FIGURES_DIR,
     MULTIDEPTH_PLOT_DIR,
     TIMESTAMP_DIAGNOSTICS_DIR,
 ]:
@@ -2958,7 +2969,7 @@ def write_year_outputs(
     response_summary = add_vertical_velocity_fields(response_summary)
 
     response_summary.to_csv(
-        DIAGNOSTICS_DIR / f"irrigation_event_response_summary_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_event_response_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
@@ -2968,7 +2979,7 @@ def write_year_outputs(
     )
 
     horizontal_advance.to_csv(
-        DIAGNOSTICS_DIR / f"irrigation_horizontal_advance_summary_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_horizontal_advance_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
@@ -2977,7 +2988,7 @@ def write_year_outputs(
     print(arrival_times.columns.tolist())
 
     arrival_times.to_csv(
-        DIAGNOSTICS_DIR / f"irrigation_arrival_times_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_arrival_times_{year}.csv",
         index=False,
     )
 
@@ -2986,7 +2997,7 @@ def write_year_outputs(
     )
 
     arrival_order_table.to_csv(
-        DIAGNOSTICS_DIR / f"arrival_order_diagnostics_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"arrival_order_diagnostics_{year}.csv",
         index=False,
     )
 
@@ -3155,7 +3166,7 @@ def write_year_outputs(
         else pd.DataFrame()
     )
 
-    plot_log_path = FIGURES_DIR / f"irrigation_event_multidepth_plot_log_{year}.csv"
+    plot_log_path = IRRIGATION_FIGURES_DIR / f"irrigation_event_multidepth_plot_log_{year}.csv"
     multidepth_plot_log.to_csv(plot_log_path, index=False)
 
     pre_start_table = detect_pre_start_response(
@@ -3168,14 +3179,14 @@ def write_year_outputs(
     )
 
     pre_start_table.to_csv(
-        DIAGNOSTICS_DIR / f"irrigation_pre_start_response_flags_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_pre_start_response_flags_{year}.csv",
         index=False,
     )
 
     trustworthy_table = classify_trustworthy_irrigation_events(pre_start_table)
 
     trustworthy_table.to_csv(
-        DIAGNOSTICS_DIR / f"trustworthy_irrigation_events_{year}.csv",
+        IRRIGATION_DIAGNOSTICS_DIR / f"trustworthy_irrigation_events_{year}.csv",
         index=False,
     )
 

@@ -5,13 +5,15 @@ import pandas as pd
 from docx import Document
 from docx.shared import Inches
 
-SCRIPT_PATH = Path(__file__).resolve()
-BIOCHAR_APP_DIR = SCRIPT_PATH.parents[2]
+from biochar_app.config.paths import (
+    IRRIGATION_DIAGNOSTICS_DIR,
+    IRRIGATION_FIGURES_DIR,
+    IRRIGATION_REPORTS_DIR,
+)
 
-BASE = BIOCHAR_APP_DIR / "data-processed" / "management" / "irrigation" / "analysis"
-DIAGNOSTICS_DIR = BASE / "diagnostics"
-FIGURES_DIR = BASE / "figures"
-REPORTS_DIR = BASE / "reports"
+DIAGNOSTICS_DIR = IRRIGATION_DIAGNOSTICS_DIR
+FIGURES_DIR = IRRIGATION_FIGURES_DIR
+REPORTS_DIR = IRRIGATION_REPORTS_DIR
 
 
 def _fmt_minutes(value: object) -> str:
