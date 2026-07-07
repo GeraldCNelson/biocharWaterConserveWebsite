@@ -76,8 +76,6 @@ from matplotlib.figure import Figure
 from typing import cast
 
 from biochar_app.config.field_management_metadata import (
-    #PROFILE_AREA_SQFT_BY_STRIP_LOGGER,
-    #PROFILE_AREA_SQFT,
     PROFILE_GALLONS_PER_INCH,
     #STRIP_WIDTH_FT,
     #STRIP_LENGTH_FT,
@@ -104,12 +102,13 @@ from biochar_app.scripts.data_loading import (
     load_logger_data,
     prepare_irrigation_input,
 )
-from biochar_app.scripts.management.irrigation_analysis import (
-    analyze_irrigation_events,
-    build_variable_definitions_table,
-    build_variable_definitions_with_sources,
-    summarize_targets_and_runtimes,
+from biochar_app.scripts.management.irrigation_analysis.irrigation_response_analysis import (
+     analyze_irrigation_events,
+     build_variable_definitions_table,
+     build_variable_definitions_with_sources,
+     summarize_targets_and_runtimes,
 )
+
 from biochar_app.scripts.management.irrigation_plots import (
     save_irrigation_event_multidepth_plots,
 )
@@ -118,14 +117,16 @@ from biochar_app.config.irrigation_config import (
     EVENT_PLOT_HOURS_BEFORE,
     EVENT_PLOT_HOURS_AFTER,
     MULTIDEPTH_PLOT_DIR,
-    HOLDING_CAPACITY_DIR,
-    IRRIGATION_FIGURES_DIR,
-    IRRIGATION_DIAGNOSTICS_DIR,
-    IRRIGATION_FIGURES_DIR,
     TIMESTAMP_DIAGNOSTICS_DIR,
     ARRIVAL_RESPONSE_THRESHOLD_VWC,
     ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC,
     MIN_PRECIP_IN,
+)
+
+from biochar_app.config.paths import (
+    HOLDING_CAPACITY_DIR,
+    IRRIGATION_DIAGNOSTICS_DIR,
+    IRRIGATION_FIGURES_DIR,
 )
 
 profile_area_sqft = PROFILE_AREA_SQFT
@@ -326,7 +327,7 @@ def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPAC
             sub.groupby(["logger_position", "strip"])["event_storage_in"]
             .mean()
             .unstack("strip")
-            .reindex([LOGGER_LOCATIONS])
+            .reindex(LOGGER_LOCATIONS)
         )
 
         ax = summary.plot(kind="bar", figsize=(8, 5))
@@ -543,7 +544,7 @@ def plot_mean_storage_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DI
             sub.groupby(["logger_position", "strip"])["event_storage_gal"]
             .mean()
             .unstack("strip")
-            .reindex([LOGGER_LOCATIONS])
+            .reindex(LOGGER_LOCATIONS)
         )
 
         ax = summary.plot(kind="bar", figsize=(8, 5))
@@ -560,7 +561,7 @@ def plot_mean_storage_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DI
         plt.close(fig)
         
 def detect_sustained_baseline_arrival(
-    series: pd.Series,
+    vwc_series: pd.Series,
     baseline_vwc: float,
     irrigation_start: pd.Timestamp,
     response_threshold_vwc: float,
@@ -579,16 +580,13 @@ def detect_sustained_baseline_arrival(
 
     This avoids treating small post-start drift as arrival.
     """
-    clean = pd.to_numeric(series, errors="coerce").dropna()
+    clean = pd.to_numeric(vwc_series, errors="coerce").dropna()
 
     if clean.empty or len(clean) < min_persist_points:
         return None, None
 
     arrival_search = clean.loc[irrigation_start:]
-    print()
-    print(series.name)
-    print(irrigation_start)
-    print(arrival_search.head(8))
+
 
     if arrival_search.empty or len(arrival_search) < min_persist_points:
         return None, None
@@ -612,16 +610,11 @@ def detect_sustained_baseline_arrival(
         if followup_rise < min_followup_rise_vwc:
             continue
         return pd.Timestamp(candidate_time), candidate_vwc
-    if series.name == "VWC_1_raw_S2_T":
-        print("\n----------------------------")
-        print(series.name)
-        print(f"baseline = {baseline_vwc}")
-        print(f"target   = {target_vwc}")
-        print(clean.loc[irrigation_start:].head(12))
+
     return None, None
 
 def detect_alt_arrival_from_vwc_step(
-    series: pd.Series,
+    vwc_series: pd.Series,
     response_threshold_vwc: float,
     min_persist_points: int = 4,
     min_total_rise_vwc: float | None = None,
@@ -631,11 +624,8 @@ def detect_alt_arrival_from_vwc_step(
 
     Alternate arrival is defined as the first increase of at least
     response_threshold_vwc that is followed by a sustained rise in VWC.
-
-    This is intended as a QA diagnostic for possible wetting that begins before
-    the recorded irrigation start time.
     """
-    clean = pd.to_numeric(series, errors="coerce").dropna()
+    clean = pd.to_numeric(vwc_series, errors="coerce").dropna()
 
     if clean.empty or len(clean) < min_persist_points + 1:
         return None, None, None
@@ -649,19 +639,18 @@ def detect_alt_arrival_from_vwc_step(
         center=True,
     ).median()
 
-    step = smoothed.diff()
-    candidates = step[step >= response_threshold_vwc]
+    step: pd.Series = pd.to_numeric(smoothed.diff(), errors="coerce").dropna()
+    candidate_mask = step >= response_threshold_vwc
+    candidates: pd.Series = step.loc[candidate_mask]
 
     if candidates.empty:
         return None, None, None
 
-    for candidate_time, step_value in candidates.items():
-        candidate_pos = clean.index.get_loc(candidate_time)
+    for candidate_time in candidates.index:
+        candidate_timestamp = pd.Timestamp(candidate_time)
+        candidate_pos = clean.index.get_loc(candidate_timestamp)
 
-        if isinstance(candidate_pos, slice):
-            continue
-
-        if not isinstance(candidate_pos, int):
+        if isinstance(candidate_pos, slice) or not isinstance(candidate_pos, int):
             continue
 
         before_pos = max(candidate_pos - 1, 0)
@@ -672,22 +661,19 @@ def detect_alt_arrival_from_vwc_step(
         if len(after) < min_persist_points:
             continue
 
-        # Sustained response criterion:
-        # all following points remain above the pre-step value by at least
-        # min_total_rise_vwc.
         if not (after >= before_value + min_total_rise_vwc).all():
             continue
 
-        # Additional trend criterion:
-        # the final value in the persistence window should not immediately
-        # collapse back toward the pre-step value.
         if float(after.iloc[-1]) < before_value + min_total_rise_vwc:
             continue
 
+        candidate_value = float(clean.iloc[candidate_pos])
+        step_value = float(candidates.loc[candidate_timestamp])
+
         return (
-            pd.Timestamp(candidate_time),
-            float(clean.loc[candidate_time]),
-            float(step_value),
+            candidate_timestamp,
+            candidate_value,
+            step_value,
         )
 
     return None, None, None
@@ -747,13 +733,13 @@ def build_irrigation_arrival_times(
         plot_start = irrigation_start - pd.Timedelta(hours=hours_before)
         plot_end = irrigation_start + pd.Timedelta(hours=hours_after)
 
-        series = (
+        vwc_series = (
             pd.to_numeric(df_15min[sensor_col], errors="coerce")
             .loc[plot_start:plot_end]
             .dropna()
         )
 
-        if series.empty:
+        if vwc_series.empty:
             continue
 
         (
@@ -761,7 +747,7 @@ def build_irrigation_arrival_times(
             alt_arrival_vwc,
             alt_arrival_step_vwc,
         ) = detect_alt_arrival_from_vwc_step(
-            series=series,
+            vwc_series=vwc_series,
             response_threshold_vwc=ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC,
         )
 
@@ -771,7 +757,7 @@ def build_irrigation_arrival_times(
         ).iloc[0]
 
         if pd.isna(baseline_vwc):
-            pre = series.loc[:irrigation_start]
+            pre = vwc_series.loc[:irrigation_start]
             baseline_vwc = pre.median() if not pre.empty else pd.NA
 
         response_time: pd.Timestamp | None = None
@@ -779,7 +765,7 @@ def build_irrigation_arrival_times(
 
         if pd.notna(baseline_vwc):
             response_time, response_vwc = detect_sustained_baseline_arrival(
-                series=series,
+                vwc_series=vwc_series,
                 baseline_vwc=float(baseline_vwc),
                 irrigation_start=irrigation_start,
                 response_threshold_vwc=response_threshold_vwc,
@@ -2585,8 +2571,13 @@ def build_arrival_order_diagnostics(
     def _as_bool(value: object) -> bool:
         if isinstance(value, bool):
             return value
-        if pd.isna(value):
+        if value is None:
             return False
+        try:
+            if bool(pd.Series([value]).isna().iloc[0]):
+                return False
+        except Exception:
+            pass
         return str(value).strip().lower() in {"true", "1", "yes", "y"}
 
     def _depth_order_class(

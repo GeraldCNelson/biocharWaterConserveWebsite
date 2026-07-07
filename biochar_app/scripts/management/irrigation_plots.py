@@ -24,7 +24,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from biochar_app.config.experiment_config import LOGGER_LOCATION_MAPPING
-from biochar_app.scripts.management.irrigation_analysis import (
+from biochar_app.scripts.management.irrigation_analysis.irrigation_response_analysis import (
     DEPTH_INDEX_TO_INCHES,
     _validate_datetime_index,
 )
