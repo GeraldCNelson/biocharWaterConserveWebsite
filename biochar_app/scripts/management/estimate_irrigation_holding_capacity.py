@@ -71,10 +71,11 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
-from matplotlib.axes import Axes
+
 from matplotlib.figure import Figure
 from typing import cast
 
+from biochar_app.config.experiment_config import LOGGER_GEOMETRY
 from biochar_app.config.field_management_metadata import (
     PROFILE_GALLONS_PER_INCH,
     #STRIP_WIDTH_FT,
@@ -109,7 +110,7 @@ from biochar_app.scripts.management.irrigation_analysis.irrigation_response_anal
      summarize_targets_and_runtimes,
 )
 
-from biochar_app.scripts.management.irrigation_plots import (
+from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_irrigation_event_multidepth_plots,
 )
 
@@ -147,7 +148,6 @@ DEPTH_INDEX_TO_INCHES: dict[str, int] = {
     for depth_code in SENSOR_DEPTH_CODES
 }
 
-from biochar_app.config.experiment_config import LOGGER_GEOMETRY
 
 BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
