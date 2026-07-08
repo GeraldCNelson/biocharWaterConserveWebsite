@@ -18,73 +18,11 @@ from biochar_app.config.field_management_metadata import (
     ZONE_LENGTHS_FT_BY_STRIP,
 )
 
-
-def round_for_reporting(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-
-    round_0_cols = [
-        "gallons_strip",
-        "gallons_group",
-        "baseline_storage_gal",
-        "plateau_storage_gal",
-        "event_storage_gal",
-        "profile_baseline_storage_gal",
-        "profile_plateau_storage_gal",
-        "mean_gallons_strip",
-        "sd_gallons_strip",
-        "estimated_surplus_gal_strip",
-    ]
-
-    round_1_cols = [
-        "zone_length_ft",
-        "zone_area_sqft",
-        "profile_area_sqft",
-    ]
-
-    round_2_cols = [
-        "baseline_vwc",
-        "plateau_vwc",
-        "peak_vwc",
-        "peak_increase",
-        "depth_inches",
-        "event_storage_in",
-        "profile_baseline_storage_in",
-        "profile_plateau_storage_in",
-        "zone_gallons_per_inch",
-        "estimated_surplus_fraction",
-        "mean_storage_in",
-        "median_storage_in",
-        "max_storage_in",
-        "p95_storage_in",
-        "sd_storage_in",
-    ]
-
-    round_3_cols = [
-        "cv_plateau_vwc",
-        "efficiency_strip",
-        "mean_efficiency_strip",
-        "sd_efficiency_strip",
-        "flow_storage_corr",
-    ]
-
-    for col in round_0_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(0)
-
-    for col in round_1_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(1)
-
-    for col in round_2_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(2)
-
-    for col in round_3_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(3)
-
-    return out
-
+from biochar_app.scripts.management.irrigation_analysis.utils import (
+    force_float,
+    move_id_columns_left,
+    round_for_reporting,
+)
 
 def build_event_storage_by_event(zone_df: pd.DataFrame) -> pd.DataFrame:
     if zone_df.empty:
