@@ -65,9 +65,7 @@ ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC = 0.50
 #   once the methodology is finalized
 """
 
-from pathlib import Path
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -102,6 +100,9 @@ from biochar_app.scripts.management.irrigation_analysis.irrigation_response_anal
 
 from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_irrigation_event_multidepth_plots,
+    plot_mean_storage_depth_by_zone_by_year,
+    plot_mean_storage_by_zone,
+    plot_mean_storage_by_zone_by_year,
 )
 
 from biochar_app.scripts.management.irrigation_analysis.diagnostics import (
@@ -170,111 +171,10 @@ BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
 
 
-def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
-    if zone_df.empty:
-        return
-
-    figure_dir = HOLDING_CAPACITY_DIR / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
-
-    df = zone_df.copy()
-    df["event_storage_in"] = pd.to_numeric(df["event_storage_in"], errors="coerce")
-
-    for year, sub in df.groupby("year"):
-        summary = (
-            sub.groupby(["logger_position", "strip"])["event_storage_in"]
-            .mean()
-            .unstack("strip")
-            .reindex(LOGGER_LOCATIONS)
-        )
-
-        ax = summary.plot(kind="bar", figsize=(8, 5))
-        ax.set_xlabel("Logger influence zone")
-        ax.set_ylabel("Mean water stored (in)")
-        ax.set_title(f"Mean water stored by logger influence zone and strip, {year}")
-        ax.set_xticklabels(["Top", "Middle", "Bottom"], rotation=0)
-        ax.legend(title="Strip")
-
-        ax.text(
-            0.01,
-            -0.22,
-            "Water stored is expressed as equivalent water depth over each logger influence zone, "
-            "derived from 6, 12, and 18 in VWC sensors.",
-            transform=ax.transAxes,
-            fontsize=8,
-            va="top",
-        )
 
 
-        out_path = figure_dir / f"mean_water_stored_in_by_zone_{year}.png"
-        fig = cast(Figure, ax.figure)
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
 
 
-def plot_mean_storage_by_zone(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
-    if zone_df.empty:
-        return
-
-    figure_dir = HOLDING_CAPACITY_DIR / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
-
-    df = zone_df.copy()
-    df["event_storage_gal"] = pd.to_numeric(df["event_storage_gal"], errors="coerce")
-
-    summary = (
-        df.groupby(["logger_position", "strip"])["event_storage_gal"]
-        .mean()
-        .unstack("strip")
-        .reindex(["T", "M", "B"])
-    )
-
-    ax = summary.plot(kind="bar", figsize=(8, 5))
-    ax.set_xlabel("Logger position")
-    ax.set_ylabel("Mean event storage (gal)")
-    ax.set_title("Mean event storage by logger position and strip")
-    ax.set_xticklabels(["Top", "Middle", "Bottom"], rotation=0)
-    ax.legend(title="Strip")
-    
-
-    out_path = figure_dir / "mean_event_storage_by_zone_all_years.png"
-    fig = cast(Figure, ax.figure)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_mean_storage_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
-    if zone_df.empty:
-        return
-
-    figure_dir = HOLDING_CAPACITY_DIR / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
-
-    df = zone_df.copy()
-    df["event_storage_gal"] = pd.to_numeric(df["event_storage_gal"], errors="coerce")
-
-    for year, sub in df.groupby("year"):
-        summary = (
-            sub.groupby(["logger_position", "strip"])["event_storage_gal"]
-            .mean()
-            .unstack("strip")
-            .reindex(LOGGER_LOCATIONS)
-        )
-
-        ax = summary.plot(kind="bar", figsize=(8, 5))
-        ax.set_xlabel("Logger position")
-        ax.set_ylabel("Mean event storage (gal)")
-        ax.set_title(f"Mean event storage by logger position and strip, {year}")
-        ax.set_xticklabels(["Top", "Middle", "Bottom"], rotation=0)
-        ax.legend(title="Strip")
-
-        out_path = figure_dir / f"mean_event_storage_by_zone_{year}.png"
-        fig = cast(Figure, ax.figure)
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
         
 def detect_sustained_baseline_arrival(
     vwc_series: pd.Series,
