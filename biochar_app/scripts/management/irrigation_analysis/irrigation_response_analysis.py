@@ -55,13 +55,18 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import re
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, TypedDict, cast
+from typing import Any, Iterable, Optional, Sequence, TypedDict, cast
 
 import numpy as np
 import pandas as pd
 
 from biochar_app.config.field_management_metadata import (
     PROFILE_AREA_SQFT,
+)
+
+from biochar_app.config.experiment_config import (
+    SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_INDEX_TO_INCHES,
 )
 profile_area_sqft = PROFILE_AREA_SQFT
 
@@ -119,14 +124,7 @@ _VWC_SENSOR_RE = re.compile(
     r"^(?P<variable>VWC)_(?P<depth_index>[123])_raw_(?P<strip>S[1-4])_(?P<logger_position>[TMB])$"
 )
 
-DEPTH_INDEX_TO_INCHES: Dict[str, int] = {
-    "1": 6,
-    "2": 12,
-    "3": 18,
-}
-
-
-def build_bottom_control_sensor_map() -> Dict[str, str]:
+def build_bottom_control_sensor_map() -> dict[str, str]:
     return {
         "S1": "VWC_3_raw_S1_B",
         "S2": "VWC_3_raw_S2_B",
@@ -135,7 +133,7 @@ def build_bottom_control_sensor_map() -> Dict[str, str]:
     }
 
 
-def build_bottom_logger_profile_map() -> Dict[str, List[str]]:
+def build_bottom_logger_profile_map() -> dict[str, list[str]]:
     return {
         "S1": ["VWC_1_raw_S1_B", "VWC_2_raw_S1_B", "VWC_3_raw_S1_B"],
         "S2": ["VWC_1_raw_S2_B", "VWC_2_raw_S2_B", "VWC_3_raw_S2_B"],
@@ -144,7 +142,7 @@ def build_bottom_logger_profile_map() -> Dict[str, List[str]]:
     }
 
 
-def build_bottom_profile_sensor_map(depth_index: int = 3) -> Dict[str, str]:
+def build_bottom_profile_sensor_map(depth_index: int = 3) -> dict[str, str]:
     if depth_index not in {1, 2, 3}:
         raise ValueError("depth_index must be 1, 2, or 3")
 
@@ -156,7 +154,7 @@ def build_bottom_profile_sensor_map(depth_index: int = 3) -> Dict[str, str]:
     }
 
 
-def build_all_bottom_sensor_cols() -> List[str]:
+def build_all_bottom_sensor_cols() -> list[str]:
     return [
         f"VWC_{depth_index}_raw_{strip}_B"
         for strip in ["S1", "S2", "S3", "S4"]
@@ -185,7 +183,7 @@ def parse_vwc_sensor_column(sensor_col: str) -> SensorMeta:
     return result
 
 
-def _build_profile_swc_gal_cols(strip: str, logger_position: str) -> List[str]:
+def _build_profile_swc_gal_cols(strip: str, logger_position: str) -> list[str]:
     return [
         f"SWC_vol_gal_{strip}_{logger_position}_1",
         f"SWC_vol_gal_{strip}_{logger_position}_2",
@@ -258,11 +256,11 @@ def _run_lengths(mask: pd.Series) -> pd.Series:
 def _group_iter(
     df: pd.DataFrame,
     group_cols: Sequence[str],
-) -> Iterable[Tuple[Any, pd.DataFrame]]:
+) -> Iterable[tuple[Any, pd.DataFrame]]:
     if not group_cols:
         return [((), df)]
     return cast(
-        Iterable[Tuple[Any, pd.DataFrame]],
+        Iterable[tuple[Any, pd.DataFrame]],
         df.groupby(list(group_cols), dropna=False),
     )
 
@@ -411,7 +409,7 @@ def compute_event_storage_metrics(
     baseline_time: Optional[pd.Timestamp],
     plateau_time: Optional[pd.Timestamp],
     gallons_strip: Optional[float],
-) -> Dict[str, object]:
+) -> dict[str, object]:
     strip_from_col = sensor_meta["strip_from_col"]
     logger_position = sensor_meta["logger_position"]
 
@@ -472,7 +470,7 @@ def find_event_baseline(
     series: pd.Series,
     irrigation_start: pd.Timestamp,
     baseline_lookback_hours: float = 2.0,
-) -> Tuple[Optional[float], Optional[pd.Timestamp]]:
+) -> tuple[Optional[float], Optional[pd.Timestamp]]:
     window_start = irrigation_start - pd.Timedelta(hours=baseline_lookback_hours)
     sub = series.loc[window_start:irrigation_start].dropna()
 
@@ -489,7 +487,7 @@ def find_event_peak(
     peak_search_hours_after_start: float = 24.0,
     min_peak_increase: float = 0.5,
     baseline_vwc: Optional[float] = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     end = irrigation_start + pd.Timedelta(hours=peak_search_hours_after_start)
     sub = series.loc[irrigation_start:end].dropna()
 
@@ -519,7 +517,7 @@ def find_post_peak_plateau(
     series: pd.Series,
     peak_time: pd.Timestamp,
     config: PlateauConfig,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     search_end = peak_time + pd.Timedelta(hours=config.search_hours_after_peak)
     sub = series.loc[peak_time:search_end].dropna()
 
@@ -603,7 +601,7 @@ def analyze_single_event_sensor(
     event_id: Optional[object] = None,
     search_config: Optional[EventSearchConfig] = None,
     plateau_config: Optional[PlateauConfig] = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     _validate_datetime_index(df)
 
     search_config = search_config or EventSearchConfig()
@@ -632,7 +630,7 @@ def analyze_single_event_sensor(
     peak_time_obj = peak_info.get("peak_time")
     peak_found_obj = bool(peak_info.get("peak_found", False))
 
-    plateau_info: Dict[str, object] = {
+    plateau_info: dict[str, object] = {
         "plateau_vwc": None,
         "plateau_time": None,
         "plateau_method": "no_peak",
@@ -778,7 +776,7 @@ def analyze_irrigation_events(
     else:
         gallons_group_col = None
 
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
 
     for i, ev in events_local.iterrows():
         irrigation_start = _coerce_optional_timestamp(ev[start_col])
@@ -953,7 +951,7 @@ def analyze_bottom_logger_controls(
     df_15min: pd.DataFrame,
     strips: Sequence[str],
     year: int,
-    strip_to_bottom_sensor: Optional[Dict[str, str]] = None,
+    strip_to_bottom_sensor: Optional[dict[str, str]] = None,
     search_config: Optional[EventSearchConfig] = None,
     plateau_config: Optional[PlateauConfig] = None,
 ) -> pd.DataFrame:
@@ -962,7 +960,7 @@ def analyze_bottom_logger_controls(
     if strip_to_bottom_sensor is None:
         strip_to_bottom_sensor = build_bottom_control_sensor_map()
 
-    all_results: List[pd.DataFrame] = []
+    all_results: list[pd.DataFrame] = []
     all_events = load_irrigation_data()
 
     required_cols = {
@@ -1050,7 +1048,7 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
 
     if "depth_index" in out.columns:
         out["depth_index"] = out["depth_index"].astype("string")
-        out["depth_inches"] = out["depth_index"].map(DEPTH_INDEX_TO_INCHES)
+        out["depth_inches"] = out["depth_index"].map(SENSOR_DEPTH_INDEX_TO_INCHES)
     else:
         out["depth_inches"] = pd.NA
 
@@ -1146,7 +1144,7 @@ def estimate_statistical_target(
     df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
     df = df.loc[df[value_col].notna()].copy()
 
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
 
     for group_key, sub in _group_iter(df, group_cols):
         vals = pd.to_numeric(sub[value_col], errors="coerce").dropna()
@@ -1160,7 +1158,7 @@ def estimate_statistical_target(
         quantile_cap = float(vals.quantile(target_config.upper_quantile_cap))
         target_value = min(raw_target_value, quantile_cap)
 
-        row: Dict[str, object] = {
+        row: dict[str, object] = {
             "n_events": n_events,
             "mean_value": mean_value,
             "sd_value": sd_value,
@@ -1198,7 +1196,7 @@ def recommend_runtime_from_history(
     df[target_time_col] = pd.to_numeric(df[target_time_col], errors="coerce")
     df = df.loc[df[target_time_col].notna()].copy()
 
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
 
     for group_key, sub in _group_iter(df, group_cols):
         vals = pd.to_numeric(sub[target_time_col], errors="coerce").dropna()
@@ -1215,7 +1213,7 @@ def recommend_runtime_from_history(
         else:
             raise ValueError("summary_stat must be one of: 'median', 'mean', 'p75'")
 
-        row: Dict[str, object] = {
+        row: dict[str, object] = {
             "n_events": n_events,
             "runtime_hours": runtime_hours,
             "runtime_minutes": runtime_hours * 60.0,
@@ -1240,7 +1238,7 @@ def summarize_targets_and_runtimes(
     min_events: int = 3,
     k_std: float = 0.5,
     runtime_summary_stat: str = "median",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     targets = estimate_statistical_target(
         event_results=event_results,
         value_col="plateau_vwc",
@@ -1294,7 +1292,7 @@ def build_depth_target_runtime_summary(
         }
     )
 
-    aux_rows: List[Dict[str, object]] = []
+    aux_rows: list[dict[str, object]] = []
 
     for group_key, sub in df.groupby(group_cols, dropna=False):
         key_tuple = group_key if isinstance(group_key, tuple) else (group_key,)
@@ -1303,7 +1301,7 @@ def build_depth_target_runtime_summary(
         lag_vals = pd.to_numeric(sub["lag_after_irrigation_hr"], errors="coerce").dropna()
         flow_vals = pd.to_numeric(sub["avg_flow_gph_strip"], errors="coerce").dropna()
 
-        row: Dict[str, object] = {
+        row: dict[str, object] = {
             col_name: val for col_name, val in zip(group_cols, key_tuple)
         }
 
@@ -1374,7 +1372,7 @@ def build_variable_definitions_with_sources(
         if "variable_definitions" not in f.name
     ]
 
-    records: List[Dict[str, object]] = []
+    records: list[dict[str, object]] = []
 
     for csv_file in csv_files:
         try:

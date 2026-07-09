@@ -4,11 +4,11 @@ import pandas as pd
 from biochar_app.config.experiment_config import (
     STRIPS,
     SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_INDEX_TO_INCHES,
 )
 
-from biochar_app.scripts.management.estimate_irrigation_holding_capacity import (DEPTH_INDEX_TO_INCHES)
-
 from biochar_app.scripts.data_loading import (load_logger_data, prepare_irrigation_input)
+
 
 def force_float(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -145,7 +145,7 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
 
     if "depth_index" in out.columns:
         out["depth_index"] = out["depth_index"].astype("string")
-        out["depth_inches"] = out["depth_index"].map(DEPTH_INDEX_TO_INCHES)
+        out["depth_inches"] = out["depth_index"].map(SENSOR_DEPTH_INDEX_TO_INCHES)
     else:
         out["depth_inches"] = pd.NA
 

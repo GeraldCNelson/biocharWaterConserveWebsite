@@ -78,11 +78,17 @@ from biochar_app.config.experiment_config import (LOGGER_LOCATIONS)
 # strip width 46 ft × strip length 280 ft ÷ 3 logger positions.
 
 from biochar_app.config.core import (
-    SENSOR_DEPTH_CODES,
-    SENSOR_DEPTH_VALUES,
     STRIPS,
     YEARS,
 )
+
+from biochar_app.config.experiment_config import (
+    SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_INDEX_TO_INCHES,
+    SENSOR_DEPTH_LABELS,
+    SENSOR_DEPTH_VALUES,
+)
+
 from biochar_app.scripts.data_loading import (
     load_irrigation_data,
 )
@@ -122,6 +128,7 @@ from biochar_app.config.paths import (
     HOLDING_CAPACITY_DIR,
     IRRIGATION_DIAGNOSTICS_DIR,
     IRRIGATION_FIGURES_DIR,
+    IRRIGATION_REPORTS_DIR,
 )
 
 from biochar_app.scripts.management.irrigation_analysis.holding_capacity import (
@@ -164,12 +171,6 @@ for d in [
     d.mkdir(parents=True, exist_ok=True)
 
 VERBOSE = False
-
-DEPTH_INDEX_TO_INCHES: dict[str, int] = {
-    depth_code: int(SENSOR_DEPTH_VALUES[depth_code]["us"])
-    for depth_code in SENSOR_DEPTH_CODES
-}
-
 
 BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
@@ -334,7 +335,7 @@ def build_irrigation_event_response_summary(
     # VWC response by depth: peak - pre
     # ------------------------------------------------------------------
     for depth_code in SENSOR_DEPTH_CODES:
-        depth_inches = DEPTH_INDEX_TO_INCHES[depth_code]
+        depth_inches = SENSOR_DEPTH_INDEX_TO_INCHES[depth_code]
 
         pre_col = f"pre_vwc_{depth_inches}in"
         peak_col = f"peak_vwc_{depth_inches}in"
@@ -354,7 +355,7 @@ def build_irrigation_event_response_summary(
     # SWC response by depth: peak - baseline
     # ------------------------------------------------------------------
     for depth_code in SENSOR_DEPTH_CODES:
-        depth_inches = DEPTH_INDEX_TO_INCHES[depth_code]
+        depth_inches = SENSOR_DEPTH_INDEX_TO_INCHES[depth_code]
 
         baseline_col = f"baseline_swc_gal_{depth_inches}in"
         peak_col = f"peak_swc_gal_{depth_inches}in"
@@ -796,12 +797,12 @@ def write_year_outputs(
     )
 
     definitions.to_csv(
-        HOLDING_CAPACITY_DIR / f"irrigation_variable_definitions_{year}.csv",
+        IRRIGATION_REPORTS_DIR / f"irrigation_variable_definitions_{year}.csv",
         index=False,
     )
 
     build_variable_definitions_with_sources(
-        output_dir=str(HOLDING_CAPACITY_DIR),
+        output_dir=str(IRRIGATION_REPORTS_DIR),
         year=year,
     )
 
@@ -1083,6 +1084,110 @@ def write_year_outputs(
         water_balance_table,
     )
 
+def _append_if_not_empty(collection: list[pd.DataFrame], df: pd.DataFrame) -> None:
+    if not df.empty:
+        collection.append(df)
+
+def _write_zone_storage_outputs(
+    all_event_storage_zone_tables: list[pd.DataFrame],
+) -> pd.DataFrame:
+    combined_zone_storage = (
+        pd.concat(all_event_storage_zone_tables, ignore_index=True)
+        if all_event_storage_zone_tables
+        else pd.DataFrame()
+    )
+
+    combined_zone_storage = round_for_reporting(combined_zone_storage)
+
+    zone_storage_path = HOLDING_CAPACITY_DIR / "event_storage_by_zone.csv"
+    combined_zone_storage.to_csv(zone_storage_path, index=False)
+
+    build_event_storage_by_event(combined_zone_storage).to_csv(
+        HOLDING_CAPACITY_DIR / "event_storage_by_event.csv",
+        index=False,
+    )
+
+    build_zone_storage_summary(combined_zone_storage).to_csv(
+        HOLDING_CAPACITY_DIR / "zone_storage_summary.csv",
+        index=False,
+    )
+
+    build_flow_storage_correlation_summary(combined_zone_storage).to_csv(
+        HOLDING_CAPACITY_DIR / "flow_storage_correlation_summary.csv",
+        index=False,
+    )
+
+    build_zone_ordering_frequency(combined_zone_storage).to_csv(
+        HOLDING_CAPACITY_DIR / "zone_ordering_frequency.csv",
+        index=False,
+    )
+
+    build_zone_anomaly_diagnostics(combined_zone_storage).to_csv(
+        HOLDING_CAPACITY_DIR / "zone_anomaly_diagnostics.csv",
+        index=False,
+    )
+
+    plot_mean_storage_depth_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
+    plot_mean_storage_by_zone(combined_zone_storage, HOLDING_CAPACITY_DIR)
+    plot_mean_storage_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
+
+    return combined_zone_storage
+
+def _write_combined_year_outputs(
+    all_pre_start_flags: list[pd.DataFrame],
+    all_trustworthy_tables: list[pd.DataFrame],
+    all_holding_capacity_tables: list[pd.DataFrame],
+    all_water_balance_tables: list[pd.DataFrame],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    combined_pre_start = (
+        pd.concat(all_pre_start_flags, ignore_index=True)
+        if all_pre_start_flags
+        else pd.DataFrame()
+    )
+    combined_pre_start.to_csv(
+        IRRIGATION_DIAGNOSTICS_DIR / "irrigation_pre_start_response_flags_all_years.csv",
+        index=False,
+    )
+
+    combined_trustworthy = (
+        pd.concat(all_trustworthy_tables, ignore_index=True)
+        if all_trustworthy_tables
+        else pd.DataFrame()
+    )
+    combined_trustworthy.to_csv(
+        IRRIGATION_DIAGNOSTICS_DIR / "trustworthy_irrigation_events_all_years.csv",
+        index=False,
+    )
+
+    combined_holding_capacity = (
+        pd.concat(all_holding_capacity_tables, ignore_index=True)
+        if all_holding_capacity_tables
+        else pd.DataFrame()
+    )
+    combined_holding_capacity = round_for_reporting(combined_holding_capacity)
+    combined_holding_capacity.to_csv(
+        HOLDING_CAPACITY_DIR / "trustworthy_holding_capacity_summary_all_years.csv",
+        index=False,
+    )
+
+    combined_water_balance = (
+        pd.concat(all_water_balance_tables, ignore_index=True)
+        if all_water_balance_tables
+        else pd.DataFrame()
+    )
+    combined_water_balance = round_for_reporting(combined_water_balance)
+    combined_water_balance.to_csv(
+        HOLDING_CAPACITY_DIR / "first_pass_water_balance_all_years.csv",
+        index=False,
+    )
+
+    return (
+        combined_pre_start,
+        combined_trustworthy,
+        combined_holding_capacity,
+        combined_water_balance,
+    )
+
 def main() -> None:
     all_pre_start_flags: list[pd.DataFrame] = []
     all_trustworthy_tables: list[pd.DataFrame] = []
@@ -1095,7 +1200,6 @@ def main() -> None:
 
         df_15min = prepare_15min_logger_data(year)
 
-        # Existing, stable workflow: bottom loggers only.
         bottom_results = analyze_loggers_all_depths(
             df_15min=df_15min,
             strips=STRIPS,
@@ -1107,7 +1211,6 @@ def main() -> None:
             print(f"Year {year}: no bottom-logger irrigation-analysis results returned.")
             continue
 
-        # New zone-storage workflow: top, middle, and bottom loggers.
         all_logger_results = analyze_loggers_all_depths(
             df_15min=df_15min,
             strips=STRIPS,
@@ -1115,56 +1218,9 @@ def main() -> None:
             logger_positions=LOGGER_LOCATIONS,
         )
 
-        s3m_2025_debug = all_logger_results.loc[
-            (all_logger_results["strip"].astype(str).str.strip() == "S3")
-            & (all_logger_results["logger_position"].astype(str).str.strip() == "M")
-            & (all_logger_results["year"].astype(str).str.strip() == "2025")
-        ].copy()
-
-# TODO (timestamp-debug):
-# Remove or generalize this once the S3M 2025 timestamp issue is resolved.
-        s3m_2025_debug_path = (
-            TIMESTAMP_DIAGNOSTICS_DIR / "s3m_2025_peak_plateau_debug.csv"
-        )
-        s3m_2025_debug.to_csv(s3m_2025_debug_path, index=False)
-        print(f"Wrote S3M 2025 peak/plateau debug: {s3m_2025_debug_path}")
-
         if not all_logger_results.empty:
             zone_storage_table = build_event_storage_by_zone(all_logger_results)
-
-            if not zone_storage_table.empty:
-                all_event_storage_zone_tables.append(zone_storage_table)
-
-        print("\n=== STORAGE DEBUG SAMPLE, ALL LOGGERS ===")
-        debug_cols = [
-            "sensor_col",
-            "baseline_vwc",
-            "plateau_vwc",
-            "depth_inches",
-            "gallons_strip",
-            "profile_area_sqft",
-            "profile_baseline_storage_in",
-            "profile_plateau_storage_in",
-            "event_storage_in",
-            "profile_baseline_storage_gal",
-            "profile_plateau_storage_gal",
-            "event_storage_gal",
-        ]
-        debug_cols = [c for c in debug_cols if c in all_logger_results.columns]
-
-        if debug_cols:
-            debug_sample = round_for_reporting(all_logger_results[debug_cols].head(10))
-            print(debug_sample.to_string(index=False))
-
-        print(f"Year {year}: {len(bottom_results):,} bottom event/sensor/depth result rows.")
-        print(f"Year {year}: {len(all_logger_results):,} all-logger event/sensor/depth result rows.")
-
-        if VERBOSE:
-            print("\n=== BOTTOM RESULTS COLUMNS ===")
-            print(bottom_results.columns.tolist())
-            debug_table = build_enhanced_event_debug_table(bottom_results)
-            print("\n=== DEBUG TABLE SAMPLE ===")
-            print(debug_table.head(40).to_string(index=False))
+            _append_if_not_empty(all_event_storage_zone_tables, zone_storage_table)
 
         (
             pre_start_table,
@@ -1178,284 +1234,34 @@ def main() -> None:
             plot_results=all_logger_results,
         )
 
-        print("\n=== YEAR OUTPUT STATUS ===")
-        print(f"year: {year}")
-        print(f"bottom_results:         {bottom_results.shape}")
-        print(f"all_logger_results:     {all_logger_results.shape}")
-        print(f"pre_start_table:        {pre_start_table.shape}")
-        print(f"trustworthy_table:      {trustworthy_table.shape}")
-        print(f"holding_capacity_table: {holding_capacity_table.shape}")
-        print(f"water_balance_table:    {water_balance_table.shape}")
+        _append_if_not_empty(all_pre_start_flags, pre_start_table)
+        _append_if_not_empty(all_trustworthy_tables, trustworthy_table)
+        _append_if_not_empty(all_holding_capacity_tables, holding_capacity_table)
+        _append_if_not_empty(all_water_balance_tables, water_balance_table)
 
-        if not trustworthy_table.empty and "trustworthy_event" in trustworthy_table.columns:
-            print("\ntrustworthy_event counts:")
-            print(
-                trustworthy_table["trustworthy_event"]
-                .value_counts(dropna=False)
-                .to_string()
-            )
+        print(f"Year {year}: bottom rows={bottom_results.shape}, all-logger rows={all_logger_results.shape}")
 
-        if not water_balance_table.empty:
-            print("\nwater_balance_table by year / strip_group / strip:")
-            print(
-                water_balance_table
-                .groupby(["year", "strip_group", "strip"], dropna=False)
-                .size()
-                .reset_index(name="n_rows")
-                .to_string(index=False)
-            )
+    combined_zone_storage = _write_zone_storage_outputs(all_event_storage_zone_tables)
 
-            print("\nwater_balance_table date range:")
-            print(
-                f"{water_balance_table['irrigation_start'].min()} "
-                f"to {water_balance_table['irrigation_start'].max()}"
-            )
-
-        if not pre_start_table.empty:
-            all_pre_start_flags.append(pre_start_table)
-
-        if not trustworthy_table.empty:
-            all_trustworthy_tables.append(trustworthy_table)
-
-        if not holding_capacity_table.empty:
-            holding_capacity_table["year"] = year
-            all_holding_capacity_tables.append(holding_capacity_table)
-
-        if not water_balance_table.empty:
-            all_water_balance_tables.append(water_balance_table)
-
-        if not trustworthy_table.empty and "trustworthy_reason" in trustworthy_table.columns:
-            print("\ntrustworthy_reason counts:")
-            print(
-                trustworthy_table["trustworthy_reason"]
-                .value_counts(dropna=False)
-                .to_string()
-            )
-
-    combined_zone_storage = (
-        pd.concat(all_event_storage_zone_tables, ignore_index=True)
-        if all_event_storage_zone_tables
-        else pd.DataFrame()
+    (
+        combined_pre_start,
+        combined_trustworthy, 
+        combined_holding_capacity,
+        combined_water_balance,
+    ) = _write_combined_year_outputs(
+        all_pre_start_flags=all_pre_start_flags,
+        all_trustworthy_tables=all_trustworthy_tables,
+        all_holding_capacity_tables=all_holding_capacity_tables,
+        all_water_balance_tables=all_water_balance_tables,
     )
 
-    zone_storage_path = HOLDING_CAPACITY_DIR / "event_storage_by_zone.csv"
-    combined_zone_storage = round_for_reporting(combined_zone_storage)
-    combined_zone_storage.to_csv(zone_storage_path, index=False)
-
-    event_storage_by_event = build_event_storage_by_event(combined_zone_storage)
-    event_storage_by_event_path = HOLDING_CAPACITY_DIR / "event_storage_by_event.csv"
-    event_storage_by_event.to_csv(event_storage_by_event_path, index=False)
-
-    zone_storage_summary = build_zone_storage_summary(combined_zone_storage)
-    zone_storage_summary_path = HOLDING_CAPACITY_DIR / "zone_storage_summary.csv"
-    zone_storage_summary.to_csv(zone_storage_summary_path, index=False)
-
-    flow_storage_correlation = build_flow_storage_correlation_summary(
-        combined_zone_storage
-    )
-    flow_storage_correlation_path = HOLDING_CAPACITY_DIR / "flow_storage_correlation_summary.csv"
-    flow_storage_correlation.to_csv(flow_storage_correlation_path, index=False)
-
-    plot_mean_storage_depth_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
-
-    print(f"Wrote flow-storage correlation summary: {flow_storage_correlation_path}")
-
-    zone_ordering_frequency = build_zone_ordering_frequency(combined_zone_storage)
-    zone_ordering_frequency_path = HOLDING_CAPACITY_DIR / "zone_ordering_frequency.csv"
-    zone_ordering_frequency.to_csv(zone_ordering_frequency_path, index=False)
-
-    zone_anomaly_diagnostics = build_zone_anomaly_diagnostics(combined_zone_storage)
-    zone_anomaly_diagnostics_path = HOLDING_CAPACITY_DIR / "zone_anomaly_diagnostics.csv"
-    zone_anomaly_diagnostics.to_csv(zone_anomaly_diagnostics_path, index=False)
-
-    plot_mean_storage_by_zone(combined_zone_storage, HOLDING_CAPACITY_DIR)
-    plot_mean_storage_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
-
-    print(f"Wrote zone storage table: {zone_storage_path}")
-    print(f"Wrote event storage by event table: {event_storage_by_event_path}")
-    print(f"Wrote zone storage summary: {zone_storage_summary_path}")
-    print(f"Wrote zone ordering frequency: {zone_ordering_frequency_path}")
-    print(f"Wrote zone anomaly diagnostics: {zone_anomaly_diagnostics_path}")
-
-    combined = (
-        pd.concat(all_pre_start_flags, ignore_index=True)
-        if all_pre_start_flags
-        else pd.DataFrame()
-    )
-
-    combined_path = HOLDING_CAPACITY_DIR / "irrigation_pre_start_response_flags_all_years.csv"
-    combined.to_csv(combined_path, index=False)
-
-    combined_trustworthy = (
-        pd.concat(all_trustworthy_tables, ignore_index=True)
-        if all_trustworthy_tables
-        else pd.DataFrame()
-    )
-
-    trustworthy_path = HOLDING_CAPACITY_DIR / "trustworthy_irrigation_events_all_years.csv"
-    combined_trustworthy.to_csv(trustworthy_path, index=False)
-
-    combined_holding_capacity = (
-        pd.concat(all_holding_capacity_tables, ignore_index=True)
-        if all_holding_capacity_tables
-        else pd.DataFrame()
-    )
-
-    if {
-        "mean_plateau_vwc",
-        "sd_plateau_vwc",
-    }.issubset(combined_holding_capacity.columns):
-        combined_holding_capacity["cv_plateau_vwc"] = (
-            combined_holding_capacity["sd_plateau_vwc"]
-            / combined_holding_capacity["mean_plateau_vwc"]
-        )
-
-        def capacity_confidence(row: pd.Series) -> str:
-            n = row.get("n_trustworthy_events")
-            cv = row.get("cv_plateau_vwc")
-
-            if pd.isna(n) or pd.isna(cv):
-                return "low"
-            if n >= 5 and cv <= 0.10:
-                return "high"
-            if n >= 3 and cv <= 0.20:
-                return "medium"
-            return "low"
-
-        combined_holding_capacity["capacity_confidence"] = (
-            combined_holding_capacity.apply(capacity_confidence, axis=1)
-        )
-
-        round_3_cols = ["cv_plateau_vwc"]
-        round_2_cols = [
-            "mean_plateau_vwc",
-            "sd_plateau_vwc",
-            "min_plateau_vwc",
-            "max_plateau_vwc",
-            "sd_gallons_strip",
-            "mean_baseline_vwc",
-            "sd_baseline_vwc",
-            "mean_peak_vwc",
-            "sd_peak_vwc",
-            "mean_peak_increase",
-        ]
-
-        for col in round_3_cols:
-            if col in combined_holding_capacity.columns:
-                combined_holding_capacity[col] = combined_holding_capacity[col].round(3)
-
-        for col in round_2_cols:
-            if col in combined_holding_capacity.columns:
-                combined_holding_capacity[col] = combined_holding_capacity[col].round(2)
-
-    combined_holding_capacity = round_for_reporting(combined_holding_capacity)
-
-    holding_capacity_path = HOLDING_CAPACITY_DIR / "trustworthy_holding_capacity_summary_all_years.csv"
-    combined_holding_capacity.to_csv(holding_capacity_path, index=False)
-
-    combined_water_balance = (
-        pd.concat(all_water_balance_tables, ignore_index=True)
-        if all_water_balance_tables
-        else pd.DataFrame()
-    )
-
-    combined_water_balance = round_for_reporting(combined_water_balance)
-
-    water_balance_path = HOLDING_CAPACITY_DIR / "first_pass_water_balance_all_years.csv"
-    combined_water_balance.to_csv(water_balance_path, index=False)
-
-    print("\n=== COMBINED ZONE STORAGE FILE ===")
-    print(zone_storage_path)
-
-    print("\n=== COMBINED PRE-START RESPONSE FILE ===")
-    print(combined_path)
-
-    print("\n=== COMBINED TRUSTWORTHY EVENT FILE ===")
-    print(trustworthy_path)
-
-    print("\n=== COMBINED HOLDING CAPACITY SUMMARY FILE ===")
-    print(holding_capacity_path)
-
-    print("\n=== COMBINED FIRST-PASS WATER BALANCE FILE ===")
-    print(water_balance_path)
-
-    if combined.empty:
-        print("No pre-start response rows were produced.")
-        return
-
-    flagged = combined[combined["flag_pre_start_response"].fillna(False)].copy()
-    unexplained = combined[
-        combined["flag_unexplained_pre_start_response"].fillna(False)
-    ].copy()
-    precip_driven = combined[
-        combined["likely_precip_driven_pre_start_response"].fillna(False)
-    ].copy()
-    battery_or_logger = combined[
-        combined["possible_battery_or_logger_issue"].fillna(False)
-    ].copy()
-
-    trustworthy_count = 0
-    untrustworthy_count = 0
-
-    if (
-        not combined_trustworthy.empty
-        and "trustworthy_event" in combined_trustworthy.columns
-    ):
-        trustworthy_mask = combined_trustworthy["trustworthy_event"].fillna(False)
-
-        trustworthy_count = int(trustworthy_mask.sum())
-        untrustworthy_count = int((~trustworthy_mask).sum())
-
-    print("\n=== PRE-START RESPONSE SUMMARY ===")
-    print(f"Total pre-start rows: {len(combined):,}")
-    print(f"Flagged pre-start responses: {len(flagged):,}")
-    print(f"Likely precip-driven flagged responses: {len(precip_driven):,}")
-    print(f"Possible battery/logger issue rows: {len(battery_or_logger):,}")
-    print(f"Unexplained flagged responses: {len(unexplained):,}")
-
-    print("\n=== TRUSTWORTHY EVENT SUMMARY ===")
-    print(f"Trustworthy sensor/event/depth rows: {trustworthy_count:,}")
-    print(f"Not trustworthy sensor/event/depth rows: {untrustworthy_count:,}")
-
-    if not combined_holding_capacity.empty:
-        print("\n=== HOLDING CAPACITY SUMMARY ===")
-        print(f"Holding-capacity summary rows: {len(combined_holding_capacity):,}")
-
-    if not combined_water_balance.empty:
-        print("\n=== FIRST-PASS WATER BALANCE SUMMARY ===")
-        print(f"Water-balance event rows: {len(combined_water_balance):,}")
-
-        if "estimated_surplus_gal_strip" in combined_water_balance.columns:
-            total_surplus = pd.to_numeric(
-                combined_water_balance["estimated_surplus_gal_strip"],
-                errors="coerce",
-            ).sum()
-            print(f"Total estimated surplus across included events: {total_surplus:,.0f} gal")
-
-    if not combined_zone_storage.empty:
-        print("\n=== EVENT STORAGE BY ZONE SUMMARY ===")
-        print(f"Zone-storage rows: {len(combined_zone_storage):,}")
-
-    if not unexplained.empty:
-        print("\n=== UNEXPLAINED PRE-START RESPONSES ===")
-        summary_cols = [
-            "year",
-            "strip_group",
-            "strip",
-            "event_id",
-            "sensor_col",
-            "irrigation_start",
-            "pre_start_increase",
-            "total_precip_in_pre_start_window",
-            "battery_col",
-            "battery_pre_start_min_v",
-            "battery_event_min_v",
-            "vwc_missing_fraction_pre_start_window",
-            "gallons_strip",
-        ]
-        summary_cols = [c for c in summary_cols if c in unexplained.columns]
-        print(unexplained[summary_cols].to_string(index=False))
-
+    print("\n=== IRRIGATION ANALYSIS COMPLETE ===")
+    print(f"DEPTH_INDEX_TO_INCHES: {SENSOR_DEPTH_INDEX_TO_INCHES}")
+    print(f"Zone-storage rows: {len(combined_zone_storage):,}")
+    print(f"Pre-start rows: {len(combined_pre_start):,}")
+    print(f"Trustworthy-event rows: {len(combined_trustworthy):,}")
+    print(f"Holding-capacity rows: {len(combined_holding_capacity):,}")
+    print(f"Water-balance rows: {len(combined_water_balance):,}")
 
 if __name__ == "__main__":
     main()

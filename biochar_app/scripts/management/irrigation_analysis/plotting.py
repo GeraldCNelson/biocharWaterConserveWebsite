@@ -13,11 +13,9 @@ irrigation_analysis.py.
 
 from __future__ import annotations
 
-from typing import cast
-
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -30,8 +28,12 @@ from matplotlib.patches import Patch
 
 from biochar_app.config.experiment_config import LOGGER_LOCATION_MAPPING, LOGGER_LOCATIONS
 from biochar_app.scripts.management.irrigation_analysis.irrigation_response_analysis import (
-    DEPTH_INDEX_TO_INCHES,
     _validate_datetime_index,
+)
+
+from biochar_app.config.experiment_config import (
+    SENSOR_DEPTH_CODES,
+    SENSOR_DEPTH_INDEX_TO_INCHES,
 )
 
 from biochar_app.config.irrigation_config import (
@@ -167,14 +169,14 @@ def _collect_multidepth_cols(
     strip: str,
     logger_position: str = "B",
     depths: Sequence[int] = (1, 2, 3),
-) -> List[Tuple[str, str]]:
-    cols: List[Tuple[str, str]] = []
+) -> list[tuple[str, str]]:
+    cols: list[tuple[str, str]] = []
 
     for depth in depths:
         if depth not in {1, 2, 3}:
             raise ValueError("depth values must be 1, 2, or 3")
 
-        inches = DEPTH_INDEX_TO_INCHES[str(depth)]
+        inches = SENSOR_DEPTH_INDEX_TO_INCHES[str(depth)]
         cols.append((f"VWC_{depth}_raw_{strip}_{logger_position}", f"{inches} in"))
 
     return cols
@@ -216,8 +218,8 @@ def compute_event_plot_ylim(
     if sensor_filter is not None:
         work = work[work["sensor_col"].isin(sensor_filter)].copy()
 
-    mins: List[float] = []
-    maxs: List[float] = []
+    mins: list[float] = []
+    maxs: list[float] = []
 
     for _, row in work.iterrows():
         irrigation_start = coerce_optional_timestamp(row.get("irrigation_start"))
@@ -492,7 +494,7 @@ def save_irrigation_event_inspection_plots(
             hours_after=hours_after,
         )
 
-    log_rows: List[Dict[str, object]] = []
+    log_rows: list[dict[str, object]] = []
 
     for _, row in work.iterrows():
         event_id = row.get("event_id", "unknown")
@@ -534,7 +536,7 @@ def save_irrigation_event_inspection_plots(
 
 def plot_event_multidepth(
     df: pd.DataFrame,
-    cols: Sequence[Tuple[str, str]],
+    cols: Sequence[tuple[str, str]],
     start: pd.Timestamp | str,
     end: pd.Timestamp | str,
     event_id: Optional[object] = None,
@@ -551,7 +553,7 @@ def plot_event_multidepth(
     output_path: Optional[str | Path] = None,
     show: bool = False,
     precip_col: Optional[str] = "precip_in",
-    y_limits: Optional[Tuple[float, float]] = None,
+    y_limits: Optional[tuple[float, float]] = None,
     title_prefix: str = "Event Multi-depth VWC",
     response_threshold: float = ARRIVAL_RESPONSE_THRESHOLD_VWC,
 ) -> None:
@@ -670,7 +672,7 @@ def plot_event_multidepth(
 
     display_event_id = _fmt_event_id(event_id)
 
-    title_bits: List[str] = []
+    title_bits: list[str] = []
 
     if year is not None:
         title_bits.append(str(year))
@@ -772,8 +774,8 @@ def plot_event_multidepth(
 
     handles1, labels1 = ax.get_legend_handles_labels()
 
-    filtered_handles: List[Any] = []
-    filtered_labels: List[str] = []
+    filtered_handles: list[Any] = []
+    filtered_labels: list[str] = []
     seen_labels: set[str] = set()
 
     for handle, label in zip(handles1, labels1):
@@ -786,7 +788,7 @@ def plot_event_multidepth(
         filtered_labels.append(label)
         seen_labels.add(label)
 
-    legend_handles: List[Any] = filtered_handles + [window_patch] + marker_handles
+    legend_handles: list[Any] = filtered_handles + [window_patch] + marker_handles
     legend_labels: list[str] = (
         filtered_labels
         + ["Irrigation window"]
@@ -806,7 +808,7 @@ def plot_event_multidepth(
         depth_match = re.search(r"VWC_(\d)_", sensor_col)
         if depth_match:
             depth_idx = depth_match.group(1)
-            depth_in = DEPTH_INDEX_TO_INCHES.get(depth_idx, depth_idx)
+            depth_in = SENSOR_DEPTH_INDEX_TO_INCHES.get(depth_idx, depth_idx)
             arrival_parts.append(f"{depth_in}in={arrival_ts.strftime('%H:%M')}")
 
     arrival_text = ", ".join(arrival_parts) if arrival_parts else "None"
@@ -895,7 +897,7 @@ def plot_event_multidepth_from_results(
     output_path: Optional[str | Path] = None,
     show: bool = False,
     precip_col: Optional[str] = "precip_in",
-    y_limits: Optional[Tuple[float, float]] = None,
+    y_limits: Optional[tuple[float, float]] = None,
 ) -> None:
     if event_results.empty:
         raise ValueError("event_results is empty.")
@@ -951,11 +953,11 @@ def plot_event_multidepth_from_results(
     start = irrigation_start - pd.Timedelta(hours=hours_before)
     end = irrigation_start + pd.Timedelta(hours=hours_after)
 
-    baselines: Dict[str, pd.Timestamp] = {}
-    peaks: Dict[str, pd.Timestamp] = {}
-    plateaus: Dict[str, pd.Timestamp] = {}
+    baselines: dict[str, pd.Timestamp] = {}
+    peaks: dict[str, pd.Timestamp] = {}
+    plateaus: dict[str, pd.Timestamp] = {}
 
-    arrivals: Dict[str, pd.Timestamp] = {}
+    arrivals: dict[str, pd.Timestamp] = {}
     for _, row in work.iterrows():
         sensor_col = str(row["sensor_col"])
 
@@ -1066,11 +1068,11 @@ def save_irrigation_event_multidepth_plots(
     if max_plots is not None:
         unique_events = unique_events.head(max_plots).copy()
 
-    y_limits: Optional[Tuple[float, float]] = None
+    y_limits: Optional[tuple[float, float]] = None
 
     if use_common_y_axis:
-        mins: List[float] = []
-        maxs: List[float] = []
+        mins: list[float] = []
+        maxs: list[float] = []
 
         for _, event_key in unique_events.iterrows():
             sub_rows = work[
@@ -1117,7 +1119,7 @@ def save_irrigation_event_multidepth_plots(
                 else (ymin - 0.05 * yrange, ymax + 0.05 * yrange)
             )
 
-    log_rows: List[Dict[str, object]] = []
+    log_rows: list[dict[str, object]] = []
 
     for _, event_key in unique_events.iterrows():
         strip = str(event_key["strip"])
