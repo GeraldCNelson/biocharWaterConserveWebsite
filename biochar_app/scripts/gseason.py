@@ -16,14 +16,12 @@ from biochar_app.scripts.config import DEFAULT_GSEASON_PERIODS
 
 logger = logging.getLogger(__name__)
 
-
 def _slice_and_mean(
     df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp
 ) -> pd.Series:
     """Column-wise mean of df[start:end] (inclusive). Assumes DatetimeIndex."""
     mask = (df.index >= start) & (df.index <= end)
     return df.loc[mask].mean(numeric_only=True)
-
 
 def compute_seasons(
     df: pd.DataFrame,
@@ -137,7 +135,6 @@ def compute_seasons(
     )
 
     return out_df
-
 
 def assign_gseason_periods(ts: pd.Timestamp, year: int) -> str | None:
     """

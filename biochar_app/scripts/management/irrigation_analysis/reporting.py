@@ -15,12 +15,10 @@ DIAGNOSTICS_DIR = IRRIGATION_DIAGNOSTICS_DIR
 FIGURES_DIR = IRRIGATION_FIGURES_DIR
 REPORTS_DIR = IRRIGATION_REPORTS_DIR
 
-
 def _fmt_minutes(value: object) -> str:
     if pd.isna(value):
         return "NA"
     return f"{float(value):.0f}"
-
 
 def _fmt_datetime(value: object) -> str:
     if pd.isna(value):
@@ -32,7 +30,6 @@ def _fmt_datetime(value: object) -> str:
 
     return pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M")
 
-
 def _fmt_bool_flag(value: object) -> bool:
     if isinstance(value, bool):
         return value
@@ -41,7 +38,6 @@ def _fmt_bool_flag(value: object) -> bool:
         return False
 
     return str(value).strip().lower() in {"true", "1", "yes", "y"}
-
 
 def add_arrival_definitions_section(doc: Document) -> None:
     doc.add_heading("Arrival Detection Definitions", level=2)
@@ -258,14 +254,11 @@ def build_arrival_diagnostics_report(
     doc.save(output_path)
     return output_path
 
-
 def build_holding_capacity_report() -> None:
     raise NotImplementedError("Holding capacity report is not implemented yet.")
 
-
 def build_trustworthy_events_report() -> None:
     raise NotImplementedError("Trustworthy events report is not implemented yet.")
-
 
 def main() -> None:
     year = 2026
@@ -276,7 +269,6 @@ def main() -> None:
     )
 
     print(f"Wrote report: {output_path}")
-
 
 if __name__ == "__main__":
     main()

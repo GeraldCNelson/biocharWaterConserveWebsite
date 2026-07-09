@@ -68,7 +68,6 @@ from biochar_app.config.paths import (
     PARQUET_DIR,
 )
 
-
 logger = logging.getLogger(__name__)
 
 # Internal base 5-min column names (before unit suffix)
@@ -91,7 +90,6 @@ RAW_HEADER_MAP = {
     "st5cm": "5cm Soil Temp",
     "st15cm": "15cm Soil Temp",
 }
-
 
 def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
     """
@@ -131,7 +129,6 @@ def get_weather_column_labels(units: str = DEFAULT_UNITS) -> dict[str, str]:
         final_map[base_name] = label
 
     return final_map
-
 
 def fetch_weather_data(year: int) -> pd.DataFrame:
     """

@@ -68,7 +68,6 @@ ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC = 0.50
 import pandas as pd
 import numpy as np
 
-
 from biochar_app.config.field_management_metadata import (
     PROFILE_AREA_SQFT,
 )
@@ -175,7 +174,6 @@ VERBOSE = False
 BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
-
 
 def build_irrigation_event_response_summary(
     arrival_times: pd.DataFrame,
@@ -506,7 +504,6 @@ def build_irrigation_event_response_summary(
 
     return force_float(move_id_columns_left(wide))
 
-
 def analyze_loggers_all_depths(
     df_15min: pd.DataFrame,
     strips: list[str],
@@ -665,7 +662,6 @@ def build_enhanced_event_debug_table(
 
     return out
 
-
 def build_enhanced_runtime_table(
     event_results: pd.DataFrame,
     min_events: int = 3,
@@ -745,9 +741,6 @@ def build_enhanced_runtime_table(
         out[numeric_cols] = out[numeric_cols].round(6)
 
     return out
-
-
-
 
 def write_year_outputs(
     year: int,

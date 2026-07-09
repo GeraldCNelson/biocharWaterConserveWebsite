@@ -62,7 +62,6 @@ SUPPLEMENTAL_SOILCHEM_FILES: Sequence[Path] = [
     SOIL_CHEM_RAW_DIR / "Soil_2026-04-28.csv",
     ]
 
-
 def _snake_col(name: str) -> str:
     text = str(name).strip().lower()
     text = text.replace("%", " pct ")
@@ -121,7 +120,6 @@ def _find_machine_col_by_human_header(
 
     return None
 
-
 def _ensure_sample_id_column(
         df_clean: pd.DataFrame,
         header_map: dict[str, str],
@@ -167,7 +165,6 @@ def _ensure_sample_id_column(
         f"Columns containing 'sample': {sampleish}"
     )
 
-
 def _filter_to_project_rows(df_clean: pd.DataFrame) -> pd.DataFrame:
     out = df_clean.copy()
 
@@ -185,7 +182,6 @@ def _filter_to_project_rows(df_clean: pd.DataFrame) -> pd.DataFrame:
     out["sample_id"] = out["sample_id"].astype(str)
 
     return out
-
 
 def _drop_blank_key_rows(df_clean: pd.DataFrame) -> pd.DataFrame:
     """
@@ -206,7 +202,6 @@ def _drop_blank_key_rows(df_clean: pd.DataFrame) -> pd.DataFrame:
         print(f"🧹 Dropped {dropped} blank/footer rows after standardization")
 
     return out.loc[mask].copy()
-
 
 def _ensure_expected_soilchem_columns(df_clean: pd.DataFrame) -> pd.DataFrame:
     out = df_clean.copy()
@@ -259,7 +254,6 @@ def _ensure_expected_soilchem_columns(df_clean: pd.DataFrame) -> pd.DataFrame:
             out["nh4_no3_ratio"] = pd.NA
 
     return out
-
 
 def _standardize_soilchem_dataframe(
     df_raw: pd.DataFrame,
@@ -327,7 +321,6 @@ def _standardize_soilchem_dataframe(
 
     return df_clean, header_map
 
-
 def _read_supplemental_file(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
 
@@ -338,7 +331,6 @@ def _read_supplemental_file(path: Path) -> pd.DataFrame:
         return pd.read_csv(path)
 
     raise ValueError(f"Unsupported supplemental file type: {path}")
-
 
 def _print_date_counts(df: pd.DataFrame, label: str) -> None:
     if "date_rec" not in df.columns:
@@ -355,7 +347,6 @@ def _print_date_counts(df: pd.DataFrame, label: str) -> None:
     print(f"\nCounts by 'date_rec' {label}:")
     for date_value, count in date_counts.items():
         print(f"  {date_value}: {count}")
-
 
 def _prepare_soilchem_csv(
         clean_csv: Path,
@@ -420,7 +411,6 @@ def _prepare_soilchem_csv(
     _print_date_counts(merged_df, label=f"after merging {supplemental_raw_csv.name}")
     return output_csv
 
-
 def update_ward_master_soilchem(sheet: Optional[str] = None) -> None:
     if not MASTER_XLSX.exists():
         raise FileNotFoundError(f"Input not found: {MASTER_XLSX}")
@@ -473,10 +463,8 @@ def update_ward_master_soilchem(sheet: Optional[str] = None) -> None:
 
     print(f"✅ Final soil chem clean CSV includes supplemental rows: {OUT_CLEAN_CSV}")
 
-
 # Backward-compatible alias in case old imports still use the prior name.
 clean_ward_master_soilchem = update_ward_master_soilchem
-
 
 if __name__ == "__main__":
     update_ward_master_soilchem()

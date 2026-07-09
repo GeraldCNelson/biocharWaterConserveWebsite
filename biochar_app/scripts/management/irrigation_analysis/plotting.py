@@ -58,26 +58,22 @@ def _depth_color_for_sensor(sensor_col: str) -> str:
 def _is_missing(value: object) -> bool:
     return bool(pd.Series([value]).isna().iloc[0])
 
-
 def _as_float_or_none(value: object) -> float | None:
     num = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     if _is_missing(num):
         return None
     return float(num)
 
-
 def _safe_filename(text: str) -> str:
     text = re.sub(r"[^\w\-\.]+", "_", text.strip())
     text = re.sub(r"_+", "_", text)
     return text.strip("_")
-
 
 def _fmt1(value: object) -> str:
     num = _as_float_or_none(value)
     if num is None:
         return "NA"
     return f"{num:.1f}"
-
 
 def _fmt_event_id(value: object) -> str:
     if value is None or _is_missing(value):
@@ -97,7 +93,6 @@ def _fmt_event_id(value: object) -> str:
 
     return text[:22] + "…" if len(text) > 24 else text
 
-
 def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
     if value is None:
         return None
@@ -111,16 +106,13 @@ def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
 
     return pd.Timestamp(ts)
 
-
 def _datetime_index_to_mpl_nums(index: pd.Index) -> np.ndarray:
     dt_index = pd.DatetimeIndex(index)
     py_dates = list(dt_index.to_pydatetime())
     return np.asarray(mdates.date2num(py_dates), dtype=float)
 
-
 def _timestamp_to_mpl_num(ts: pd.Timestamp) -> float:
     return float(mdates.date2num(ts.to_pydatetime()))
-
 
 def _get_strip_volume_and_flow(first_row: pd.Series) -> tuple[object, object, object]:
     gallons_strip = _as_float_or_none(first_row.get("gallons_strip", pd.NA))
@@ -141,7 +133,6 @@ def _get_strip_volume_and_flow(first_row: pd.Series) -> tuple[object, object, ob
         pd.NA if avg_flow_gph_strip is None else avg_flow_gph_strip,
     )
 
-
 def _get_plot_window_series(
     df: pd.DataFrame,
     sensor_col: str,
@@ -155,7 +146,6 @@ def _get_plot_window_series(
     series = pd.to_numeric(df[sensor_col], errors="coerce")
     return series.loc[plot_start:plot_end].dropna()
 
-
 def _prepare_plot_window_df(
     df: pd.DataFrame,
     start: pd.Timestamp | str,
@@ -163,7 +153,6 @@ def _prepare_plot_window_df(
 ) -> pd.DataFrame:
     _validate_datetime_index(df)
     return df.loc[pd.Timestamp(start):pd.Timestamp(end)].copy()
-
 
 def _collect_multidepth_cols(
     strip: str,
@@ -181,12 +170,10 @@ def _collect_multidepth_cols(
 
     return cols
 
-
 def _event_id_mask(series: pd.Series, event_id: object) -> pd.Series:
     if _is_missing(event_id):
         return series.map(_is_missing)
     return series == event_id
-
 
 def _event_label_for_filename(
     event_id: object,
@@ -196,7 +183,6 @@ def _event_label_for_filename(
     if _is_missing(event_id):
         return f"{irrigation_start:%Y-%m-%d_%H%M}_{strip}"
     return str(event_id)
-
 
 def compute_event_plot_ylim(
     df: pd.DataFrame,
@@ -255,7 +241,6 @@ def compute_event_plot_ylim(
 
     pad = yrange * pad_fraction
     return ymin - pad, ymax + pad
-
 
 def plot_irrigation_event_inspection(
     df: pd.DataFrame,
@@ -449,7 +434,6 @@ def plot_irrigation_event_inspection(
 
     plt.close(fig)
 
-
 def save_irrigation_event_inspection_plots(
     df: pd.DataFrame,
     event_results: pd.DataFrame,
@@ -532,7 +516,6 @@ def save_irrigation_event_inspection_plots(
         )
 
     return pd.DataFrame(log_rows)
-
 
 def plot_event_multidepth(
     df: pd.DataFrame,
@@ -884,7 +867,6 @@ def plot_event_multidepth(
 
     plt.close(fig)
 
-
 def plot_event_multidepth_from_results(
     df: pd.DataFrame,
     event_results: pd.DataFrame,
@@ -1008,7 +990,6 @@ def plot_event_multidepth_from_results(
         y_limits=y_limits,
         title_prefix=title_prefix_with_flow,
     )
-
 
 def save_irrigation_event_multidepth_plots(
     df: pd.DataFrame,
@@ -1210,7 +1191,6 @@ def save_irrigation_event_multidepth_plots(
 
     return pd.DataFrame(log_rows)
 
-
 def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
     if zone_df.empty:
         return
@@ -1245,7 +1225,6 @@ def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPAC
             fontsize=8,
             va="top",
         )
-
 
         out_path = figure_dir / f"mean_water_stored_in_by_zone_{year}.png"
         fig = cast(Figure, ax.figure)

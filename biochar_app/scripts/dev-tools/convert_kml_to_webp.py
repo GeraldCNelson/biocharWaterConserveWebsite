@@ -4,7 +4,6 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from PIL import Image
 
-
 # Path to biochar_app/static/images, assuming this script is run from project root
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PATH_TO_IMAGES = PROJECT_ROOT / "biochar_app" / "static" / "images"
@@ -16,7 +15,6 @@ WEBP_OUTPUT_NAME = "biocharExperimentalDesign.webp"
 kml_path = PATH_TO_IMAGES / KML_FILE_NAME
 png_output = PATH_TO_IMAGES / PNG_OUTPUT_NAME
 webp_output = PATH_TO_IMAGES / WEBP_OUTPUT_NAME
-
 
 def main() -> None:
     if not kml_path.exists():
@@ -51,7 +49,6 @@ def main() -> None:
 
     print(f"Saved PNG:  {png_output}")
     print(f"Saved WebP: {webp_output}")
-
 
 if __name__ == "__main__":
     main()

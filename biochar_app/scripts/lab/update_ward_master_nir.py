@@ -93,7 +93,6 @@ SUPPLEMENTAL_NIR_FILES: list[Path] = []
 #     HAY_RAW_DIR / "NIR_2026-xx-xx.csv",
 # ]
 
-
 MINERAL_COLUMNS = [
     "Ca_pct",
     "Ca_pct_db",
@@ -135,7 +134,6 @@ def _rename_nir_date(df: pd.DataFrame) -> pd.DataFrame:
         out = out.rename(columns={"date_rec": "nir_date"})
     return out
 
-
 def _canonicalize_strip(value: object) -> str | None:
     if value is None:
         return None
@@ -158,7 +156,6 @@ def _canonicalize_strip(value: object) -> str | None:
 
     return None
 
-
 def _find_sheet_name(xls: pd.ExcelFile, patterns: tuple[str, ...]) -> str:
     lower_map = {str(name).lower(): str(name) for name in xls.sheet_names}
 
@@ -169,7 +166,6 @@ def _find_sheet_name(xls: pd.ExcelFile, patterns: tuple[str, ...]) -> str:
     raise ValueError(
         f"Could not find sheet matching patterns {patterns} in {xls.sheet_names}"
     )
-
 
 def _read_one_2024_mineral_workbook(path: Path) -> pd.DataFrame:
     logger.info(f"📘 Reading 2024 mineral supplement workbook: {path.name}")
@@ -299,7 +295,6 @@ def _read_2024_mineral_supplements() -> pd.DataFrame:
     logger.info(f"🧪 Combined supplement rows: {supp.shape[0]}")
     return supp
 
-
 def _patch_missing_minerals(
     df: pd.DataFrame,
     supplement_df: pd.DataFrame,
@@ -331,7 +326,6 @@ def _patch_missing_minerals(
         logger.info(f"   {col}: filled {n}")
 
     return out
-
 
 def update_ward_master_nir() -> None:
     logger.info(f"📥 Reading Ward NIR master CSV: {IN_MASTER_CSV}")
@@ -374,7 +368,6 @@ def update_ward_master_nir() -> None:
     # Prefer dry-basis forage/NIR values when both as-received and dry-basis exist
     df = _drop_as_received_pct_when_dry_basis_exists(df)
 
-
     # Put keys first
     key_cols = [c for c in ["strip", "nir_date"] if c in df.columns]
     other_cols = [c for c in df.columns if c not in key_cols]
@@ -405,7 +398,6 @@ def update_ward_master_nir() -> None:
     logger.info(f"✅ Wrote cleaned NIR master: {OUT_CLEAN_CSV}")
     logger.info(f"✅ Wrote header map JSON:    {OUT_HEADERS_JSON}")
     logger.info("✅ Done.")
-
 
 if __name__ == "__main__":
     update_ward_master_nir()

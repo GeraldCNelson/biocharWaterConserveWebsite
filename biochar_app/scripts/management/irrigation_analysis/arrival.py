@@ -37,7 +37,6 @@ def detect_sustained_baseline_arrival(
 
     arrival_search = clean.loc[irrigation_start:]
 
-
     if arrival_search.empty or len(arrival_search) < min_persist_points:
         return None, None
 

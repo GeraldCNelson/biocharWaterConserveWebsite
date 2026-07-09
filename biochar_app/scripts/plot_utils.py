@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Sequence, cast
+from typing import Any, Optional, TYPE_CHECKING, Sequence, cast
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -72,15 +72,12 @@ PLOT_MARGINS = {
     "dual_axis_tall_metric": {"l": 60, "r": 165, "t": 70, "b": 70},
 }
 
-
 # ---------------------------------------------------------------------------
 # Small helpers worth keeping
 # ---------------------------------------------------------------------------
 
-
 def bad_request(msg: str) -> None:
     raise HTTPException(status_code=400, detail=msg)
-
 
 def coerce_unit_system(unit_system: str) -> UnitSystem:
     s = (unit_system or "").strip().lower()
@@ -90,20 +87,16 @@ def coerce_unit_system(unit_system: str) -> UnitSystem:
         return "metric"
     return "us"
 
-
 def _depth_color(depth_key: str) -> Optional[str]:
     return PLOT_COLORS.get(f"depth_{str(depth_key)}")
 
-
-def _plot_margin(preset: str) -> Dict[str, int]:
+def _plot_margin(preset: str) -> dict[str, int]:
     return dict(PLOT_MARGINS[preset])
 
-
-SWC_DEPTH_INCHES: Dict[str, float] = {
+SWC_DEPTH_INCHES: dict[str, float] = {
     str(depth_key): float(str(labels["us"]).split()[0])
     for depth_key, labels in SENSOR_DEPTH_LABELS.items()
 }
-
 
 def _ensure_timestamp_datetime(df_in: pd.DataFrame) -> pd.DataFrame:
     df = df_in.copy()
@@ -111,18 +104,15 @@ def _ensure_timestamp_datetime(df_in: pd.DataFrame) -> pd.DataFrame:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     return df
 
-
-def _x_time_strings(df: pd.DataFrame) -> List[str]:
+def _x_time_strings(df: pd.DataFrame) -> list[str]:
     if "timestamp" not in df.columns:
         return []
     ts = pd.to_datetime(df["timestamp"], errors="coerce")
     return ts.dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
-
-def prepare_plot_for_json(fig: go.Figure) -> Dict[str, Any]:
+def prepare_plot_for_json(fig: go.Figure) -> dict[str, Any]:
     raw = json.dumps(fig, cls=PlotlyJSONEncoder)
-    return cast(Dict[str, Any], json.loads(raw))
-
+    return cast(dict[str, Any], json.loads(raw))
 
 def _compact_unit_phrase(label: str) -> str:
     s = str(label).strip()
@@ -136,7 +126,6 @@ def _compact_unit_phrase(label: str) -> str:
         s = s.replace(old, new)
     return s
 
-
 def _depth_display_label(depth_key: str | int, usys: UnitSystem, *, compact: bool = False) -> str:
     dkey = str(depth_key)
     label = SENSOR_DEPTH_LABELS.get(dkey, {}).get(
@@ -145,15 +134,12 @@ def _depth_display_label(depth_key: str | int, usys: UnitSystem, *, compact: boo
     )
     return _compact_unit_phrase(label) if compact else str(label)
 
-
 def _logger_display_label(logger_location: str) -> str:
     return str(LOGGER_LOCATION_MAPPING.get(logger_location, logger_location))
-
 
 def _normalize_trace_grouping(trace_option: str) -> str:
     mode = str(trace_option or "").strip()
     return TRACE_OPTION_MAP.get(mode, TRACE_OPTION_MAP.get(mode.lower(), mode))
-
 
 def build_raw_plot_title(
     *,
@@ -180,7 +166,6 @@ def build_raw_plot_title(
 
     return f"{granularity.capitalize()} {human_var} in Strip {strip}, {year} ({fixed_label})"
 
-
 def build_ratio_plot_title(
     *,
     granularity: str,
@@ -204,11 +189,9 @@ def build_ratio_plot_title(
 
     return title_text
 
-
 # ---------------------------------------------------------------------------
 # Overlays / shared layout helpers
 # ---------------------------------------------------------------------------
-
 
 def add_precipitation_bars(
     fig: go.Figure,
@@ -266,7 +249,6 @@ def add_precipitation_bars(
     )
     fig.update_layout(yaxis2=common_yaxis2_config(usys))
 
-
 def add_irrigation_shapes(
     fig: go.Figure,
     strip: str,
@@ -274,7 +256,7 @@ def add_irrigation_shapes(
     unit_system: str,
     sum_only: bool = False,
     periods: Optional[Sequence[Any]] = None,
-    category_labels: Optional[List[str]] = None,
+    category_labels: Optional[list[str]] = None,
 ) -> None:
     usys: UnitSystem = coerce_unit_system(unit_system)
 
@@ -385,11 +367,10 @@ def add_irrigation_shapes(
         )
     )
 
-
 def configure_primary_yaxis(
     fig: go.Figure,
     df: pd.DataFrame,
-    y_cols: List[str],
+    y_cols: list[str],
     variable: str,
     unit_system: str,
     kind: str,
@@ -420,11 +401,9 @@ def configure_primary_yaxis(
         )
     )
 
-
 # ---------------------------------------------------------------------------
 # RAW (time series)
 # ---------------------------------------------------------------------------
-
 
 def make_raw_figure(
     *,
@@ -439,7 +418,7 @@ def make_raw_figure(
     start: str,
     end: str,
     trace_option: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
     grouping = _normalize_trace_grouping(trace_option)
 
@@ -456,7 +435,7 @@ def make_raw_figure(
     human_var = get_unit_aware_label(display_variable, usys)
 
     fig = go.Figure()
-    y_cols: List[str] = []
+    y_cols: list[str] = []
     use_secondary_y = False
 
     def swc_from_vwc(series: pd.Series, depth_key: str) -> pd.Series:
@@ -486,7 +465,7 @@ def make_raw_figure(
             y_cols.append(base_col)
             y_vals = safe_tolist(to_float_series(df_plot[base_col]))
 
-            line_kwargs: Dict[str, Any] = {"width": 2}
+            line_kwargs: dict[str, Any] = {"width": 2}
             depth_col = _depth_color(d_str)
             if depth_col:
                 line_kwargs["color"] = depth_col
@@ -577,7 +556,7 @@ def make_raw_figure(
         is_gseason=False,
     )
 
-    layout_kwargs: Dict[str, Any] = dict(
+    layout_kwargs: dict[str, Any] = dict(
         title={"text": title_text, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis=common_xaxis_config(granularity, start, end),
         yaxis={"title": {"text": human_var, "font": {"size": 14}}},
@@ -606,11 +585,9 @@ def make_raw_figure(
 
     return prepare_plot_for_json(fig)
 
-
 # ---------------------------------------------------------------------------
 # Ratio (time series or gseason)
 # ---------------------------------------------------------------------------
-
 
 def make_ratio_figure(
     df: pd.DataFrame,
@@ -623,7 +600,7 @@ def make_ratio_figure(
     start: str,
     end: str,
     depth: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
     is_gs = granularity.lower() == "gseason"
 
@@ -668,7 +645,7 @@ def make_ratio_figure(
         pair_color = PLOT_COLORS.get(f"ratio_{p1}_{p2}", None)
 
         if is_gs:
-            bar_kwargs: Dict[str, Any] = {
+            bar_kwargs: dict[str, Any] = {
                 "x": x,
                 "y": y,
                 "name": pair_label,
@@ -679,7 +656,7 @@ def make_ratio_figure(
                 bar_kwargs["marker"] = dict(color=pair_color)
             fig.add_trace(go.Bar(**bar_kwargs))
         else:
-            line_kwargs: Dict[str, Any] = {"width": 2}
+            line_kwargs: dict[str, Any] = {"width": 2}
             if pair_color:
                 line_kwargs["color"] = pair_color
 
@@ -704,7 +681,7 @@ def make_ratio_figure(
         no_data=False,
     )
 
-    xcfg: Dict[str, Any] = (
+    xcfg: dict[str, Any] = (
         {"title": "Season", "type": "category"}
         if is_gs
         else common_xaxis_config(granularity, start, end)
@@ -750,11 +727,9 @@ def make_ratio_figure(
 
     return prepare_plot_for_json(fig)
 
-
 # ---------------------------------------------------------------------------
 # Temperature delta (time series)
 # ---------------------------------------------------------------------------
-
 
 def make_temperature_delta_figure(
     df: pd.DataFrame,
@@ -765,7 +740,7 @@ def make_temperature_delta_figure(
     year: int,
     start: str,
     end: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
     df2 = _ensure_timestamp_datetime(df)
     if "timestamp" not in df2.columns:
@@ -867,16 +842,14 @@ def make_temperature_delta_figure(
 
     return prepare_plot_for_json(fig)
 
-
 # -----------------------------------------------------------------------------
 # RAW gseason (categorical)
 # -----------------------------------------------------------------------------
 
-
 def make_raw_gseason_figure(
     *,
     df: pd.DataFrame,
-    periods: List[Any],
+    periods: list[Any],
     variable: str,
     strip: str,
     logger_location: str,
@@ -884,7 +857,7 @@ def make_raw_gseason_figure(
     unit_system: str,
     year: int,
     trace_option: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
     grouping = _normalize_trace_grouping(trace_option)
 
@@ -905,7 +878,7 @@ def make_raw_gseason_figure(
 
         unit_suffix = "in" if usys == "us" else "mm"
         precip_list = safe_tolist(precip_vals)
-        precip_text: List[str] = []
+        precip_text: list[str] = []
         for v in precip_list:
             try:
                 fv = float(v)
@@ -933,7 +906,7 @@ def make_raw_gseason_figure(
     human_var = label_name_mapping[variable][usys]
     abbr = VARIABLE_NAME_ABBREV.get(variable, variable)
     legend_fmt = f"{abbr}, {{}}"
-    sensor_cols_plotted: List[str] = []
+    sensor_cols_plotted: list[str] = []
     depth_str = str(depth)
 
     if variable == "SWC":
@@ -949,7 +922,7 @@ def make_raw_gseason_figure(
                 sensor_cols_plotted.append(col)
 
                 series = to_float_series(df2[col])
-                bar_kwargs: Dict[str, Any] = {
+                bar_kwargs: dict[str, Any] = {
                     "x": labels,
                     "y": safe_tolist(series),
                     "name": legend_fmt.format(depth_map[usys]),
@@ -988,7 +961,7 @@ def make_raw_gseason_figure(
                 sensor_cols_plotted.append(col)
 
                 series = to_float_series(df2[col])
-                bar_kwargs2: Dict[str, Any] = {
+                bar_kwargs2: dict[str, Any] = {
                     "x": labels,
                     "y": safe_tolist(series),
                     "name": legend_fmt.format(depth_map[usys]),
@@ -1038,7 +1011,7 @@ def make_raw_gseason_figure(
         primary_max = None
 
     yaxis_cfg = common_yaxis_config("raw", variable, usys, primary_min, primary_max)
-    y2_cfg: Dict[str, Any] = common_yaxis2_config(usys)
+    y2_cfg: dict[str, Any] = common_yaxis2_config(usys)
 
     if have_precip and precip_vals is not None:
         p_block = pd.DataFrame({"p": to_float_series(precip_vals)})
@@ -1084,23 +1057,21 @@ def make_raw_gseason_figure(
 
     return prepare_plot_for_json(fig)
 
-
 # -----------------------------------------------------------------------------
 # Ratio gseason (categorical)
 # -----------------------------------------------------------------------------
 
-
 def make_ratio_gseason_figure(
     *,
     df: pd.DataFrame,
-    periods: List[Any],
+    periods: list[Any],
     variable: str,
     strip: str,
     logger_location: str,
     depth: int,
     unit_system: str,
     year: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     usys: UnitSystem = coerce_unit_system(unit_system)
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
@@ -1122,7 +1093,7 @@ def make_ratio_gseason_figure(
         s3_col = f"{base}_S3_{logger_location}_{depth_str}"
         s4_col = f"{base}_S4_{logger_location}_{depth_str}"
 
-        ratios: Dict[str, pd.Series] = {}
+        ratios: dict[str, pd.Series] = {}
 
         if s1_col in df2.columns and s2_col in df2.columns:
             s1 = to_float_series(df2[s1_col])
@@ -1165,7 +1136,7 @@ def make_ratio_gseason_figure(
             )
             return prepare_plot_for_json(fig)
 
-        all_vals: List[pd.Series] = []
+        all_vals: list[pd.Series] = []
         for idx, (pair_label, series) in enumerate(ratios.items(), start=1):
             vals = to_float_series(series)
             all_vals.append(vals)
@@ -1173,7 +1144,7 @@ def make_ratio_gseason_figure(
             color_key = f"ratio_SWC_{pair_label.replace('/', '_')}"
             color_val = PLOT_COLORS.get(color_key, None)
 
-            bar_kwargs: Dict[str, Any] = {
+            bar_kwargs: dict[str, Any] = {
                 "x": labels,
                 "y": safe_tolist(vals),
                 "name": pair_label,
@@ -1276,7 +1247,7 @@ def make_ratio_gseason_figure(
         pair_color = PLOT_COLORS.get(f"ratio_{p1}_{p2}", None)
 
         series = to_float_series(df2[col])
-        bar_kwargs3: Dict[str, Any] = {
+        bar_kwargs3: dict[str, Any] = {
             "x": labels,
             "y": safe_tolist(series),
             "name": f"{p1}/{p2}",

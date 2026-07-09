@@ -34,7 +34,6 @@ from typing import Callable, Final, Iterable, Optional, cast
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PageElement, Tag
 
-
 # ---------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------
@@ -49,7 +48,6 @@ LAB_REFERENCE_MEDIA_DIR = BIOCHAR_APP / "static" / "lab_reference_media"
 WARD_DOCX_DIR.mkdir(parents=True, exist_ok=True)
 WARD_HTML_DIR.mkdir(parents=True, exist_ok=True)
 LAB_REFERENCE_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-
 
 # ---------------------------------------------------------------------
 # Config
@@ -283,7 +281,6 @@ BIOLOGICAL_REPORT_OUTPUTS: Final[set[str]] = {
     "ward_biological_report_20241105.html",
 }
 
-
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
@@ -298,14 +295,12 @@ def slugify(text: str) -> str:
     text = re.sub(r"-{2,}", "-", text)
     return text.strip("-")
 
-
 def to_snake_case_filename(text: str) -> str:
     text = text.strip().lower()
     text = text.replace("&", " and ")
     text = re.sub(r"[^a-z0-9]+", "_", text)
     text = re.sub(r"_+", "_", text)
     return text.strip("_")
-
 
 def unique_slug(base: str, seen: set[str]) -> str:
     slug = base or "section"
@@ -321,14 +316,12 @@ def unique_slug(base: str, seen: set[str]) -> str:
     seen.add(new_slug)
     return new_slug
 
-
 def normalize_text(text: str) -> str:
     text = text.strip().lower()
     text = text.replace("\xa0", " ")
     text = text.replace("–", "-").replace("—", "-")
     text = re.sub(r"\s+", " ", text)
     return text
-
 
 def ensure_head(soup: BeautifulSoup) -> Tag:
     head = soup.head
@@ -342,7 +335,6 @@ def ensure_head(soup: BeautifulSoup) -> Tag:
         head = soup.head
     return cast(Tag, head)
 
-
 def ensure_body(soup: BeautifulSoup) -> Tag:
     body = soup.body
     if body is None:
@@ -355,13 +347,11 @@ def ensure_body(soup: BeautifulSoup) -> Tag:
         body = soup.body
     return cast(Tag, body)
 
-
 def inject_css(soup: BeautifulSoup) -> None:
     head = ensure_head(soup)
     style_tag = soup.new_tag("style")
     style_tag.string = WARD_HTML_CSS
     head.append(style_tag)
-
 
 def wrap_body_content(soup: BeautifulSoup) -> None:
     body = ensure_body(soup)
@@ -373,7 +363,6 @@ def wrap_body_content(soup: BeautifulSoup) -> None:
 
     body.append(wrapper)
 
-
 def collect_existing_ids(soup: BeautifulSoup) -> set[str]:
     seen: set[str] = set()
     for tag in soup.find_all(True):
@@ -383,7 +372,6 @@ def collect_existing_ids(soup: BeautifulSoup) -> set[str]:
         if isinstance(tag_id, str) and tag_id.strip():
             seen.add(tag_id.strip())
     return seen
-
 
 def add_heading_ids(soup: BeautifulSoup) -> None:
     seen = collect_existing_ids(soup)
@@ -402,7 +390,6 @@ def add_heading_ids(soup: BeautifulSoup) -> None:
 
         slug = slugify(text)
         tag["id"] = unique_slug(slug, seen)
-
 
 def add_explicit_named_anchors(soup: BeautifulSoup, output_name: str) -> None:
     explicit_map = EXPLICIT_ANCHOR_MAP.get(output_name, {})
@@ -433,14 +420,12 @@ def add_explicit_named_anchors(soup: BeautifulSoup, output_name: str) -> None:
         tag["id"] = wanted_id
         seen.add(wanted_id)
 
-
 def _get_block_tags_in_order(soup: BeautifulSoup) -> list[Tag]:
     out: list[Tag] = []
     for tag in soup.find_all(list(BLOCK_TAGS)):
         if isinstance(tag, Tag):
             out.append(tag)
     return out
-
 
 def _find_first_matching_block(
     blocks: list[Tag],
@@ -451,7 +436,6 @@ def _find_first_matching_block(
         if text and predicate(text):
             return idx, tag
     return None, None
-
 
 def _find_next_matching_block(
     blocks: list[Tag],
@@ -469,7 +453,6 @@ def _find_next_matching_block(
         if text and predicate(text):
             return idx, tag
     return None, None
-
 
 def _insert_anchor_before(tag: Tag, wanted_id: str, seen_ids: set[str]) -> bool:
     if wanted_id in seen_ids or tag.parent is None:
@@ -503,7 +486,6 @@ def _insert_anchor_before(tag: Tag, wanted_id: str, seen_ids: set[str]) -> bool:
     tag.insert_before(anchor)
     seen_ids.add(wanted_id)
     return True
-
 
 def add_biological_report_anchors(soup: BeautifulSoup, output_name: str) -> None:
     if output_name not in BIOLOGICAL_REPORT_OUTPUTS:
@@ -589,7 +571,6 @@ def add_biological_report_anchors(soup: BeautifulSoup, output_name: str) -> None
         if anchor_idx is not None and _insert_anchor_before(anchor_tag, wanted_id, seen_ids):
             used_block_indexes.add(anchor_idx)
 
-
 def add_table_ids_from_captions(soup: BeautifulSoup) -> None:
     seen = collect_existing_ids(soup)
 
@@ -620,7 +601,6 @@ def add_table_ids_from_captions(soup: BeautifulSoup) -> None:
         chosen_id = long_id if long_id not in seen else short_id
         chosen_id = unique_slug(chosen_id, seen)
         table["id"] = chosen_id
-
 
 def replace_word_bookmark_ids_with_table_ids(soup: BeautifulSoup) -> None:
     mapping: dict[str, str] = {}
@@ -685,7 +665,6 @@ def replace_word_bookmark_ids_with_table_ids(soup: BeautifulSoup) -> None:
         if old_id in mapping:
             anchor["href"] = f"#{mapping[old_id]}"
 
-
 def remove_empty_paragraphs(soup: BeautifulSoup) -> None:
     for p in soup.find_all("p"):
         if not isinstance(p, Tag):
@@ -696,10 +675,8 @@ def remove_empty_paragraphs(soup: BeautifulSoup) -> None:
             continue
         p.decompose()
 
-
 def _basename_from_src(src: str) -> str:
     return Path(src.replace("\\", "/")).name
-
 
 def rewrite_image_paths(soup: BeautifulSoup, media_url_prefix: str) -> None:
     media_url_prefix = media_url_prefix.rstrip("/")
@@ -736,7 +713,6 @@ def rewrite_image_paths(soup: BeautifulSoup, media_url_prefix: str) -> None:
 
         img["style"] = "max-width: 100%; height: auto;"
 
-
 def _remove_empty_ancestors(start_tag: Optional[Tag]) -> None:
     removable_names = {"p", "div", "blockquote", "span"}
     current = start_tag
@@ -759,7 +735,6 @@ def _remove_empty_ancestors(start_tag: Optional[Tag]) -> None:
         current.decompose()
         current = parent
 
-
 def _paragraph_text_without_images(tag: Tag) -> str:
     text_parts: list[str] = []
     for child in tag.children:
@@ -768,7 +743,6 @@ def _paragraph_text_without_images(tag: Tag) -> str:
         elif isinstance(child, Tag) and child.name != "img":
             text_parts.append(child.get_text(" ", True))
     return normalize_text(" ".join(text_parts))
-
 
 def _is_probable_page_footer_or_header(text: str) -> bool:
     if not text:
@@ -782,7 +756,6 @@ def _is_probable_page_footer_or_header(text: str) -> bool:
     ]
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
-
 def remove_images_inside_headings(soup: BeautifulSoup) -> None:
     for heading in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
         if not isinstance(heading, Tag):
@@ -792,7 +765,6 @@ def remove_images_inside_headings(soup: BeautifulSoup) -> None:
             if isinstance(img, Tag):
                 img.decompose()
 
-
 def remove_page_header_footer_paragraphs(soup: BeautifulSoup) -> None:
     for p in soup.find_all("p"):
         if not isinstance(p, Tag):
@@ -801,7 +773,6 @@ def remove_page_header_footer_paragraphs(soup: BeautifulSoup) -> None:
         text = normalize_text(p.get_text(" ", True))
         if text and _is_probable_page_footer_or_header(text):
             p.decompose()
-
 
 def remove_decorative_transition_images(soup: BeautifulSoup, output_name: str) -> None:
     decorative = DECORATIVE_IMAGE_BASENAMES.get(output_name, set())
@@ -832,7 +803,6 @@ def remove_decorative_transition_images(soup: BeautifulSoup, output_name: str) -
         img.decompose()
         _remove_empty_ancestors(parent)
 
-
 def normalize_image_classes(soup: BeautifulSoup) -> None:
     for img in soup.find_all("img"):
         if not isinstance(img, Tag):
@@ -859,7 +829,6 @@ def normalize_image_classes(soup: BeautifulSoup) -> None:
 
         img["class"] = classes
         img["style"] = "max-width: 100%; height: auto;"
-
 
 def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
     print(f"🖼 apply_image_replacements called for: {output_name}")
@@ -979,7 +948,6 @@ def apply_image_replacements(soup: BeautifulSoup, output_name: str) -> None:
         else:
             print(f"  ⚠️ Unknown replacement mode: {mode}")
 
-
 def cleanup_html(soup: BeautifulSoup, output_name: str) -> None:
     inject_css(soup)
     wrap_body_content(soup)
@@ -1007,7 +975,6 @@ def cleanup_html(soup: BeautifulSoup, output_name: str) -> None:
     # Final cleanup
     remove_empty_paragraphs(soup)
 
-
 def output_name_for_docx(docx_name: str) -> str:
     if docx_name in OUTPUT_NAME_MAP:
         mapped = OUTPUT_NAME_MAP[docx_name]
@@ -1016,7 +983,6 @@ def output_name_for_docx(docx_name: str) -> str:
 
     stem = Path(docx_name).stem
     return f"{to_snake_case_filename(stem)}.html"
-
 
 def convert_docx_to_html(docx_path: Path, media_dir: Path) -> str:
     media_dir.mkdir(parents=True, exist_ok=True)
@@ -1038,13 +1004,11 @@ def convert_docx_to_html(docx_path: Path, media_dir: Path) -> str:
     )
     return result.stdout
 
-
 def iter_docx_files(directory: Path) -> Iterable[Path]:
     return sorted(
         p for p in directory.iterdir()
         if p.suffix.lower() == ".docx" and not p.name.startswith("~$")
     )
-
 
 # ---------------------------------------------------------------------
 # Main
@@ -1080,7 +1044,6 @@ def main() -> int:
             print(f"❌ Failed to convert {docx_path.name}: {exc}")
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

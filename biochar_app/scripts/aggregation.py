@@ -1,16 +1,19 @@
 # aggregation.py
 from typing import (
-    Any, Callable, Dict, Iterable, Mapping, Tuple
+    Any,
+    Callable,
+    Iterable,
+    Mapping,
 )
 import pandas as pd
 
-PeriodBounds = Tuple[pd.Timestamp, pd.Timestamp]
+PeriodBounds = tuple[pd.Timestamp, pd.Timestamp]
 # A mapping from period‐code → its (start, end) for a given year
 PeriodSpecFn = Callable[[int], Mapping[str, PeriodBounds]]
 # The function that computes raw/ratio stats for one slice
 ComputeFn = Callable[
     [pd.DataFrame, str, str, str],
-    Tuple[Dict[str, Any], Dict[str, Any]]
+    tuple[dict[str, Any], dict[str, Any]]
 ]
 
 def build_summary(
@@ -22,7 +25,7 @@ def build_summary(
     depths: Iterable[str],
     compute_fn: ComputeFn,
     zero_ratio_for: Iterable[str] = (),
-) -> Dict[str, Dict]:
+) -> dict[str, Dict]:
     """
     A generic driver that:
      - asks get_period_specs(year) for { code: (start_ts,end_ts) }
@@ -32,11 +35,11 @@ def build_summary(
      - returns nested dict[period][var][strip_depth] = {raw_statistics, ratio_statistics}
     """
     period_specs = get_period_specs(year)
-    summary: Dict[str, Dict] = {}
+    summary: dict[str, Dict] = {}
 
     for code, (start, end) in period_specs.items():
         sub = df[(df.timestamp >= start) & (df.timestamp <= end)]
-        stats_for_code: Dict[str, Dict] = {}
+        stats_for_code: dict[str, Dict] = {}
 
         for var in variables:
             stats_for_code[var] = {}

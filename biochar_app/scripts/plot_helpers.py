@@ -17,7 +17,7 @@ import math
 import re
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Optional, cast
 
 import pandas as pd
 from fastapi import HTTPException
@@ -57,10 +57,8 @@ COLUMN_CATEGORY_RULES = {
     ],
 }
 
-
 def bad_request(msg: str) -> None:
     raise HTTPException(status_code=400, detail=msg)
-
 
 def sanitize_json(obj: Any) -> Any:
     if obj is None or isinstance(obj, (str, bool, int, float)):
@@ -94,8 +92,7 @@ def sanitize_json(obj: Any) -> Any:
 
     return str(obj)
 
-
-def compute_global_min_max(df: pd.DataFrame, cols: list[str]) -> Tuple[float, float]:
+def compute_global_min_max(df: pd.DataFrame, cols: list[str]) -> tuple[float, float]:
     if not cols:
         raise ValueError("No data columns to compute min/max")
 
@@ -116,9 +113,8 @@ def compute_global_min_max(df: pd.DataFrame, cols: list[str]) -> Tuple[float, fl
 
     return min_val, max_val
 
-
-def common_xaxis_config(_granularity: str, start: str, end: str) -> Dict[str, Any]:
-    cfg: Dict[str, Any] = {
+def common_xaxis_config(_granularity: str, start: str, end: str) -> dict[str, Any]:
+    cfg: dict[str, Any] = {
         "title": {"text": "Date", "font": {"size": 12}},
         "type": "date",
         "showline": True,
@@ -190,14 +186,13 @@ def common_xaxis_config(_granularity: str, start: str, end: str) -> Dict[str, An
 
     return cfg
 
-
 def common_yaxis_config(
     kind: str,
     variable: str,
     unit_system: UnitSystem,
     global_min: Optional[float],
     global_max: Optional[float],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if global_min is None:
         raise HTTPException(400, "Cannot build y-axis: global_min is None")
     if global_max is None:
@@ -241,7 +236,7 @@ def common_yaxis_config(
         else f"{title_base}{f' ({unit})' if unit else ''}"
     )
 
-    axis_cfg: Dict[str, Any] = {
+    axis_cfg: dict[str, Any] = {
         "title": {"text": title_text, "font": {"size": 12}},
         "tickformat": None,
         "showgrid": True,
@@ -257,8 +252,7 @@ def common_yaxis_config(
 
     return axis_cfg
 
-
-def common_yaxis2_config(unit_system: UnitSystem = "us") -> Dict[str, Any]:
+def common_yaxis2_config(unit_system: UnitSystem = "us") -> dict[str, Any]:
     unit_label = "mm" if unit_system == "metric" else "in"
 
     return {
@@ -282,7 +276,6 @@ def common_yaxis2_config(unit_system: UnitSystem = "us") -> Dict[str, Any]:
         "automargin": False,
     }
 
-
 def common_legend_config(title: str) -> dict:
     return dict(
         title=dict(text=f"<b>{title}</b>", side="top"),
@@ -300,7 +293,6 @@ def common_legend_config(title: str) -> dict:
         itemwidth=30,
     )
 
-
 def get_unit_aware_label(variable: str, unit_system: UnitSystem) -> str:
     label = label_name_mapping.get(variable, variable)
     if isinstance(label, dict):
@@ -315,7 +307,6 @@ def get_unit_aware_label(variable: str, unit_system: UnitSystem) -> str:
             .replace("(in)", "(mm)")
         )
     return label_s
-
 
 def convert_units(df: pd.DataFrame, unit_system: UnitSystem) -> pd.DataFrame:
     if unit_system != "metric":
@@ -334,7 +325,6 @@ def convert_units(df: pd.DataFrame, unit_system: UnitSystem) -> pd.DataFrame:
             df_conv[col] = pd.to_numeric(df_conv[col], errors="coerce").apply(to_liters)
 
     return df_conv
-
 
 def parse_sensor_column(col: str, unit_system: UnitSystem) -> dict[str, str]:
     parts = col.split("_")
@@ -366,7 +356,6 @@ def parse_sensor_column(col: str, unit_system: UnitSystem) -> dict[str, str]:
         "logger_location": str(human_loc),
     }
 
-
 def _get_irrigation_workbook() -> Optional[pd.ExcelFile]:
     """
     Legacy workbook helper retained for diagnostics only.
@@ -394,7 +383,6 @@ def _get_irrigation_workbook() -> Optional[pd.ExcelFile]:
     )
     return _IRRIGATION_XLS
 
-
 def _clean_irrigation_column(name: str) -> str:
     return (
         str(name)
@@ -408,7 +396,6 @@ def _clean_irrigation_column(name: str) -> str:
         .replace("/", "_")
     )
 
-
 def _find_irrigation_sheet_name(xls: pd.ExcelFile, year: int) -> Optional[str]:
     target = str(year)
     for sheet in xls.sheet_names:
@@ -416,7 +403,6 @@ def _find_irrigation_sheet_name(xls: pd.ExcelFile, year: int) -> Optional[str]:
         if target in s_clean and "IRRIGATION" in s_clean.upper():
             return str(sheet)
     return None
-
 
 def _load_irrigation_sheet(year: int) -> pd.DataFrame:
     """
@@ -471,7 +457,6 @@ def _load_irrigation_sheet(year: int) -> pd.DataFrame:
     _IRRIGATION_SHEETS_CACHE[year] = df
     return df
 
-
 def _safe_datestr(val: Any) -> str:
     if val is None or pd.isna(val):
         return ""
@@ -487,7 +472,6 @@ def _safe_datestr(val: Any) -> str:
         pass
 
     return str(val)
-
 
 def _reconcile_irrigation_volume_with_acre_ft(
     df: pd.DataFrame,
@@ -574,7 +558,6 @@ def _reconcile_irrigation_volume_with_acre_ft(
             rel_tol * 100,
             "\n".join(mismatch_rows),
         )
-
 
 def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     """

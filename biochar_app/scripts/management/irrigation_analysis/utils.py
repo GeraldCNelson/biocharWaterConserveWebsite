@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 from biochar_app.config.experiment_config import (
     STRIPS,
     SENSOR_DEPTH_CODES,
@@ -9,13 +8,11 @@ from biochar_app.config.experiment_config import (
 
 from biochar_app.scripts.data_loading import (load_logger_data, prepare_irrigation_input)
 
-
 def force_float(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     numeric_cols = df.select_dtypes(include=["number"]).columns
     df[numeric_cols] = df[numeric_cols].astype(float)
     return df
-
 
 def move_id_columns_left(df: pd.DataFrame) -> pd.DataFrame:
     left_cols = [
@@ -31,7 +28,6 @@ def move_id_columns_left(df: pd.DataFrame) -> pd.DataFrame:
     left_cols = [col for col in left_cols if col in df.columns]
     other_cols = [col for col in df.columns if col not in left_cols]
     return df[left_cols + other_cols]
-
 
 def round_for_reporting(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -99,13 +95,11 @@ def round_for_reporting(df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
-
 def build_bottom_logger_profile_map() -> dict[str, list[str]]:
     return {
         strip: [f"VWC_{depth_code}_raw_{strip}_B" for depth_code in SENSOR_DEPTH_CODES]
         for strip in STRIPS
     }
-
 
 def prepare_15min_logger_data(year: int, VERBOSE=None) -> pd.DataFrame:
     df_15min = load_logger_data(year=year, granularity="15min")
@@ -135,7 +129,6 @@ def prepare_15min_logger_data(year: int, VERBOSE=None) -> pd.DataFrame:
         print("Index:", type(df_15min.index), df_15min.index.name)
 
     return df_15min
-
 
 def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     if event_results.empty:
@@ -179,7 +172,6 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     out.loc[duration_hours <= 0, "avg_flow_gph_strip"] = pd.NA
 
     return out
-
 
 def attach_event_metadata(results: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
     if results.empty:

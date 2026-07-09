@@ -650,7 +650,6 @@ def build_trustworthy_holding_capacity_summary(
         .reset_index()
     )
 
-
     summary["profile_area_sqft"] = PROFILE_AREA_SQFT
     summary["gallons_per_profile_inch"] = PROFILE_GALLONS_PER_INCH
 

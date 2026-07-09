@@ -46,7 +46,6 @@ OUTPUT_COLUMNS = [
     "notes",
 ]
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_WORKBOOK)
@@ -54,7 +53,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backup-dir", type=Path, default=DEFAULT_BACKUP_DIR)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
-
 
 def make_backup(path: Path, backup_dir: Path) -> Path | None:
     if not path.exists():
@@ -66,10 +64,8 @@ def make_backup(path: Path, backup_dir: Path) -> Path | None:
     backup_path.write_bytes(path.read_bytes())
     return backup_path
 
-
 def seasonal_date(year: int) -> str:
     return f"{year}-{DEFAULT_APPLICATION_MM_DD}"
-
 
 def strip_group_for_strip(strip: str) -> str:
     if strip in {"S1", "S2"}:
@@ -78,14 +74,12 @@ def strip_group_for_strip(strip: str) -> str:
         return "S3_S4"
     return ""
 
-
 def location_for_strip(strip: str) -> str:
     if strip in {"S1", "S2"}:
         return "west"
     if strip in {"S3", "S4"}:
         return "east"
     return ""
-
 
 def strip_area_acres(strip: str) -> float | None:
     value = STRIP_AREA_ACRES.get(strip)
@@ -97,24 +91,20 @@ def strip_area_acres(strip: str) -> float | None:
     except Exception:
         return None
 
-
 def normalize_product_name(value: object) -> str:
     product = str(value).strip().upper()
     product = product.replace("LBS OF ", "").strip()
     product = " ".join(product.split())
     return product
 
-
 def clean_product_name(value: object) -> str:
     return normalize_product_name(value)
-
 
 def numeric_value(value: object) -> float:
     parsed = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     if pd.isna(parsed):
         return 0.0
     return float(parsed)
-
 
 def product_analysis_for(product: str) -> dict[str, float]:
     key = normalize_product_name(product)
@@ -127,7 +117,6 @@ def product_analysis_for(product: str) -> dict[str, float]:
         nutrient: float(analysis.get(nutrient, 0.0) or 0.0)
         for nutrient in NUTRIENTS
     }
-
 
 def product_analysis_note(product: str) -> str:
     key = normalize_product_name(product)
@@ -142,7 +131,6 @@ def product_analysis_note(product: str) -> str:
         "for this product, so nutrient-specific applied amounts were set to 0."
     )
 
-
 def add_nutrient_totals(row: dict[str, object]) -> dict[str, object]:
     product = str(row.get("product") or "")
     applied_total_lb = numeric_value(row.get("applied_total_lb"))
@@ -156,7 +144,6 @@ def add_nutrient_totals(row: dict[str, object]) -> dict[str, object]:
         row[rate_col] = pd.NA
 
     return row
-
 
 def add_rate_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -200,7 +187,6 @@ def add_rate_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = out.drop(columns=["area_acres"], errors="ignore")
     return out
 
-
 def strip_amounts_from_row_values(
     raw: pd.DataFrame,
     row_index: int,
@@ -230,7 +216,6 @@ def strip_amounts_from_row_values(
         strip: 0.0
         for strip in strips
     }
-
 
 def parse_2023_sheet(workbook: Path, sheet_name: str) -> pd.DataFrame:
     year = 2023
@@ -293,7 +278,6 @@ def parse_2023_sheet(workbook: Path, sheet_name: str) -> pd.DataFrame:
 
     return add_rate_columns(pd.DataFrame(rows))
 
-
 def parse_2024_2025_sheet(workbook: Path, sheet_name: str, year: int) -> pd.DataFrame:
     raw = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
 
@@ -350,7 +334,6 @@ def parse_2024_2025_sheet(workbook: Path, sheet_name: str, year: int) -> pd.Data
 
     return add_rate_columns(pd.DataFrame(rows))
 
-
 def build_fertilizer_clean(input_workbook: Path) -> pd.DataFrame:
     if not input_workbook.exists():
         raise FileNotFoundError(f"Input fertilizer workbook not found: {input_workbook}")
@@ -402,7 +385,6 @@ def build_fertilizer_clean(input_workbook: Path) -> pd.DataFrame:
 
     return out
 
-
 def main() -> int:
     args = parse_args()
 
@@ -428,7 +410,6 @@ def main() -> int:
 
     print(f"Output written: {args.output}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

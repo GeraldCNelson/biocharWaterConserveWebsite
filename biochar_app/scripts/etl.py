@@ -23,18 +23,34 @@ Full ETL including growing-season (gseason) summaries:
 
 Logger time policy
 ------------------
-Option B: final logger timestamps should reflect seasonal Mountain Time switches.
+Raw Campbell logger timestamps are parsed as naive clock text, then interpreted
+as a fixed Mountain Standard Time timeline after any manual logger-clock
+corrections have been applied.
 
 Implementation:
-1. Parse the raw logger timestamp text as naive.
-2. Apply manual LOGGER_CLOCK_CORRECTIONS.
-3. Treat the corrected series as a fixed MST base (UTC-7 all year).
+1. Parse raw logger timestamp text as naive datetimes.
+2. Apply manual LOGGER_CLOCK_CORRECTIONS for known logger clock jumps/resets.
+3. Treat the corrected timestamps as fixed MST, UTC-7 all year.
 4. Convert that fixed-base timeline to America/Denver civil time.
-5. Keep logger timestamps timezone-aware internally through resampling.
-6. Drop tz info only when writing parquet / CSV-like outputs.
+5. Resample while timestamps are timezone-aware America/Denver timestamps.
+6. Before writing Parquet/CSV outputs, remove timezone information.
 
-This allows spring-forward / fall-back behavior to exist in the final outputs,
-instead of flattening everything into one continuous naive 15-minute sequence.
+Result:
+Parquet and CSV logger timestamps are timezone-naive, but their clock values
+represent local America/Denver civil time. During daylight-saving time, this
+means the exported logger timestamps correspond to MDT local clock time.
+
+Implication:
+Irrigation start/end times recorded from field notes, meter photos, or local
+Colorado clock time should align directly with logger timestamps in the parquet
+outputs, provided those irrigation times are also interpreted as local
+America/Denver civil time.
+
+Usage:
+python biochar_app/scripts/etl.py
+python biochar_app/scripts/etl.py --year 2024
+python biochar_app/scripts/etl.py --force-backup-raw
+python biochar_app/scripts/etl.py --no-backup-raw
 """
 
 from __future__ import annotations
@@ -43,9 +59,13 @@ import csv
 import logging
 import math
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Optional, cast
+
+import argparse
+import json
+import shutil
+from datetime import datetime, timedelta
 
 import pandas as pd
 from pandas import Series
@@ -63,6 +83,14 @@ from biochar_app.config.core import (
     YEARS,
     cylinder_volume_m3,
 )
+
+from biochar_app.config.irrigation_config import (
+    RAW_DATA_BACKUP_DIR,
+    RAW_DATA_BACKUP_INTERVAL_DAYS,
+    RAW_DATA_BACKUP_STATE,
+    DEFAULT_ETL_YEAR
+)
+
 from biochar_app.config.paths import (
     DATA_RAW_DIR,
     LOGGER_DOWNLOADS_DIR,
@@ -114,7 +142,6 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
 # (Etc/GMT+7 is fixed UTC-7; the sign is reversed by POSIX convention.)
 LOGGER_FIXED_STANDARD_TZ = "Etc/GMT+7"
 
-
 # ---------------------------------------------------------------------------
 # Timezone helpers
 # ---------------------------------------------------------------------------
@@ -136,9 +163,7 @@ def tz_name(tz_like: Any) -> str:
         return tz_like
     return str(tz_like)
 
-
 DEFAULT_TIMEZONE_NAME = tz_name(DEFAULT_TIMEZONE)
-
 
 def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
     """
@@ -155,7 +180,6 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
         if mask.any():
             out = out.where(~mask, out + pd.Timedelta(minutes=int(add_min)))
     return out
-
 
 def apply_logger_seasonal_civil_time(
     ts: pd.Series,
@@ -181,7 +205,6 @@ def apply_logger_seasonal_civil_time(
     # Then convert to America/Denver civil time
     return s_fixed.dt.tz_convert(tz_name(local_tz))
 
-
 # ---------------------------------------------------------------------------
 # Timestamp helpers
 # ---------------------------------------------------------------------------
@@ -197,7 +220,6 @@ def ts_to_iso_minute(ts_any: Any) -> str:
             ts_any = pd.Timestamp(ts_any)
     return ts_any.strftime("%Y-%m-%dT%H:%M")
 
-
 def ts_to_iso_date(ts_any: Any) -> str:
     if ts_any is None or pd.isna(ts_any):
         return ""
@@ -209,7 +231,6 @@ def ts_to_iso_date(ts_any: Any) -> str:
             ts_any = pd.Timestamp(ts_any)
     return ts_any.strftime("%Y-%m-%d")
 
-
 def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
     ts = pd.Timestamp(value)
     if pd.isna(ts):
@@ -217,12 +238,10 @@ def make_timestamp_or_raise(value: str, *, context: str = "") -> pd.Timestamp:
     assert isinstance(ts, pd.Timestamp)
     return ts
 
-
 def force_datetime64_ns(s: pd.Series) -> pd.Series:
     dt = pd.to_datetime(s, errors="coerce")
     dt_nonnull = dt.dropna()
     return cast(pd.Series, dt_nonnull.astype("datetime64[ns]"))
-
 
 def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
@@ -233,7 +252,6 @@ def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
     s = ts.astype("string").str.strip()
     return pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S", errors="coerce")
-
 
 def normalize_weather_timestamp_series(ts: pd.Series, tz: Any = DEFAULT_TIMEZONE) -> pd.Series:
     """
@@ -253,7 +271,6 @@ def normalize_weather_timestamp_series(ts: pd.Series, tz: Any = DEFAULT_TIMEZONE
 
     return s.dt.tz_localize(None)
 
-
 def make_timestamp_column_naive(df_in: pd.DataFrame, col: str = "timestamp") -> pd.DataFrame:
     """
     If df[col] is timezone-aware, convert to DEFAULT_TIMEZONE and drop tz info.
@@ -267,7 +284,6 @@ def make_timestamp_column_naive(df_in: pd.DataFrame, col: str = "timestamp") -> 
             pass
     return df_out
 
-
 def make_datetimeindex_naive(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     """
     If df.index is a tz-aware DatetimeIndex, convert to DEFAULT_TIMEZONE and drop tz info.
@@ -277,7 +293,6 @@ def make_datetimeindex_naive(df_in: pd.DataFrame, copy: bool = True) -> pd.DataF
         df.index = df.index.tz_convert(DEFAULT_TIMEZONE_NAME).tz_localize(None)
     return df
 
-
 # ---------------------------------------------------------------------------
 # Strip pairing assumptions (treated vs control)
 # ---------------------------------------------------------------------------
@@ -286,7 +301,6 @@ STRIP_PAIRS = [
     ("S1", "S2"),
     ("S3", "S4"),
 ]
-
 
 # ============================= Common helpers ============================= #
 
@@ -303,9 +317,8 @@ def convert_soil_t_to_fahrenheit(df_in: pd.DataFrame, copy: bool = True) -> pd.D
     logger.info(f"🌡 Converted {len(t_cols)} soil-temp columns from °C to °F")
     return df
 
-
 def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
-    mapping: Dict[str, str] = {}
+    mapping: dict[str, str] = {}
     prefix = logger_name[:2]
     loc = logger_name[2:]
 
@@ -325,10 +338,8 @@ def rename_logger_columns(df: pd.DataFrame, logger_name: str) -> pd.DataFrame:
 
     return df.rename(columns=mapping)
 
-
 def _clean_col_name(s: object) -> str:
     return str(s).lstrip("\ufeff").strip().strip('"').strip("'").strip()
-
 
 def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
     with datfile.open("r", newline="") as f:
@@ -352,7 +363,6 @@ def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
         na_values=["", "NA", "NAN"],
         engine="python",
     )
-
 
 def _candidate_logger_files(tag: str, year: int) -> list[Path]:
     """
@@ -380,7 +390,6 @@ def _candidate_logger_files(tag: str, year: int) -> list[Path]:
             files.append(p_late)
 
     return files
-
 
 def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
     files = _candidate_logger_files(tag, year)
@@ -456,9 +465,8 @@ def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
 
     return rename_logger_columns(df_all, tag)
 
-
 def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
-    frames: List[pd.DataFrame] = []
+    frames: list[pd.DataFrame] = []
     for strip in STRIPS:
         for loc in LOGGER_LOCATIONS:
             tag = f"{strip}{loc}"
@@ -475,7 +483,6 @@ def merge_all_loggers(year: int) -> Optional[pd.DataFrame]:
     merged = merged.loc[:, ~merged.columns.duplicated()]
     return merged.reset_index()
 
-
 def replace_bad_values(
     df_in: pd.DataFrame,
     threshold: float = DEFAULT_BAD_VALUE_THRESHOLD,
@@ -490,7 +497,6 @@ def replace_bad_values(
     logger.info(f"🧹 Replaced extreme placeholders with NaN (|x| ≥ {threshold:g})")
     return df
 
-
 def scale_vwc_to_percent(df_in: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
     df = df_in.copy() if copy else df_in
 
@@ -499,7 +505,6 @@ def scale_vwc_to_percent(df_in: pd.DataFrame, *, copy: bool = True) -> pd.DataFr
         df[col_name] = pd.to_numeric(df[col_name], errors="coerce") * 100.0
 
     return df
-
 
 def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     df = df_in.copy() if copy else df_in
@@ -519,7 +524,6 @@ def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataF
 
     logger.info("💧 Added SWC cylinder volumes (L & gallons) per sensor")
     return df
-
 
 def add_temperature_differences(
     df_in: pd.DataFrame,
@@ -549,7 +553,6 @@ def add_temperature_differences(
         else "🌡 No ΔT columns added (required T_*_raw_* columns missing)"
     )
     return df
-
 
 def add_swc_differences(
     df_in: pd.DataFrame,
@@ -590,10 +593,9 @@ def add_swc_differences(
     )
     return df
 
-
 # ============================= Growing-season summary ============================= #
 
-def unpack_gseason_period(period_code: str, period_meta: Any) -> Tuple[str, str, str]:
+def unpack_gseason_period(period_code: str, period_meta: Any) -> tuple[str, str, str]:
     if isinstance(period_meta, (tuple, list)) and len(period_meta) == 2:
         return period_code, str(period_meta[0]), str(period_meta[1])
 
@@ -609,7 +611,6 @@ def unpack_gseason_period(period_code: str, period_meta: Any) -> Tuple[str, str,
         f"('MM-DD','MM-DD') or {{'start':'MM-DD','end':'MM-DD','label':...}}; got {period_meta!r}"
     )
 
-
 def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
     if "timestamp" not in df_daily.columns:
         logger.warning(f"⚠️ write_gseason_summary({year}) skipped: no 'timestamp' column")
@@ -623,14 +624,14 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
         return
     daily_df["timestamp"] = daily_df["timestamp"].astype("datetime64[ns]")
 
-    value_cols: List[str] = [c for c in daily_df.columns if c != "timestamp"]
-    agg_map: Dict[str, str] = {c: ("sum" if c.startswith("precip") else "mean") for c in value_cols}
+    value_cols: list[str] = [c for c in daily_df.columns if c != "timestamp"]
+    agg_map: dict[str, str] = {c: ("sum" if c.startswith("precip") else "mean") for c in value_cols}
 
     daily_dir = Path(PARQUET_DIR) / "summary" / "daily"
     prev_daily_df: Optional[pd.DataFrame] = None
     prev_loaded_year: Optional[int] = None
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for period_code, meta in DEFAULT_GSEASON_PERIODS.items():
         period_label, mmdd_start, mmdd_end = unpack_gseason_period(period_code, meta)
@@ -646,7 +647,7 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
         end_day = make_timestamp_or_raise(f"{period_end_year}-{mmdd_end}", context=f"{period_code} end")
         end_ts = end_day + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
-        window_parts: List[pd.DataFrame] = []
+        window_parts: list[pd.DataFrame] = []
 
         if wraps_year:
             prev_path = daily_dir / f"{period_start_year}_daily.parquet"
@@ -689,7 +690,7 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
                 f"⚠️ No daily rows for gseason {period_code} in {year} "
                 f"[{start_ts.date()} → {end_ts.date()}]; filling NaN."
             )
-            stats: Dict[str, Any] = {c: math.nan for c in value_cols}
+            stats: dict[str, Any] = {c: math.nan for c in value_cols}
         else:
             stats_series = window[value_cols].agg(agg_map).round(3)
             stats = stats_series.to_dict()
@@ -716,7 +717,6 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
     out_df.to_parquet(out_path, index=False, compression="snappy")
     logger.info(f"✅ Summary gseason (DEFAULT periods): {out_path.name}")
 
-
 # ============================= Bulk-download helpers ============================= #
 
 def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
@@ -730,7 +730,7 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
 
     df = make_timestamp_column_naive(df, col="timestamp")
 
-    readme_lines: List[str] = [
+    readme_lines: list[str] = [
         "Biochar Fruita CSU Experiment – Logger 15-minute Data",
         f"Year: {year}",
         "",
@@ -789,7 +789,6 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
 
     logger.info(f"📦 Wrote logger download ZIP: {zip_path.name}")
 
-
 def write_weather_download_zip(year: int, df_15min: pd.DataFrame, download_url: str = "", builder_url: str = "") -> None:
     zip_path = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
@@ -805,7 +804,7 @@ def write_weather_download_zip(year: int, df_15min: pd.DataFrame, download_url: 
     csv_buf = StringIO()
     df.to_csv(csv_buf, index=False)
 
-    readme_lines: List[str] = [
+    readme_lines: list[str] = [
         f"Biochar Fruita CSU Experiment - 15-min Weather Data ({year})",
         "",
         "Source:",
@@ -826,7 +825,6 @@ def write_weather_download_zip(year: int, df_15min: pd.DataFrame, download_url: 
         zf.writestr(f"README_Weather_15min_{year}.txt", "\n".join(readme_lines))
 
     logger.info(f"📦 Wrote weather download ZIP: {zip_path.name}")
-
 
 # ============================= Aggregation (loggers) ============================= #
 
@@ -881,7 +879,6 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False, compression="snappy")
         logger.info(f"✅ Summary {freq} ratios: {fn_ratio}")
 
-
 # ============================= Weather (CoAgMet) ============================= #
 
 def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
@@ -910,10 +907,98 @@ def clean_weather_frame(dfw: pd.DataFrame) -> pd.DataFrame:
 
     return df_copy
 
+def validate_datfiles_for_year(year: int) -> None:
+    raw_year_dir = Path(DATA_RAW_DIR) / f"datfiles_{year}"
 
+    if not raw_year_dir.exists():
+        raise FileNotFoundError(f"Missing raw dat directory: {raw_year_dir}")
+
+    required = [
+        f"{strip}{loc}_Table1.dat"
+        for strip in STRIPS
+        for loc in LOGGER_LOCATIONS
+    ]
+
+    missing = [
+        filename
+        for filename in required
+        if not (raw_year_dir / filename).exists()
+    ]
+
+    if missing:
+        raise FileNotFoundError(
+            f"Missing required Table1 dat files for {year} in {raw_year_dir}:\n"
+            + "\n".join(f"  - {name}" for name in missing)
+        )
+
+    dat_count = len(list(raw_year_dir.glob("*.dat")))
+    logger.info(f"✅ Raw dat validation passed for {year}: {dat_count} .dat files found")
+
+def _read_backup_state() -> dict[str, Any]:
+    if not RAW_DATA_BACKUP_STATE.exists():
+        return {}
+
+    try:
+        return json.loads(RAW_DATA_BACKUP_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+def _write_backup_state(state: dict[str, Any]) -> None:
+    RAW_DATA_BACKUP_STATE.parent.mkdir(parents=True, exist_ok=True)
+    RAW_DATA_BACKUP_STATE.write_text(
+        json.dumps(state, indent=2),
+        encoding="utf-8",
+    )
+
+def maybe_backup_raw_data(force: bool = False) -> Path | None:
+    RAW_DATA_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+    state = _read_backup_state()
+    last_backup_date = state.get("last_backup_date")
+
+    if not force and last_backup_date:
+        try:
+            last_dt = datetime.fromisoformat(str(last_backup_date))
+            age_days = (datetime.now() - last_dt).days
+
+            if age_days < RAW_DATA_BACKUP_INTERVAL_DAYS:
+                logger.info(
+                    f"📦 Raw data backup current: last backup {age_days} days ago"
+                )
+                return None
+        except Exception:
+            pass
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_base = RAW_DATA_BACKUP_DIR / f"data_raw_{timestamp}"
+
+    zip_path = Path(
+        shutil.make_archive(
+            base_name=str(archive_base),
+            format="zip",
+            root_dir=Path(DATA_RAW_DIR).parent,
+            base_dir=Path(DATA_RAW_DIR).name,
+        )
+    )
+
+    size_mb = zip_path.stat().st_size / (1024 * 1024)
+
+    logger.info("📦 Raw data backup written:")
+    logger.info(f"    File: {zip_path}")
+    logger.info(f"    Size: {size_mb:.1f} MB")
+
+    _write_backup_state(
+        {
+            "last_backup_date": datetime.now().isoformat(timespec="seconds"),
+            "last_backup_file": str(zip_path),
+            "size_mb": round(size_mb, 1),
+        }
+    )
+
+    return zip_path
 # ============================= Orchestration ============================= #
 
-def generate_summaries(years: List[int]) -> None:
+def generate_summaries(years: list[int]) -> None:
     for year in years:
         logger.info(f"🌱 Starting ETL for {year}")
 
@@ -1034,15 +1119,19 @@ def generate_summaries(years: List[int]) -> None:
 
     logger.info("🎉 ETL complete.")
 
-
 def resolve_target_year(cli_year: Optional[int] = None) -> int:
+    """
+    Determine the year to process.
+
+    Priority:
+    1. Explicit CLI argument; eg 2024; run python etl.py --year 2024
+    2. Current calendar year. python etl.py
+
+    """
     if cli_year is not None:
         return int(cli_year)
-    try:
-        return int(max(YEARS))
-    except Exception:
-        return int(datetime.now().year)
 
+    return DEFAULT_ETL_YEAR
 
 def safe_series_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd.Series:
     """
@@ -1061,7 +1150,6 @@ def safe_series_ratio(num: pd.Series, denom: pd.Series, eps: float = 1e-3) -> pd
     ratio = num_f / denom_safe
     ratio = ratio.replace([POS_INF, NEG_INF], NAN)
     return ratio
-
 
 def calculate_ratios(df_in: pd.DataFrame) -> pd.DataFrame:
     """
@@ -1106,7 +1194,25 @@ def calculate_ratios(df_in: pd.DataFrame) -> pd.DataFrame:
 
     return ratio_df
 
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--year", type=int, default=None)
+    parser.add_argument("--all-years", action="store_true")
+    parser.add_argument("--no-backup-raw", action="store_true")
+    parser.add_argument("--force-backup-raw", action="store_true")
+    args = parser.parse_args()
+
+    os.makedirs(PARQUET_DIR, exist_ok=True)
+
+    years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
+
+    for year in years:
+        validate_datfiles_for_year(year)
+
+    if not args.no_backup_raw:
+        maybe_backup_raw_data(force=args.force_backup_raw)
+
+    generate_summaries(years)
 
 if __name__ == "__main__":
-    os.makedirs(PARQUET_DIR, exist_ok=True)
-    generate_summaries(YEARS)
+    main()

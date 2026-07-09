@@ -18,10 +18,8 @@ from collections import defaultdict
 
 PACKAGE_ROOT = Path("biochar_app")
 
-
 def get_py_files(root: Path):
     return list(root.rglob("*.py"))
-
 
 def collect_definitions(py_files):
     defs = defaultdict(list)
@@ -38,7 +36,6 @@ def collect_definitions(py_files):
                     defs[node.name].append(path)
 
     return defs
-
 
 def collect_references(py_files):
     refs = set()
@@ -58,7 +55,6 @@ def collect_references(py_files):
 
     return refs
 
-
 def main():
     py_files = get_py_files(PACKAGE_ROOT)
     defs = collect_definitions(py_files)
@@ -77,7 +73,6 @@ def main():
     for func_name, paths in sorted(unused):
         for p in paths:
             print(f"{func_name}  ->  {p}")
-
 
 if __name__ == "__main__":
     main()

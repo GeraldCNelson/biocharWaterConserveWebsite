@@ -15,7 +15,6 @@ from biochar_app.config.core import (
     STRIP_DESCRIPTIONS,
 )
 
-
 from biochar_app.config.descriptions import (
     PROJECT_README_TITLE,
     PROJECT_METHOD_NOTE,
@@ -786,7 +785,6 @@ def build_management_readme(
         ]
     )
 
-
 def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
     
@@ -895,7 +893,6 @@ def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
             build_nir_reference_note(),
         ]
     )
-
 
 def build_hay_variable_section(df: pd.DataFrame) -> str:
     cols = [str(c) for c in df.columns]
@@ -1377,7 +1374,6 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
             "",
         ]
     )
-
 
 def build_file_dataset_readme(
     dataset_key: str,

@@ -68,7 +68,6 @@ from pathlib import Path
 import pandas as pd
 from pandas import Series
 
-
 def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
     Parse TOA5 TIMESTAMP strings into pandas datetimes (timezone-naive).
@@ -76,7 +75,6 @@ def normalize_logger_timestamp_series(ts: Series) -> Series:
     """
     s = ts.astype("string").str.strip()
     return pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S", errors="coerce")
-
 
 def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
     """
@@ -106,7 +104,6 @@ def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
         na_values=["", "NA", "NAN"],
         engine="python",
     )
-
 
 def read_dat_timestamps(datfile: Path) -> pd.Series:
     """

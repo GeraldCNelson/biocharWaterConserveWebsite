@@ -18,7 +18,6 @@ from biochar_app.config.paths import (
     PARQUET_SUMMARY_WEATHER_MONTHLY_DIR,
 )
 
-
 def load_logger_data(year: int, granularity: Optional[str] = None) -> pd.DataFrame:
     """
     Canonical loader for logger summary parquet data.
@@ -114,7 +113,6 @@ def load_logger_data(year: int, granularity: Optional[str] = None) -> pd.DataFra
 
     return df.sort_values("timestamp").reset_index(drop=True)
 
-
 def _weather_base_dir(granularity: str) -> Path:
     gran = granularity.lower()
     mapping: dict[str, Path] = {
@@ -124,7 +122,6 @@ def _weather_base_dir(granularity: str) -> Path:
         "monthly": PARQUET_SUMMARY_WEATHER_MONTHLY_DIR,
     }
     return mapping.get(gran, Path(PARQUET_SUMMARY_DIR) / "weather" / gran)
-
 
 def _weather_parquet_candidates(year: int, granularity: str) -> list[Path]:
     base = _weather_base_dir(granularity)
@@ -137,7 +134,6 @@ def _weather_parquet_candidates(year: int, granularity: str) -> list[Path]:
         Path(PARQUET_DIR) / str(year) / gran / "weather" / f"{year}_{gran}.parquet",
         Path(PARQUET_DIR) / str(year) / gran / "weather" / f"weather_{year}_{gran}.parquet",
     ]
-
 
 def load_weather_data(year: int, granularity: Optional[str] = None) -> pd.DataFrame:
     """
@@ -374,7 +370,6 @@ def load_irrigation_data() -> pd.DataFrame:
     out.sort_values(["strip", "start_timestamp"], inplace=True)
     out.reset_index(drop=True, inplace=True)
     return out
-
 
 def prepare_irrigation_input(df: pd.DataFrame) -> pd.DataFrame:
     """

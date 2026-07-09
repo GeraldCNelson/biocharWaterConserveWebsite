@@ -176,7 +176,6 @@ def write_png(rows: list[dict[str, object]]) -> None:
             }
         )
 
-
     if not plot_rows:
         print("No GPS points available for PNG plot.")
         return
@@ -333,7 +332,6 @@ def write_png(rows: list[dict[str, object]]) -> None:
             se=se,
             logger_df=logger_df,
         )
-
 
         # Left-side logger spacing and distance from furrow start to top logger.
         if nw is not None and s1t is not None:
@@ -618,7 +616,6 @@ def add_distance_label(
         zorder=8,
         )
 
-
 def add_furrow_reference_lines(
         ax,
         nw: pd.Series | None,
@@ -742,7 +739,6 @@ def add_furrow_reference_lines(
                 zorder=8,
                 )
 
-
 def add_distance_tick(
         ax,
         edge_point: pd.Series,
@@ -834,7 +830,6 @@ def write_csv(rows: list[dict[str, object]]) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
-
 def write_geojson(rows: list[dict[str, object]]) -> None:
     features: list[dict[str, object]] = []
 
@@ -872,7 +867,6 @@ def write_geojson(rows: list[dict[str, object]]) -> None:
         encoding="utf-8",
     )
 
-
 def main() -> int:
     photos = find_photos()
 
@@ -900,7 +894,6 @@ def main() -> int:
     print(f"Wrote PNG    : {OUT_PNG}")
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -41,7 +41,7 @@ The canonical output remains:
 from __future__ import annotations
 
 import logging
-from typing import Dict, Sequence
+from typing import Sequence
 from pathlib import Path
 import pandas as pd
 
@@ -99,14 +99,11 @@ SUPPLEMENTAL_RAW_BIO_CSVS = [
 FIXED_BEGIN_DEPTH_IN = 0
 FIXED_END_DEPTH_IN = 8
 
-
-
-def _apply_rename_map(df: pd.DataFrame, rename_map: Dict[str, str]) -> pd.DataFrame:
+def _apply_rename_map(df: pd.DataFrame, rename_map: dict[str, str]) -> pd.DataFrame:
     out = df.copy()
     applicable = {src: dst for src, dst in rename_map.items() if src in out.columns}
     out = out.rename(columns=applicable)
     return out
-
 
 def _print_date_counts(csv_path, label: str) -> None:
     merged_df = pd.read_csv(csv_path)
@@ -125,7 +122,6 @@ def _print_date_counts(csv_path, label: str) -> None:
     print(f"\nCounts by 'date_rec' {label}:")
     for date_value, count in date_counts.items():
         print(f"  {date_value}: {count}")
-
 
 def _merge_supplemental_raw_files_if_present(
     supplemental_csvs: Sequence,
@@ -168,7 +164,6 @@ def _merge_supplemental_raw_files_if_present(
 
     print(f"\n✅ Updated canonical soil bio clean CSV with supplemental rows: {OUT_CLEAN_CSV}")
 
-
 def _resolve_master_input() -> Path:
     """Return the preferred compiled master file path, with CSV fallback."""
     if IN_MASTER_FILE.exists():
@@ -186,7 +181,6 @@ def _resolve_master_input() -> Path:
         f"  {IN_MASTER_FILE}\n"
         f"  {FALLBACK_IN_MASTER_CSV}"
     )
-
 
 def _read_compiled_master(path: Path) -> pd.DataFrame:
     """Read Ward's compiled PLFA file from CSV or Excel."""
@@ -206,7 +200,6 @@ def _read_compiled_master(path: Path) -> pd.DataFrame:
         na_filter=False,
         engine="python",
     )
-
 
 def update_ward_master_soilbio() -> None:
     input_master = _resolve_master_input()
@@ -241,7 +234,6 @@ def update_ward_master_soilbio() -> None:
         df_clean["strip"].fillna("").astype(str).str.strip().ne("")
         & df_clean["date_rec"].fillna("").astype(str).str.strip().ne("")
         ].copy()
-
 
     # Dataset-specific canonical names
     df_clean = _apply_rename_map(df_clean, RAW_TO_CANONICAL_SOILBIO)
@@ -288,10 +280,8 @@ def update_ward_master_soilbio() -> None:
     # Then merge in known supplemental files if present.
     _merge_supplemental_raw_files_if_present(SUPPLEMENTAL_RAW_BIO_CSVS)
 
-
 # Backward-compatible alias in case any old imports still use the prior function name.
 clean_ward_master_soilbio = update_ward_master_soilbio
-
 
 if __name__ == "__main__":
     update_ward_master_soilbio()

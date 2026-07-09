@@ -29,7 +29,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from biochar_app.config.core import GRANULARITY_NAME_MAPPING
 
-
 from biochar_app.config.paths import (
     PARQUET_DIR,
     PARQUET_SUMMARY_DIR,
@@ -72,15 +71,11 @@ WORKBOOK_TOKENS: dict[str, str] = {
     "biomass": "BIOMASS",
 }
 
-
 def _safe_int(v: Any) -> Optional[int]:
     try:
         return int(v)
     except Exception:
         return None
-
-
-
 
 def _list_years_on_disk() -> list[int]:
     years: set[int] = set()
@@ -103,7 +98,6 @@ def _list_years_on_disk() -> list[int]:
 
     return sorted(years)
 
-
 def _list_resolutions_on_disk(year: int) -> list[str]:
     found: list[str] = []
 
@@ -113,14 +107,11 @@ def _list_resolutions_on_disk(year: int) -> list[str]:
 
     return [r for r in ALLOWED_RESOLUTIONS if r in found]
 
-
 def _summary_logger_parquet_path(year: int, resolution: str) -> Path:
     return PARQUET_SUMMARY_DIR / resolution / f"{year}_{resolution}.parquet"
 
-
 def _summary_logger_ratios_parquet_path(year: int, resolution: str) -> Path:
     return PARQUET_SUMMARY_DIR / resolution / f"{year}_{resolution}_ratios.parquet"
-
 
 def _summary_weather_base_dir(resolution: str) -> Path:
     mapping: dict[str, Path] = {
@@ -131,7 +122,6 @@ def _summary_weather_base_dir(resolution: str) -> Path:
     }
     return mapping.get(resolution, PARQUET_SUMMARY_DIR / "weather" / resolution)
 
-
 def _summary_weather_parquet_candidates(year: int, resolution: str) -> list[Path]:
     base = _summary_weather_base_dir(resolution)
     return [
@@ -140,13 +130,11 @@ def _summary_weather_parquet_candidates(year: int, resolution: str) -> list[Path
         base / f"weather_{year}_{resolution}.parquet",
     ]
 
-
 def _logger_parquet_path(year: int, resolution: str) -> Path:
     preferred = _summary_logger_parquet_path(year, resolution)
     if preferred.exists():
         return preferred
     return PARQUET_DIR / str(year) / resolution / f"{year}_{resolution}.parquet"
-
 
 def _logger_ratios_parquet_path(year: int, resolution: str) -> Optional[Path]:
     preferred = _summary_logger_ratios_parquet_path(year, resolution)
@@ -158,7 +146,6 @@ def _logger_ratios_parquet_path(year: int, resolution: str) -> Optional[Path]:
         return old
 
     return None
-
 
 def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
     for c in _summary_weather_parquet_candidates(year, resolution):
@@ -177,7 +164,6 @@ def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
 
     return None
 
-
 def _read_parquet_df(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Parquet not found: {path}")
@@ -186,7 +172,6 @@ def _read_parquet_df(path: Path) -> pd.DataFrame:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read parquet {path}: {e}")
 
-
 def _read_workbook_sheet_df(sheet_name: str) -> pd.DataFrame:
     if not IRRIGATION_WORKBOOK_PATH.exists():
         raise HTTPException(status_code=404, detail=f"Workbook not found: {IRRIGATION_WORKBOOK_PATH}")
@@ -194,7 +179,6 @@ def _read_workbook_sheet_df(sheet_name: str) -> pd.DataFrame:
         return pd.read_excel(IRRIGATION_WORKBOOK_PATH, sheet_name=sheet_name, engine="openpyxl")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read sheet {sheet_name}: {e}")
-
 
 def _load_logger_download_df(year: int, resolution: str) -> pd.DataFrame:
     try:
@@ -208,7 +192,6 @@ def _load_logger_download_df(year: int, resolution: str) -> pd.DataFrame:
             status_code=500,
             detail=f"Failed to load logger data for year={year}, resolution={resolution}: {e}",
         )
-
 
 def _load_weather_download_df(year: int, resolution: str) -> pd.DataFrame:
     try:
@@ -226,7 +209,6 @@ def _load_weather_download_df(year: int, resolution: str) -> pd.DataFrame:
 
     return df
 
-
 def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -234,7 +216,6 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
             zf.writestr(name, content)
     buf.seek(0)
     return buf.read()
-
 
 @bulk_router.get("/bulk_download_manifest")
 def bulk_download_manifest() -> dict[str, Any]:
@@ -346,7 +327,6 @@ def bulk_download_manifest() -> dict[str, Any]:
         "years": manifest_years,
         "granularities": manifest_granularities,
     }
-
 
 @bulk_router.post("/bulk_download")
 async def bulk_download(payload: dict[str, Any]):

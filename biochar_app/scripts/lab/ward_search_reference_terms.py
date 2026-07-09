@@ -50,8 +50,7 @@ import zipfile
 from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
-
+from typing import Iterable, Sequence
 
 # ---------------------------------------------------------------------
 # Defaults
@@ -109,7 +108,7 @@ SCHEMA_KEYS_TO_CHECK = [
 
 # For each schema key, give a few search terms from most specific to more general.
 # The first term is treated as the primary term for reporting.
-SCHEMA_SEARCH_TERMS: Dict[str, List[str]] = {
+SCHEMA_SEARCH_TERMS: dict[str, list[str]] = {
     "crude_protein_pct_db": [
         "Crude Protein",
         "crude protein",
@@ -215,7 +214,6 @@ SCHEMA_SEARCH_TERMS: Dict[str, List[str]] = {
     ],
 }
 
-
 # ---------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------
@@ -226,9 +224,8 @@ class MatchRecord:
     line_no: int
     term: str
     line_text: str
-    context_before: List[str]
-    context_after: List[str]
-
+    context_before: list[str]
+    context_after: list[str]
 
 # ---------------------------------------------------------------------
 # CLI
@@ -252,7 +249,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 # ---------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------
@@ -264,19 +260,16 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-
 def build_pattern(term: str, case_sensitive: bool, whole_word: bool) -> re.Pattern[str]:
     escaped = re.escape(term)
     pattern = rf"\b{escaped}\b" if whole_word else escaped
     flags = 0 if case_sensitive else re.IGNORECASE
     return re.compile(pattern, flags)
 
-
 def should_skip(path: Path, include_hidden: bool) -> bool:
     if include_hidden:
         return False
     return any(part.startswith(".") for part in path.parts)
-
 
 def iter_files(root: Path, extensions: Sequence[str], include_hidden: bool) -> Iterable[Path]:
     extset = {e.lower() for e in extensions}
@@ -288,7 +281,6 @@ def iter_files(root: Path, extensions: Sequence[str], include_hidden: bool) -> I
             continue
         if p.suffix.lower() in extset:
             yield p
-
 
 # ---------------------------------------------------------------------
 # DOCX handling
@@ -310,7 +302,6 @@ def extract_docx_text(path: Path) -> str | None:
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
 
-
 def read_file(path: Path) -> str | None:
     if path.suffix.lower() == ".docx":
         return extract_docx_text(path)
@@ -319,7 +310,6 @@ def read_file(path: Path) -> str | None:
         return path.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return None
-
 
 # ---------------------------------------------------------------------
 # Search logic
@@ -332,7 +322,7 @@ def search_file(
     whole_word: bool,
     context: int,
     max_matches: int,
-) -> List[MatchRecord]:
+) -> list[MatchRecord]:
     text = read_file(path)
     if not text:
         return []
@@ -342,7 +332,7 @@ def search_file(
     normalized_terms = {term: normalize_text(term) for term in terms}
     patterns = {term: build_pattern(term, case_sensitive, whole_word) for term in terms}
 
-    results: List[MatchRecord] = []
+    results: list[MatchRecord] = []
 
     for i, line in enumerate(lines):
         for term, pattern in patterns.items():
@@ -374,18 +364,16 @@ def search_file(
 
     return results
 
-
-def filename_matches(path: Path, terms: Sequence[str], case_sensitive: bool) -> List[str]:
+def filename_matches(path: Path, terms: Sequence[str], case_sensitive: bool) -> list[str]:
     name = str(path)
     haystack = name if case_sensitive else name.lower()
 
-    hits: List[str] = []
+    hits: list[str] = []
     for term in terms:
         needle = term if case_sensitive else term.lower()
         if needle in haystack:
             hits.append(term)
     return hits
-
 
 def print_match(m: MatchRecord) -> None:
     print(f"\n{m.file_path}:{m.line_no}  [term: {m.term}]")
@@ -394,7 +382,6 @@ def print_match(m: MatchRecord) -> None:
     print(f"--> {m.line_text}")
     for line in m.context_after:
         print(f"    {line}")
-
 
 # ---------------------------------------------------------------------
 # Schema audit
@@ -407,12 +394,12 @@ def search_schema_key_in_sources(
     whole_word: bool,
     context: int,
     max_matches_per_file: int,
-) -> Dict[str, List[MatchRecord]]:
+) -> dict[str, list[MatchRecord]]:
     """
     Returns dict term -> matches for that schema key.
     """
     terms = SCHEMA_SEARCH_TERMS.get(schema_key, [schema_key])
-    out: Dict[str, List[MatchRecord]] = {term: [] for term in terms}
+    out: dict[str, list[MatchRecord]] = {term: [] for term in terms}
 
     for path in source_files:
         file_matches = search_file(
@@ -428,7 +415,6 @@ def search_schema_key_in_sources(
 
     return out
 
-
 def summarize_schema_audit(
     source_files: Sequence[Path],
     case_sensitive: bool,
@@ -440,9 +426,9 @@ def summarize_schema_audit(
     print(f"Schema keys checked: {len(SCHEMA_KEYS_TO_CHECK)}")
     print(f"Source files used : {len(source_files)}")
 
-    found_primary: List[str] = []
-    found_fallback_only: List[str] = []
-    missing_all: List[str] = []
+    found_primary: list[str] = []
+    found_fallback_only: list[str] = []
+    missing_all: list[str] = []
 
     for schema_key in SCHEMA_KEYS_TO_CHECK:
         term_hits = search_schema_key_in_sources(
@@ -497,7 +483,6 @@ def summarize_schema_audit(
             print(f"  - {key}")
 
     return len(missing_all)
-
 
 # ---------------------------------------------------------------------
 # Main
@@ -569,7 +554,6 @@ def main() -> int:
     if args.schema_audit and missing_count > 0:
         return 1
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

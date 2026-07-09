@@ -4,7 +4,6 @@ from typing import Any, Optional, cast
 
 import pandas as pd
 
-
 def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
     """
     Convert a scalar-like value to pd.Timestamp.
@@ -24,7 +23,6 @@ def coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
 
     return pd.Timestamp(ts)
 
-
 def coerce_optional_float(value: object) -> Optional[float]:
     """
     Convert a scalar-like value to float.
@@ -38,7 +36,6 @@ def coerce_optional_float(value: object) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
-
 
 def coerce_optional_int(value: object) -> Optional[int]:
     """

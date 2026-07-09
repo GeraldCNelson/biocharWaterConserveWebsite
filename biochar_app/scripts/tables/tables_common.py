@@ -14,13 +14,12 @@ This keeps table "shape" consistent across tabs and prevents drift.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 from biochar_app.scripts.lab.reference_helpers import get_reference_for_varspec
 from biochar_app.scripts.lab.serializers import serialize_reference_bundle
 
 # A build function that returns the standard set payload dict
-SetPayloadBuilder = Callable[[], Dict[str, Any]]
-
+SetPayloadBuilder = Callable[[], dict[str, Any]]
 
 def _dedupe_note(group_note: str, top_note: str) -> str:
     """
@@ -34,16 +33,15 @@ def _dedupe_note(group_note: str, top_note: str) -> str:
         return ""
     return gn
 
-
 def make_set(
     *,
     key: str,
     label: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     top_note: str = "",
     group_note: str = "",
     display_label: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Standardize a single set object.
 
@@ -52,7 +50,7 @@ def make_set(
     - Adds note/notes only if group_note is non-empty and differs from top_note
     - Merges in payload last (payload wins if there’s overlap, but avoid overlap)
     """
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "key": key,
         "label": label,
     }
@@ -68,15 +66,14 @@ def make_set(
     out.update(payload)
     return out
 
-
 def build_grouped_tab_payload(
     *,
     title: str,
     top_note: str,
-    groups: Sequence[Dict[str, Any]],
-    build_payload_for_group: Callable[[Dict[str, Any]], Dict[str, Any]],
+    groups: Sequence[dict[str, Any]],
+    build_payload_for_group: Callable[[dict[str, Any]], dict[str, Any]],
     include_display_labels: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build a tab payload with a shared top-level note and grouped sets.
 
@@ -92,7 +89,7 @@ def build_grouped_tab_payload(
     Returns:
       {"title": ..., "note": ..., "sets": [...]}
     """
-    sets: List[Dict[str, Any]] = []
+    sets: list[dict[str, Any]] = []
 
     for i, grp in enumerate(groups, start=1):
         payload = build_payload_for_group(grp)
@@ -116,8 +113,7 @@ def build_grouped_tab_payload(
         "sets": sets,
     }
 
-
-def build_variable_meta(var_spec: Any) -> Dict[str, Any]:
+def build_variable_meta(var_spec: Any) -> dict[str, Any]:
     """
     Build a standard variable metadata payload, including optional Ward reference info.
 

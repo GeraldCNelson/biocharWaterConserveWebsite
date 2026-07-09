@@ -14,11 +14,9 @@ from __future__ import annotations
 import pandas as pd
 from biochar_app.config.paths import PARQUET_SUMMARY_15MIN_DIR
 
-
 START_DATE = pd.Timestamp("2023-10-10")
 MAX_GAP = pd.Timedelta(hours=2)
 BATT_THRESHOLD_V = 11.5   # ← updated threshold
-
 
 def _load_year(path) -> pd.DataFrame | None:
     df = pd.read_parquet(path)
@@ -41,10 +39,8 @@ def _load_year(path) -> pd.DataFrame | None:
     df = df.dropna(subset=["timestamp"])
     return df
 
-
 def _battery_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if "batt" in c.lower()]
-
 
 def _continuity(ts: pd.Series) -> tuple[bool, pd.Timedelta | None]:
     if len(ts) < 2:
@@ -60,7 +56,6 @@ def _continuity(ts: pd.Series) -> tuple[bool, pd.Timedelta | None]:
 
     max_gap = max_gap_obj
     return bool(max_gap <= MAX_GAP), max_gap
-
 
 def main() -> int:
     if not PARQUET_SUMMARY_15MIN_DIR.exists():
@@ -165,7 +160,6 @@ def main() -> int:
         print(bad.sort_values(["year", "battery_column"]).to_string(index=False))
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -18,8 +18,6 @@ from pathlib import Path
 
 from biochar_app.config.core import YEARS
 from biochar_app.config.paths import (
-    HOLDING_CAPACITY_DIR,
-    IRRIGATION_ANALYSIS_DIR,
     IRRIGATION_DIAGNOSTICS_DIR,
     IRRIGATION_FIGURES_DIR,
 )

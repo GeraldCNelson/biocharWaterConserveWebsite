@@ -7,6 +7,29 @@ plots, downloads, README files, labels, and documentation.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
+
+class SensorDepthSpec(TypedDict):
+    value: float
+    unit: str
+
+SensorDepthValues = dict[str, dict[str, SensorDepthSpec]]
+
+SENSOR_DEPTH_VALUES: SensorDepthValues = {
+    "1": {
+        "us": {"value": 6.0, "unit": "in"},
+        "metric": {"value": 15.0, "unit": "cm"},
+    },
+    "2": {
+        "us": {"value": 12.0, "unit": "in"},
+        "metric": {"value": 30.0, "unit": "cm"},
+    },
+    "3": {
+        "us": {"value": 18.0, "unit": "in"},
+        "metric": {"value": 45.0, "unit": "cm"},
+    },
+}
 # ---------------------------------------------------------------------
 # Experimental units
 # ---------------------------------------------------------------------
@@ -41,13 +64,7 @@ DATALOGGER_NAMES = [
     "S3T", "S3B", "S3M",
     "S4T", "S4M", "S4B",
 ]
-LOGGER_LOCATIONS = ["T", "M", "B"]
 
-LOGGER_LOCATION_MAPPING = {
-    "T": "Top",
-    "M": "Middle",
-    "B": "Bottom",
-}
 
 VARIABLES = ["VWC", "EC", "T", "SWC"]
 
@@ -55,18 +72,30 @@ VARIABLES = ["VWC", "EC", "T", "SWC"]
 # Sensor depths
 # ---------------------------------------------------------------------
 
-SENSOR_DEPTH_CODES = ["1", "2", "3"]
+SENSOR_DEPTH_CODES: tuple[str, ...] = (
+    tuple(SENSOR_DEPTH_VALUES.keys())
+)
 
 SENSOR_DEPTH_LABELS = {
-    "1": {"us": "6 in", "metric": "15 cm"},
-    "2": {"us": "12 in", "metric": "30 cm"},
-    "3": {"us": "18 in", "metric": "45 cm"},
+    depth_code: {
+        system: f"{spec['value']:g} {spec['unit']}"
+        for system, spec in systems.items()
+    }
+    for depth_code, systems in SENSOR_DEPTH_VALUES.items()
+
 }
 
-SENSOR_DEPTH_VALUES = {
-    "1": {"us": 6.0, "metric": 15.0},
-    "2": {"us": 12.0, "metric": 30.0},
-    "3": {"us": 18.0, "metric": 45.0},
+SENSOR_DEPTH_INDEX_TO_INCHES: dict[str, int] = {
+    depth_code: int(systems["us"]["value"])
+    for depth_code, systems in SENSOR_DEPTH_VALUES.items()
+}
+
+LOGGER_LOCATIONS = ["T", "M", "B"]
+
+LOGGER_LOCATION_MAPPING = {
+    "T": "Top",
+    "M": "Middle",
+    "B": "Bottom",
 }
 
 LOGGER_GEOMETRY = {

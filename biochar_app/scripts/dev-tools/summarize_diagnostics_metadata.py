@@ -14,11 +14,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DIAGNOSTICS_DIR = PROJECT_ROOT / "biochar_app" / "diagnostics"
-OUTPUT_PATH = DIAGNOSTICS_DIR / "diagnostics_python_metadata_summary.txt"
-
+DIAGNOSTICS_SOURCE_DIR = PROJECT_ROOT / "biochar_app" / "diagnostics"
+OUTPUT_PATH = DIAGNOSTICS_SOURCE_DIR / "diagnostics_python_metadata_summary.txt"
 
 def get_module_docstring(path: Path) -> str:
     try:
@@ -27,7 +25,6 @@ def get_module_docstring(path: Path) -> str:
         return ast.get_docstring(module) or ""
     except Exception as exc:
         return f"[Could not parse docstring: {exc}]"
-
 
 def get_imports(path: Path) -> list[str]:
     imports: list[str] = []
@@ -47,7 +44,6 @@ def get_imports(path: Path) -> list[str]:
 
     return sorted(set(imports))
 
-
 def get_top_level_functions(path: Path) -> list[str]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -59,7 +55,6 @@ def get_top_level_functions(path: Path) -> list[str]:
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
     ]
-
 
 def get_constants(path: Path) -> list[str]:
     try:
@@ -80,7 +75,6 @@ def get_constants(path: Path) -> list[str]:
                 constants.append(target.id)
 
     return constants
-
 
 def find_keywords(text: str) -> list[str]:
     keywords = [
@@ -110,7 +104,6 @@ def find_keywords(text: str) -> list[str]:
             found.append(keyword)
 
     return found
-
 
 def summarize_file(path: Path) -> str:
     rel = path.relative_to(PROJECT_ROOT)
@@ -149,17 +142,16 @@ def summarize_file(path: Path) -> str:
 
     return "\n".join(lines)
 
-
 def main() -> None:
-    if not DIAGNOSTICS_DIR.exists():
-        raise FileNotFoundError(f"Diagnostics directory not found: {DIAGNOSTICS_DIR}")
+    if not DIAGNOSTICS_SOURCE_DIR.exists():
+        raise FileNotFoundError(f"Diagnostics directory not found: {DIAGNOSTICS_SOURCE_DIR}")
 
-    py_files = sorted(DIAGNOSTICS_DIR.rglob("*.py"))
+    py_files = sorted(DIAGNOSTICS_SOURCE_DIR.rglob("*.py"))
 
     output_lines: list[str] = []
     output_lines.append("Diagnostics Python Metadata Summary")
     output_lines.append("=" * 88)
-    output_lines.append(f"Diagnostics directory: {DIAGNOSTICS_DIR}")
+    output_lines.append(f"Diagnostics directory: {DIAGNOSTICS_SOURCE_DIR}")
     output_lines.append(f"Python files found: {len(py_files)}")
     output_lines.append("")
 
@@ -170,7 +162,6 @@ def main() -> None:
 
     print(f"Wrote diagnostics metadata summary:")
     print(OUTPUT_PATH)
-
 
 if __name__ == "__main__":
     main()

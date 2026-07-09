@@ -8,7 +8,6 @@ Crop excess white space from an existing PNG and save as WebP.
 from pathlib import Path
 from PIL import Image, ImageChops
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PATH_TO_IMAGES = PROJECT_ROOT / "static" / "images"
 
@@ -17,7 +16,6 @@ WEBP_OUTPUT_NAME = "biocharExperimentalDesign.webp"
 
 png_input = PATH_TO_IMAGES / PNG_INPUT_NAME
 webp_output = PATH_TO_IMAGES / WEBP_OUTPUT_NAME
-
 
 def crop_white_border(img: Image.Image, padding: int = 20) -> Image.Image:
     img = img.convert("RGB")
@@ -38,7 +36,6 @@ def crop_white_border(img: Image.Image, padding: int = 20) -> Image.Image:
 
     return img.crop((left, upper, right, lower))
 
-
 def main() -> None:
     if not png_input.exists():
         raise FileNotFoundError(f"PNG file not found: {png_input}")
@@ -49,7 +46,6 @@ def main() -> None:
 
     print(f"Source PNG : {png_input}")
     print(f"Saved WebP : {webp_output}")
-
 
 if __name__ == "__main__":
     main()

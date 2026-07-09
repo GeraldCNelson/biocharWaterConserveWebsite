@@ -11,7 +11,6 @@ import pandas as pd
 
 from biochar_app.scripts.data_loading import load_irrigation_data
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PARQUET_DIR = PROJECT_ROOT / "data-processed" / "parquet"
 OUTPUT_DIR = PROJECT_ROOT / "data-processed" / "irrigation-analysis"
@@ -24,7 +23,6 @@ DEPTHS = [1, 2, 3]
 WINDOW_HOURS_BEFORE = 36
 WINDOW_HOURS_AFTER = 72
 MIN_POSITIVE_JUMP_PCT = 2.0
-
 
 def load_logger_year(year: int) -> pd.DataFrame:
     path = PARQUET_DIR / str(year) / f"{year}_raw_logger.parquet"
@@ -42,7 +40,6 @@ def load_logger_year(year: int) -> pd.DataFrame:
     df = df.sort_values("timestamp").set_index("timestamp")
 
     return df
-
 
 def first_positive_jump(
     series: pd.Series,
@@ -95,7 +92,6 @@ def first_positive_jump(
         "max_jump_value": max_jump_value,
         "baseline_vwc_at_start": baseline_vwc_at_start,
     }
-
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -229,7 +225,6 @@ def main() -> None:
     )
 
     print(summary.to_string(index=False))
-
 
 if __name__ == "__main__":
     main()

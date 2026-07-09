@@ -47,7 +47,7 @@ from __future__ import annotations
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 import pandas as pd
 
@@ -68,11 +68,10 @@ from biochar_app.scripts.tables.table_metadata_helpers import (
 # -----------------------------------------------------------------------------
 SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1-4 (0-12 in). Columns: sampling events. Values shown are strip means."
 
-
 # -----------------------------------------------------------------------------
 # Raw Ward biological column aliases -> cleaned machine-readable columns
 # -----------------------------------------------------------------------------
-CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
+CLEAN_TO_RAW_ALIASES: dict[str, Sequence[str]] = {
     "begin_depth_in": (
         "Begin Depth",
     ),
@@ -234,11 +233,10 @@ CLEAN_TO_RAW_ALIASES: Dict[str, Sequence[str]] = {
     ),
 }
 
-
 # -----------------------------------------------------------------------------
 # Soil Bio variable groups
 # -----------------------------------------------------------------------------
-SOILBIO_VARIABLE_GROUPS: List[Dict[str, Any]] = [
+SOILBIO_VARIABLE_GROUPS: list[dict[str, Any]] = [
     {
         "group_key": "soilbio_micro_biomass",
         "group_label": "Microbial Biomass & Community",
@@ -471,7 +469,6 @@ def _normalize_strip(value: Any) -> str:
 
     return ""
 
-
 def _coerce_numeric(value: Any) -> Optional[float]:
     """
     Convert Ward-style numeric strings to float.
@@ -502,7 +499,6 @@ def _coerce_numeric(value: Any) -> Optional[float]:
     except ValueError:
         return None
 
-
 def _parse_date_iso(value: Any) -> str:
     if value is None:
         return ""
@@ -510,7 +506,6 @@ def _parse_date_iso(value: Any) -> str:
     if pd.isna(ts):
         return ""
     return ts.strftime("%Y-%m-%d")
-
 
 def _normalize_raw_header(header: Any) -> str:
     """
@@ -522,22 +517,20 @@ def _normalize_raw_header(header: Any) -> str:
     text = str(header).strip().lower()
     return re.sub(r"[^a-z0-9]+", "", text)
 
-
-def _build_raw_header_lookup(columns: Iterable[Any]) -> Dict[str, str]:
+def _build_raw_header_lookup(columns: Iterable[Any]) -> dict[str, str]:
     """
     Build normalized_header -> actual_header lookup.
     If duplicates normalize to the same key, the first one wins.
     """
-    lookup: Dict[str, str] = {}
+    lookup: dict[str, str] = {}
     for col in columns:
         norm = _normalize_raw_header(col)
         if norm and norm not in lookup:
             lookup[norm] = str(col)
     return lookup
 
-
 def _find_actual_raw_col(
-    raw_lookup: Dict[str, str],
+    raw_lookup: dict[str, str],
     aliases: Sequence[str],
 ) -> Optional[str]:
     """
@@ -579,10 +572,9 @@ def _find_actual_raw_col(
 
     return None
 
-
 def _first_matching_raw_value(
     row: pd.Series,
-    raw_lookup: Dict[str, str],
+    raw_lookup: dict[str, str],
     aliases: Sequence[str],
 ) -> Any:
     """
@@ -592,7 +584,6 @@ def _first_matching_raw_value(
     if actual_col is None:
         return None
     return row.get(actual_col)
-
 
 def _backfill_blank_strips(clean_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -617,7 +608,6 @@ def _backfill_blank_strips(clean_df: pd.DataFrame) -> pd.DataFrame:
 
     out["strip"] = out["strip"].map(_normalize_strip)
     return out
-
 
 def _infer_supplemental_raw_path(clean_csv: Path) -> Optional[Path]:
     """
@@ -651,7 +641,6 @@ def _infer_supplemental_raw_path(clean_csv: Path) -> Optional[Path]:
 
     return None
 
-
 def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str]) -> pd.DataFrame:
     """
     Convert a raw Ward Biological_*.csv file into the cleaned machine-readable schema.
@@ -659,7 +648,7 @@ def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str])
     raw_df = pd.read_csv(raw_csv)
     raw_lookup = _build_raw_header_lookup(raw_df.columns)
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for _, row in raw_df.iterrows():
         strip_value = ""
@@ -671,7 +660,7 @@ def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str])
         date_rec = _parse_date_iso(row.get("Date Received"))
         date_rept = _parse_date_iso(row.get("Date Reported"))
 
-        record: Dict[str, Any] = {
+        record: dict[str, Any] = {
             "strip": strip_value,
             "date_rec": date_rec,
             "date_rept": date_rept,
@@ -702,7 +691,6 @@ def _convert_raw_bio_to_clean_shape(raw_csv: Path, clean_columns: Iterable[str])
         out["strip"] = out["strip"].map(_normalize_strip)
 
     return out
-
 
 def _prepare_soilbio_csv(
     clean_csv: Path,
@@ -756,7 +744,6 @@ def _prepare_soilbio_csv(
     merged_df.to_csv(output_csv, index=False)
     return output_csv
 
-
 # -----------------------------------------------------------------------------
 # Public builder
 # -----------------------------------------------------------------------------
@@ -764,7 +751,7 @@ def build_soilbio_table(
     clean_csv: Path,
     min_year: int = 2023,
     supplemental_raw_csv: Optional[Path] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build the soil biology tab payload.
     """
@@ -776,7 +763,7 @@ def build_soilbio_table(
             supplemental_raw_csv=supplemental_raw_csv,
         )
 
-        def _builder(grp: Dict[str, Any]) -> Dict[str, Any]:
+        def _builder(grp: dict[str, Any]) -> dict[str, Any]:
             return build_soil_table_payload(
                 clean_csv=prepared_csv,
                 variables=grp["variables"],

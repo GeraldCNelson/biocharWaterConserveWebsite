@@ -72,11 +72,9 @@ profile_area_sqft = PROFILE_AREA_SQFT
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class PlateauConfig:
@@ -87,13 +85,11 @@ class PlateauConfig:
     plateau_summary_window_points: int = 4
     fallback_hours_after_peak: float = 4.0
 
-
 @dataclass(frozen=True)
 class EventSearchConfig:
     baseline_lookback_hours: float = 2.0
     peak_search_hours_after_start: float = 24.0
     min_peak_increase: float = 0.5
-
 
 @dataclass(frozen=True)
 class TargetConfig:
@@ -101,11 +97,9 @@ class TargetConfig:
     min_events: int = 3
     upper_quantile_cap: float = 0.95
 
-
 # ---------------------------------------------------------------------
 # Typed structures
 # ---------------------------------------------------------------------
-
 
 class SensorMeta(TypedDict):
     variable: Optional[str]
@@ -114,11 +108,9 @@ class SensorMeta(TypedDict):
     logger_position: Optional[str]
     is_valid_vwc_sensor: bool
 
-
 # ---------------------------------------------------------------------
 # Sensor helpers
 # ---------------------------------------------------------------------
-
 
 _VWC_SENSOR_RE = re.compile(
     r"^(?P<variable>VWC)_(?P<depth_index>[123])_raw_(?P<strip>S[1-4])_(?P<logger_position>[TMB])$"
@@ -132,7 +124,6 @@ def build_bottom_control_sensor_map() -> dict[str, str]:
         "S4": "VWC_3_raw_S4_B",
     }
 
-
 def build_bottom_logger_profile_map() -> dict[str, list[str]]:
     return {
         "S1": ["VWC_1_raw_S1_B", "VWC_2_raw_S1_B", "VWC_3_raw_S1_B"],
@@ -140,7 +131,6 @@ def build_bottom_logger_profile_map() -> dict[str, list[str]]:
         "S3": ["VWC_1_raw_S3_B", "VWC_2_raw_S3_B", "VWC_3_raw_S3_B"],
         "S4": ["VWC_1_raw_S4_B", "VWC_2_raw_S4_B", "VWC_3_raw_S4_B"],
     }
-
 
 def build_bottom_profile_sensor_map(depth_index: int = 3) -> dict[str, str]:
     if depth_index not in {1, 2, 3}:
@@ -153,14 +143,12 @@ def build_bottom_profile_sensor_map(depth_index: int = 3) -> dict[str, str]:
         "S4": f"VWC_{depth_index}_raw_S4_B",
     }
 
-
 def build_all_bottom_sensor_cols() -> list[str]:
     return [
         f"VWC_{depth_index}_raw_{strip}_B"
         for strip in ["S1", "S2", "S3", "S4"]
         for depth_index in [1, 2, 3]
     ]
-
 
 def parse_vwc_sensor_column(sensor_col: str) -> SensorMeta:
     result: SensorMeta = {
@@ -182,7 +170,6 @@ def parse_vwc_sensor_column(sensor_col: str) -> SensorMeta:
     result["is_valid_vwc_sensor"] = True
     return result
 
-
 def _build_profile_swc_gal_cols(strip: str, logger_position: str) -> list[str]:
     return [
         f"SWC_vol_gal_{strip}_{logger_position}_1",
@@ -190,22 +177,18 @@ def _build_profile_swc_gal_cols(strip: str, logger_position: str) -> list[str]:
         f"SWC_vol_gal_{strip}_{logger_position}_3",
     ]
 
-
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 
-
 def _is_missing(value: object) -> bool:
     return bool(pd.Series([value]).isna().iloc[0])
-
 
 def _as_float_or_none(value: object) -> Optional[float]:
     num = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     if _is_missing(num):
         return None
     return float(num)
-
 
 def _coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
     if value is None:
@@ -220,7 +203,6 @@ def _coerce_optional_timestamp(value: object) -> Optional[pd.Timestamp]:
 
     return pd.Timestamp(ts)
 
-
 def _validate_datetime_index(df: pd.DataFrame) -> None:
     if not isinstance(df.index, pd.DatetimeIndex):
         raise TypeError("Input dataframe must have a DatetimeIndex.")
@@ -229,16 +211,13 @@ def _validate_datetime_index(df: pd.DataFrame) -> None:
     if not df.index.is_monotonic_increasing:
         raise ValueError("Input dataframe index must be sorted ascending.")
 
-
 def _coerce_datetime_column(events: pd.DataFrame, column: str) -> pd.Series:
     if column not in events.columns:
         raise KeyError(f"Required events column not found: {column}")
     return pd.to_datetime(events[column], errors="coerce")
 
-
 def _hours_from_timedelta(td: pd.Timedelta) -> float:
     return td.total_seconds() / 3600.0
-
 
 def _infer_step_minutes(index: pd.DatetimeIndex) -> float:
     diffs = index.to_series().diff().dropna()
@@ -246,12 +225,10 @@ def _infer_step_minutes(index: pd.DatetimeIndex) -> float:
         return float("nan")
     return float(diffs.dt.total_seconds().median() / 60.0)
 
-
 def _run_lengths(mask: pd.Series) -> pd.Series:
     groups = (mask != mask.shift()).cumsum()
     lengths = mask.groupby(groups).transform("sum")
     return lengths.where(mask, 0)
-
 
 def _group_iter(
     df: pd.DataFrame,
@@ -264,7 +241,6 @@ def _group_iter(
         df.groupby(list(group_cols), dropna=False),
     )
 
-
 def _safe_value_at_timestamp(
     df: pd.DataFrame,
     timestamp: Optional[pd.Timestamp],
@@ -275,11 +251,9 @@ def _safe_value_at_timestamp(
 
     return _as_float_or_none(df.at[timestamp, column])
 
-
 # ---------------------------------------------------------------------
 # Variable definitions
 # ---------------------------------------------------------------------
-
 
 def build_variable_definitions_table() -> pd.DataFrame:
     rows = [
@@ -397,11 +371,9 @@ def build_variable_definitions_table() -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
-
 # ---------------------------------------------------------------------
 # Event storage helpers
 # ---------------------------------------------------------------------
-
 
 def compute_event_storage_metrics(
     df: pd.DataFrame,
@@ -460,11 +432,9 @@ def compute_event_storage_metrics(
         "swc_missing_cols": "; ".join(missing_cols),
     }
 
-
 # ---------------------------------------------------------------------
 # Core event logic
 # ---------------------------------------------------------------------
-
 
 def find_event_baseline(
     series: pd.Series,
@@ -479,7 +449,6 @@ def find_event_baseline(
 
     baseline_time = pd.Timestamp(sub.index[-1])
     return float(sub.median()), baseline_time
-
 
 def find_event_peak(
     series: pd.Series,
@@ -511,7 +480,6 @@ def find_event_peak(
         "peak_increase": peak_increase,
         "peak_found": peak_found,
     }
-
 
 def find_post_peak_plateau(
     series: pd.Series,
@@ -587,7 +555,6 @@ def find_post_peak_plateau(
         "plateau_time": fallback_time,
         "plateau_method": "fallback_window",
     }
-
 
 def analyze_single_event_sensor(
     df: pd.DataFrame,
@@ -709,7 +676,6 @@ def analyze_single_event_sensor(
         "efficiency_strip": storage_metrics["efficiency_strip"],
         "estimated_loss_gal_strip": storage_metrics["estimated_loss_gal_strip"],
     }
-
 
 def analyze_irrigation_events(
     df: pd.DataFrame,
@@ -946,7 +912,6 @@ def analyze_irrigation_events(
 
     return out
 
-
 def analyze_bottom_logger_controls(
     df_15min: pd.DataFrame,
     strips: Sequence[str],
@@ -1024,11 +989,9 @@ def analyze_bottom_logger_controls(
 
     return pd.concat(all_results, ignore_index=True) if all_results else pd.DataFrame()
 
-
 # ---------------------------------------------------------------------
 # Reporting helpers
 # ---------------------------------------------------------------------
-
 
 def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
     if event_results.empty:
@@ -1076,7 +1039,6 @@ def add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
-
 def build_event_debug_table(
     event_results: pd.DataFrame,
     decimals: int = 2,
@@ -1122,11 +1084,9 @@ def build_event_debug_table(
 
     return out
 
-
 # ---------------------------------------------------------------------
 # Aggregations
 # ---------------------------------------------------------------------
-
 
 def estimate_statistical_target(
     event_results: pd.DataFrame,
@@ -1179,7 +1139,6 @@ def estimate_statistical_target(
 
     return pd.DataFrame(rows)
 
-
 def recommend_runtime_from_history(
     event_results: pd.DataFrame,
     target_time_col: str = "time_to_plateau_hours",
@@ -1231,7 +1190,6 @@ def recommend_runtime_from_history(
 
     return pd.DataFrame(rows)
 
-
 def summarize_targets_and_runtimes(
     event_results: pd.DataFrame,
     group_cols: Sequence[str] = ("strip", "sensor_col"),
@@ -1255,7 +1213,6 @@ def summarize_targets_and_runtimes(
     )
 
     return targets, runtimes
-
 
 def build_depth_target_runtime_summary(
     event_results: pd.DataFrame,
@@ -1353,11 +1310,9 @@ def build_depth_target_runtime_summary(
 
     return out
 
-
 # ---------------------------------------------------------------------
 # Definitions helpers
 # ---------------------------------------------------------------------
-
 
 def build_variable_definitions_with_sources(
     output_dir: str | Path,

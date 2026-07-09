@@ -45,7 +45,6 @@ import pandas as pd
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-
 from biochar_app.config.paths import DATA_PROCESSED_DIR
 
 DEFAULT_PHOTO_DIR = (
@@ -71,7 +70,6 @@ SUPPORTED_VIDEO_EXTENSIONS = {
     ".m4v",
 }
 
-
 @dataclass(frozen=True)
 class PhotoRecord:
     filename: str
@@ -82,7 +80,6 @@ class PhotoRecord:
     meter_reading_x100: float | None
     exclude: bool
     notes: str
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -138,7 +135,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def get_exif_datetime_image(path: Path) -> tuple[str | None, str]:
     """
     Extract DateTimeOriginal/DateTimeDigitized/DateTime from image EXIF.
@@ -169,7 +165,6 @@ def get_exif_datetime_image(path: Path) -> tuple[str | None, str]:
 
     return None, "no_datetime_tag"
 
-
 def parse_exif_datetime(raw: str) -> str | None:
     raw = raw.strip()
     if not raw:
@@ -190,7 +185,6 @@ def parse_exif_datetime(raw: str) -> str | None:
             pass
 
     return None
-
 
 def get_video_metadata_with_exiftool(path: Path) -> tuple[str | None, str]:
     """
@@ -232,7 +226,6 @@ def get_video_metadata_with_exiftool(path: Path) -> tuple[str | None, str]:
 
     return None, "video_no_datetime_tag"
 
-
 def parse_video_datetime(raw: str) -> str | None:
     """
     Parse common exiftool video date strings.
@@ -262,11 +255,9 @@ def parse_video_datetime(raw: str) -> str | None:
 
     return None
 
-
 def get_file_modified_timestamp(path: Path) -> tuple[str, str]:
     dt = datetime.fromtimestamp(path.stat().st_mtime)
     return dt.strftime("%Y-%m-%dT%H:%M"), "file_modified_time_fallback"
-
 
 def get_capture_timestamp(path: Path) -> tuple[str | None, str]:
     ext = path.suffix.lower()
@@ -285,14 +276,12 @@ def get_capture_timestamp(path: Path) -> tuple[str | None, str]:
     ts, source = get_file_modified_timestamp(path)
     return ts, source
 
-
 def list_media_files(photo_dir: Path) -> list[Path]:
     allowed = SUPPORTED_IMAGE_EXTENSIONS | SUPPORTED_VIDEO_EXTENSIONS
     return sorted(
         p for p in photo_dir.iterdir()
         if p.is_file() and p.suffix.lower() in allowed
     )
-
 
 def build_initial_photo_index(photo_dir: Path) -> pd.DataFrame:
     rows: list[PhotoRecord] = []
@@ -335,7 +324,6 @@ def build_initial_photo_index(photo_dir: Path) -> pd.DataFrame:
     df = df.sort_values(["timestamp_sort", "filename"]).drop(columns=["timestamp_sort"])
     return df.reset_index(drop=True)
 
-
 def load_or_create_review_csv(photo_dir: Path, year: int, use_review: bool) -> pd.DataFrame:
     review_path = photo_dir.parent / f"photo_review_{year}.csv"
 
@@ -354,7 +342,6 @@ def load_or_create_review_csv(photo_dir: Path, year: int, use_review: bool) -> p
     print(f"✅ Wrote review CSV: {review_path}")
     print("   Fill in meter_reading_x100, then rerun with --use-review.")
     return df
-
 
 def normalize_review_df(df: pd.DataFrame) -> pd.DataFrame:
     required = [
@@ -392,7 +379,6 @@ def normalize_review_df(df: pd.DataFrame) -> pd.DataFrame:
     out = out.sort_values(["timestamp_dt", "filename"]).reset_index(drop=True)
 
     return out
-
 
 def suggest_pairs(df: pd.DataFrame, max_event_hours: float, min_gallons: float) -> pd.DataFrame:
     """
@@ -702,7 +688,6 @@ def suggest_pairs_from_known_irrigation_events(
 
     return pd.DataFrame(rows)
 
-
 def append_unmatched_rows(events_df: pd.DataFrame, photo_df: pd.DataFrame) -> pd.DataFrame:
     events_df = events_df.copy()
 
@@ -891,7 +876,6 @@ def attach_irrigation_matches(
 
     return out
 
-
 def main() -> int:
     args = parse_args()
 
@@ -977,7 +961,6 @@ def main() -> int:
         )
 
     return 0
-
 
 def detect_irrigation_events_from_meter(df: pd.DataFrame,
                                         min_event_gallons: float = 20000,

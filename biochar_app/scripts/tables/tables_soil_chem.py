@@ -12,7 +12,7 @@ Notes:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from biochar_app.scripts.tables.tables_common import build_grouped_tab_payload
 from biochar_app.scripts.tables.tables_soil_common import VariableSpec, build_soil_table_payload
@@ -26,11 +26,10 @@ from biochar_app.scripts.tables.table_metadata_helpers import (
 # -----------------------------------------------------------------------------
 SOIL_TABLE_TOP_NOTE = "Rows: STRIP 1–4 (0–8 in). Columns: sampling events. Values shown are strip means."
 
-
 # -----------------------------------------------------------------------------
 # Soil Chem variable groups
 # -----------------------------------------------------------------------------
-SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
+SOILCHEM_VARIABLE_GROUPS: list[dict[str, Any]] = [
     {
         "group_key": "soilchem_ph_salinity_lime",
         "group_label": "pH / Salinity / Lime",
@@ -407,12 +406,11 @@ SOILCHEM_VARIABLE_GROUPS: List[Dict[str, Any]] = [
     },
 ]
 
-
 # -----------------------------------------------------------------------------
 # Public builder
 # -----------------------------------------------------------------------------
-def build_soilchem_table(clean_csv: Path, min_year: int = 2023) -> Dict[str, Any]:
-    def _builder(grp: Dict[str, Any]) -> Dict[str, Any]:
+def build_soilchem_table(clean_csv: Path, min_year: int = 2023) -> dict[str, Any]:
+    def _builder(grp: dict[str, Any]) -> dict[str, Any]:
         return build_soil_table_payload(
             clean_csv=clean_csv,
             variables=grp["variables"],

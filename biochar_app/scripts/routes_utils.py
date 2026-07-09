@@ -16,7 +16,6 @@ from biochar_app.scripts.gseason_utils import periods_to_list_of_dicts, add_gsea
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class PeriodSpec:
     code: str
@@ -24,15 +23,12 @@ class PeriodSpec:
     start: str
     end: str
 
-
 GSEASON_SUMMARY_DIR = PARQUET_DIR / "summary" / "gseason"
-
 
 def load_summary_df(year: int, granularity: str, variable: str, strip: str) -> pd.DataFrame:
     path = PARQUET_DIR / "summary" / granularity / f"{year}_{granularity}.parquet"
     df = pd.read_parquet(path)
     return df[(df.variable == variable) & (df.strip == strip)]
-
 
 def merge_all_loggers(year: int) -> pd.DataFrame:
     dat_dir = Path(DATA_RAW_DIR) / f"datfiles_{year}"
@@ -51,7 +47,6 @@ def merge_all_loggers(year: int) -> pd.DataFrame:
     merged = merged.loc[:, ~merged.columns.duplicated()]
     merged = restrict_to_year(merged, year)
     return merged
-
 
 def load_gseason_df(
     year: int,
@@ -119,7 +114,6 @@ def load_gseason_df(
         df["precip_unit"] = "in"
 
     return df
-
 
 def restrict_to_year(df: pd.DataFrame, year: int) -> pd.DataFrame:
     df = df.copy()

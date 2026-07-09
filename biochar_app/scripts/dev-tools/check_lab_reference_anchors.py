@@ -50,36 +50,31 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Dict, List, Optional, Sequence, Tuple, Mapping
+from typing import Optional, Sequence, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
 
-
 def ok(msg: str) -> None:
     print(f"✅ {msg}")
-
 
 def warn(msg: str) -> None:
     print(f"⚠️ {msg}")
 
-
 def fail(msg: str) -> None:
     print(f"❌ {msg}")
-
 
 class IdCollector(HTMLParser):
     """Collect all HTML id attributes from a page."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.ids: List[str] = []
+        self.ids: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
         for key, value in attrs:
             if key == "id" and value:
                 self.ids.append(value)
-
 
 @dataclass
 class AnchorRecord:
@@ -93,12 +88,10 @@ class AnchorRecord:
     page_path: str
     fragment: str
 
-
 @dataclass
 class SemanticIssue:
     level: str  # "warn" or "fail"
     message: str
-
 
 def normalize_table_number(text: Optional[str]) -> Optional[str]:
     """
@@ -112,25 +105,21 @@ def normalize_table_number(text: Optional[str]) -> Optional[str]:
         return None
     return f"table-{m.group(1)}"
 
-
 def fetch_html(url: str, timeout: int = 15) -> str:
     with urlopen(url, timeout=timeout) as resp:
         charset = resp.headers.get_content_charset() or "utf-8"
         return resp.read().decode(charset, errors="replace")
 
-
-def extract_ids(html: str) -> List[str]:
+def extract_ids(html: str) -> list[str]:
     parser = IdCollector()
     parser.feed(html)
     return parser.ids
-
 
 def simple_slug(text: str) -> str:
     text = text.strip().lower()
     text = re.sub(r"[^a-z0-9]+", "-", text)
     text = re.sub(r"-{2,}", "-", text).strip("-")
     return text
-
 
 def score_candidate(fragment: str, candidate: str, table_hint: Optional[str], title_hint: Optional[str]) -> int:
     """
@@ -163,16 +152,15 @@ def score_candidate(fragment: str, candidate: str, table_hint: Optional[str], ti
     score -= max(len(c) - len(f), 0)
     return score
 
-
 def suggest_matches(
     fragment: str,
     ids_on_page: Sequence[str],
     table_number: Optional[str],
     table_title: Optional[str],
     limit: int = 5,
-) -> List[str]:
+) -> list[str]:
     table_hint = normalize_table_number(table_number)
-    ranked: List[Tuple[int, str]] = []
+    ranked: list[tuple[int, str]] = []
 
     for candidate in ids_on_page:
         score = score_candidate(fragment, candidate, table_hint, table_title)
@@ -180,7 +168,7 @@ def suggest_matches(
             ranked.append((score, candidate))
 
     ranked.sort(key=lambda x: (-x[0], x[1]))
-    out: List[str] = []
+    out: list[str] = []
     seen = set()
     for _score, cand in ranked:
         if cand not in seen:
@@ -190,18 +178,17 @@ def suggest_matches(
             break
     return out
 
-
 def build_anchor_records(
     lab_references: Mapping[str, object],
     only_page: Optional[str] = None,
-) -> Tuple[List[AnchorRecord], List[Tuple[str, int, str]]]:
+) -> tuple[list[AnchorRecord], list[tuple[str, int, str]]]:
     """
     Returns:
       - records with fragments to validate
       - skipped refs without fragments: (lab_key, ref_index, source_url)
     """
-    records: List[AnchorRecord] = []
-    skipped: List[Tuple[str, int, str]] = []
+    records: list[AnchorRecord] = []
+    skipped: list[tuple[str, int, str]] = []
 
     for lab_key, bundle in lab_references.items():
         if bundle is None:
@@ -240,8 +227,7 @@ def build_anchor_records(
 
     return records, skipped
 
-
-def semantic_checks(rec: AnchorRecord) -> List[SemanticIssue]:
+def semantic_checks(rec: AnchorRecord) -> list[SemanticIssue]:
     """
     Checks for anchors that exist but may still be poor semantic matches.
 
@@ -252,7 +238,7 @@ def semantic_checks(rec: AnchorRecord) -> List[SemanticIssue]:
       section somewhere in their bundle, not only the generic NIRS section.
     - Generic NIRS-only anchors on derived variables are treated as suspicious.
     """
-    issues: List[SemanticIssue] = []
+    issues: list[SemanticIssue] = []
     key = rec.lab_key
     frag = rec.fragment.lower()
     section = (rec.section_title or "").lower()
@@ -373,7 +359,6 @@ def semantic_checks(rec: AnchorRecord) -> List[SemanticIssue]:
 
     return issues
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -398,7 +383,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def main() -> int:
     args = parse_args()
 
@@ -422,12 +406,12 @@ def main() -> int:
             for lab_key, idx, source_url in skipped:
                 print(f"   - {lab_key} [ref {idx}] -> {source_url}")
 
-    by_page: Dict[str, List[AnchorRecord]] = defaultdict(list)
+    by_page: dict[str, list[AnchorRecord]] = defaultdict(list)
     for rec in records:
         by_page[rec.page_path].append(rec)
 
-    page_ids: Dict[str, List[str]] = {}
-    page_errors: Dict[str, str] = {}
+    page_ids: dict[str, list[str]] = {}
+    page_errors: dict[str, str] = {}
 
     print("\n--- FETCHING PAGES ---")
     for page_path in sorted(by_page):
@@ -540,7 +524,6 @@ def main() -> int:
 
     fail("Some anchors did not match rendered HTML ids or failed semantic checks.")
     return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

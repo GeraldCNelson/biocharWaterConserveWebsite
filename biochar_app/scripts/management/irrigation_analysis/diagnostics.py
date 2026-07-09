@@ -19,7 +19,6 @@ BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
 
-
 def _logger_distance_ft(logger_position: object) -> float | None:
     code = str(logger_position).strip()
     meta = LOGGER_GEOMETRY.get(code, {})
