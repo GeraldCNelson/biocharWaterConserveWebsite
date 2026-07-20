@@ -1,10 +1,13 @@
 import pandas as pd
+from pathlib import Path
 
 from biochar_app.config.experiment_config import (
     STRIPS,
     SENSOR_DEPTH_CODES,
     SENSOR_DEPTH_INDEX_TO_INCHES,
 )
+
+from biochar_app.config.paths import IRRIGATION_DIR
 
 from biochar_app.scripts.data_loading import (load_logger_data, prepare_irrigation_input)
 
@@ -227,3 +230,11 @@ def attach_event_metadata(results: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
                         out = out.rename(columns={fallback_col: col})
 
     return out
+
+
+
+def load_irrigation_photo_review(year: int) -> pd.DataFrame:
+    path = IRRIGATION_DIR / f"photo_review_{year}.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(path)

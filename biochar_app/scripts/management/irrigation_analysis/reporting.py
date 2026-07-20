@@ -6,14 +6,48 @@ from docx import Document
 from docx.shared import Inches
 
 from biochar_app.config.paths import (
-    IRRIGATION_DIAGNOSTICS_DIR,
-    IRRIGATION_FIGURES_DIR,
-    IRRIGATION_REPORTS_DIR,
+    irrigation_analysis_paths,
 )
 
-DIAGNOSTICS_DIR = IRRIGATION_DIAGNOSTICS_DIR
-FIGURES_DIR = IRRIGATION_FIGURES_DIR
-REPORTS_DIR = IRRIGATION_REPORTS_DIR
+from biochar_app.config.core import (
+    YEARS,
+)
+
+from biochar_app.config.irrigation_config import get_irrigation_analysis_options
+
+ANALYSIS_OPTIONS = get_irrigation_analysis_options()
+ANALYSIS_VARIANT = ANALYSIS_OPTIONS.output_variant
+
+ANALYSIS_PATHS = irrigation_analysis_paths(
+    ANALYSIS_OPTIONS.output_variant
+)
+
+DIAGNOSTICS_DIR = ANALYSIS_PATHS["diagnostics"]
+FIGURES_DIR = ANALYSIS_PATHS["figures"]
+REPORTS_DIR = ANALYSIS_PATHS["reports"]
+
+def validate_reporting_inputs() -> None:
+    """
+    Verify that the selected analysis variant has reporting inputs.
+    """
+
+    if not DIAGNOSTICS_DIR.exists():
+        raise FileNotFoundError(
+            "Selected irrigation-analysis diagnostics directory "
+            f"does not exist: {DIAGNOSTICS_DIR}"
+        )
+
+    if not FIGURES_DIR.exists():
+        raise FileNotFoundError(
+            "Selected irrigation-analysis figures directory "
+            f"does not exist: {FIGURES_DIR}"
+        )
+
+    REPORTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
 
 def _fmt_minutes(value: object) -> str:
     if pd.isna(value):
@@ -121,10 +155,32 @@ def build_arrival_diagnostics_report(
     report_rows = arrival_order.copy()
 
     if not include_expected:
+        primary_unexpected = (
+            report_rows["order_class"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+            .ne("expected")
+        )
+
+        alternate_unexpected = (
+            report_rows["alt_order_class"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+            .ne("expected")
+        )
+
+        alt_before_start = (
+            report_rows["any_alt_before_start"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+            .isin({"true", "1", "yes", "y"})
+        )
+
         report_rows = report_rows[
-            report_rows["order_class"].ne("as expected")
-            | report_rows["alt_order_class"].ne("as expected")
-            | report_rows["any_alt_before_start"].apply(_fmt_bool_flag)
+            primary_unexpected | alternate_unexpected | alt_before_start
         ].copy()
 
     report_rows = report_rows.merge(
@@ -166,7 +222,10 @@ def build_arrival_diagnostics_report(
     ).reset_index(drop=True)
 
     doc = Document()
-    doc.add_heading(f"{year} Irrigation Arrival Diagnostics", level=1)
+    doc.add_heading(
+        (f"{year} Irrigation Arrival Diagnostics — {ANALYSIS_OPTIONS.report_label}"),
+        level=1,
+    )
     doc.add_paragraph(
         "Comparison of standard sustained-response arrival detection and "
         "alternate sustained step-change arrival detection. Plateau VWC is retained "
@@ -261,14 +320,15 @@ def build_trustworthy_events_report() -> None:
     raise NotImplementedError("Trustworthy events report is not implemented yet.")
 
 def main() -> None:
-    year = 2026
+    for year in YEARS:
+        print(f"\nGenerating irrigation report for {year}...")
 
-    output_path = build_arrival_diagnostics_report(
-        year=year,
-        include_expected=False,
-    )
+        output_path = build_arrival_diagnostics_report(
+            year=year,
+            include_expected=False,
+        )
 
-    print(f"Wrote report: {output_path}")
+        print(f"Wrote report: {output_path}")
 
 if __name__ == "__main__":
     main()

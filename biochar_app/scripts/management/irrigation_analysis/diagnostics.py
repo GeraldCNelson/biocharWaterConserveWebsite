@@ -7,6 +7,9 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+from biochar_app.config.irrigation_config import (
+    PHOTO_TIMESTAMP_REVIEW_THRESHOLD_MIN,
+)
 
 from biochar_app.config.experiment_config import LOGGER_GEOMETRY
 from biochar_app.config.irrigation_config import MIN_PRECIP_IN
@@ -18,6 +21,376 @@ from biochar_app.scripts.management.irrigation_analysis.utils import (
 BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
+
+def _first_existing_column(
+    df: pd.DataFrame,
+    candidates: tuple[str, ...],
+) -> str | None:
+    """
+    Return the first candidate column present in a DataFrame.
+    """
+    return next((col for col in candidates if col in df.columns), None)
+
+
+def _normalize_event_id(series: pd.Series) -> pd.Series:
+    """
+    Normalize event IDs for reliable joins.
+    """
+    return (
+        series.astype("string")
+        .str.strip()
+        .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    )
+
+
+def build_photo_recorded_timestamp_audit(
+    irrigation_events: pd.DataFrame,
+    photo_events: pd.DataFrame,
+    *,
+    year: int | None = None,
+    review_threshold_min: float = PHOTO_TIMESTAMP_REVIEW_THRESHOLD_MIN,
+) -> pd.DataFrame:
+    """
+    Compare photo-derived irrigation timestamps with recorded event timestamps.
+
+    Produces one row per irrigation event. Positive offsets mean the photo-derived
+    timestamp is later than the recorded timestamp; negative offsets mean it is
+    earlier.
+
+    Required join field
+    -------------------
+    Both inputs must contain event_id.
+
+    Accepted irrigation timestamp column names
+    -------------------------------------------
+    Start:
+      start_timestamp, irrigation_start, recorded_start, start
+
+    End:
+      end_timestamp, irrigation_end, recorded_end, end
+
+    Accepted photo timestamp column names
+    -------------------------------------
+    Start:
+      photo_start, photo_start_timestamp, start_timestamp, irrigation_start
+
+    End:
+      photo_end, photo_end_timestamp, end_timestamp, irrigation_end
+    """
+    if irrigation_events.empty:
+        return pd.DataFrame()
+
+    if photo_events.empty:
+        return pd.DataFrame()
+
+    if "event_id" not in irrigation_events.columns:
+        raise KeyError("irrigation_events must contain an 'event_id' column")
+
+    if "event_id" not in photo_events.columns:
+        raise KeyError("photo_events must contain an 'event_id' column")
+
+    irrigation_start_col = _first_existing_column(
+        irrigation_events,
+        (
+            "start_timestamp",
+            "irrigation_start",
+            "recorded_start",
+            "start",
+        ),
+    )
+    irrigation_end_col = _first_existing_column(
+        irrigation_events,
+        (
+            "end_timestamp",
+            "irrigation_end",
+            "recorded_end",
+            "end",
+        ),
+    )
+
+    photo_start_col = _first_existing_column(
+        photo_events,
+        (
+            "photo_start",
+            "photo_start_timestamp",
+            "start_timestamp",
+            "irrigation_start",
+        ),
+    )
+    photo_end_col = _first_existing_column(
+        photo_events,
+        (
+            "photo_end",
+            "photo_end_timestamp",
+            "end_timestamp",
+            "irrigation_end",
+        ),
+    )
+
+    if irrigation_start_col is None:
+        raise KeyError(
+            "Could not find a recorded irrigation-start column. "
+            "Expected one of: start_timestamp, irrigation_start, "
+            "recorded_start, start."
+        )
+
+    if irrigation_end_col is None:
+        raise KeyError(
+            "Could not find a recorded irrigation-end column. "
+            "Expected one of: end_timestamp, irrigation_end, "
+            "recorded_end, end."
+        )
+
+    if photo_start_col is None:
+        raise KeyError(
+            "Could not find a photo-derived start column. "
+            "Expected one of: photo_start, photo_start_timestamp, "
+            "start_timestamp, irrigation_start."
+        )
+
+    irrigation_cols = [
+        "event_id",
+        irrigation_start_col,
+        irrigation_end_col,
+    ]
+
+    for optional_col in (
+        "year",
+        "strip_group",
+        "location",
+        "gallons_group",
+        "gallons_strip",
+    ):
+        if optional_col in irrigation_events.columns:
+            irrigation_cols.append(optional_col)
+
+    recorded = irrigation_events[irrigation_cols].copy()
+
+    recorded["event_id"] = _normalize_event_id(recorded["event_id"])
+    recorded = recorded.dropna(subset=["event_id"])
+
+    recorded = recorded.rename(
+        columns={
+            irrigation_start_col: "recorded_start",
+            irrigation_end_col: "recorded_end",
+        }
+    )
+
+    recorded["recorded_start"] = pd.to_datetime(
+        recorded["recorded_start"],
+        errors="coerce",
+    )
+    recorded["recorded_end"] = pd.to_datetime(
+        recorded["recorded_end"],
+        errors="coerce",
+    )
+
+    # load_irrigation_data() may contain one row per strip. Reduce it to one
+    # event-level record before joining to the photo review.
+    recorded = recorded.sort_values(
+        ["event_id", "recorded_start"],
+        na_position="last",
+    ).drop_duplicates(
+        subset=["event_id"],
+        keep="first",
+    )
+
+    photo_cols = ["event_id", photo_start_col]
+
+    if photo_end_col is not None:
+        photo_cols.append(photo_end_col)
+
+    for optional_col in (
+        "photo_start_file",
+        "photo_end_file",
+        "start_photo",
+        "end_photo",
+        "start_filename",
+        "end_filename",
+        "review_status",
+        "review_notes",
+        "notes",
+    ):
+        if optional_col in photo_events.columns:
+            photo_cols.append(optional_col)
+
+    photos = photo_events[photo_cols].copy()
+    photos["event_id"] = _normalize_event_id(photos["event_id"])
+    photos = photos.dropna(subset=["event_id"])
+
+    rename_map = {
+        photo_start_col: "photo_start",
+    }
+
+    if photo_end_col is not None:
+        rename_map[photo_end_col] = "photo_end"
+
+    photos = photos.rename(columns=rename_map)
+
+    photos["photo_start"] = pd.to_datetime(
+        photos["photo_start"],
+        errors="coerce",
+    )
+
+    if "photo_end" in photos.columns:
+        photos["photo_end"] = pd.to_datetime(
+            photos["photo_end"],
+            errors="coerce",
+        )
+    else:
+        photos["photo_end"] = pd.NaT
+
+    photos = photos.sort_values(
+        ["event_id", "photo_start"],
+        na_position="last",
+    ).drop_duplicates(
+        subset=["event_id"],
+        keep="first",
+    )
+
+    out = recorded.merge(
+        photos,
+        on="event_id",
+        how="outer",
+        indicator=True,
+        validate="one_to_one",
+    )
+
+    if year is not None:
+        if "year" in out.columns:
+            year_values = pd.to_numeric(out["year"], errors="coerce")
+            out = out.loc[year_values.eq(year)].copy()
+        else:
+            event_year = pd.to_numeric(
+                out["event_id"].astype("string").str.slice(0, 4),
+                errors="coerce",
+            )
+            out = out.loc[event_year.eq(year)].copy()
+            out["year"] = year
+
+    out["photo_record_match_status"] = out["_merge"].map(
+        {
+            "both": "matched",
+            "left_only": "recorded_only",
+            "right_only": "photo_only",
+        }
+    )
+    out = out.drop(columns="_merge")
+
+    out["start_offset_min"] = (
+        out["photo_start"] - out["recorded_start"]
+    ).dt.total_seconds() / 60.0
+
+    out["end_offset_min"] = (
+        out["photo_end"] - out["recorded_end"]
+    ).dt.total_seconds() / 60.0
+
+    out["recorded_duration_hr"] = (
+        out["recorded_end"] - out["recorded_start"]
+    ).dt.total_seconds() / 3600.0
+
+    out["photo_duration_hr"] = (
+        out["photo_end"] - out["photo_start"]
+    ).dt.total_seconds() / 3600.0
+
+    out["duration_difference_min"] = (
+        out["photo_duration_hr"] - out["recorded_duration_hr"]
+    ) * 60.0
+
+    out["photo_start_available"] = out["photo_start"].notna()
+    out["photo_end_available"] = out["photo_end"].notna()
+
+    out["start_offset_abs_min"] = out["start_offset_min"].abs()
+    out["end_offset_abs_min"] = out["end_offset_min"].abs()
+
+    out["start_timestamp_needs_review"] = (
+        out["start_offset_abs_min"] > review_threshold_min
+    ).fillna(False)
+
+    out["end_timestamp_needs_review"] = (
+        out["end_offset_abs_min"] > review_threshold_min
+    ).fillna(False)
+
+    out["timestamp_needs_review"] = (
+        out["start_timestamp_needs_review"]
+        | out["end_timestamp_needs_review"]
+        | out["photo_record_match_status"].ne("matched")
+    )
+
+    def build_review_reason(row: pd.Series) -> str:
+        reasons: list[str] = []
+
+        match_status = row.get("photo_record_match_status")
+        if match_status == "recorded_only":
+            reasons.append("no matching photo event")
+        elif match_status == "photo_only":
+            reasons.append("no matching recorded event")
+
+        if bool(row.get("start_timestamp_needs_review", False)):
+            reasons.append("start timestamp offset exceeds threshold")
+
+        if bool(row.get("end_timestamp_needs_review", False)):
+            reasons.append("end timestamp offset exceeds threshold")
+
+        if pd.isna(row.get("photo_start")):
+            reasons.append("photo start unavailable")
+
+        if pd.isna(row.get("photo_end")):
+            reasons.append("photo end unavailable")
+
+        return "; ".join(dict.fromkeys(reasons))
+
+    out["timestamp_review_reason"] = out.apply(
+        build_review_reason,
+        axis=1,
+    )
+
+    numeric_cols = [
+        "start_offset_min",
+        "end_offset_min",
+        "start_offset_abs_min",
+        "end_offset_abs_min",
+        "recorded_duration_hr",
+        "photo_duration_hr",
+        "duration_difference_min",
+    ]
+
+    for col in numeric_cols:
+        out[col] = pd.to_numeric(out[col], errors="coerce").round(2)
+
+    id_cols = [
+        "year",
+        "event_id",
+        "strip_group",
+        "location",
+        "recorded_start",
+        "photo_start",
+        "start_offset_min",
+        "recorded_end",
+        "photo_end",
+        "end_offset_min",
+        "recorded_duration_hr",
+        "photo_duration_hr",
+        "duration_difference_min",
+        "photo_record_match_status",
+        "timestamp_needs_review",
+        "timestamp_review_reason",
+    ]
+
+    ordered_cols = [
+        col for col in id_cols if col in out.columns
+    ] + [
+        col for col in out.columns if col not in id_cols
+    ]
+
+    return (
+        out[ordered_cols]
+        .sort_values(
+            ["year", "recorded_start", "event_id"],
+            na_position="last",
+        )
+        .reset_index(drop=True)
+    )
 
 def _logger_distance_ft(logger_position: object) -> float | None:
     code = str(logger_position).strip()

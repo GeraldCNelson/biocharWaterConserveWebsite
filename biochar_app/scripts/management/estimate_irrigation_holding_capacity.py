@@ -67,6 +67,7 @@ ALTERNATE_ARRIVAL_RESPONSE_THRESHOLD_VWC = 0.50
 
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 from biochar_app.config.field_management_metadata import (
     PROFILE_AREA_SQFT,
@@ -84,8 +85,6 @@ from biochar_app.config.core import (
 from biochar_app.config.experiment_config import (
     SENSOR_DEPTH_CODES,
     SENSOR_DEPTH_INDEX_TO_INCHES,
-    SENSOR_DEPTH_LABELS,
-    SENSOR_DEPTH_VALUES,
 )
 
 from biochar_app.scripts.data_loading import (
@@ -116,6 +115,7 @@ from biochar_app.scripts.management.irrigation_analysis.diagnostics import (
 )
 
 from biochar_app.config.irrigation_config import (
+    get_irrigation_analysis_options,
     EVENT_PLOT_HOURS_BEFORE,
     EVENT_PLOT_HOURS_AFTER,
     MULTIDEPTH_PLOT_DIR,
@@ -124,10 +124,8 @@ from biochar_app.config.irrigation_config import (
 )
 
 from biochar_app.config.paths import (
-    HOLDING_CAPACITY_DIR,
-    IRRIGATION_DIAGNOSTICS_DIR,
-    IRRIGATION_FIGURES_DIR,
-    IRRIGATION_REPORTS_DIR,
+    irrigation_analysis_paths,
+    ensure_analysis_output_directories,
 )
 
 from biochar_app.scripts.management.irrigation_analysis.holding_capacity import (
@@ -158,6 +156,21 @@ from biochar_app.scripts.management.irrigation_analysis.utils import (
     round_for_reporting,
 )
 
+ANALYSIS_OPTIONS = get_irrigation_analysis_options()
+ANALYSIS_VARIANT = ANALYSIS_OPTIONS.output_variant
+IRRIGATION_INPUT_CSV = ANALYSIS_OPTIONS.input_csv
+
+ANALYSIS_PATHS = irrigation_analysis_paths(
+    ANALYSIS_OPTIONS.output_variant
+)
+
+IRRIGATION_ANALYSIS_DIR = ANALYSIS_PATHS["root"]
+HOLDING_CAPACITY_DIR = ANALYSIS_PATHS["holding_capacity"]
+IRRIGATION_DIAGNOSTICS_DIR = ANALYSIS_PATHS["diagnostics"]
+IRRIGATION_FIGURES_DIR = ANALYSIS_PATHS["figures"]
+IRRIGATION_REPORTS_DIR = ANALYSIS_PATHS["reports"]
+
+
 profile_area_sqft = PROFILE_AREA_SQFT
 
 for d in [
@@ -175,6 +188,7 @@ BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
 
+        
 def build_irrigation_event_response_summary(
     arrival_times: pd.DataFrame,
     event_results: pd.DataFrame,
@@ -504,18 +518,42 @@ def build_irrigation_event_response_summary(
 
     return force_float(move_id_columns_left(wide))
 
+
 def analyze_loggers_all_depths(
     df_15min: pd.DataFrame,
+    irrigation_events: pd.DataFrame,
     strips: list[str],
     year: int,
     logger_positions: list[str] | None = None,
 ) -> pd.DataFrame:
+    """
+    Analyze irrigation responses for all available depths and selected loggers.
 
+    Parameters
+    ----------
+    df_15min
+        Prepared 15-minute logger data with a DatetimeIndex.
+
+    irrigation_events
+        Canonically loaded strip-level irrigation events. The active analysis
+        variant determines which irrigation CSV is loaded before this function
+        is called.
+
+    strips
+        Strip identifiers to analyze.
+
+    year
+        Calendar year to analyze.
+
+    logger_positions
+        Logger positions to include. Defaults to top, middle, and bottom.
+    """
     if logger_positions is None:
         logger_positions = ["T", "M", "B"]
 
     all_results: list[pd.DataFrame] = []
-    all_events = load_irrigation_data()
+
+    all_events = irrigation_events
 
     required_cols = {
         "strip",
@@ -526,18 +564,22 @@ def analyze_loggers_all_depths(
     }
 
     missing = required_cols - set(all_events.columns)
+
     if missing:
         raise KeyError(
-            f"Clean irrigation data is missing required columns: {sorted(missing)}"
+            "Clean irrigation data is missing required columns: "
+            f"{sorted(missing)}"
         )
 
     for strip in strips:
-
         sensor_cols: list[str] = []
 
         for position in logger_positions:
             for depth in (1, 2, 3):
-                col = f"VWC_{depth}_raw_{strip}_{position}"
+                col = (
+                    f"VWC_{depth}_raw_"
+                    f"{strip}_{position}"
+                )
 
                 if col in df_15min.columns:
                     sensor_cols.append(col)
@@ -545,7 +587,8 @@ def analyze_loggers_all_depths(
         if not sensor_cols:
             print(
                 f"Skipping {strip}: "
-                f"no matching sensors for positions {logger_positions}"
+                f"no matching sensors for positions "
+                f"{logger_positions}"
             )
             continue
 
@@ -560,13 +603,21 @@ def analyze_loggers_all_depths(
             "event_id",
             "strip_group",
             "location",
+            "gallons_source",
+            "gallons_estimated",
+            "meter_volume_shared_between_groups",
+            "meter_volume_allocation_method",
+            "correction_applied",
+            "correction_code",
         ]:
             if optional_col in all_events.columns:
                 select_cols.append(optional_col)
 
         events = all_events.loc[
-            (all_events["strip"] == strip)
-            & (all_events["year"] == year),
+            (
+                all_events["strip"].eq(strip)
+                & all_events["year"].eq(year)
+            ),
             select_cols,
         ].copy()
 
@@ -600,19 +651,31 @@ def analyze_loggers_all_depths(
                 else None
             ),
         )
+
         strip_results = attach_event_metadata(
             strip_results,
             events,
         )
 
-        print("\n=== STRIP RESULTS COLUMNS AFTER DELTA FIELDS ===")
-        print(strip_results.columns.tolist())
+        # print(
+        #     "\n=== STRIP RESULTS COLUMNS "
+        #     "AFTER DELTA FIELDS ==="
+        # )
+        # print(strip_results.columns.tolist())
+
         if not strip_results.empty:
             all_results.append(strip_results)
+
     if not all_results:
         return pd.DataFrame()
-    out = pd.concat(all_results, ignore_index=True)
+
+    out = pd.concat(
+        all_results,
+        ignore_index=True,
+    )
+
     out = add_derived_event_fields(out)
+
     return out
 
 def build_enhanced_event_debug_table(
@@ -747,7 +810,47 @@ def write_year_outputs(
     df_15min: pd.DataFrame,
     results: pd.DataFrame,
     plot_results: pd.DataFrame | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    *,
+    diagnostics_dir: Path = IRRIGATION_DIAGNOSTICS_DIR,
+    holding_capacity_dir: Path = HOLDING_CAPACITY_DIR,
+    figures_dir: Path = IRRIGATION_FIGURES_DIR,
+    reports_dir: Path = IRRIGATION_REPORTS_DIR,
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+    diagnostics_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    holding_capacity_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    figures_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    reports_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    multidepth_plot_dir = (
+        figures_dir
+        / "event_multidepth"
+    )
+
+    multidepth_plot_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     results = add_scaled_storage_fields(results)
 
     debug_table = build_enhanced_event_debug_table(results)
@@ -772,30 +875,30 @@ def write_year_outputs(
     runtimes = force_float(move_id_columns_left(runtimes))
 
     debug_table.to_csv(
-        HOLDING_CAPACITY_DIR / f"debug_irrigation_events_{year}_all_depths.csv",
+        holding_capacity_dir / f"debug_irrigation_events_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     targets.to_csv(
-        HOLDING_CAPACITY_DIR / f"irrigation_targets_{year}_all_depths.csv",
+        holding_capacity_dir / f"irrigation_targets_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     runtimes.to_csv(
-        HOLDING_CAPACITY_DIR / f"irrigation_runtimes_{year}_all_depths.csv",
+        holding_capacity_dir / f"irrigation_runtimes_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     definitions.to_csv(
-        IRRIGATION_REPORTS_DIR / f"irrigation_variable_definitions_{year}.csv",
+        reports_dir / f"irrigation_variable_definitions_{year}.csv",
         index=False,
     )
 
     build_variable_definitions_with_sources(
-        output_dir=str(IRRIGATION_REPORTS_DIR),
+        output_dir=str(reports_dir),
         year=year,
     )
 
@@ -824,7 +927,7 @@ def write_year_outputs(
     response_summary = add_vertical_velocity_fields(response_summary)
 
     response_summary.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_event_response_summary_{year}.csv",
+        diagnostics_dir / f"irrigation_event_response_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
@@ -834,7 +937,7 @@ def write_year_outputs(
     )
 
     horizontal_advance.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_horizontal_advance_summary_{year}.csv",
+        diagnostics_dir / f"irrigation_horizontal_advance_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
@@ -843,7 +946,7 @@ def write_year_outputs(
     print(arrival_times.columns.tolist())
 
     arrival_times.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_arrival_times_{year}.csv",
+        diagnostics_dir / f"irrigation_arrival_times_{year}.csv",
         index=False,
     )
 
@@ -852,7 +955,7 @@ def write_year_outputs(
     )
 
     arrival_order_table.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"arrival_order_diagnostics_{year}.csv",
+        diagnostics_dir / f"arrival_order_diagnostics_{year}.csv",
         index=False,
     )
 
@@ -980,7 +1083,7 @@ def write_year_outputs(
     for logger_position_raw in LOGGER_LOCATIONS:
         logger_position = str(logger_position_raw).strip()
 
-        position_plot_dir = MULTIDEPTH_PLOT_DIR / logger_position
+        position_plot_dir = multidepth_plot_dir / logger_position
         position_plot_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"\nWriting {logger_position} plots to:")
@@ -1021,7 +1124,10 @@ def write_year_outputs(
         else pd.DataFrame()
     )
 
-    plot_log_path = IRRIGATION_FIGURES_DIR / f"irrigation_event_multidepth_plot_log_{year}.csv"
+    plot_log_path = (
+            figures_dir
+            / f"irrigation_event_multidepth_plot_log_{year}.csv"
+    )
     multidepth_plot_log.to_csv(plot_log_path, index=False)
 
     pre_start_table = detect_pre_start_response(
@@ -1034,14 +1140,14 @@ def write_year_outputs(
     )
 
     pre_start_table.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"irrigation_pre_start_response_flags_{year}.csv",
+        diagnostics_dir / f"irrigation_pre_start_response_flags_{year}.csv",
         index=False,
     )
 
     trustworthy_table = classify_trustworthy_irrigation_events(pre_start_table)
 
     trustworthy_table.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / f"trustworthy_irrigation_events_{year}.csv",
+        diagnostics_dir / f"trustworthy_irrigation_events_{year}.csv",
         index=False,
     )
 
@@ -1051,7 +1157,7 @@ def write_year_outputs(
     )
 
     holding_capacity_table.to_csv(
-        HOLDING_CAPACITY_DIR / f"trustworthy_holding_capacity_summary_{year}.csv",
+        holding_capacity_dir / f"trustworthy_holding_capacity_summary_{year}.csv",
         index=False,
     )
 
@@ -1061,7 +1167,7 @@ def write_year_outputs(
     )
 
     water_balance_table.to_csv(
-        HOLDING_CAPACITY_DIR / f"first_pass_water_balance_{year}.csv",
+        holding_capacity_dir / f"first_pass_water_balance_{year}.csv",
         index=False,
     )
 
@@ -1083,46 +1189,91 @@ def _append_if_not_empty(collection: list[pd.DataFrame], df: pd.DataFrame) -> No
 
 def _write_zone_storage_outputs(
     all_event_storage_zone_tables: list[pd.DataFrame],
+    *,
+    holding_capacity_dir: Path,
 ) -> pd.DataFrame:
     combined_zone_storage = (
-        pd.concat(all_event_storage_zone_tables, ignore_index=True)
+        pd.concat(
+            all_event_storage_zone_tables,
+            ignore_index=True,
+        )
         if all_event_storage_zone_tables
         else pd.DataFrame()
     )
 
-    combined_zone_storage = round_for_reporting(combined_zone_storage)
+    combined_zone_storage = round_for_reporting(
+        combined_zone_storage
+    )
 
-    zone_storage_path = HOLDING_CAPACITY_DIR / "event_storage_by_zone.csv"
-    combined_zone_storage.to_csv(zone_storage_path, index=False)
+    holding_capacity_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    build_event_storage_by_event(combined_zone_storage).to_csv(
-        HOLDING_CAPACITY_DIR / "event_storage_by_event.csv",
+    zone_storage_path = (
+        holding_capacity_dir
+        / "event_storage_by_zone.csv"
+    )
+
+    combined_zone_storage.to_csv(
+        zone_storage_path,
         index=False,
     )
 
-    build_zone_storage_summary(combined_zone_storage).to_csv(
-        HOLDING_CAPACITY_DIR / "zone_storage_summary.csv",
+    build_event_storage_by_event(
+        combined_zone_storage
+    ).to_csv(
+        holding_capacity_dir
+        / "event_storage_by_event.csv",
         index=False,
     )
 
-    build_flow_storage_correlation_summary(combined_zone_storage).to_csv(
-        HOLDING_CAPACITY_DIR / "flow_storage_correlation_summary.csv",
+    build_zone_storage_summary(
+        combined_zone_storage
+    ).to_csv(
+        holding_capacity_dir
+        / "zone_storage_summary.csv",
         index=False,
     )
 
-    build_zone_ordering_frequency(combined_zone_storage).to_csv(
-        HOLDING_CAPACITY_DIR / "zone_ordering_frequency.csv",
+    build_flow_storage_correlation_summary(
+        combined_zone_storage
+    ).to_csv(
+        holding_capacity_dir
+        / "flow_storage_correlation_summary.csv",
         index=False,
     )
 
-    build_zone_anomaly_diagnostics(combined_zone_storage).to_csv(
-        HOLDING_CAPACITY_DIR / "zone_anomaly_diagnostics.csv",
+    build_zone_ordering_frequency(
+        combined_zone_storage
+    ).to_csv(
+        holding_capacity_dir
+        / "zone_ordering_frequency.csv",
         index=False,
     )
 
-    plot_mean_storage_depth_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
-    plot_mean_storage_by_zone(combined_zone_storage, HOLDING_CAPACITY_DIR)
-    plot_mean_storage_by_zone_by_year(combined_zone_storage, HOLDING_CAPACITY_DIR)
+    build_zone_anomaly_diagnostics(
+        combined_zone_storage
+    ).to_csv(
+        holding_capacity_dir
+        / "zone_anomaly_diagnostics.csv",
+        index=False,
+    )
+
+    plot_mean_storage_depth_by_zone_by_year(
+        combined_zone_storage,
+        holding_capacity_dir,
+    )
+
+    plot_mean_storage_by_zone(
+        combined_zone_storage,
+        holding_capacity_dir,
+    )
+
+    plot_mean_storage_by_zone_by_year(
+        combined_zone_storage,
+        holding_capacity_dir,
+    )
 
     return combined_zone_storage
 
@@ -1131,46 +1282,96 @@ def _write_combined_year_outputs(
     all_trustworthy_tables: list[pd.DataFrame],
     all_holding_capacity_tables: list[pd.DataFrame],
     all_water_balance_tables: list[pd.DataFrame],
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    *,
+    diagnostics_dir: Path,
+    holding_capacity_dir: Path,
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+    diagnostics_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    holding_capacity_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    frames = [df for df in all_pre_start_flags if df is not None and not df.empty]
+
     combined_pre_start = (
-        pd.concat(all_pre_start_flags, ignore_index=True)
-        if all_pre_start_flags
+        pd.concat(
+            frames,
+            ignore_index=True,
+        )
+        if frames
         else pd.DataFrame()
     )
+
     combined_pre_start.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / "irrigation_pre_start_response_flags_all_years.csv",
+        diagnostics_dir
+        / "irrigation_pre_start_response_flags_all_years.csv",
         index=False,
     )
 
+    trustworthy_frames = [
+        df for df in all_trustworthy_tables if df is not None and not df.empty
+    ]
+
     combined_trustworthy = (
-        pd.concat(all_trustworthy_tables, ignore_index=True)
-        if all_trustworthy_tables
+        pd.concat(
+            trustworthy_frames,
+            ignore_index=True,
+        )
+        if trustworthy_frames
         else pd.DataFrame()
     )
+
     combined_trustworthy.to_csv(
-        IRRIGATION_DIAGNOSTICS_DIR / "trustworthy_irrigation_events_all_years.csv",
+        diagnostics_dir
+        / "trustworthy_irrigation_events_all_years.csv",
         index=False,
     )
 
     combined_holding_capacity = (
-        pd.concat(all_holding_capacity_tables, ignore_index=True)
+        pd.concat(
+            all_holding_capacity_tables,
+            ignore_index=True,
+        )
         if all_holding_capacity_tables
         else pd.DataFrame()
     )
-    combined_holding_capacity = round_for_reporting(combined_holding_capacity)
+
+    combined_holding_capacity = round_for_reporting(
+        combined_holding_capacity
+    )
+
     combined_holding_capacity.to_csv(
-        HOLDING_CAPACITY_DIR / "trustworthy_holding_capacity_summary_all_years.csv",
+        holding_capacity_dir
+        / "trustworthy_holding_capacity_summary_all_years.csv",
         index=False,
     )
 
     combined_water_balance = (
-        pd.concat(all_water_balance_tables, ignore_index=True)
+        pd.concat(
+            all_water_balance_tables,
+            ignore_index=True,
+        )
         if all_water_balance_tables
         else pd.DataFrame()
     )
-    combined_water_balance = round_for_reporting(combined_water_balance)
+
+    combined_water_balance = round_for_reporting(
+        combined_water_balance
+    )
+
     combined_water_balance.to_csv(
-        HOLDING_CAPACITY_DIR / "first_pass_water_balance_all_years.csv",
+        holding_capacity_dir
+        / "first_pass_water_balance_all_years.csv",
         index=False,
     )
 
@@ -1181,7 +1382,30 @@ def _write_combined_year_outputs(
         combined_water_balance,
     )
 
+
 def main() -> None:
+    ensure_analysis_output_directories(ANALYSIS_PATHS)
+
+    if not IRRIGATION_INPUT_CSV.exists():
+        raise FileNotFoundError(
+            "Selected irrigation analysis input file was not found: "
+            f"{IRRIGATION_INPUT_CSV}"
+        )
+
+    irrigation_events = load_irrigation_data(IRRIGATION_INPUT_CSV)
+
+    if irrigation_events.empty:
+        raise ValueError(
+            "Selected irrigation analysis input produced no usable events: "
+            f"{IRRIGATION_INPUT_CSV}"
+        )
+
+    print(f"\n=== IRRIGATION ANALYSIS: {ANALYSIS_OPTIONS.report_label.upper()} ===")
+    print(f"Irrigation input: {IRRIGATION_INPUT_CSV}")
+    print(f"Loaded irrigation rows: {len(irrigation_events):,}")
+    print(f"Output root: {IRRIGATION_ANALYSIS_DIR}")
+    print(f"Description: {ANALYSIS_OPTIONS.description}")
+
     all_pre_start_flags: list[pd.DataFrame] = []
     all_trustworthy_tables: list[pd.DataFrame] = []
     all_holding_capacity_tables: list[pd.DataFrame] = []
@@ -1195,25 +1419,37 @@ def main() -> None:
 
         bottom_results = analyze_loggers_all_depths(
             df_15min=df_15min,
+            irrigation_events=irrigation_events,
             strips=STRIPS,
             year=year,
             logger_positions=["B"],
         )
-
         if bottom_results.empty:
-            print(f"Year {year}: no bottom-logger irrigation-analysis results returned.")
+            print(
+                f"Year {year}: no bottom-logger "
+                "irrigation-analysis results returned."
+            )
             continue
 
         all_logger_results = analyze_loggers_all_depths(
             df_15min=df_15min,
+            irrigation_events=irrigation_events,
             strips=STRIPS,
             year=year,
             logger_positions=LOGGER_LOCATIONS,
         )
 
         if not all_logger_results.empty:
-            zone_storage_table = build_event_storage_by_zone(all_logger_results)
-            _append_if_not_empty(all_event_storage_zone_tables, zone_storage_table)
+            zone_storage_table = (
+                build_event_storage_by_zone(
+                    all_logger_results
+                )
+            )
+
+            _append_if_not_empty(
+                all_event_storage_zone_tables,
+                zone_storage_table,
+            )
 
         (
             pre_start_table,
@@ -1225,36 +1461,119 @@ def main() -> None:
             df_15min=df_15min,
             results=bottom_results,
             plot_results=all_logger_results,
+            diagnostics_dir=(
+                IRRIGATION_DIAGNOSTICS_DIR
+            ),
+            holding_capacity_dir=(
+                HOLDING_CAPACITY_DIR
+            ),
+            figures_dir=(
+                IRRIGATION_FIGURES_DIR
+            ),
+            reports_dir=(
+                IRRIGATION_REPORTS_DIR
+            ),
         )
 
-        _append_if_not_empty(all_pre_start_flags, pre_start_table)
-        _append_if_not_empty(all_trustworthy_tables, trustworthy_table)
-        _append_if_not_empty(all_holding_capacity_tables, holding_capacity_table)
-        _append_if_not_empty(all_water_balance_tables, water_balance_table)
+        _append_if_not_empty(
+            all_pre_start_flags,
+            pre_start_table,
+        )
 
-        print(f"Year {year}: bottom rows={bottom_results.shape}, all-logger rows={all_logger_results.shape}")
+        _append_if_not_empty(
+            all_trustworthy_tables,
+            trustworthy_table,
+        )
 
-    combined_zone_storage = _write_zone_storage_outputs(all_event_storage_zone_tables)
+        _append_if_not_empty(
+            all_holding_capacity_tables,
+            holding_capacity_table,
+        )
+
+        _append_if_not_empty(
+            all_water_balance_tables,
+            water_balance_table,
+        )
+
+        print(
+            f"Year {year}: "
+            f"bottom rows={bottom_results.shape}, "
+            f"all-logger rows="
+            f"{all_logger_results.shape}"
+        )
+
+    combined_zone_storage = (
+        _write_zone_storage_outputs(
+            all_event_storage_zone_tables,
+            holding_capacity_dir=(
+                HOLDING_CAPACITY_DIR
+            ),
+        )
+    )
 
     (
         combined_pre_start,
-        combined_trustworthy, 
+        combined_trustworthy,
         combined_holding_capacity,
         combined_water_balance,
     ) = _write_combined_year_outputs(
-        all_pre_start_flags=all_pre_start_flags,
-        all_trustworthy_tables=all_trustworthy_tables,
-        all_holding_capacity_tables=all_holding_capacity_tables,
-        all_water_balance_tables=all_water_balance_tables,
+        all_pre_start_flags=(
+            all_pre_start_flags
+        ),
+        all_trustworthy_tables=(
+            all_trustworthy_tables
+        ),
+        all_holding_capacity_tables=(
+            all_holding_capacity_tables
+        ),
+        all_water_balance_tables=(
+            all_water_balance_tables
+        ),
+        diagnostics_dir=(
+            IRRIGATION_DIAGNOSTICS_DIR
+        ),
+        holding_capacity_dir=(
+            HOLDING_CAPACITY_DIR
+        ),
     )
 
-    print("\n=== IRRIGATION ANALYSIS COMPLETE ===")
-    print(f"DEPTH_INDEX_TO_INCHES: {SENSOR_DEPTH_INDEX_TO_INCHES}")
-    print(f"Zone-storage rows: {len(combined_zone_storage):,}")
-    print(f"Pre-start rows: {len(combined_pre_start):,}")
-    print(f"Trustworthy-event rows: {len(combined_trustworthy):,}")
-    print(f"Holding-capacity rows: {len(combined_holding_capacity):,}")
-    print(f"Water-balance rows: {len(combined_water_balance):,}")
+    print(
+        "\n=== "
+        f"{ANALYSIS_OPTIONS.report_label.upper()} "
+        "IRRIGATION ANALYSIS COMPLETE ==="
+    )
+    print(
+        f"Irrigation source: "
+        f"{IRRIGATION_INPUT_CSV}"
+    )
+    print(
+        f"Output root: "
+        f"{IRRIGATION_ANALYSIS_DIR}"
+    )
+    print(
+        f"DEPTH_INDEX_TO_INCHES: "
+        f"{SENSOR_DEPTH_INDEX_TO_INCHES}"
+    )
+    print(
+        f"Zone-storage rows: "
+        f"{len(combined_zone_storage):,}"
+    )
+    print(
+        f"Pre-start rows: "
+        f"{len(combined_pre_start):,}"
+    )
+    print(
+        f"Trustworthy-event rows: "
+        f"{len(combined_trustworthy):,}"
+    )
+    print(
+        f"Holding-capacity rows: "
+        f"{len(combined_holding_capacity):,}"
+    )
+    print(
+        f"Water-balance rows: "
+        f"{len(combined_water_balance):,}"
+    )
 
 if __name__ == "__main__":
     main()
