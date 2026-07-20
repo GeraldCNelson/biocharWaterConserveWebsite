@@ -29,7 +29,6 @@ from .paths import (
     BASE_DIR,
     DATA_PROCESSED_DIR,
     DATA_RAW_DIR,
-    IRRIGATION_CSV,
     LAB_TESTS_RAW_DIR,
     PARQUET_DIR,
     PARQUET_SUMMARY_15MIN_DIR,
@@ -38,6 +37,8 @@ from .paths import (
     BIOCHAR_MASTER_WORKBOOK,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_SOILCHEM_CSV,
+    ensure_analysis_output_directories,
+    irrigation_analysis_paths,
 )
 
 from .thresholds import (
@@ -67,7 +68,6 @@ __all__ = [
     "PAKBUS",
     "DATA_PROCESSED_DIR",
     "DATA_RAW_DIR",
-    "IRRIGATION_CSV",
     "LAB_TESTS_RAW_DIR",
     "PARQUET_DIR",
     "PARQUET_SUMMARY_15MIN_DIR",
@@ -83,4 +83,6 @@ __all__ = [
     "WARD_MASTER_SOILBIO_CSV",
     "WARD_MASTER_SOILCHEM_CSV",
     "WARD_MASTER_NIR_CSV",
+    "ensure_analysis_output_directories",
+    "irrigation_analysis_paths",
 ]

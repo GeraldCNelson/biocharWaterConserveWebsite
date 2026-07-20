@@ -39,9 +39,14 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILCHEM_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
-    IRRIGATION_CSV,
     FERTILIZER_CSV_OUT,
+    BIOCHAR_MASTER_WORKBOOK,
 )
+
+from biochar_app.config.irrigation_config import (
+    get_irrigation_analysis_options,
+)
+
 from biochar_app.scripts.data_loading import load_logger_data, load_weather_data
 from biochar_app.scripts.readme_builders import (
     build_file_dataset_readme,
@@ -52,8 +57,8 @@ from biochar_app.scripts.readme_builders import (
 bulk_router = APIRouter()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-IRRIGATION_WORKBOOK_PATH = REPO_ROOT / "biochar_app" / "data-raw" / "biochar-data-master.xlsx"
-
+IRRIGATION_OPTIONS = get_irrigation_analysis_options()
+IRRIGATION_DOWNLOAD_CSV = IRRIGATION_OPTIONS.input_csv
 ALLOWED_RESOLUTIONS = ["15min", "hourly", "daily", "monthly", "gseason"]
 
 FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
@@ -63,7 +68,11 @@ FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
 }
 
 MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
-    "irrigation": (IRRIGATION_CSV, "Irrigation", "biochar_irrigation_all_years.csv"),
+    "irrigation": (
+        IRRIGATION_DOWNLOAD_CSV,
+        "Irrigation",
+        "biochar_irrigation_all_years.csv",
+    ),
     "fertilizer": (FERTILIZER_CSV_OUT, "Fertilizer use", "biochar_fertilizer_all_years.csv"),
 }
 
@@ -172,13 +181,32 @@ def _read_parquet_df(path: Path) -> pd.DataFrame:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read parquet {path}: {e}")
 
-def _read_workbook_sheet_df(sheet_name: str) -> pd.DataFrame:
-    if not IRRIGATION_WORKBOOK_PATH.exists():
-        raise HTTPException(status_code=404, detail=f"Workbook not found: {IRRIGATION_WORKBOOK_PATH}")
+def _read_workbook_sheet_df(
+    sheet_name: str,
+) -> pd.DataFrame:
+    if not BIOCHAR_MASTER_WORKBOOK.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Workbook not found: "
+                f"{BIOCHAR_MASTER_WORKBOOK}"
+            ),
+        )
+
     try:
-        return pd.read_excel(IRRIGATION_WORKBOOK_PATH, sheet_name=sheet_name, engine="openpyxl")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read sheet {sheet_name}: {e}")
+        return pd.read_excel(
+            BIOCHAR_MASTER_WORKBOOK,
+            sheet_name=sheet_name,
+            engine="openpyxl",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to read sheet {sheet_name}: "
+                f"{exc}"
+            ),
+        ) from exc
 
 def _load_logger_download_df(year: int, resolution: str) -> pd.DataFrame:
     try:
@@ -261,9 +289,9 @@ def bulk_download_manifest() -> dict[str, Any]:
                 }
             )
 
-    if IRRIGATION_WORKBOOK_PATH.exists():
+    if BIOCHAR_MASTER_WORKBOOK.exists():
         try:
-            xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
+            xls = pd.ExcelFile(BIOCHAR_MASTER_WORKBOOK, engine="openpyxl")
             sheets = [str(s) for s in xls.sheet_names]
         except Exception:
             sheets = []
@@ -465,7 +493,7 @@ async def bulk_download(payload: dict[str, Any]):
             raise HTTPException(status_code=400, detail=f"Invalid year in key: {key}")
 
         try:
-            xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
+            xls = pd.ExcelFile(BIOCHAR_MASTER_WORKBOOK, engine="openpyxl")
             sheets = [str(s) for s in xls.sheet_names]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Cannot read workbook sheets: {e}")

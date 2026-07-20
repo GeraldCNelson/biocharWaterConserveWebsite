@@ -48,7 +48,7 @@ from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
     get_flat_gseason_summary,
 )
-from biochar_app.scripts.plot_utils import (
+from biochar_app.scripts.plot_builder import (
     make_raw_figure,
     make_ratio_figure,
     make_raw_gseason_figure,

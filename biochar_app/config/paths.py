@@ -15,6 +15,10 @@ from pathlib import Path
 # jump up one level from config/ into biochar_app/
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+CONFIG_DIR = BASE_DIR / "config"
+
+DATASET_METADATA_PY = CONFIG_DIR / "dataset_metadata.py"
+
 DATA_RAW_DIR = BASE_DIR / "data-raw"
 DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
 STATIC_DIR = BASE_DIR / "static"
@@ -64,12 +68,19 @@ WARD_MASTER_SOILCHEM_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean
 BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 
 # Management workbook / cleaned management datasets
-BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
+BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master-4.xlsx"
 
 MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
 
 IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR / "irrigation"
-IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean.csv"
+IRRIGATION_PRODUCTION_CSV = (
+    IRRIGATION_DIR / "irrigation_clean.csv"
+)
+
+IRRIGATION_QC_CSV = (
+    IRRIGATION_DIR / "irrigation_clean_qc_candidate.csv"
+)
+#IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean_qc_candidate.csv"
 IRRIGATION_ANALYSIS_DIR = IRRIGATION_DIR / "analysis"
 HOLDING_CAPACITY_DIR = IRRIGATION_ANALYSIS_DIR / "holding_capacity"
 IRRIGATION_DIAGNOSTICS_DIR = IRRIGATION_ANALYSIS_DIR / "diagnostics"
@@ -99,3 +110,33 @@ LIDAR_ANALYSIS_DIR = LIDAR_DIR / "analysis"
 LIDAR_PIPELINES_DIR = LIDAR_DIR / "pipelines"
 DRONE_DIR = GEOSPATIAL_DIR / "drone"
 
+        
+def irrigation_analysis_paths(
+    variant: str | None = None,
+) -> dict[str, Path]:
+    """
+    Return output paths for one irrigation-analysis variant.
+    """
+
+    if variant is None or variant == "" or variant == "production":
+        analysis_root = IRRIGATION_ANALYSIS_DIR
+    else:
+        analysis_root = IRRIGATION_ANALYSIS_DIR / variant
+
+    return {
+        "root": analysis_root,
+        "diagnostics": analysis_root / "diagnostics",
+        "figures": analysis_root / "figures",
+        "reports": analysis_root / "reports",
+        "holding_capacity": analysis_root / "holding_capacity",
+    }
+
+def ensure_analysis_output_directories(
+    paths: dict[str, Path],
+) -> None:
+    """
+    Create an irrigation-analysis output directory tree if it does not exist.
+    """
+
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,5 @@
 """
-plot_utils.py
+plot_builder.py
 
 Plotly figure builders + small helpers used by routes.
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from typing import Any, Optional, TYPE_CHECKING, Sequence, cast
 
 import pandas as pd
@@ -49,7 +50,7 @@ from biochar_app.config.units import (
     label_name_mapping,
 )
 
-from biochar_app.scripts.plot_helpers import (
+from biochar_app.scripts.plot_components import (
     common_legend_config,
     common_xaxis_config,
     common_yaxis2_config,
@@ -57,6 +58,11 @@ from biochar_app.scripts.plot_helpers import (
     convert_units,
     get_unit_aware_label,
     load_irrigation_events,
+)
+
+from biochar_app.config.dataset_metadata import (
+    DAILY_PRECIPITATION_MAX_IN,
+    VWC_MAX_PERCENT,
 )
 
 # TODO:
@@ -76,6 +82,14 @@ PLOT_MARGINS = {
 # Small helpers worth keeping
 # ---------------------------------------------------------------------------
 
+def round_axis_limit(
+    value: float,
+    step: float,
+) -> float:
+    """
+    Round a positive axis limit up to the next multiple of `step`.
+    """
+    return math.ceil(value / step) * step
 def bad_request(msg: str) -> None:
     raise HTTPException(status_code=400, detail=msg)
 
@@ -198,13 +212,17 @@ def add_precipitation_bars(
     df: pd.DataFrame,
     unit_system: str,
     granularity: str,
+    precipitation_axis_max_in: float = DAILY_PRECIPITATION_MAX_IN,
 ) -> None:
     usys: UnitSystem = coerce_unit_system(unit_system)
     df = _ensure_timestamp_datetime(df)
 
     gran = str(granularity or "").strip().lower()
 
-    bw = bar_width_map.get(gran, bar_width_map.get("daily", 0))
+    bw = bar_width_map.get(
+        gran,
+        bar_width_map.get("daily", 0),
+    )
 
     width_multiplier = {
         "15min": 50.0,
@@ -219,35 +237,110 @@ def add_precipitation_bars(
     except (TypeError, ValueError):
         pass
 
-    primary = {"metric": "precip_mm", "us": "precip_in"}[usys]
-    fallback = {"metric": "precip_in", "us": "precip_mm"}[usys]
+    primary = {
+        "metric": "precip_mm",
+        "us": "precip_in",
+    }[usys]
+
+    fallback = {
+        "metric": "precip_in",
+        "us": "precip_mm",
+    }[usys]
 
     vals: Optional[pd.Series] = None
-    if primary in df.columns:
-        vals = to_float_series(df[primary])
-    elif fallback in df.columns:
-        tmp = to_float_series(df[fallback])
-        vals = tmp * (25.4 if usys == "metric" else 1.0 / 25.4)
 
-    if vals is None or "timestamp" not in df.columns:
+    if primary in df.columns:
+        vals = to_float_series(
+            df[primary]
+        )
+
+    elif fallback in df.columns:
+        tmp = to_float_series(
+            df[fallback]
+        )
+
+        vals = (
+            tmp * 25.4
+            if usys == "metric"
+            else tmp / 25.4
+        )
+
+    if (
+        vals is None
+        or "timestamp" not in df.columns
+    ):
         return
 
-    unit_suffix = "mm" if usys == "metric" else "in"
+    unit_suffix = (
+        "mm"
+        if usys == "metric"
+        else "in"
+    )
+
+    configured_axis_max = (
+        precipitation_axis_max_in * 25.4
+        if usys == "metric"
+        else precipitation_axis_max_in
+    )
+
+    observed_max = pd.to_numeric(
+        vals,
+        errors="coerce",
+    ).max()
+
+    if pd.isna(observed_max):
+        precipitation_axis_max = configured_axis_max
+
+    elif gran == "daily":
+        precipitation_axis_max = round_axis_limit(
+            max(
+                configured_axis_max,
+                float(observed_max),
+            ),
+            0.05 if usys == "us" else 1.0,
+        )
+
+    else:
+        precipitation_axis_max = round_axis_limit(
+            float(observed_max),
+            0.01 if usys == "us" else 0.25,
+        )
 
     fig.add_trace(
         go.Bar(
-            x=safe_tolist(df["timestamp"]),
-            y=safe_tolist(vals),
+            x=safe_tolist(
+                df["timestamp"]
+            ),
+            y=safe_tolist(
+                vals
+            ),
             yaxis="y2",
             name="Precip",
             width=bw,
-            marker=dict(color=PLOT_COLORS.get("precip", "LightSteelBlue")),
+            marker=dict(
+                color=PLOT_COLORS.get(
+                    "precip",
+                    "LightSteelBlue",
+                )
+            ),
             offsetgroup="0",
             opacity=0.55,
-            hovertemplate=f"Precip: %{{y:.2f}} {unit_suffix}<extra></extra>",
+            hovertemplate=(
+                f"Precip: %{{y:.2f}} "
+                f"{unit_suffix}<extra></extra>"
+            ),
         )
     )
-    fig.update_layout(yaxis2=common_yaxis2_config(usys))
+
+    yaxis2_config = common_yaxis2_config(usys)
+
+    yaxis2_config["range"] = [
+        0.0, precipitation_axis_max,
+    ]
+
+    fig.update_layout(
+        yaxis2=yaxis2_config
+    )
 
 def add_irrigation_shapes(
     fig: go.Figure,
@@ -381,12 +474,16 @@ def configure_primary_yaxis(
     usys: UnitSystem = coerce_unit_system(unit_system)
     block = df_cols(df, y_cols)
     gmin, gmax = finite_min_max(block)
+
     if gmin is None or gmax is None:
         return
 
+    padding_fraction = 0.05
+
     if kind == "raw" and variable == "VWC":
         gmin = 0.0
-        gmax = 50.0
+        gmax = math.ceil(VWC_MAX_PERCENT / 5.0) * 5.0
+        padding_fraction = 0.0
 
     elif kind == "ratio" and variable in ("VWC", "SWC"):
         gmin = min(0.0, gmin)
@@ -398,6 +495,7 @@ def configure_primary_yaxis(
             usys,
             gmin,
             gmax,
+            padding_fraction=padding_fraction,
         )
     )
 

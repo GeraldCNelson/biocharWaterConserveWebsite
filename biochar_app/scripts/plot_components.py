@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-plot_helpers.py — Shared Plotting Helpers & Unit-Aware Utilities.
+plot_components.py — Shared Plotting Helpers & Unit-Aware Utilities.
 
 Irrigation terminology:
     total_meter_gallons = water measured at the meter, upstream of split valve
@@ -192,6 +192,7 @@ def common_yaxis_config(
     unit_system: UnitSystem,
     global_min: Optional[float],
     global_max: Optional[float],
+    padding_fraction: float = 0.05,
 ) -> dict[str, Any]:
     if global_min is None:
         raise HTTPException(400, "Cannot build y-axis: global_min is None")
@@ -220,8 +221,8 @@ def common_yaxis_config(
         title_base, unit = str(full_label), ""
 
     if kind == "raw":
-        y_min = gmin * 0.95
-        y_max = gmax * 1.05
+        y_min = gmin - abs(gmin) * padding_fraction
+        y_max = gmax + abs(gmax) * padding_fraction
     else:
         pad = abs(gmax) * 0.05
         y_min = gmin - pad
