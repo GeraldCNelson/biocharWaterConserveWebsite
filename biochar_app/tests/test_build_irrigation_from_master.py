@@ -101,12 +101,69 @@ class BuildIrrigationFromMasterTests(unittest.TestCase):
         self.assertTrue(candidate["gallons_strip"].eq(34125.0).all())
         self.assertTrue(candidate["concurrent_group_count"].eq(2).all())
         self.assertTrue(
+            candidate["total_meter_gallons"].eq(136500.0).all()
+        )
+        self.assertTrue(
+            candidate["flow_allocation_fraction"].eq(0.5).all()
+        )
+        self.assertTrue(
+            candidate["strip_allocation_fraction"].eq(0.5).all()
+        )
+        self.assertTrue(
             candidate["calculated_total_meter_gallons"].eq(136500.0).all()
         )
         self.assertTrue(
             candidate[
                 "calculated_group_gallons_from_totalizer"
             ].eq(68250.0).all()
+        )
+
+    def test_single_group_event_uses_full_meter_volume(self) -> None:
+        single_event = event(
+            strip_group="S1_S2",
+            reported_gallons=136500.0,
+            source_row=13,
+        )
+        events = pd.DataFrame([single_event])
+
+        candidate, invalid = build_candidate_from_events(events)
+
+        self.assertTrue(invalid.empty)
+        self.assertEqual(len(candidate), 2)
+        self.assertTrue(candidate["concurrent_group_count"].eq(1).all())
+        self.assertTrue(
+            candidate["total_meter_gallons"].eq(136500.0).all()
+        )
+        self.assertTrue(
+            candidate["flow_allocation_fraction"].eq(1.0).all()
+        )
+        self.assertTrue(candidate["gallons_group"].eq(136500.0).all())
+        self.assertTrue(candidate["gallons_strip"].eq(68250.0).all())
+
+    def test_missing_totalizer_uses_allocated_group_fallback(self) -> None:
+        first = event(
+            strip_group="S1_S2",
+            reported_gallons=68250.0,
+            source_row=13,
+        )
+        second = event(
+            strip_group="S3_S4",
+            reported_gallons=68250.0,
+            source_row=14,
+        )
+        first["workbook_totalizer_derived_gallons"] = None
+        second["workbook_totalizer_derived_gallons"] = None
+
+        candidate, invalid = build_candidate_from_events(
+            pd.DataFrame([first, second])
+        )
+
+        self.assertTrue(invalid.empty)
+        self.assertTrue(
+            candidate["total_meter_gallons"].eq(136500.0).all()
+        )
+        self.assertTrue(
+            candidate["flow_allocation_fraction"].eq(0.5).all()
         )
 
     def test_missing_volume_event_is_excluded_for_review(self) -> None:

@@ -257,6 +257,12 @@ def build_candidate_from_events(
         )
 
         concurrent_count = int(event["concurrent_group_count"])
+        flow_allocation_fraction = 1.0 / concurrent_count
+        total_meter_gallons = (
+            calculated_gallons
+            if calculated_gallons is not pd.NA
+            else gallons_group / flow_allocation_fraction
+        )
         calculated_group = (
             calculated_gallons / concurrent_count
             if calculated_gallons is not pd.NA
@@ -273,8 +279,10 @@ def build_candidate_from_events(
                     "strip_group": strip_group,
                     "location": event["location"],
                     "strip": strip,
-                    "total_meter_gallons": gallons_group,
-                    "flow_allocation_fraction": 1.0,
+                    "total_meter_gallons": total_meter_gallons,
+                    "flow_allocation_fraction": (
+                        flow_allocation_fraction
+                    ),
                     "strip_allocation_fraction": 0.5,
                     "gallons_group": gallons_group,
                     "gallons_source": "reported_gal_used",
