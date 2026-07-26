@@ -4,6 +4,9 @@ etl.py
 
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
+  - Require the macOS OneDrive application unless master refresh is skipped
+  - Validate and install the synchronized authoritative master-workbook
+    snapshot before downstream data processing
   - Parse raw logger timestamps as naive clock text
   - Apply per-logger clock corrections (MST/MDT jumps, resets) using LOGGER_CLOCK_CORRECTIONS
   - Convert corrected logger timestamps from a fixed MST base into America/Denver civil time
@@ -51,6 +54,7 @@ python biochar_app/scripts/etl.py
 python biochar_app/scripts/etl.py --year 2024
 python biochar_app/scripts/etl.py --force-backup-raw
 python biochar_app/scripts/etl.py --no-backup-raw
+python biochar_app/scripts/etl.py --skip-master-workbook-refresh
 """
 
 from __future__ import annotations
@@ -85,6 +89,7 @@ from biochar_app.config.core import (
     cylinder_volume_m3,
 )
 
+from biochar_app.config.data_sources import BIOCHAR_MASTER_SOURCE
 from biochar_app.config.irrigation_config import (
     RAW_DATA_BACKUP_DIR,
     RAW_DATA_BACKUP_INTERVAL_DAYS,
@@ -108,6 +113,13 @@ from biochar_app.config.units import (
     UNIT_CONVERSIONS,
 )
 from biochar_app.scripts.get_weather_data import fetch_weather_data
+from biochar_app.scripts.management.build_irrigation_from_master import (
+    build_and_install_irrigation,
+)
+from biochar_app.scripts.management.update_master_workbook_snapshot import (
+    require_onedrive_desktop_app,
+    update_snapshot,
+)
 from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
 
 from biochar_app.config.dataset_metadata import (
@@ -1465,15 +1477,93 @@ def update_plot_metadata(
         f"{max_daily_precip_in:.2f} in"
     )
 
+
+def refresh_master_workbook_snapshot() -> dict[str, Any]:
+    """
+    Validate and install the latest locally synchronized master workbook.
+
+    Microsoft OneDrive performs cloud synchronization. This function verifies
+    that the desktop application is running and then installs a validated,
+    byte-identical repository snapshot for application and analysis code.
+    """
+    require_onedrive_desktop_app()
+
+    source = BIOCHAR_MASTER_SOURCE.synced_source_path
+    logger.info("Checking synchronized master workbook: %s", source)
+    logger.info(
+        "Synchronized workbook modification time: %s",
+        datetime.fromtimestamp(source.stat().st_mtime).astimezone().isoformat()
+        if source.exists()
+        else "unavailable",
+    )
+
+    audit = update_snapshot(
+        source=source,
+        destination=BIOCHAR_MASTER_SOURCE.local_path,
+        required_sheets=BIOCHAR_MASTER_SOURCE.required_sheets,
+        audit_path=BIOCHAR_MASTER_SOURCE.local_path.with_suffix(
+            ".snapshot.json"
+        ),
+        validate_only=False,
+    )
+
+    logger.info(
+        "Master workbook snapshot: result=%s changed=%s sha256=%s",
+        audit["result"],
+        audit["changed"],
+        audit["installed_sha256"],
+    )
+    return audit
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--year", type=int, default=None)
     parser.add_argument("--all-years", action="store_true")
     parser.add_argument("--no-backup-raw", action="store_true")
     parser.add_argument("--force-backup-raw", action="store_true")
+    parser.add_argument(
+        "--skip-master-workbook-refresh",
+        action="store_true",
+        help=(
+            "Use the existing repository snapshot without checking OneDrive. "
+            "Management data may be stale."
+        ),
+    )
+    parser.add_argument(
+        "--skip-irrigation-build",
+        action="store_true",
+        help=(
+            "Do not rebuild irrigation_clean.csv from the validated master "
+            "workbook snapshot."
+        ),
+    )
     args = parser.parse_args()
 
     os.makedirs(PARQUET_DIR, exist_ok=True)
+
+    if args.skip_master_workbook_refresh:
+        logger.warning(
+            "Master-workbook refresh was skipped. Management data may be "
+            "based on an older repository snapshot."
+        )
+    else:
+        refresh_master_workbook_snapshot()
+
+    if args.skip_irrigation_build:
+        logger.warning(
+            "Irrigation build was skipped. Plot annotations and irrigation "
+            "analysis may be stale."
+        )
+    else:
+        irrigation_audit = build_and_install_irrigation()
+        logger.info(
+            "Irrigation data rebuilt: rows=%s latest_start=%s "
+            "invalid_group_events=%s",
+            irrigation_audit["production_strip_rows"],
+            irrigation_audit["latest_irrigation_start"],
+            irrigation_audit["invalid_group_events"],
+        )
 
     years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
 

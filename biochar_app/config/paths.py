@@ -68,7 +68,7 @@ WARD_MASTER_SOILCHEM_CSV = SOIL_CHEM_PROCESSED_DIR / "ward_master_soilchem_clean
 BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 
 # Management workbook / cleaned management datasets
-BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master-4.xlsx"
+BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
 
 MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
 
