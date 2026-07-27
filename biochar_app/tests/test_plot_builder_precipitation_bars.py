@@ -33,10 +33,10 @@ class PrecipitationBarWidthTests(unittest.TestCase):
         self.assertEqual(len(figure.data), 1)
         return int(figure.data[0].width)
 
-    def test_15min_bar_uses_one_15_minute_interval(self) -> None:
+    def test_15min_bar_uses_visible_30_minute_display_width(self) -> None:
         self.assertEqual(
             self.precipitation_width("15min"),
-            bar_width_map["15min"],
+            30 * 60 * 1000,
         )
 
     def test_15minute_alias_uses_15min_width(self) -> None:
@@ -45,10 +45,14 @@ class PrecipitationBarWidthTests(unittest.TestCase):
             bar_width_map["15min"],
         )
 
-    def test_hourly_and_daily_bars_use_configured_widths(self) -> None:
-        for granularity in ("hourly", "daily"):
-            with self.subTest(granularity=granularity):
-                self.assertEqual(
-                    self.precipitation_width(granularity),
-                    bar_width_map[granularity],
-                )
+    def test_hourly_bar_uses_one_hour_width(self) -> None:
+        self.assertEqual(
+            self.precipitation_width("hourly"),
+            60 * 60 * 1000,
+        )
+
+    def test_daily_bar_uses_65_percent_of_day(self) -> None:
+        self.assertEqual(
+            self.precipitation_width("daily"),
+            int(0.65 * 24 * 60 * 60 * 1000),
+        )
