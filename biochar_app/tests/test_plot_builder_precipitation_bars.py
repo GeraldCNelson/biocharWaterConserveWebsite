@@ -51,8 +51,8 @@ class PrecipitationBarWidthTests(unittest.TestCase):
             60 * 60 * 1000,
         )
 
-    def test_daily_bar_uses_65_percent_of_day(self) -> None:
+    def test_daily_bar_uses_half_day_width(self) -> None:
         self.assertEqual(
             self.precipitation_width("daily"),
-            int(0.65 * 24 * 60 * 60 * 1000),
+            int(0.5 * 24 * 60 * 60 * 1000),
         )

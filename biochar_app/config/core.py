@@ -219,7 +219,7 @@ bar_width_map = {
     "15min": 30 * 60 * 1000,
     "hourly": 3600 * 1000,
     # Leave a visible gap between neighboring daily precipitation totals.
-    "daily": ms_per_day * 0.65,
+    "daily": ms_per_day * 0.5,
     "monthly": 30 * ms_per_day * 0.8,
 }
 
