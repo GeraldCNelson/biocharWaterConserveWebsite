@@ -218,24 +218,15 @@ def add_precipitation_bars(
     df = _ensure_timestamp_datetime(df)
 
     gran = str(granularity or "").strip().lower()
+    gran = {
+        "15minute": "15min",
+        "15-minute": "15min",
+    }.get(gran, gran)
 
     bw = bar_width_map.get(
         gran,
         bar_width_map.get("daily", 0),
     )
-
-    width_multiplier = {
-        "15min": 50.0,
-        "15minute": 50.0,
-        "15-minute": 50.0,
-        "hourly": 2.5,
-        "daily": 1.5,
-    }.get(gran, 1.0)
-
-    try:
-        bw = int(float(bw) * width_multiplier)
-    except (TypeError, ValueError):
-        pass
 
     primary = {
         "metric": "precip_mm",
