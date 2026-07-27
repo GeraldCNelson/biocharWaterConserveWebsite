@@ -188,6 +188,110 @@ BATTERY_MIN_OK = 11.0
 BATTERY_MAX_OK = 15.0
 MIN_BOTTOM_RESPONSE_DELAY_HR = 0.5
 
+
+def prune_stale_multidepth_figures(
+    *,
+    year: int,
+    plot_log: pd.DataFrame,
+    multidepth_plot_dir: Path,
+) -> list[Path]:
+    """
+    Remove obsolete generated event plots for one successfully built year.
+
+    Event timestamps and IDs are part of plot filenames. When corrected source
+    data change either value, a new filename is written and the old PNG would
+    otherwise remain beside it. Cleanup is deliberately skipped unless the
+    current build produced at least one plot and every plot-log row reports
+    ``written``.
+    """
+
+    if plot_log.empty or "status" not in plot_log.columns:
+        return []
+
+    if not plot_log["status"].astype("string").eq("written").all():
+        print(
+            f"Year {year}: stale-figure cleanup skipped because one or more "
+            "event plots were not written successfully."
+        )
+        return []
+
+    expected = {
+        Path(value).resolve()
+        for value in plot_log["output_file"].dropna().astype(str)
+    }
+
+    if not expected:
+        return []
+
+    stale = sorted(
+        path
+        for path in multidepth_plot_dir.glob(f"*/{year}-*.png")
+        if path.resolve() not in expected
+    )
+
+    for path in stale:
+        path.unlink()
+
+    return stale
+
+
+def concat_nonempty_informative_frames(
+    frames: list[pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Concatenate nonempty frames without pandas' all-NA dtype warning.
+
+    Columns that are entirely missing in one yearly frame are dropped from that
+    frame before concatenation. A column is still retained in the combined
+    result whenever at least one year contains an actual value.
+    """
+
+    informative = [
+        frame.dropna(axis="columns", how="all")
+        for frame in frames
+        if frame is not None and not frame.empty
+    ]
+
+    return (
+        pd.concat(informative, ignore_index=True)
+        if informative
+        else pd.DataFrame()
+    )
+
+
+def logger_order_flag_summary(
+    arrival_order_table: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return one console-summary row per flagged event and strip."""
+
+    if arrival_order_table.empty:
+        return pd.DataFrame()
+
+    flag_mask = (
+        arrival_order_table["any_bottom_before_top_or_middle"].eq(True)
+        | arrival_order_table[
+            "any_alt_bottom_before_top_or_middle"
+        ].eq(True)
+    )
+
+    columns = [
+        "strip",
+        "event_id",
+        "arrival_6in_logger_order_class",
+        "arrival_12in_logger_order_class",
+        "arrival_18in_logger_order_class",
+        "alt_arrival_6in_logger_order_class",
+        "alt_arrival_12in_logger_order_class",
+        "alt_arrival_18in_logger_order_class",
+    ]
+
+    return (
+        arrival_order_table.loc[flag_mask, columns]
+        .drop_duplicates(subset=["strip", "event_id"])
+        .sort_values(["strip", "event_id"])
+        .reset_index(drop=True)
+    )
+
         
 def build_irrigation_event_response_summary(
     arrival_times: pd.DataFrame,
@@ -1015,30 +1119,16 @@ def write_year_outputs(
             )
 
     if not arrival_order_table.empty:
-        logger_order_flag_rows = arrival_order_table[
-            arrival_order_table["any_bottom_before_top_or_middle"].eq(True)
-            | arrival_order_table["any_alt_bottom_before_top_or_middle"].eq(True)
-        ]
+        logger_order_flag_rows = logger_order_flag_summary(
+            arrival_order_table
+        )
 
         print(f"\n=== LOGGER ORDER FLAGS ({year}) ===")
         if logger_order_flag_rows.empty:
             print("None")
         else:
-            logger_order_cols = [
-                "strip",
-                "event_id",
-                "logger_position",
-                "arrival_6in_logger_order_class",
-                "arrival_12in_logger_order_class",
-                "arrival_18in_logger_order_class",
-                "alt_arrival_6in_logger_order_class",
-                "alt_arrival_12in_logger_order_class",
-                "alt_arrival_18in_logger_order_class",
-            ]
             print(
-                logger_order_flag_rows[logger_order_cols]
-                .sort_values(["strip", "event_id", "logger_position"])
-                .to_string(index=False)
+                logger_order_flag_rows.to_string(index=False)
             )
 
     if not arrival_times.empty:
@@ -1129,6 +1219,16 @@ def write_year_outputs(
             / f"irrigation_event_multidepth_plot_log_{year}.csv"
     )
     multidepth_plot_log.to_csv(plot_log_path, index=False)
+
+    stale_plot_paths = prune_stale_multidepth_figures(
+        year=year,
+        plot_log=multidepth_plot_log,
+        multidepth_plot_dir=multidepth_plot_dir,
+    )
+    print(
+        f"Year {year}: removed {len(stale_plot_paths)} stale "
+        "multidepth event plot(s)."
+    )
 
     pre_start_table = detect_pre_start_response(
         df_15min=df_15min,
@@ -1301,15 +1401,8 @@ def _write_combined_year_outputs(
         exist_ok=True,
     )
 
-    frames = [df for df in all_pre_start_flags if df is not None and not df.empty]
-
-    combined_pre_start = (
-        pd.concat(
-            frames,
-            ignore_index=True,
-        )
-        if frames
-        else pd.DataFrame()
+    combined_pre_start = concat_nonempty_informative_frames(
+        all_pre_start_flags
     )
 
     combined_pre_start.to_csv(
@@ -1318,17 +1411,8 @@ def _write_combined_year_outputs(
         index=False,
     )
 
-    trustworthy_frames = [
-        df for df in all_trustworthy_tables if df is not None and not df.empty
-    ]
-
-    combined_trustworthy = (
-        pd.concat(
-            trustworthy_frames,
-            ignore_index=True,
-        )
-        if trustworthy_frames
-        else pd.DataFrame()
+    combined_trustworthy = concat_nonempty_informative_frames(
+        all_trustworthy_tables
     )
 
     combined_trustworthy.to_csv(
@@ -1337,13 +1421,8 @@ def _write_combined_year_outputs(
         index=False,
     )
 
-    combined_holding_capacity = (
-        pd.concat(
-            all_holding_capacity_tables,
-            ignore_index=True,
-        )
-        if all_holding_capacity_tables
-        else pd.DataFrame()
+    combined_holding_capacity = concat_nonempty_informative_frames(
+        all_holding_capacity_tables
     )
 
     combined_holding_capacity = round_for_reporting(
@@ -1356,13 +1435,8 @@ def _write_combined_year_outputs(
         index=False,
     )
 
-    combined_water_balance = (
-        pd.concat(
-            all_water_balance_tables,
-            ignore_index=True,
-        )
-        if all_water_balance_tables
-        else pd.DataFrame()
+    combined_water_balance = concat_nonempty_informative_frames(
+        all_water_balance_tables
     )
 
     combined_water_balance = round_for_reporting(

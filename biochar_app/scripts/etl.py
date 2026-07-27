@@ -241,7 +241,12 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S2M": [("2026-02-23 08:45:00", 60)],
     "S2T": [("2024-04-02 16:00:00", -60)],
     "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
-    "S3M": [("2023-09-04 10:30:00", -60), ("2024-07-07 06:30:00", -120), ("2025-01-16 23:45:00", -180)],
+    "S3M": [
+        ("2023-09-04 10:30:00", -60),
+        ("2024-07-07 06:30:00", -120),
+        ("2025-01-16 23:45:00", -180),
+        ("2026-02-19 15:00:00", 0),
+    ],
     "S3T": [("2024-02-23 11:30:00", 60)],
     "S4B": [("2023-09-04 10:30:00", -60), ("2023-09-20 18:30:00", -120), ("2026-02-23 09:00:00", -60)],
     "S4M": [("2024-02-23 14:30:00", 60)],
@@ -276,18 +281,38 @@ DEFAULT_TIMEZONE_NAME = tz_name(DEFAULT_TIMEZONE)
 
 def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
     """
-    Apply piecewise clock corrections (add minutes) to a naive timestamp series.
+    Apply piecewise absolute clock offsets to a naive timestamp series.
+
+    Each ``LOGGER_CLOCK_CORRECTIONS`` entry records the complete offset that
+    becomes active at its start timestamp. Entries are state changes, not
+    incremental adjustments. For example, successive offsets of -60 and -120
+    mean that the later interval receives -120 minutes, not -180 minutes.
+
+    Interval selection is based on the original raw logger timestamp. This is
+    important because applying an earlier correction must not move a row across
+    a later state-change boundary.
     """
     pts = LOGGER_CLOCK_CORRECTIONS.get(logger_tag)
     if not pts:
         return ts
 
-    out = pd.to_datetime(ts, errors="coerce").astype("datetime64[ns]")
-    for start_s, add_min in pts:
+    raw = pd.to_datetime(ts, errors="coerce").astype("datetime64[ns]")
+    out = raw.copy()
+
+    # Later state changes overwrite earlier ones for all subsequent raw rows.
+    # Sorting also makes the behavior deterministic if configuration entries
+    # are ever entered out of chronological order.
+    for start_s, add_min in sorted(
+        pts,
+        key=lambda item: pd.Timestamp(item[0]),
+    ):
         start_ts = pd.Timestamp(start_s)
-        mask = out >= start_ts
+        mask = raw >= start_ts
         if mask.any():
-            out = out.where(~mask, out + pd.Timedelta(minutes=int(add_min)))
+            out = out.where(
+                ~mask,
+                raw + pd.Timedelta(minutes=int(add_min)),
+            )
     return out
 
 def apply_logger_seasonal_civil_time(

@@ -179,6 +179,7 @@ biochar_app/geospatial/drone/processed/**
 
 .DS_Store
 **/.DS_Store
+.venv
 
 biochar_app/data-processed/management/irrigation/photos/originals/
 biochar_app/data-processed/management/irrigation/photos/meter_photo_review*.xlsx

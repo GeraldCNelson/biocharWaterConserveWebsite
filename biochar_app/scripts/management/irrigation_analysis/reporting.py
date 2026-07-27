@@ -258,6 +258,17 @@ def build_arrival_diagnostics_report(
             )
 
             doc.add_paragraph(f"Event ID: {row['event_id']}")
+
+            if _fmt_bool_flag(
+                row.get("elevated_18in_baseline_context")
+            ):
+                doc.add_paragraph(
+                    "Depth-profile context: the pre-irrigation 18-inch VWC "
+                    "was higher than both shallower baselines. Treat this as "
+                    "a site/depth-profile characteristic, not an anomaly by "
+                    "itself; arrival timing is evaluated separately."
+                )
+
             doc.add_paragraph(
                 f"Irrigation start: {_fmt_datetime(row.get('irrigation_start'))} | "
                 f"Irrigation end: {_fmt_datetime(row.get('irrigation_end'))} | "

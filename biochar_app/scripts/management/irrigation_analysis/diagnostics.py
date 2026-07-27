@@ -1006,6 +1006,7 @@ def build_arrival_order_diagnostics(
         arrival_lookup: dict[int, float | None] = {}
         alt_lookup: dict[int, float | None] = {}
         alt_before_start_lookup: dict[int, bool] = {}
+        baseline_lookup: dict[int, float | None] = {}
 
         for _, row in group.iterrows():
             depth = int(row["depth_inches"])
@@ -1019,6 +1020,9 @@ def build_arrival_order_diagnostics(
             alt_before_start_lookup[depth] = _as_bool(
                 row.get("alt_arrival_before_irrigation_start")
             )
+            baseline_lookup[depth] = _as_float_or_none(
+                row.get("baseline_vwc")
+            )
 
         arrival_6 = arrival_lookup.get(6)
         arrival_12 = arrival_lookup.get(12)
@@ -1027,6 +1031,17 @@ def build_arrival_order_diagnostics(
         alt_6 = alt_lookup.get(6)
         alt_12 = alt_lookup.get(12)
         alt_18 = alt_lookup.get(18)
+
+        baseline_6 = baseline_lookup.get(6)
+        baseline_12 = baseline_lookup.get(12)
+        baseline_18 = baseline_lookup.get(18)
+        elevated_18in_baseline_context = (
+            baseline_6 is not None
+            and baseline_12 is not None
+            and baseline_18 is not None
+            and baseline_18 > baseline_6
+            and baseline_18 > baseline_12
+        )
 
         order_group = (
             group[
@@ -1106,6 +1121,19 @@ def build_arrival_order_diagnostics(
                 "alt_before_start_depths": ",".join(alt_before_start_depths),
                 "any_alt_before_start": any_alt_before_start,
                 "all_alt_before_start": all_alt_before_start,
+                "baseline_vwc_6in": baseline_6,
+                "baseline_vwc_12in": baseline_12,
+                "baseline_vwc_18in": baseline_18,
+                "elevated_18in_baseline_context": (
+                    elevated_18in_baseline_context
+                ),
+                "depth_profile_interpretation": (
+                    "18-inch baseline exceeds both shallower baselines; "
+                    "treat as a site/depth-profile characteristic, not an "
+                    "anomaly by itself."
+                    if elevated_18in_baseline_context
+                    else ""
+                ),
             }
         )
 

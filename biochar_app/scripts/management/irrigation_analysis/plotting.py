@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Irrigation plotting utilities.
+Irrigation plotting utilities for estimate_irrigation_holding_capacity.py.
 
 from biochar_app.config.experiment_config import LOGGER_LOCATIONS
 

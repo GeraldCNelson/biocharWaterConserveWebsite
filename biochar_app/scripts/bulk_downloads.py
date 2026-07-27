@@ -426,8 +426,9 @@ async def bulk_download(payload: dict[str, Any]):
             ratios_included = False
             if ratios_pq is not None and ratios_pq.exists():
                 ratios_df = _read_parquet_df(ratios_pq)
+                numeric_columns = ratios_df.select_dtypes(include="number").columns
+                ratios_df[numeric_columns] = ratios_df[numeric_columns].round(3)
                 ratios_bytes = ratios_df.to_csv(index=False).encode("utf-8")
-                files.append((f"biochar_loggers_{year}_{resolution}_ratios.csv", ratios_bytes))
                 ratios_included = True
 
             readme = build_timeseries_yearly_readme(
