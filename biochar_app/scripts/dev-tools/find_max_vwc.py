@@ -14,7 +14,6 @@ from typing import Any, cast
 
 import pandas as pd
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PARQUET_DIR = PROJECT_ROOT / "data-processed" / "parquet"
 
@@ -26,13 +25,11 @@ LOW_VWC = 1.0
 LARGE_JUMP = 10.0
 OBS_PER_HOUR = 4.0  # 15-minute data
 
-
 def get_vwc_columns(df: pd.DataFrame) -> list[str]:
     return [
         c for c in df.columns
         if c.startswith("VWC_") and "_raw_" in c
     ]
-
 
 def count_bad_episodes(mask: pd.Series) -> int:
     if mask.empty:
@@ -40,7 +37,6 @@ def count_bad_episodes(mask: pd.Series) -> int:
 
     starts = mask & ~mask.shift(fill_value=False)
     return int(starts.sum())
-
 
 def episode_stats(
     values: pd.Series,
@@ -67,7 +63,6 @@ def episode_stats(
 
     longest_hours = longest_points / OBS_PER_HOUR
     return longest_points, longest_hours
-
 
 def get_episode_details(
     sub: pd.DataFrame,
@@ -121,7 +116,6 @@ def get_episode_details(
         )
 
     return episodes
-
 
 def summarize_sensor_qa(all_values: pd.DataFrame) -> None:
     print("\nVWC QA summary by sensor")
@@ -188,7 +182,6 @@ def summarize_sensor_qa(all_values: pd.DataFrame) -> None:
 
     print(qa_df.to_string(index=False))
 
-
 def summarize_high_values_by_hour(all_values: pd.DataFrame) -> None:
     print("\nHigh VWC observations by hour of day")
     print("-" * 80)
@@ -209,7 +202,6 @@ def summarize_high_values_by_hour(all_values: pd.DataFrame) -> None:
     )
 
     print(hourly.to_string(index=False))
-
 
 def summarize_high_vwc_episodes(all_values: pd.DataFrame) -> None:
     print("\nDetailed VWC episodes > 50%")
@@ -247,7 +239,6 @@ def summarize_high_vwc_episodes(all_values: pd.DataFrame) -> None:
     )
 
     print(episode_df.to_string(index=False))
-
 
 def main() -> None:
     all_records: list[pd.DataFrame] = []
@@ -349,7 +340,6 @@ def main() -> None:
     summarize_sensor_qa(all_values)
     summarize_high_values_by_hour(all_values)
     summarize_high_vwc_episodes(all_values)
-
 
 if __name__ == "__main__":
     main()

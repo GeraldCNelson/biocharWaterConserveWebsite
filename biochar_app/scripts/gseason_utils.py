@@ -31,12 +31,10 @@ from biochar_app.scripts.data_loading import load_irrigation_data
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------------
 # Top-level: generate & load JSON for logger seasonal summaries
 # (Assumes you have a job that prepares this; we keep the interface unchanged.)
 # ---------------------------------------------------------------------------
-
 
 def generate_gseason_summary(
     year: int,
@@ -223,7 +221,6 @@ def generate_gseason_summary(
         summary_path,
     )
 
-
 def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict:
     """
     Load the nested JSON summary (period → variable → strip_depth → stats).
@@ -235,11 +232,9 @@ def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict
     with summary_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
-
 # ---------------------------------------------------------------------------
 # Stats helpers for UI
 # ---------------------------------------------------------------------------
-
 
 def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, depth: str):
     """
@@ -353,7 +348,6 @@ def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, dept
                     }
 
     return raw_stats, ratio_stats
-
 
 def get_flat_gseason_summary(year: int) -> pd.DataFrame:
     """
@@ -484,11 +478,9 @@ def get_flat_gseason_summary(year: int) -> pd.DataFrame:
 
     return wide
 
-
 # ---------------------------------------------------------------------------
 # Weather: seasonal precip SUMs for plotting right-axis
 # ---------------------------------------------------------------------------
-
 
 def format_gseason_label(code: str) -> str:
     period = DEFAULT_GSEASON_PERIODS.get(code)
@@ -499,7 +491,6 @@ def format_gseason_label(code: str) -> str:
     end_month = month_abbr(period["end"])
     label = period["label"]
     return f"{label} Season Summary ({start_month}–{end_month})"
-
 
 def add_gseason_precip_from_daily(
     df_gs: pd.DataFrame,
@@ -569,7 +560,6 @@ def add_gseason_precip_from_daily(
 
     return df_gs
 
-
 # Normalize PeriodSpec / mappings → list of simple dicts for seasons
 def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
     """
@@ -636,7 +626,6 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
 
         out.append({"code": code, "label": label, "start": start, "end": end})
     return out
-
 
 def add_gseason_irrigation_from_events(
     df_gs: pd.DataFrame,
@@ -720,7 +709,6 @@ def add_gseason_irrigation_from_events(
     df_out["irrigation_kgal"] = np.round(df_out["irrigation_gal"] / 1000.0, 3)
 
     return df_out
-
 
 def build_gseason_frame_for_strip_depth(
     year: int,

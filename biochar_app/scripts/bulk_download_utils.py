@@ -4,7 +4,7 @@ import io
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Dict
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -45,14 +45,12 @@ def _inject_year_if_missing(df: pd.DataFrame, year: Optional[int]) -> pd.DataFra
         df["Year"] = int(year)
     return df
 
-
 def load_sheet_as_dataframe(xlsx_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     if not spec.sheet_name:
         raise ValueError(f"Spec {spec.dataset_key} has no sheet_name (file-backed?)")
     df = pd.read_excel(xlsx_path, sheet_name=spec.sheet_name, engine="openpyxl")
     df = _inject_year_if_missing(df, spec.year)
     return df
-
 
 def load_csv_as_dataframe(csv_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     p = Path(csv_path)
@@ -62,18 +60,15 @@ def load_csv_as_dataframe(csv_path: str | Path, spec: BulkSheetSpec) -> pd.DataF
     df = _inject_year_if_missing(df, spec.year)
     return df
 
-
 def load_spec_as_dataframe(xlsx_path: str | Path, spec: BulkSheetSpec) -> pd.DataFrame:
     if spec.csv_path:
         return load_csv_as_dataframe(spec.csv_path, spec)
     return load_sheet_as_dataframe(xlsx_path, spec)
 
-
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     buf = io.StringIO()
     df.to_csv(buf, index=False)
     return buf.getvalue().encode("utf-8")
-
 
 # -----------------------------------------------------------------------------
 # Public zip builder
@@ -81,8 +76,8 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
 
 def build_zip_for_selection(
     xlsx_path: str | Path,
-    selected_keys: List[str],
-    registry: Optional[List[BulkSheetSpec]] = None,
+    selected_keys: list[str],
+    registry: Optional[list[BulkSheetSpec]] = None,
 ) -> bytes:
     reg = registry or default_bulk_registry()
     lookup = {s.dataset_key: s for s in reg}
@@ -113,12 +108,11 @@ def build_zip_for_selection(
 
     return out.getvalue()
 
-
 # -----------------------------------------------------------------------------
 # Registry
 # -----------------------------------------------------------------------------
 
-def default_bulk_registry() -> List[BulkSheetSpec]:
+def default_bulk_registry() -> list[BulkSheetSpec]:
     """
     Add new datasets by appending new BulkSheetSpec entries.
     Keep sheet_name EXACT (including trailing spaces).
@@ -164,8 +158,7 @@ def default_bulk_registry() -> List[BulkSheetSpec]:
         ),
     ]
 
-
-def build_manifest(xlsx_path: str | Path) -> Dict[str, Any]:
+def build_manifest(xlsx_path: str | Path) -> dict[str, Any]:
     """
     Compatibility wrapper for routes.py.
     Returns the full bulk download manifest, including:

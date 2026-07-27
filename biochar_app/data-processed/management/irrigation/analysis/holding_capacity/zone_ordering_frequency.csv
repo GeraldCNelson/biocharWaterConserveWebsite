@@ -1,0 +1,7 @@
+zone_ordering,n_events,pct_events
+T>M>B,54,42.1875
+T>B>M,30,23.4375
+B>T>M,23,17.96875
+M>T>B,12,9.375
+B>M>T,5,3.90625
+M>B>T,4,3.125

@@ -28,10 +28,8 @@ SUSPICIOUS_IMAGES = {
 TEXT_WINDOW = 5
 # number of text blocks before and after
 
-
 def clean_text(text: str) -> str:
     return " ".join(text.replace("\xa0", " ").split())
-
 
 def collect_text_blocks(soup: BeautifulSoup) -> list[tuple[Tag, str]]:
     """
@@ -48,7 +46,6 @@ def collect_text_blocks(soup: BeautifulSoup) -> list[tuple[Tag, str]]:
             blocks.append((tag, text))
 
     return blocks
-
 
 def find_nearest_block_index(img_tag: Tag, blocks: list[tuple[Tag, str]]) -> int | None:
     """
@@ -71,7 +68,6 @@ def find_nearest_block_index(img_tag: Tag, blocks: list[tuple[Tag, str]]) -> int
         current = parent if isinstance(parent, Tag) else None
 
     return None
-
 
 def main() -> None:
     if not HTML_PATH.exists():
@@ -117,7 +113,6 @@ def main() -> None:
 
     if not found_any:
         print("No suspicious images found in the HTML.")
-
 
 if __name__ == "__main__":
     main()

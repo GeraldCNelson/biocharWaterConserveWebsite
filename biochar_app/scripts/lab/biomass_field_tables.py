@@ -41,7 +41,7 @@ If it is missing/empty, the UI will show: "No variables available for this table
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.scripts.tables.tables_common import build_variable_meta
 
@@ -58,11 +58,9 @@ def _input_csv_path() -> Path:
     """
     return Path("biochar_app/data-processed/field_biomass_dry_g_wide_clean.csv")
 
-
-def _as_period_obj(p: str) -> Dict[str, str]:
+def _as_period_obj(p: str) -> dict[str, str]:
     p = str(p).strip()
     return {"key": p, "label": p}
-
 
 # ---------------------------------------------------------------------
 # Public API
@@ -70,7 +68,7 @@ def _as_period_obj(p: str) -> Dict[str, str]:
 def get_biomass_field_table_payload(
     csv_path: str | Path | None = None,
     min_year: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build the wide-form Biomass Field table payload.
 
@@ -111,14 +109,14 @@ def get_biomass_field_table_payload(
 
     # Build a robust mapping from "stripped string column name" -> actual df column name
     # This prevents silent failures if the CSV has headers like "2023-06-12 " (trailing space).
-    col_map: Dict[str, Any] = {str(c).strip(): c for c in df.columns}
+    col_map: dict[str, Any] = {str(c).strip(): c for c in df.columns}
 
     # -----------------------------------------------------------------
     # Periods (date columns)
     # -----------------------------------------------------------------
     if min_year is not None:
-        keep_cols: List[Any] = ["location"]
-        kept_periods: List[str] = []
+        keep_cols: list[Any] = ["location"]
+        kept_periods: list[str] = []
 
         for c in df.columns[1:]:
             s = str(c).strip()
@@ -148,7 +146,7 @@ def get_biomass_field_table_payload(
             }
 
         df = df[keep_cols]
-        period_keys: List[str] = kept_periods
+        period_keys: list[str] = kept_periods
     else:
         period_keys = [str(c).strip() for c in df.columns[1:]]
 
@@ -159,8 +157,8 @@ def get_biomass_field_table_payload(
     # -----------------------------------------------------------------
     # Rows (locations)
     # -----------------------------------------------------------------
-    rows: List[str] = df["location"].tolist()
-    row_labels: Dict[str, str] = {r: r for r in rows}
+    rows: list[str] = df["location"].tolist()
+    row_labels: dict[str, str] = {r: r for r in rows}
 
     # -----------------------------------------------------------------
     # Variables (frontend expects an explicit list)
@@ -191,11 +189,11 @@ def get_biomass_field_table_payload(
     # -----------------------------------------------------------------
     # Data: data[varKey][rowKey][periodKey] = value
     # -----------------------------------------------------------------
-    data_block: Dict[str, Dict[str, Any]] = {}
+    data_block: dict[str, dict[str, Any]] = {}
 
     for _, r in df.iterrows():
         loc = str(r["location"]).strip()
-        per_map: Dict[str, Any] = {}
+        per_map: dict[str, Any] = {}
 
         for p in period_keys:
             # Use the *actual* df column name if it differs due to whitespace/etc.
@@ -213,7 +211,7 @@ def get_biomass_field_table_payload(
 
         data_block[loc] = per_map
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "title": "Biomass (Field Samples)",
         "sets": [
             {

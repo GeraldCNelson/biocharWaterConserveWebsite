@@ -59,7 +59,6 @@ from biochar_app.config.experiment_config import (
 
 BASE_URL = "http://127.0.0.1:8000"
 
-
 # ---------------------------------------------------------------------
 # Smoke-test metadata
 # ---------------------------------------------------------------------
@@ -157,7 +156,6 @@ def print_banner(title: str) -> None:
     print(title)
     print("=" * 80)
 
-
 def content_disposition_filename(response: requests.Response) -> str:
     header = response.headers.get("Content-Disposition", "")
     marker = 'filename="'
@@ -165,8 +163,17 @@ def content_disposition_filename(response: requests.Response) -> str:
         return header.split(marker, 1)[1].split('"', 1)[0]
     return header
 
+def normalize_trace_option_for_test(trace_option: str) -> str:
+    mode = str(trace_option or "").strip()
+    if mode in {"depth", "depths"}:
+        return "depth"
+    if mode in {"loggerLocation", "logger_location", "logger-location"}:
+        return "loggerLocation"
+    return mode
 
 def assert_filename_rules(filename: str, trace_option: str) -> None:
+    trace_option = normalize_trace_option_for_test(trace_option)
+
     if trace_option == "depth":
         assert "logger" in filename, (
             f"Depth-grouped download should include logger location in filename: {filename}"
@@ -183,14 +190,12 @@ def assert_filename_rules(filename: str, trace_option: str) -> None:
             f"Logger-location-grouped download should not use logger in filename: {filename}"
         )
 
-
 def preview_text(text: str, max_lines: int = 35) -> str:
     lines = text.splitlines()
     shown = lines[:max_lines]
     if len(lines) > max_lines:
         shown.append("... [README preview truncated]")
     return "\n".join(shown)
-
 
 def validate_filename_rules(
     filename: str,
@@ -207,7 +212,6 @@ def validate_filename_rules(
         assert token not in filename, (
             f"Did not expect '{token}' in filename: {filename}"
         )
-
 
 def validate_zip(
     response: requests.Response,
@@ -260,7 +264,6 @@ def validate_csv_response(response: requests.Response) -> None:
     first_line = text.splitlines()[0] if text.splitlines() else ""
     print(f"CSV header: {first_line}")
 
-
 # ---------------------------------------------------------------------
 # Plot downloads
 # ---------------------------------------------------------------------
@@ -290,7 +293,6 @@ def test_plot_download(case: dict[str, str]) -> None:
 
     validate_zip(response, trace_option=case["traceOption"])
 
-
 # ---------------------------------------------------------------------
 # Summary downloads
 # ---------------------------------------------------------------------
@@ -313,7 +315,6 @@ def get_summary_stats(variable: str = DEFAULT_VARIABLE) -> dict:
 
     response.raise_for_status()
     return response.json()
-
 
 def test_summary_download(case: dict[str, str]) -> None:
     variable = case.get("variable", DEFAULT_VARIABLE)
@@ -344,7 +345,6 @@ def test_summary_download(case: dict[str, str]) -> None:
     else:
         validate_csv_response(response)
 
-
 # ---------------------------------------------------------------------
 # Metadata sanity checks
 # ---------------------------------------------------------------------
@@ -358,7 +358,6 @@ def validate_smoke_metadata() -> None:
 
     granularity_values = [g[0] if isinstance(g, tuple) else g for g in GRANULARITIES]
     assert DEFAULT_GRANULARITY in granularity_values
-
 
 # ---------------------------------------------------------------------
 # Main
@@ -374,7 +373,6 @@ def main() -> None:
         test_summary_download(case)
 
     print("\n✅ Smoke test completed")
-
 
 if __name__ == "__main__":
     main()

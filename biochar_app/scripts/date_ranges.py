@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Optional
 
-
-def parquet_timestamp_range(path: Path) -> Optional[Dict[str, str]]:
+def parquet_timestamp_range(path: Path) -> Optional[dict[str, str]]:
     try:
         df = pd.read_parquet(path, columns=["timestamp"])
     except Exception:
@@ -26,8 +25,7 @@ def parquet_timestamp_range(path: Path) -> Optional[Dict[str, str]]:
         "max": max_ts.date().isoformat(),
     }
 
-
-def parquet_gseason_range(path: Path) -> Optional[Dict[str, str]]:
+def parquet_gseason_range(path: Path) -> Optional[dict[str, str]]:
     try:
         df = pd.read_parquet(path, columns=["period_start", "period_end"])
     except Exception:
@@ -50,18 +48,17 @@ def parquet_gseason_range(path: Path) -> Optional[Dict[str, str]]:
         "max": max_ts.date().isoformat(),
     }
 
-
 def build_date_ranges(
     base_dir: Path,
-    years: List[int],
-    granularities: List[str],
-) -> Dict[int, Dict[str, Dict[str, str]]]:
+    years: list[int],
+    granularities: list[str],
+) -> dict[int, dict[str, dict[str, str]]]:
     """
     Scan parquet files and return:
 
       DATE_RANGES[year][granularity] = {"min": ..., "max": ...}
     """
-    out: Dict[int, Dict[str, Dict[str, str]]] = {}
+    out: dict[int, dict[str, dict[str, str]]] = {}
 
     for year in years:
         year = int(year)

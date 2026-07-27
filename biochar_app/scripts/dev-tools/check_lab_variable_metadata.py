@@ -126,7 +126,6 @@ def check_csv_coverage(
 
     return problems
 
-
 def check_required_fields() -> list[str]:
     problems: list[str] = []
 
@@ -142,7 +141,6 @@ def check_required_fields() -> list[str]:
             problems.append(f"{key}: related_terms must be a list")
 
     return problems
-
 
 def check_duplicate_aliases() -> list[str]:
     problems: list[str] = []
@@ -166,7 +164,6 @@ def check_duplicate_aliases() -> list[str]:
                 seen[seen_key] = key
 
     return problems
-
 
 def check_soil_bio_coverage() -> list[str]:
     return check_csv_coverage(
@@ -202,7 +199,6 @@ def check_soil_chem_coverage() -> list[str]:
         )
     return problems
 
-
 def main() -> None:
     checks: dict[str, list[str]] = {
         "Required fields": check_required_fields(),
@@ -227,7 +223,6 @@ def main() -> None:
         raise SystemExit(1)
 
     print("\n✅ Lab variable metadata validation passed.")
-
 
 if __name__ == "__main__":
     main()

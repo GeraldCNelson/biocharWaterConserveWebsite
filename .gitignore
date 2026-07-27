@@ -84,6 +84,14 @@ biochar_app/data-processed/**
 !biochar_app/data-processed/ward-html/**
 
 ############################
+# Temporary irrigation photo import folders
+############################
+biochar_app/data-processed/management/irrigation/photos/photos_2023/
+biochar_app/data-processed/management/irrigation/photos/photos_Lobato_phone/
+biochar_app/data-processed/management/irrigation/photos/photos_meter_readings/
+biochar_app/data-processed/management/irrigation/photos/duplicates_archive/
+
+############################
 # Management: exclude large/generated artifacts
 ############################
 biochar_app/data-processed/management/**/backup/
@@ -138,15 +146,28 @@ package-lock.json
 *.zip
 
 ############################
-# Geospatial rasters
+# Geospatial data
+############################
 ############################
 biochar_app/geospatial/**/*.img
 biochar_app/geospatial/**/*.tif
 biochar_app/geospatial/**/*.tiff
-biochar_app/geospatial/**/*.laz
 biochar_app/geospatial/**/*.las
+biochar_app/geospatial/**/*.laz
 biochar_app/geospatial/**/*.qgz
-biochar_app/geospatial/**/*.gpkg
+
+############################
+# Temporary GIS outputs
+############################
+biochar_app/geospatial/lidar/clipped/**
+biochar_app/geospatial/lidar/hillshade/**
+biochar_app/geospatial/drone/processed/**
+
+############################
+# Permanent GIS products ARE tracked
+############################
+!biochar_app/geospatial/field_layout/*.gpkg
+!biochar_app/geospatial/field_layout/*.geojson
 
 ############################
 # Optional: large local-only exports
@@ -158,3 +179,11 @@ biochar_app/geospatial/**/*.gpkg
 
 .DS_Store
 **/.DS_Store
+.venv
+
+biochar_app/data-processed/management/irrigation/photos/originals/
+biochar_app/data-processed/management/irrigation/photos/meter_photo_review*.xlsx
+biochar_app/data-processed/management/irrigation/photos/photo_inventory.csv
+biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique.csv
+biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_manifest.csv
+biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_audit.json

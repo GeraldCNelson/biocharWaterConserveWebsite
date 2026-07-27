@@ -11,11 +11,10 @@ from typing import (
     cast,
     Protocol,
     TypeAlias,
-    Literal
+    Literal,
 )
 
 import pandas as pd
-
 
 UnitSystem: TypeAlias = Literal["us", "metric"]
 
@@ -24,14 +23,12 @@ NAN: float = float("nan")
 POS_INF: float = float("inf")
 NEG_INF: float = float("-inf")
 
-
 def df_cols(df: pd.DataFrame, cols: Sequence[str]) -> pd.DataFrame:
     """
     Always return a DataFrame (helps df[cols] stub issues).
     Using .loc keeps this stable and type checkers like it.
     """
     return df.loc[:, list(cols)]
-
 
 def to_float_series(s: Any) -> pd.Series:
     """
@@ -53,7 +50,6 @@ def to_float_series(s: Any) -> pd.Series:
     # Use dtype string to avoid "float|Series has no astype" nonsense
     return out.astype("float64")
 
-
 def safe_tolist(x: Any) -> list[Any]:
     """
     Convert series/array/scalar to JSON-safe list without Optional issues.
@@ -73,7 +69,6 @@ def safe_tolist(x: Any) -> list[Any]:
         except Exception:
             pass
     return [x]
-
 
 def finite_min_max(block: pd.DataFrame) -> tuple[Optional[float], Optional[float]]:
     """
@@ -106,7 +101,6 @@ def finite_min_max(block: pd.DataFrame) -> tuple[Optional[float], Optional[float
         return None, None
     return float(min_val), float(max_val)
 
-
 def safe_timestamp(value: Any) -> Optional[pd.Timestamp]:
     """
     Return scalar Timestamp or None; avoids container types and type unions.
@@ -126,7 +120,6 @@ def safe_timestamp(value: Any) -> Optional[pd.Timestamp]:
 
     ts2 = pd.to_datetime(str(value), errors="coerce")
     return ts2 if isinstance(ts2, pd.Timestamp) and not pd.isna(ts2) else None
-
 
 # -----------------------------------------------------------------------------
 # Aggregation typing shims
@@ -148,13 +141,11 @@ class _Aggable(Protocol):
 
 def agg(self, spec: Any) -> Any: ...
 
-
 def df_agg(obj: Any, spec: AggDict) -> pd.DataFrame:
     """
     Typed wrapper around obj.agg(spec) for DataFrame/Resampler/GroupBy.
     """
     return cast(pd.DataFrame, obj.agg(spec))
-
 
 def gb_agg(gb: Any, spec: AggDict) -> pd.DataFrame:
     """

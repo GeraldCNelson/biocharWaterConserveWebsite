@@ -39,12 +39,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence
 
 import pandas as pd
 
 from biochar_app.scripts.tables.tables_common import build_variable_meta
-
 
 # -----------------------------------------------------------------------------
 # Small utilities
@@ -52,11 +51,10 @@ from biochar_app.scripts.tables.tables_common import build_variable_meta
 def _norm(s: Any) -> str:
     return str(s or "").strip()
 
-
 def _keyify(s: str) -> str:
     """Make a stable key from a label."""
     s = _norm(s).lower()
-    out: List[str] = []
+    out: list[str] = []
     prev_us = False
     for ch in s:
         if ch.isalnum():
@@ -68,7 +66,6 @@ def _keyify(s: str) -> str:
                 prev_us = True
     return "".join(out).strip("_")
 
-
 def _is_missing(v: Any) -> bool:
     if v is None:
         return True
@@ -77,7 +74,6 @@ def _is_missing(v: Any) -> bool:
     if isinstance(v, str) and _norm(v) == "":
         return True
     return False
-
 
 def _to_float(v: Any) -> Optional[float]:
     """Convert to float if possible; otherwise None."""
@@ -101,10 +97,8 @@ def _to_float(v: Any) -> Optional[float]:
 
     return None
 
-
 def _is_numeric_value(v: Any) -> bool:
     return _to_float(v) is not None
-
 
 def _normalize_strip(x: Any) -> str:
     """
@@ -127,7 +121,6 @@ def _normalize_strip(x: Any) -> str:
 
     return _norm(x)
 
-
 # -----------------------------------------------------------------------------
 # Column / date handling (STRICT date_rec)
 # -----------------------------------------------------------------------------
@@ -137,7 +130,6 @@ def require_date_rec(df: pd.DataFrame, source_name: str) -> None:
             f"{source_name}: required column 'date_rec' not found. "
             f"Columns present: {list(df.columns)}"
         )
-
 
 def _parse_date_rec(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -184,7 +176,6 @@ def _parse_date_rec(df: pd.DataFrame) -> pd.DataFrame:
     out["_date_rec_dt"] = parsed
     return out
 
-
 # -----------------------------------------------------------------------------
 # Reading cleaned master CSV (single-header)
 # -----------------------------------------------------------------------------
@@ -211,7 +202,6 @@ def read_clean_master_csv(csv_path: Path, source_name: str) -> pd.DataFrame:
     require_date_rec(df, source_name=source_name)
     return df
 
-
 # -----------------------------------------------------------------------------
 # Variable spec
 # -----------------------------------------------------------------------------
@@ -219,10 +209,9 @@ def read_clean_master_csv(csv_path: Path, source_name: str) -> pd.DataFrame:
 class VariableSpec:
     key: str
     label: str
-    candidates: Tuple[str, ...]
+    candidates: tuple[str, ...]
     note: str | None = None
     reference_key: Optional[str] = None
-
 
 def _pick_first_existing_column(
     df: pd.DataFrame,
@@ -246,7 +235,6 @@ def _pick_first_existing_column(
 
     return None
 
-
 def _aggregate_value(series: pd.Series) -> Any:
     """
     Preserve text if unique; average numeric if multiple numeric values; else None.
@@ -265,7 +253,7 @@ def _aggregate_value(series: pd.Series) -> Any:
         return None
 
     normed = [(_norm(v), v) for v in vals]
-    unique_norm: Dict[str, Any] = {}
+    unique_norm: dict[str, Any] = {}
     for k, orig in normed:
         if k not in unique_norm:
             unique_norm[k] = orig
@@ -276,12 +264,11 @@ def _aggregate_value(series: pd.Series) -> Any:
         return f if f is not None else _norm(only_orig)
 
     floats = [_to_float(v) for v in vals]
-    float_vals: List[float] = [f for f in floats if f is not None]
+    float_vals: list[float] = [f for f in floats if f is not None]
     if len(float_vals) == len(floats) and float_vals:
         return float(sum(float_vals) / len(float_vals))
 
     return None
-
 
 def _compute_ratio(numer: Any, denom: Any) -> Optional[float]:
     n = _to_float(numer)
@@ -289,7 +276,6 @@ def _compute_ratio(numer: Any, denom: Any) -> Optional[float]:
     if n is None or d is None or d == 0.0:
         return None
     return n / d
-
 
 # -----------------------------------------------------------------------------
 # Payload builder
@@ -299,7 +285,7 @@ def build_soil_table_payload(
     variables: Sequence[VariableSpec],
     min_year: int = 2023,
     include_ratio_rows: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build the standard soil table payload.
 
@@ -335,14 +321,14 @@ def build_soil_table_payload(
         .sort_values("_date_rec_dt", kind="mergesort")
     )
 
-    periods: List[Dict[str, str]] = []
+    periods: list[dict[str, str]] = []
     for _, r in periods_df.iterrows():
         key = _norm(r["date_rec"])
         periods.append({"key": key, "label": key})
 
     # Row keys and labels
-    rows: List[str] = ["strip_1", "strip_2", "strip_3", "strip_4"]
-    row_labels: Dict[str, str] = {
+    rows: list[str] = ["strip_1", "strip_2", "strip_3", "strip_4"]
+    row_labels: dict[str, str] = {
         "strip_1": "STRIP 1",
         "strip_2": "STRIP 2",
         "strip_3": "STRIP 3",
@@ -361,7 +347,7 @@ def build_soil_table_payload(
         "STRIP 4": "strip_4",
     }
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "periods": periods,
         "variables": [build_variable_meta(v) for v in variables],
         "rows": rows,
@@ -371,7 +357,7 @@ def build_soil_table_payload(
 
     for spec in variables:
         col = _pick_first_existing_column(df, spec.candidates)
-        table_for_var: Dict[str, Dict[str, Any]] = {rk: {} for rk in rows}
+        table_for_var: dict[str, dict[str, Any]] = {rk: {} for rk in rows}
 
         if col is None:
             out["data"][spec.key] = table_for_var

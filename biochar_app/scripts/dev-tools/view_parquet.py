@@ -10,7 +10,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import config
 
-
 def summarize_file(path: Path) -> None:
     """
     Print diagnostics for a single parquet file: filename, columns, shape, dtypes, and first rows.
@@ -28,7 +27,6 @@ def summarize_file(path: Path) -> None:
     print(df.dtypes)
     print("Head:")
     print(df.head(), "\n")
-
 
 def main():
     # ── 1) Raw logger parquet files (by year directories)
@@ -55,7 +53,6 @@ def main():
                 summarize_file(pq)
 
     print("Done.")
-
 
 if __name__ == "__main__":
     main()

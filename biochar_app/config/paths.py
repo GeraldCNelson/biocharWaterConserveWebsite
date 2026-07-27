@@ -15,6 +15,10 @@ from pathlib import Path
 # jump up one level from config/ into biochar_app/
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+CONFIG_DIR = BASE_DIR / "config"
+
+DATASET_METADATA_PY = CONFIG_DIR / "dataset_metadata.py"
+
 DATA_RAW_DIR = BASE_DIR / "data-raw"
 DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
 STATIC_DIR = BASE_DIR / "static"
@@ -67,18 +71,72 @@ BIOMASS_FIELD_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_wide_clean.csv"
 BIOCHAR_MASTER_WORKBOOK = DATA_RAW_DIR / "biochar-data-master.xlsx"
 
 MANAGEMENT_PROCESSED_DIR = DATA_PROCESSED_DIR / "management"
-IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR/ "irrigation"
-IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean.csv"
-FERTILIZER_DIR = MANAGEMENT_PROCESSED_DIR/ "fertilizer"
+
+IRRIGATION_DIR = MANAGEMENT_PROCESSED_DIR / "irrigation"
+IRRIGATION_PRODUCTION_CSV = (
+    IRRIGATION_DIR / "irrigation_clean.csv"
+)
+
+IRRIGATION_QC_CSV = (
+    IRRIGATION_DIR / "irrigation_clean_qc_candidate.csv"
+)
+#IRRIGATION_CSV = IRRIGATION_DIR / "irrigation_clean_qc_candidate.csv"
+IRRIGATION_ANALYSIS_DIR = IRRIGATION_DIR / "analysis"
+HOLDING_CAPACITY_DIR = IRRIGATION_ANALYSIS_DIR / "holding_capacity"
+IRRIGATION_DIAGNOSTICS_DIR = IRRIGATION_ANALYSIS_DIR / "diagnostics"
+IRRIGATION_FIGURES_DIR = IRRIGATION_ANALYSIS_DIR / "figures"
+IRRIGATION_REPORTS_DIR = IRRIGATION_ANALYSIS_DIR / "reports"
+
+FERTILIZER_DIR = MANAGEMENT_PROCESSED_DIR / "fertilizer"
 FERTILIZER_CSV_OUT = FERTILIZER_DIR / "fertilizer_clean.csv"
 FERTILIZER_DATA_IN = FERTILIZER_DIR / "fertilizer_data_raw.xlsx"
 
-
-DOWNLOADS_DIR = DATA_PROCESSED_DIR / "downloads"
-LOGGER_DOWNLOADS_DIR = DOWNLOADS_DIR / "loggers"
-WEATHER_DOWNLOADS_DIR = DOWNLOADS_DIR / "weather"
-
-WARD_HTML_DIR = BASE_DIR / "data-processed" / "ward-html"
-
 WARD_BIOLOGICAL_REPORT_HTML_FILE = WARD_HTML_DIR / "ward-biological-report.html"
 WARD_BIOLOGICAL_REPORT_DOCX_FILE = BASE_DIR / "data-processed" / "ward-docx" / "Biological 2024-11-05.docx"
+
+# =============================================================================
+# Geospatial directories
+# =============================================================================
+
+GEOSPATIAL_DIR = BASE_DIR / "geospatial"
+
+FIELD_LAYOUT_DIR = GEOSPATIAL_DIR / "field_layout"
+LIDAR_DIR = GEOSPATIAL_DIR / "lidar"
+LIDAR_RAW_DIR = LIDAR_DIR / "raw"
+LIDAR_TERRAIN_DIR = LIDAR_DIR / "terrain"
+LIDAR_CLIPPED_DIR = LIDAR_DIR / "clipped"
+LIDAR_HILLSHADE_DIR = LIDAR_DIR / "hillshade"
+LIDAR_ANALYSIS_DIR = LIDAR_DIR / "analysis"
+LIDAR_PIPELINES_DIR = LIDAR_DIR / "pipelines"
+DRONE_DIR = GEOSPATIAL_DIR / "drone"
+
+        
+def irrigation_analysis_paths(
+    variant: str | None = None,
+) -> dict[str, Path]:
+    """
+    Return output paths for one irrigation-analysis variant.
+    """
+
+    if variant is None or variant == "" or variant == "production":
+        analysis_root = IRRIGATION_ANALYSIS_DIR
+    else:
+        analysis_root = IRRIGATION_ANALYSIS_DIR / variant
+
+    return {
+        "root": analysis_root,
+        "diagnostics": analysis_root / "diagnostics",
+        "figures": analysis_root / "figures",
+        "reports": analysis_root / "reports",
+        "holding_capacity": analysis_root / "holding_capacity",
+    }
+
+def ensure_analysis_output_directories(
+    paths: dict[str, Path],
+) -> None:
+    """
+    Create an irrigation-analysis output directory tree if it does not exist.
+    """
+
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)

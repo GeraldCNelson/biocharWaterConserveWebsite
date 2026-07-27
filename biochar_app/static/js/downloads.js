@@ -126,41 +126,50 @@ export async function downloadTraceData(kind = "all") {
     const yearEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-year"));
     const variableEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-variable"));
     const stripEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-strip"));
+    const loggerEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-loggerLocation"));
     const granEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-granularity"));
     const depthEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("main-depth"));
+    const traceOptionEl= /** @type {HTMLSelectElement | null} */(document.getElementById("main-traceOption"));
 
-    if (!yearEl || !variableEl || !stripEl || !granEl || !depthEl) {
-      alert("⚠️ Cannot download data: one or more controls are missing.");
-      return;
-    }
+   if (!yearEl || !variableEl || !stripEl || !loggerEl || !granEl || !depthEl || !traceOptionEl) {
+    alert("⚠️ Cannot download data: one or more controls are missing.");
+    return;
+  }
 
     const year = parseInt(yearEl.value, 10);
     const variable = variableEl.value;
     const strip = stripEl.value;
+    const loggerLocation = loggerEl.value;
     const granularity = granEl.value;
     const depth = depthEl.value;
+    const traceOption = traceOptionEl.value;
     const unitSystem = downloadsWindow.unitSystem || "us";
 
     const payload = {
       year,
       variable,
       strip,
+      loggerLocation,
       granularity,
       depth,
+      traceOption,
       unitSystem,
       downloadType: kind,
     };
 
+    console.log("⬇️ downloadTraceData payload:", payload);
+
     const fname =
-        buildFilename([
-          "data",
-          kind,
-          variable,
-          strip,
-          `${depth}depth`,
-          granularity,
-          year,
-        ]) + ".zip";
+      buildFilename([
+        "data",
+        kind,
+        variable,
+        strip,
+        `logger${loggerLocation}`,
+        `${depth}depth`,
+        granularity,
+        year,
+      ]) + ".zip";
 
     await postAndDownload("/api/download_plot_data", payload, fname);
   } catch (err) {
@@ -179,6 +188,7 @@ export async function downloadSummaryData(mode = "all") {
   const stripEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-strip"));
   const granularityEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-granularity"));
   const depthEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-depth"));
+  const traceOption = traceOptionEl.value;
 
   if (!yearEl || !variableEl || !stripEl || !granularityEl || !depthEl) {
     console.error("❌ downloadSummaryData: summary controls not found in DOM");
@@ -206,6 +216,7 @@ export async function downloadSummaryData(mode = "all") {
     strip,
     granularity,
     depth,
+    traceOption,
     unitSystem,
     mode,
     summaryStats,

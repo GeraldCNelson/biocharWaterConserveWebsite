@@ -27,10 +27,9 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import pandas as pd
-
 
 # ---------------- Paths (repo-relative) ----------------
 
@@ -45,7 +44,6 @@ INGEST_ROOT = REPO_ROOT / "biochar_app" / "data-raw" / "pakbus_ingest"
 # Where we write per-run raw downloads (optional but useful for debugging)
 RUN_ROOT = REPO_ROOT / "biochar_app" / "data-raw" / "pakbus_runs"
 
-
 # ---------------- Time helpers ----------------
 
 def floor_to_15min(ts: datetime) -> datetime:
@@ -59,13 +57,12 @@ def parse_iso(ts: str) -> datetime:
     s = ts.strip().replace(" ", "T")
     return datetime.fromisoformat(s)
 
-def compute_window(now: datetime, last_seen: Optional[datetime], hours: float) -> Tuple[datetime, datetime]:
+def compute_window(now: datetime, last_seen: Optional[datetime], hours: float) -> tuple[datetime, datetime]:
     end = floor_to_15min(now)
     start = end - timedelta(hours=hours)
     if last_seen is not None:
         start = max(start, last_seen + timedelta(minutes=15))
     return start, end
-
 
 # ---------------- Locking ----------------
 
@@ -90,18 +87,16 @@ def release_lock(fd: int, lock_path: Path) -> None:
         except Exception:
             pass
 
-
 # ---------------- State ----------------
 
-def load_state(path: Path) -> Dict[str, Dict[str, str]]:
+def load_state(path: Path) -> dict[str, dict[str, str]]:
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8") or "{}")
 
-def save_state(path: Path, state: Dict[str, Dict[str, str]]) -> None:
+def save_state(path: Path, state: dict[str, dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
 
 # ---------------- CSV schema handling ----------------
 
@@ -117,7 +112,6 @@ def pick_timestamp_column(df: pd.DataFrame) -> Optional[str]:
 def coerce_timestamp_series(s: pd.Series) -> pd.Series:
     # Be forgiving; you’ve been using naive timestamps in your pipeline.
     return pd.to_datetime(s, errors="coerce")
-
 
 # ---------------- Ingestion ----------------
 
@@ -169,7 +163,6 @@ def append_new_rows(
     new_last = df[ts_col].max().to_pydatetime()
     return IngestResult(len(df), new_last)
 
-
 # ---------------- Downloader call ----------------
 
 def run_fetch_leaf_records(
@@ -198,7 +191,6 @@ def run_fetch_leaf_records(
         "--output", str(output_csv),
     ]
     subprocess.run(cmd, check=True)
-
 
 # ---------------- Main ----------------
 
@@ -295,7 +287,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
     finally:
         release_lock(fd, args.lock)
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

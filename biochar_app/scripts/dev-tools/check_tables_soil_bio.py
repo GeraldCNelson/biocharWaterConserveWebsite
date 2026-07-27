@@ -4,7 +4,6 @@ from __future__ import annotations
 from biochar_app.config.lab_reference_data import LAB_REFERENCES
 from biochar_app.scripts.tables.tables_soil_bio import SOILBIO_VARIABLE_GROUPS
 
-
 def main() -> None:
     print("✅ Imported successfully")
     print(f"✅ LAB_REFERENCES size: {len(LAB_REFERENCES)}")
@@ -52,7 +51,6 @@ def main() -> None:
             print(f"  - {group_key} / {var_key} / {label}")
     else:
         print("  (none)")
-
 
 if __name__ == "__main__":
     main()

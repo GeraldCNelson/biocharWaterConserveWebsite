@@ -10,7 +10,6 @@ from biochar_app.config.lab_reference_models import (
 )
 from biochar_app.config.lab_specs import LabVarSpec
 
-
 # ---------------------------------------------------------------------
 # Core lookup
 # ---------------------------------------------------------------------
@@ -20,14 +19,11 @@ def get_reference_bundle(reference_key: Optional[str]) -> Optional[VariableRefer
         return None
     return LAB_REFERENCES.get(reference_key)
 
-
 def get_reference_for_varspec(var_spec: LabVarSpec) -> Optional[VariableReferenceBundle]:
     return get_reference_bundle(var_spec.reference_key)
 
-
 def has_reference(var_spec: LabVarSpec) -> bool:
     return var_spec.reference_key in LAB_REFERENCES if var_spec.reference_key else False
-
 
 # ---------------------------------------------------------------------
 # Threshold logic
@@ -45,7 +41,6 @@ def get_matching_band(
             return band
 
     return None
-
 
 def get_band_label_for_value(
     value: Optional[float],

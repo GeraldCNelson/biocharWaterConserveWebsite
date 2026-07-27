@@ -16,13 +16,11 @@ from biochar_app.config.paths import (
 GLOSSARY_JSON = Path("biochar_app/static/data/glossary_terms.json")
 OUT_CSV = Path("biochar_app/data-processed/glossary_alias_suggestions.csv")
 
-
 DATASETS = {
     "soil_biology": WARD_MASTER_SOILBIO_CSV,
     "soil_chemistry": WARD_MASTER_SOILCHEM_CSV,
     "plant_forage_metrics": WARD_MASTER_NIR_CSV,
 }
-
 
 SCIENTIFIC_ALIASES = {
     "monounsaturated_polyunsaturated_ratio": [
@@ -80,10 +78,8 @@ SCIENTIFIC_ALIASES = {
     ],
 }
 
-
 def normalize_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
-
 
 def humanize_column(col: str) -> str:
     s = str(col)
@@ -108,10 +104,8 @@ def humanize_column(col: str) -> str:
 
     return normalize_text(s)
 
-
 def load_glossary() -> dict:
     return json.loads(GLOSSARY_JSON.read_text(encoding="utf-8"))
-
 
 def existing_aliases(item: dict) -> set[str]:
     vals = []
@@ -120,7 +114,6 @@ def existing_aliases(item: dict) -> set[str]:
     vals.extend(item.get("matches", []) or [])
     vals.extend(item.get("aliases", []) or [])
     return {normalize_text(v) for v in vals if str(v).strip()}
-
 
 def item_matches_column(item: dict, col: str) -> bool:
     col_norm = normalize_text(col)
@@ -163,7 +156,6 @@ def item_matches_column(item: dict, col: str) -> bool:
 
     return False
 
-
 def suggest_for_item(section_key: str, item: dict, columns: list[str]) -> list[dict]:
     current = existing_aliases(item)
     suggestions: set[str] = set()
@@ -199,7 +191,6 @@ def suggest_for_item(section_key: str, item: dict, columns: list[str]) -> list[d
         for s in clean_suggestions
     ]
 
-
 def main() -> None:
     glossary = load_glossary()
     rows = []
@@ -227,7 +218,6 @@ def main() -> None:
 
     print(f"Wrote {len(out)} alias suggestions:")
     print(OUT_CSV)
-
 
 if __name__ == "__main__":
     main()

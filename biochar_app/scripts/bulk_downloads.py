@@ -29,7 +29,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from biochar_app.config.core import GRANULARITY_NAME_MAPPING
 
-
 from biochar_app.config.paths import (
     PARQUET_DIR,
     PARQUET_SUMMARY_DIR,
@@ -40,9 +39,14 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILCHEM_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
-    IRRIGATION_CSV,
     FERTILIZER_CSV_OUT,
+    BIOCHAR_MASTER_WORKBOOK,
 )
+
+from biochar_app.config.irrigation_config import (
+    get_irrigation_analysis_options,
+)
+
 from biochar_app.scripts.data_loading import load_logger_data, load_weather_data
 from biochar_app.scripts.readme_builders import (
     build_file_dataset_readme,
@@ -53,8 +57,8 @@ from biochar_app.scripts.readme_builders import (
 bulk_router = APIRouter()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-IRRIGATION_WORKBOOK_PATH = REPO_ROOT / "biochar_app" / "data-raw" / "biochar-data-master.xlsx"
-
+IRRIGATION_OPTIONS = get_irrigation_analysis_options()
+IRRIGATION_DOWNLOAD_CSV = IRRIGATION_OPTIONS.input_csv
 ALLOWED_RESOLUTIONS = ["15min", "hourly", "daily", "monthly", "gseason"]
 
 FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
@@ -64,7 +68,11 @@ FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
 }
 
 MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
-    "irrigation": (IRRIGATION_CSV, "Irrigation", "biochar_irrigation_all_years.csv"),
+    "irrigation": (
+        IRRIGATION_DOWNLOAD_CSV,
+        "Irrigation",
+        "biochar_irrigation_all_years.csv",
+    ),
     "fertilizer": (FERTILIZER_CSV_OUT, "Fertilizer use", "biochar_fertilizer_all_years.csv"),
 }
 
@@ -72,15 +80,11 @@ WORKBOOK_TOKENS: dict[str, str] = {
     "biomass": "BIOMASS",
 }
 
-
 def _safe_int(v: Any) -> Optional[int]:
     try:
         return int(v)
     except Exception:
         return None
-
-
-
 
 def _list_years_on_disk() -> list[int]:
     years: set[int] = set()
@@ -103,7 +107,6 @@ def _list_years_on_disk() -> list[int]:
 
     return sorted(years)
 
-
 def _list_resolutions_on_disk(year: int) -> list[str]:
     found: list[str] = []
 
@@ -113,14 +116,11 @@ def _list_resolutions_on_disk(year: int) -> list[str]:
 
     return [r for r in ALLOWED_RESOLUTIONS if r in found]
 
-
 def _summary_logger_parquet_path(year: int, resolution: str) -> Path:
     return PARQUET_SUMMARY_DIR / resolution / f"{year}_{resolution}.parquet"
 
-
 def _summary_logger_ratios_parquet_path(year: int, resolution: str) -> Path:
     return PARQUET_SUMMARY_DIR / resolution / f"{year}_{resolution}_ratios.parquet"
-
 
 def _summary_weather_base_dir(resolution: str) -> Path:
     mapping: dict[str, Path] = {
@@ -131,7 +131,6 @@ def _summary_weather_base_dir(resolution: str) -> Path:
     }
     return mapping.get(resolution, PARQUET_SUMMARY_DIR / "weather" / resolution)
 
-
 def _summary_weather_parquet_candidates(year: int, resolution: str) -> list[Path]:
     base = _summary_weather_base_dir(resolution)
     return [
@@ -140,13 +139,11 @@ def _summary_weather_parquet_candidates(year: int, resolution: str) -> list[Path
         base / f"weather_{year}_{resolution}.parquet",
     ]
 
-
 def _logger_parquet_path(year: int, resolution: str) -> Path:
     preferred = _summary_logger_parquet_path(year, resolution)
     if preferred.exists():
         return preferred
     return PARQUET_DIR / str(year) / resolution / f"{year}_{resolution}.parquet"
-
 
 def _logger_ratios_parquet_path(year: int, resolution: str) -> Optional[Path]:
     preferred = _summary_logger_ratios_parquet_path(year, resolution)
@@ -158,7 +155,6 @@ def _logger_ratios_parquet_path(year: int, resolution: str) -> Optional[Path]:
         return old
 
     return None
-
 
 def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
     for c in _summary_weather_parquet_candidates(year, resolution):
@@ -177,7 +173,6 @@ def _weather_parquet_path(year: int, resolution: str) -> Optional[Path]:
 
     return None
 
-
 def _read_parquet_df(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Parquet not found: {path}")
@@ -186,15 +181,32 @@ def _read_parquet_df(path: Path) -> pd.DataFrame:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read parquet {path}: {e}")
 
+def _read_workbook_sheet_df(
+    sheet_name: str,
+) -> pd.DataFrame:
+    if not BIOCHAR_MASTER_WORKBOOK.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Workbook not found: "
+                f"{BIOCHAR_MASTER_WORKBOOK}"
+            ),
+        )
 
-def _read_workbook_sheet_df(sheet_name: str) -> pd.DataFrame:
-    if not IRRIGATION_WORKBOOK_PATH.exists():
-        raise HTTPException(status_code=404, detail=f"Workbook not found: {IRRIGATION_WORKBOOK_PATH}")
     try:
-        return pd.read_excel(IRRIGATION_WORKBOOK_PATH, sheet_name=sheet_name, engine="openpyxl")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read sheet {sheet_name}: {e}")
-
+        return pd.read_excel(
+            BIOCHAR_MASTER_WORKBOOK,
+            sheet_name=sheet_name,
+            engine="openpyxl",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to read sheet {sheet_name}: "
+                f"{exc}"
+            ),
+        ) from exc
 
 def _load_logger_download_df(year: int, resolution: str) -> pd.DataFrame:
     try:
@@ -208,7 +220,6 @@ def _load_logger_download_df(year: int, resolution: str) -> pd.DataFrame:
             status_code=500,
             detail=f"Failed to load logger data for year={year}, resolution={resolution}: {e}",
         )
-
 
 def _load_weather_download_df(year: int, resolution: str) -> pd.DataFrame:
     try:
@@ -226,7 +237,6 @@ def _load_weather_download_df(year: int, resolution: str) -> pd.DataFrame:
 
     return df
 
-
 def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -234,7 +244,6 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
             zf.writestr(name, content)
     buf.seek(0)
     return buf.read()
-
 
 @bulk_router.get("/bulk_download_manifest")
 def bulk_download_manifest() -> dict[str, Any]:
@@ -280,9 +289,9 @@ def bulk_download_manifest() -> dict[str, Any]:
                 }
             )
 
-    if IRRIGATION_WORKBOOK_PATH.exists():
+    if BIOCHAR_MASTER_WORKBOOK.exists():
         try:
-            xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
+            xls = pd.ExcelFile(BIOCHAR_MASTER_WORKBOOK, engine="openpyxl")
             sheets = [str(s) for s in xls.sheet_names]
         except Exception:
             sheets = []
@@ -346,7 +355,6 @@ def bulk_download_manifest() -> dict[str, Any]:
         "years": manifest_years,
         "granularities": manifest_granularities,
     }
-
 
 @bulk_router.post("/bulk_download")
 async def bulk_download(payload: dict[str, Any]):
@@ -418,8 +426,9 @@ async def bulk_download(payload: dict[str, Any]):
             ratios_included = False
             if ratios_pq is not None and ratios_pq.exists():
                 ratios_df = _read_parquet_df(ratios_pq)
+                numeric_columns = ratios_df.select_dtypes(include="number").columns
+                ratios_df[numeric_columns] = ratios_df[numeric_columns].round(3)
                 ratios_bytes = ratios_df.to_csv(index=False).encode("utf-8")
-                files.append((f"biochar_loggers_{year}_{resolution}_ratios.csv", ratios_bytes))
                 ratios_included = True
 
             readme = build_timeseries_yearly_readme(
@@ -485,7 +494,7 @@ async def bulk_download(payload: dict[str, Any]):
             raise HTTPException(status_code=400, detail=f"Invalid year in key: {key}")
 
         try:
-            xls = pd.ExcelFile(IRRIGATION_WORKBOOK_PATH, engine="openpyxl")
+            xls = pd.ExcelFile(BIOCHAR_MASTER_WORKBOOK, engine="openpyxl")
             sheets = [str(s) for s in xls.sheet_names]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Cannot read workbook sheets: {e}")

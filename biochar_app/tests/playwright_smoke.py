@@ -5,12 +5,33 @@ import socket
 import subprocess
 import sys
 import time
+import pytest
 
 BASE_URL = "http://127.0.0.1:8000"
 
 import socket
 import subprocess
 import time
+
+@pytest.fixture(scope="session", autouse=True)
+
+def local_server_for_pytest():
+    """
+    Ensure the local FastAPI server is running when tests are launched by pytest.
+    When this file is run directly as a script, the __main__ block handles server
+    startup/shutdown. When PyCharm or pytest runs test_* functions directly, this
+    fixture handles it instead.
+
+    """
+
+    server_proc = ensure_server_running()
+    try:
+        yield
+    finally:
+        if server_proc is not None:
+            server_proc.terminate()
+            server_proc.wait(timeout=10)
+            print("Local server stopped.")
 
 
 def is_server_running(host: str = "127.0.0.1", port: int = 8000) -> bool:

@@ -15,7 +15,6 @@ from biochar_app.config.core import (
     STRIP_DESCRIPTIONS,
 )
 
-
 from biochar_app.config.descriptions import (
     PROJECT_README_TITLE,
     PROJECT_METHOD_NOTE,
@@ -40,6 +39,120 @@ from biochar_app.config.descriptions import (
 
 GLOSSARY_JSON_PATH = Path(__file__).resolve().parents[1] / "static" / "data" / "glossary_terms.json"
 README_FRAGMENT_DIR = Path(__file__).resolve().parents[1] / "markdown" / "readmes"
+
+def build_plot_download_readme(
+    *,
+    download_type: str,
+    year: int,
+    variable: str,
+    strip: str,
+    granularity: str,
+    unit_system: str,
+    logger_location: str,
+    trace_option: str,
+    depth: str,
+) -> str:
+    logger_location = str(logger_location or "").strip().upper()
+    trace_option = str(trace_option or "depth").strip().lower()
+    depth = str(depth)
+
+    logger_location_label = LOGGER_LOCATION_MAPPING.get(
+        logger_location,
+        logger_location,
+    )
+
+    depth_info = SENSOR_DEPTH_LABELS.get(depth)
+    depth_label_us = depth_info["us"] if depth_info else f"Depth {depth}"
+    depth_label_metric = depth_info.get("metric", "") if depth_info else ""
+    selected_depth_text = (
+        f"{depth_label_us} / {depth_label_metric}"
+        if depth_label_metric
+        else depth_label_us
+    )
+
+    is_grouped_by_depth = trace_option in {"depth", "depths"}
+
+    if is_grouped_by_depth:
+        location_selection_text = (
+            f"Selected logger location: {logger_location} ({logger_location_label})"
+        )
+        depth_selection_text = ""
+        grouping_text = (
+            "Plot grouping\n"
+            "-------------\n"
+            "Top Plot grouped by: Depth\n"
+        )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by depth and logger location "
+            f"{logger_location} ({logger_location_label}) is selected, raw "
+            f"{variable} columns should include all three depths for that logger:\n\n"
+            f"- {variable}_1_raw_{strip}_{logger_location}_pct = 6 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_2_raw_{strip}_{logger_location}_pct = 12 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_3_raw_{strip}_{logger_location}_pct = 18 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+        )
+    else:
+        location_selection_text = ""
+        depth_selection_text = (
+            f"Selected depth code: {depth}\n"
+            f"Selected depth: {selected_depth_text}"
+        )
+        grouping_text = (
+            "Plot grouping\n"
+            "-------------\n"
+            "Top Plot grouped by: Logger location\n"
+        )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by logger location and depth "
+            f"{depth} ({depth_label_us}) is selected, raw {variable} columns "
+            f"should include Top, Middle, and Bottom logger locations:\n\n"
+            f"- {variable}_{depth}_raw_{strip}_T_pct = {depth_label_us} sensor, "
+            f"{strip}, Top logger\n"
+            f"- {variable}_{depth}_raw_{strip}_M_pct = {depth_label_us} sensor, "
+            f"{strip}, Middle logger\n"
+            f"- {variable}_{depth}_raw_{strip}_B_pct = {depth_label_us} sensor, "
+            f"{strip}, Bottom logger\n"
+        )
+
+    if download_type == "all":
+        depth_selection_text = (
+            f"Selected depth code for ratio columns: {depth}\n"
+            f"Selected depth for ratio columns: {selected_depth_text}"
+        )
+
+    readme_header = build_download_header(
+        title="Biochar Project — Interactive Plot Data Download",
+        year=year,
+        variable=variable,
+        strip=strip,
+        granularity=granularity,
+        unit_system=unit_system,
+        extra_lines=[
+            location_selection_text,
+            depth_selection_text,
+            f"Download type: {download_type}",
+        ],
+    )
+
+    notes = load_readme_fragment(f"plot_download_{download_type}_notes")
+
+    return (
+        readme_header
+        + grouping_text
+        + "\n"
+        + notes
+        + "\n\n"
+        + column_examples
+        + "\n\n"
+        + build_experiment_lookup_section(unit_system)
+        + "\n"
+    )
 
 def load_readme_fragment(name: str) -> str:
     path = README_FRAGMENT_DIR / f"{name}.md"
@@ -672,7 +785,6 @@ def build_management_readme(
         ]
     )
 
-
 def build_soilchem_readme(dataset_label: str, df: pd.DataFrame) -> str:
     coverage = _detect_year_span(df)
     
@@ -781,7 +893,6 @@ def build_hay_readme(dataset_label: str, df: pd.DataFrame) -> str:
             build_nir_reference_note(),
         ]
     )
-
 
 def build_hay_variable_section(df: pd.DataFrame) -> str:
     cols = [str(c) for c in df.columns]
@@ -1263,7 +1374,6 @@ def build_generic_file_readme(dataset_label: str, df: pd.DataFrame) -> str:
             "",
         ]
     )
-
 
 def build_file_dataset_readme(
     dataset_key: str,

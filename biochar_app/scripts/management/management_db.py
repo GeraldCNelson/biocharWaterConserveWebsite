@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from biochar_app.config.paths import DATA_PROCESSED_DIR
 
 DB_PATH = DATA_PROCESSED_DIR / "management" / "management_entries.sqlite"
 
-
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format."""
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
 
 def get_connection() -> sqlite3.Connection:
     """Get SQLite connection, creating the parent directory if needed."""
@@ -20,7 +18,6 @@ def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 def initialize_management_db() -> None:
     """Create management tables if they do not exist."""
@@ -62,8 +59,7 @@ def initialize_management_db() -> None:
         )
         conn.commit()
 
-
-def insert_irrigation_event(row: Dict[str, Any]) -> None:
+def insert_irrigation_event(row: dict[str, Any]) -> None:
     """Insert a new irrigation event."""
     now = utc_now_iso()
     row = {
@@ -83,8 +79,7 @@ def insert_irrigation_event(row: Dict[str, Any]) -> None:
         )
         conn.commit()
 
-
-def update_irrigation_event(event_id: str, updates: Dict[str, Any]) -> None:
+def update_irrigation_event(event_id: str, updates: dict[str, Any]) -> None:
     """Update an existing irrigation event."""
     if not updates:
         return
@@ -103,8 +98,7 @@ def update_irrigation_event(event_id: str, updates: Dict[str, Any]) -> None:
         )
         conn.commit()
 
-
-def get_irrigation_event(event_id: str) -> Dict[str, Any] | None:
+def get_irrigation_event(event_id: str) -> dict[str, Any] | None:
     """Fetch a single irrigation event."""
     with get_connection() as conn:
         row = conn.execute(
@@ -114,8 +108,7 @@ def get_irrigation_event(event_id: str) -> Dict[str, Any] | None:
 
     return dict(row) if row else None
 
-
-def list_irrigation_events(limit: int = 100) -> List[Dict[str, Any]]:
+def list_irrigation_events(limit: int = 100) -> list[dict[str, Any]]:
     """List recent irrigation events."""
     with get_connection() as conn:
         rows = conn.execute(
@@ -129,7 +122,6 @@ def list_irrigation_events(limit: int = 100) -> List[Dict[str, Any]]:
         ).fetchall()
 
     return [dict(r) for r in rows]
-
 
 def delete_irrigation_event(event_id: str) -> None:
     """Delete an irrigation event."""

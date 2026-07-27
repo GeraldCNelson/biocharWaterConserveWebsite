@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 # ─── Global caches ─────────────────────────────────────────────────────────────
 _cache: dict[tuple[int, str], pd.DataFrame] = {}  # (year, granularity) -> df
 
-
 # ============================= Caching hook ============================= #
 
 def _cached_load_logger_data(year: int, granularity: str) -> pd.DataFrame:
@@ -53,7 +52,6 @@ def _cached_load_logger_data(year: int, granularity: str) -> pd.DataFrame:
         _cache[key] = df
         logger.info("📥 Cached slice %s×%s (rows=%d)", key[0], key[1], len(df))
     return _cache[key]
-
 
 # ============================= App setup ============================= #
 
@@ -80,7 +78,6 @@ app.include_router(management_router)
 # 3) SPA entrypoint via Jinja2
 templates = Jinja2Templates(directory=str(templates_dir))
 
-
 @app.get("/", response_class=HTMLResponse)
 async def serve_spa(request: Request) -> HTMLResponse:
     periods_list = [
@@ -105,7 +102,6 @@ async def serve_spa(request: Request) -> HTMLResponse:
         },
     )
 
-
 # 4) Ensure processed data exists
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -118,11 +114,9 @@ if not has_any_parquet:
     except subprocess.CalledProcessError as exc:
         logger.error("❌ ETL failed: %s", exc)
 
-
 # 5) Monkey-patch loader so all routes use caching “for free”
 import biochar_app.scripts.routes_utils as _ru
 _ru.load_logger_year = _cached_load_logger_data  # type: ignore[attr-defined]
-
 
 # 6) Build DATE_RANGES once at import time
 logger.info("⏳ Preloading parquet date ranges...")
@@ -154,7 +148,6 @@ except Exception as exc:
 
 logger.info("✅ Date range preload complete")
 
-
 # 7) Preload only the default slice at boot
 try:
     df0 = _cached_load_logger_data(DEFAULT_YEAR, DEFAULT_GRANULARITY)
@@ -168,7 +161,6 @@ except FileNotFoundError:
     logger.warning("⚠️ No parquet found for default slice %s/%s", DEFAULT_YEAR, DEFAULT_GRANULARITY)
 except Exception as exc:
     logger.exception("❌ Failed to preload default slice: %s", exc)
-
 
 # 8) Run with Uvicorn when invoked directly
 if __name__ == "__main__":

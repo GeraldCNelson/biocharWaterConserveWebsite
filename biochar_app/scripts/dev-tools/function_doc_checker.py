@@ -1,7 +1,6 @@
 import os
 import re
 
-
 def extract_functions_with_doc(file_path, file_type="py"):
     with open(file_path, 'r') as f:
         lines = f.readlines()
@@ -36,7 +35,6 @@ def extract_functions_with_doc(file_path, file_type="py"):
 
     return report
 
-
 def scan_directory(base_path):
     output = []
     for root, _, files in os.walk(base_path):
@@ -46,7 +44,6 @@ def scan_directory(base_path):
             if file.endswith('.js'):
                 output.extend(extract_functions_with_doc(os.path.join(root, file), file_type="js"))
     return output
-
 
 if __name__ == "__main__":
     # Change this to your project directory

@@ -21,7 +21,6 @@ from biochar_app.scripts.management.management_db import (
 
 management_router = APIRouter(prefix="/api/management", tags=["management"])
 
-
 class StartIrrigationRequest(BaseModel):
     strip_group: str = Field(..., examples=["S1_S2"])
     location: str = Field(..., examples=["west"])
@@ -32,21 +31,17 @@ class StartIrrigationRequest(BaseModel):
     entered_by: str = ""
     notes: str = ""
 
-
 class FinishIrrigationRequest(BaseModel):
     end_timestamp: str
     end_totalizer_gal_x100: Optional[float] = None
     end_flow_gpm: Optional[float] = None
     notes: str = ""
 
-
 def _year_from_timestamp(ts: str) -> int:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).year
 
-
 def _date_from_timestamp(ts: str) -> str:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).date().isoformat()
-
 
 def _normalize_strip_group(value: str) -> str:
     compact = value.strip().upper().replace(" ", "").replace("-", "").replace("_", "")
@@ -58,14 +53,12 @@ def _normalize_strip_group(value: str) -> str:
 
     raise HTTPException(status_code=400, detail=f"Invalid strip_group: {value}")
 
-
 def _location_for_group(strip_group: str, fallback: str) -> str:
     if strip_group == "S1_S2":
         return "west"
     if strip_group == "S3_S4":
         return "east"
     return fallback.strip().lower()
-
 
 def _compute_total_meter_gallons(
     start_totalizer_gal_x100: Optional[float],
@@ -86,7 +79,6 @@ def _compute_total_meter_gallons(
 
     return total_meter_gallons
 
-
 def _compute_gallons_group(
     total_meter_gallons: Optional[float],
     flow_allocation_fraction: float | int | str | None,
@@ -103,7 +95,6 @@ def _compute_gallons_group(
             fraction = 1.0
 
     return total_meter_gallons * fraction
-
 
 def _compute_avg_flow_gpm_group(
     start_flow_gpm: Optional[float],
@@ -126,11 +117,9 @@ def _compute_avg_flow_gpm_group(
     avg_meter_flow_gpm = sum(vals) / len(vals)
     return avg_meter_flow_gpm * fraction
 
-
 @management_router.on_event("startup")
 async def startup_management_db() -> None:
     initialize_management_db()
-
 
 @management_router.post("/irrigation/start")
 async def start_irrigation_event(req: StartIrrigationRequest):
@@ -161,7 +150,6 @@ async def start_irrigation_event(req: StartIrrigationRequest):
         "event_id": event_id,
         "event": get_irrigation_event(event_id),
     }
-
 
 @management_router.post("/irrigation/{event_id}/finish")
 async def finish_irrigation_event(event_id: str, req: FinishIrrigationRequest):
@@ -215,11 +203,9 @@ async def finish_irrigation_event(event_id: str, req: FinishIrrigationRequest):
         "event": get_irrigation_event(event_id),
     }
 
-
 @management_router.get("/irrigation/events")
 async def api_list_irrigation_events(limit: int = 100):
     return {"events": list_irrigation_events(limit=limit)}
-
 
 @management_router.get("/irrigation/{event_id}")
 async def api_get_irrigation_event(event_id: str):
@@ -233,9 +219,7 @@ async def api_get_irrigation_event(event_id: str):
 
     return {"event": event}
 
-
 PHOTO_DIR = DATA_PROCESSED_DIR / "management" / "photos" / "irrigation"
-
 
 def _photo_path(event_id: str, photo_type: str, original_filename: str) -> Path:
     event = get_irrigation_event(event_id)
@@ -251,7 +235,6 @@ def _photo_path(event_id: str, photo_type: str, original_filename: str) -> Path:
     filename = f"{event_date}_{label}_{suffix}_{photo_type}.jpg"
 
     return PHOTO_DIR / filename
-
 
 @management_router.post("/irrigation/{event_id}/photo/{photo_type}")
 async def upload_irrigation_photo(

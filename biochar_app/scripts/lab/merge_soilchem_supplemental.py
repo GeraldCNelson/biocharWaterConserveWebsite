@@ -21,7 +21,6 @@ RAW_SUPPLEMENTAL_CSV = (
     / "Soil_2025-11-03.csv"
 )
 
-
 RAW_TO_CLEAN = {
     "Sample ID 2": "sample_id",
     # "Date Received": "date_rec",
@@ -74,7 +73,6 @@ RAW_TO_CLEAN = {
     "Copper Cu": "copper_rec",
 }
 
-
 TEXT_COLUMNS = {
     "strip",
     "sample_id",
@@ -84,13 +82,11 @@ TEXT_COLUMNS = {
     "excess_lime",
 }
 
-
 def parse_date(value: Any) -> str:
     dt = pd.to_datetime(value, errors="coerce")
     if pd.isna(dt):
         return ""
     return dt.strftime("%Y-%m-%d")
-
 
 def coerce_value(col: str, value: Any) -> Any:
     if col in TEXT_COLUMNS:
@@ -100,7 +96,6 @@ def coerce_value(col: str, value: Any) -> Any:
         return None
 
     return pd.to_numeric(value, errors="coerce")
-
 
 def build_supplemental_clean(raw_csv: Path, clean_columns: list[str]) -> pd.DataFrame:
     raw = pd.read_csv(raw_csv)
@@ -139,7 +134,6 @@ def build_supplemental_clean(raw_csv: Path, clean_columns: list[str]) -> pd.Data
 
     return pd.DataFrame(records, columns=clean_columns)
 
-
 def main() -> None:
     if not WARD_MASTER_SOILCHEM_CSV.exists():
         raise FileNotFoundError(WARD_MASTER_SOILCHEM_CSV)
@@ -171,7 +165,6 @@ def main() -> None:
     print(f"Final rows: {len(combined)}")
     print()
     print(combined[["strip", "date_rec", "date_rept", "excess_lime"]].to_string(index=False))
-
 
 if __name__ == "__main__":
     main()

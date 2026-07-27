@@ -5,11 +5,9 @@ from biochar_app.config.lab_variable_metadata import (
     get_lab_variable_metadata,
 )
 
-
 def metadata_label(key: str, fallback: str | None = None) -> str:
     label = get_display_label(key)
     return label if label != key else (fallback or key)
-
 
 def metadata_note(key: str, fallback: str | None = None) -> str:
     meta = get_lab_variable_metadata(key)

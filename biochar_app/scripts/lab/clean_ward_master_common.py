@@ -50,9 +50,7 @@ import re
 
 import pandas as pd
 
-
 ScalarValue: TypeAlias = str | int | float | None
-
 
 # ---------------------------------------------------------------------
 # Admin columns to drop (case-insensitive) across ALL Ward/Lobato masters
@@ -75,7 +73,6 @@ ADMIN_DROP_COLS = {
     # Depth columns we don’t want when enforcing fixed depth later
     "b_depth", "e_depth", "beginning_depth", "ending_depth",
 }
-
 
 # ---------------------------------------------------------------------
 # Special Ward/Lobato string values
@@ -102,7 +99,6 @@ COMMON_EMPTY_STRINGS = {
     "--",
 }
 
-
 # ---------------------------------------------------------------------
 # Machine name normalization (Excel headers -> snake_case)
 # ---------------------------------------------------------------------
@@ -125,7 +121,6 @@ def make_machine_name(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", s)
     s = re.sub(r"_+", "_", s).strip("_")
     return s
-
 
 # ---------------------------------------------------------------------
 # Strip normalization helpers
@@ -162,7 +157,6 @@ def normalize_strip(value: object) -> Optional[str]:
 
     return None
 
-
 def canonical_strip_to_display(value: object) -> str:
     """strip_1 -> STRIP 1"""
     if value is None:
@@ -172,7 +166,6 @@ def canonical_strip_to_display(value: object) -> str:
     if m:
         return f"STRIP {m.group(1)}"
     return str(value).strip()
-
 
 def canonical_strip_to_etl(value: object) -> Optional[str]:
     """strip_1 -> S1"""
@@ -184,7 +177,6 @@ def canonical_strip_to_etl(value: object) -> Optional[str]:
         return f"S{m.group(1)}"
     return None
 
-
 def normalize_strip_column(df: pd.DataFrame, *, strip_col: str = "strip") -> pd.DataFrame:
     """Return a copy with df[strip_col] normalized to canonical strip_n strings."""
     out = df.copy()
@@ -192,7 +184,6 @@ def normalize_strip_column(df: pd.DataFrame, *, strip_col: str = "strip") -> pd.
         return out
     out[strip_col] = out[strip_col].apply(normalize_strip)
     return out
-
 
 def derive_strip_column(
     df: pd.DataFrame,
@@ -210,7 +201,6 @@ def derive_strip_column(
         return out
     out[target_col] = out[src].apply(normalize_strip)
     return out
-
 
 # ---------------------------------------------------------------------
 # Date normalization
@@ -230,7 +220,6 @@ def parse_to_iso_date(value: object) -> Optional[str]:
 
     iso_date: str = ts.date().isoformat()
     return iso_date
-
 
 def normalize_date_columns(
     df: pd.DataFrame,
@@ -254,7 +243,6 @@ def normalize_date_columns(
             out = out.rename(columns={src: dst})
         out[dst] = out[dst].apply(parse_to_iso_date)
     return out
-
 
 # ---------------------------------------------------------------------
 # Special Ward value normalization / numeric coercion
@@ -287,7 +275,6 @@ def normalize_special_ward_value(
 
     return value
 
-
 def normalize_special_ward_values(
     df: pd.DataFrame,
     *,
@@ -313,7 +300,6 @@ def normalize_special_ward_values(
 
     return out
 
-
 def coerce_numeric_series(s: pd.Series) -> pd.Series:
     """
     Best-effort numeric coercion for columns that might include commas,
@@ -338,7 +324,6 @@ def coerce_numeric_series(s: pd.Series) -> pd.Series:
 
     return pd.to_numeric(ss, errors="coerce")
 
-
 def coerce_numeric_columns(
     df: pd.DataFrame,
     *,
@@ -358,7 +343,6 @@ def coerce_numeric_columns(
 
     return out
 
-
 # ---------------------------------------------------------------------
 # Compatibility aliases (stabilize downstream expectations)
 # ---------------------------------------------------------------------
@@ -368,7 +352,6 @@ def first_present(columns: Iterable[str], *candidates: str) -> Optional[str]:
         if c in cols:
             return c
     return None
-
 
 def ensure_compatibility_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -409,7 +392,6 @@ def ensure_compatibility_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
-
 # ---------------------------------------------------------------------
 # Depth (fixed interval)
 # ---------------------------------------------------------------------
@@ -418,7 +400,6 @@ def add_fixed_depth_columns(df: pd.DataFrame, *, begin_in: int, end_in: int) -> 
     out["begin_depth_in"] = begin_in
     out["end_depth_in"] = end_in
     return out
-
 
 # ---------------------------------------------------------------------
 # Admin column dropping
@@ -443,7 +424,6 @@ def drop_admin_columns(
     ]
     return df.drop(columns=to_drop, errors="ignore")
 
-
 # ---------------------------------------------------------------------
 # Validation / reporting helpers
 # ---------------------------------------------------------------------
@@ -456,7 +436,6 @@ def print_strip_summary(df: pd.DataFrame, *, strip_col: str = "strip") -> None:
     print(f"\nUnique strip values in '{strip_col}':")
     for v in vals:
         print(f"  {v}")
-
 
 def print_date_summary(df: pd.DataFrame, *, date_col: str = "date_rept") -> None:
     if date_col not in df.columns:
@@ -478,7 +457,6 @@ def print_date_summary(df: pd.DataFrame, *, date_col: str = "date_rept") -> None
     for count_key, count_value in counts.items():
         print(f"  {str(count_key)}: {int(count_value)}")
 
-
 def report_missing_columns(df: pd.DataFrame, expected: Iterable[str]) -> list[str]:
     missing = [c for c in expected if c not in df.columns]
     if missing:
@@ -488,7 +466,6 @@ def report_missing_columns(df: pd.DataFrame, expected: Iterable[str]) -> list[st
     else:
         print("\nAll expected columns are present.")
     return missing
-
 
 def report_unmatched_source_columns(
     df: pd.DataFrame,
@@ -507,7 +484,6 @@ def report_unmatched_source_columns(
     else:
         print("\nNo unmatched source columns.")
     return unmatched
-
 
 # ---------------------------------------------------------------------
 # Ward CSV readers
@@ -548,7 +524,6 @@ def read_ward_two_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
 
     return data, header_map
 
-
 def read_clean_one_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
     """
     Clean export format:
@@ -570,7 +545,6 @@ def read_clean_one_header_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]
     df = ensure_compatibility_columns(df)
 
     return df, header_map
-
 
 def read_ward_master_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
     """
@@ -595,7 +569,6 @@ def read_ward_master_csv(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
         pass
 
     return read_ward_two_header_csv(path)
-
 
 # ---------------------------------------------------------------------
 # Excel workbook helpers (compiled soil chem / soil bio / nir)
@@ -646,7 +619,6 @@ def clean_compiled_workbook(
     df = ensure_compatibility_columns(df)
 
     return df, header_map
-
 
 # ---------------------------------------------------------------------
 # Higher-level cleaning helpers
@@ -702,7 +674,6 @@ def standardize_ward_dataframe(
 
     return out
 
-
 def validate_and_report(
     df: pd.DataFrame,
     *,
@@ -735,7 +706,6 @@ def validate_and_report(
         "missing_columns": missing,
         "unmatched_columns": unmatched,
     }
-
 
 # ---------------------------------------------------------------------
 # Write outputs

@@ -4,8 +4,6 @@ import subprocess
 from pathlib import Path
 import sys
 
-
-
 def run(cmd: list[str]):
     """Run a subprocess, printing its output on error."""
     try:

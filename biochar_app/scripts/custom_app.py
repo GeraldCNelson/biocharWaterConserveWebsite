@@ -16,12 +16,10 @@ app.include_router(custom_gseason_router)
 async def root():
     return RedirectResponse(url="/custom-gseason")
 
-
 # 2) custom startup log
 @app.on_event("startup")
 async def announce():
     print("👉  Your custom growing-season page is at http://127.0.0.1:8001/custom-gseason\n")
-
 
 if __name__ == "__main__":
     uvicorn.run(

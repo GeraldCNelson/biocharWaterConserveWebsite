@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import logging
 import numpy as np
@@ -358,13 +358,11 @@ NIR_VARIABLES_SET4: Sequence[LabVarSpec] = [
     ),
 ]
 
-
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 def _normalize_colname(s: str) -> str:
     return " ".join(str(s).strip().split())
-
 
 def _pick_first_existing(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
     norm_map = {_normalize_colname(c): c for c in df.columns}
@@ -381,7 +379,6 @@ def _pick_first_existing(df: pd.DataFrame, candidates: Sequence[str]) -> Optiona
                 return c
     return None
 
-
 def _parse_date_any(x: Any) -> Optional[pd.Timestamp]:
     if x is None:
         return None
@@ -391,7 +388,6 @@ def _parse_date_any(x: Any) -> Optional[pd.Timestamp]:
     if pd.isna(ts):
         return None
     return ts
-
 
 def _clean_strip_id(sample_id: Any) -> Optional[str]:
     if sample_id is None:
@@ -415,7 +411,6 @@ def _clean_strip_id(sample_id: Any) -> Optional[str]:
 
     return None
 
-
 def _canonicalize_strip_value(x: Any) -> Optional[str]:
     if x is None:
         return None
@@ -437,7 +432,6 @@ def _canonicalize_strip_value(x: Any) -> Optional[str]:
             return f"STRIP {d}"
 
     return None
-
 
 def _ensure_strip_and_date_columns(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
     df = df.copy()
@@ -469,12 +463,10 @@ def _ensure_strip_and_date_columns(df: pd.DataFrame, source_name: str) -> pd.Dat
     df["nir_date"] = pd.to_datetime(df["nir_date"], errors="coerce")
     return df
 
-
 def safe_ratio(numer: Optional[float], denom: Optional[float]) -> Optional[float]:
     if numer is None or denom is None or denom == 0:
         return None
     return numer / denom
-
 
 def _filter_period_years(df: pd.DataFrame) -> pd.DataFrame:
     if "nir_date" not in df.columns:
@@ -485,7 +477,6 @@ def _filter_period_years(df: pd.DataFrame) -> pd.DataFrame:
         return out
     years = out["nir_date"].dt.year
     return out[(years >= NIR_MIN_YEAR) & (years <= NIR_MAX_YEAR)]
-
 
 # ---------------------------------------------------------------------
 # Loading sources
@@ -539,7 +530,6 @@ def load_ward_master_csv(ward_master_csv: Path) -> pd.DataFrame:
     data = _ensure_strip_and_date_columns(data, source_name="ward_master(two_header)")
     return data
 
-
 def load_single_event_csv(event_path: Path) -> pd.DataFrame:
     event_path = Path(event_path)
     df = pd.read_csv(event_path, dtype=str, keep_default_na=False, na_filter=False, engine="python")
@@ -556,11 +546,10 @@ def load_single_event_csv(event_path: Path) -> pd.DataFrame:
     df = _ensure_strip_and_date_columns(df, source_name=f"extra_event:{event_path.name}")
     return df
 
-
 # ---------------------------------------------------------------------
 # Period builder (derived from data; no hardcoded list)
 # ---------------------------------------------------------------------
-def _build_period_list(df: pd.DataFrame) -> List[Dict[str, str]]:
+def _build_period_list(df: pd.DataFrame) -> list[dict[str, str]]:
     if "nir_date" not in df.columns:
         return []
 
@@ -579,12 +568,11 @@ def _build_period_list(df: pd.DataFrame) -> List[Dict[str, str]]:
     )
     return [{"key": d, "label": d} for d in days]
 
-
 def _build_nir_table_payload(
     df: pd.DataFrame,
     variables: Sequence[LabVarSpec],
-    extra_event_csvs: Optional[List[Path]] = None,
-) -> Dict[str, Any]:
+    extra_event_csvs: Optional[list[Path]] = None,
+) -> dict[str, Any]:
     for event_path in (extra_event_csvs or []):
         extra = load_single_event_csv(Path(event_path))
         df = pd.concat([df, extra], ignore_index=True)
@@ -603,7 +591,7 @@ def _build_nir_table_payload(
     periods = _build_period_list(df)
     rows = ["STRIP 1", "STRIP 2", "STRIP 3", "STRIP 4", "S1/S2", "S3/S4"]
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "periods": periods,
         "variables": [build_variable_meta(v) for v in variables],
         "rows": rows,
@@ -618,7 +606,7 @@ def _build_nir_table_payload(
             continue
 
         col = _pick_first_existing(df, candidates)
-        table_for_var: Dict[str, Dict[str, Optional[float]]] = {
+        table_for_var: dict[str, dict[str, Optional[float]]] = {
             r: {period["key"]: None for period in periods} for r in rows
         }
 
@@ -656,34 +644,29 @@ def _build_nir_table_payload(
 
     return out
 
-
 # ---------------------------------------------------------------------
 # Public builders
 # ---------------------------------------------------------------------
-def build_nir_set1_table(ward_master_csv: Path, extra_event_csvs: Optional[List[Path]] = None) -> Dict[str, Any]:
+def build_nir_set1_table(ward_master_csv: Path, extra_event_csvs: Optional[list[Path]] = None) -> dict[str, Any]:
     df = load_ward_master_csv(ward_master_csv)
     return _build_nir_table_payload(df, NIR_VARIABLES_SET1, extra_event_csvs=extra_event_csvs)
 
-
-def build_nir_set2_table(ward_master_csv: Path, extra_event_csvs: Optional[List[Path]] = None) -> Dict[str, Any]:
+def build_nir_set2_table(ward_master_csv: Path, extra_event_csvs: Optional[list[Path]] = None) -> dict[str, Any]:
     df = load_ward_master_csv(ward_master_csv)
     return _build_nir_table_payload(df, NIR_VARIABLES_SET2, extra_event_csvs=extra_event_csvs)
 
-
-def build_nir_set3_table(ward_master_csv: Path, extra_event_csvs: Optional[List[Path]] = None) -> Dict[str, Any]:
+def build_nir_set3_table(ward_master_csv: Path, extra_event_csvs: Optional[list[Path]] = None) -> dict[str, Any]:
     df = load_ward_master_csv(ward_master_csv)
     return _build_nir_table_payload(df, NIR_VARIABLES_SET3, extra_event_csvs=extra_event_csvs)
 
-
-def build_nir_set4_table(ward_master_csv: Path, extra_event_csvs: Optional[List[Path]] = None) -> Dict[str, Any]:
+def build_nir_set4_table(ward_master_csv: Path, extra_event_csvs: Optional[list[Path]] = None) -> dict[str, Any]:
     df = load_ward_master_csv(ward_master_csv)
     return _build_nir_table_payload(df, NIR_VARIABLES_SET4, extra_event_csvs=extra_event_csvs)
 
-
 def build_nir_tables(
     ward_master_csv: Path = WARD_MASTER_NIR_CSV,
-    extra_event_csvs: Optional[List[Path]] = None,
-) -> Dict[str, Any]:
+    extra_event_csvs: Optional[list[Path]] = None,
+) -> dict[str, Any]:
     """
     Build the full NIR payload (title + 4 sets) from the authoritative Ward master CSV.
 

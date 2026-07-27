@@ -7,7 +7,6 @@ from collections.abc import Callable, Hashable
 import pandas as pd
 import psutil
 
-
 def sizeof_df(df: pd.DataFrame) -> int:
     """
     Return the approximate in-memory size of a DataFrame in bytes,
@@ -15,13 +14,11 @@ def sizeof_df(df: pd.DataFrame) -> int:
     """
     return int(df.memory_usage(deep=True).sum())
 
-
 def available_memory_bytes() -> int:
     """
     Return how many bytes of RAM are currently available on this machine.
     """
     return int(psutil.virtual_memory().available)
-
 
 class MemoryBoundedCache:
     def __init__(

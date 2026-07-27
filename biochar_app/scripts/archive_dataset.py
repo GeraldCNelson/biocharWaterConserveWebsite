@@ -19,7 +19,6 @@ def archive_dataset(path: Path) -> None:
     shutil.copy2(path, archived)
     print(f"Archived previous dataset → {archived}")
 
-
 if __name__ == "__main__":
     from biochar_app.config.paths import (
         WARD_MASTER_NIR_CSV,

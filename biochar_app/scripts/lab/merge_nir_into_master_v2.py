@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import pandas as pd
-
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parents[1]  # biochar_app/scripts → biochar_app → project root
@@ -45,7 +43,6 @@ OUT_JSON = (
     / "nir_old_to_new_column_map.json"
 )
 
-
 def _as_str_cell(x) -> str:
     """
     Exact-ish string conversion without numeric normalization.
@@ -60,7 +57,6 @@ def _as_str_cell(x) -> str:
         pass
     return str(x)
 
-
 def signature_from_col(df: pd.DataFrame, col_idx: int) -> str:
     """
     Build the signature string for a column from the 4 data rows,
@@ -69,8 +65,7 @@ def signature_from_col(df: pd.DataFrame, col_idx: int) -> str:
     vals = [_as_str_cell(v) for v in df.iloc[:, col_idx].tolist()]
     return "||".join(vals)
 
-
-def load_master_test(master_test_csv: Path) -> Tuple[List[str], pd.DataFrame]:
+def load_master_test(master_test_csv: Path) -> tuple[list[str], pd.DataFrame]:
     """
     Master_test format:
       row 0 = human headers
@@ -87,13 +82,11 @@ def load_master_test(master_test_csv: Path) -> Tuple[List[str], pd.DataFrame]:
     data = raw.iloc[2:6, :].copy()  # 4 rows
     return machine_headers, data
 
-
 def is_unnamed_col(col: object) -> bool:
     s = "" if col is None else str(col).strip()
     return (s == "") or (s.lower().startswith("unnamed:"))
 
-
-def load_old_reference(old_csv: Path) -> Tuple[List[str], pd.DataFrame]:
+def load_old_reference(old_csv: Path) -> tuple[list[str], pd.DataFrame]:
     """
     Old NIR reference file:
       row 0 = headers
@@ -121,13 +114,12 @@ def load_old_reference(old_csv: Path) -> Tuple[List[str], pd.DataFrame]:
     data = df.iloc[0:4, :].copy()  # first 4 data rows
     return headers, data
 
-
 def build_mapping(
-    master_machine_headers: List[str],
+    master_machine_headers: list[str],
     master_data: pd.DataFrame,
-    old_headers: List[str],
+    old_headers: list[str],
     old_data: pd.DataFrame,
-) -> Tuple[Dict[str, str], Dict[str, List[str]], List[str]]:
+) -> tuple[dict[str, str], dict[str, list[str]], list[str]]:
     """
     Returns:
       mapping: old_name -> master_machine_name
@@ -135,14 +127,14 @@ def build_mapping(
       unmapped: list of old columns with no matches
     """
     # Build signature -> master column indices (allow duplicates)
-    sig_to_master_idxs: Dict[str, List[int]] = {}
+    sig_to_master_idxs: dict[str, list[int]] = {}
     for j in range(master_data.shape[1]):
         sig = signature_from_col(master_data, j)
         sig_to_master_idxs.setdefault(sig, []).append(j)
 
-    mapping: Dict[str, str] = {}
-    ambiguous: Dict[str, List[str]] = {}
-    unmapped: List[str] = []
+    mapping: dict[str, str] = {}
+    ambiguous: dict[str, list[str]] = {}
+    unmapped: list[str] = []
 
     for j, old_name in enumerate(old_headers):
         if is_unnamed_col(old_name):
@@ -165,7 +157,6 @@ def build_mapping(
             ambiguous[old_name] = candidates
 
     return mapping, ambiguous, unmapped
-
 
 def main() -> None:
     print(f"📥 Loading MASTER_TEST (2 header rows): {MASTER_TEST_CSV}")
@@ -214,7 +205,6 @@ def main() -> None:
 
     print(f"\n💾 Saved mapping JSON → {OUT_JSON}")
     OUT_JSON.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
 
 if __name__ == "__main__":
     main()

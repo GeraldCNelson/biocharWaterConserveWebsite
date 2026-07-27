@@ -59,14 +59,21 @@ GRANULARITIES = [
     ("gseason", None),
 ]
 
-TRACE_CHOICES = ["depths", "locations"]
+TRACE_CHOICES = ["depth", "loggerLocation"]
+
 PLOT_BASED_ON_OPTIONS = [
     {"value": "depth", "label": "Depth"},
     {"value": "loggerLocation", "label": "Logger Location"},
 ]
+
 TRACE_OPTION_MAP: dict[str, str] = {
-    "depth": "depths",
-    "loggerLocation": "locations",
+    "depth": "depth",
+    "depths": "depth",
+    "loggerLocation": "loggerLocation",
+    "logger_location": "loggerLocation",
+    "logger-location": "loggerLocation",
+    "locations": "loggerLocation",
+    "location": "loggerLocation",
 }
 
 # ---------------------------------------------------------------------
@@ -207,9 +214,12 @@ IRR_COLOR = "rgba(160, 82, 45, 0.55)"  # semi-transparent sienna
 
 ms_per_day = 24 * 3600 * 1000
 bar_width_map = {
-    "15min": 15 * 60 * 1000,
+    # Slightly wider than one observation interval so low precipitation
+    # remains visible when several days of 15-minute data are displayed.
+    "15min": 30 * 60 * 1000,
     "hourly": 3600 * 1000,
-    "daily": ms_per_day * 0.8,
+    # Leave a visible gap between neighboring daily precipitation totals.
+    "daily": ms_per_day * 0.5,
     "monthly": 30 * ms_per_day * 0.8,
 }
 

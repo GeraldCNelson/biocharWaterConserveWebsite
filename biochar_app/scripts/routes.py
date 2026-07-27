@@ -11,7 +11,7 @@ import logging
 from io import BytesIO
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, cast
+from typing import Any, Optional, cast
 from time import perf_counter
 
 import pandas as pd
@@ -39,6 +39,7 @@ from biochar_app.scripts.readme_builders import (
     build_experiment_lookup_section,
     build_download_header,
     load_readme_fragment,
+    build_plot_download_readme,
 )
 
 from biochar_app.scripts.data_loading import load_logger_data
@@ -47,7 +48,7 @@ from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
     get_flat_gseason_summary,
 )
-from biochar_app.scripts.plot_utils import (
+from biochar_app.scripts.plot_builder import (
     make_raw_figure,
     make_ratio_figure,
     make_raw_gseason_figure,
@@ -134,7 +135,6 @@ def get_latest_ward_html(pattern: str) -> Path:
         raise HTTPException(status_code=404, detail=f"No Ward HTML file found for pattern: {pattern}")
     return matches[0]
 
-
 def get_latest_ward_pdf(pattern: str) -> Path:
     matches = sorted(WARD_PDF_DIR.glob(pattern), reverse=True)
     if not matches:
@@ -171,8 +171,7 @@ templates = Jinja2Templates(
 # LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
 # WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
-_LOADED_LOGGER_CACHE: dict[Tuple[int, str], Any] = {}
-
+_LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -196,10 +195,8 @@ def _spec_dicts_to_objs(specs: list[dict[str, Any]]) -> list[Any]:
         )
     return out
 
-
 def _normalize_sheet_name(s: str) -> str:
     return (s or "").strip()
-
 
 def _clean_for_json(obj: Any) -> Any:
     if isinstance(obj, dict):
@@ -212,11 +209,9 @@ def _clean_for_json(obj: Any) -> Any:
         return obj
     return obj
 
-
 def _ensure_year_allowed(year: int) -> None:
     if year not in YEARS:
         raise HTTPException(status_code=404, detail=f"Year {year} is not available.")
-
 
 def _normalize_unit_system(raw: Any) -> UnitSystem:
     """
@@ -225,14 +220,12 @@ def _normalize_unit_system(raw: Any) -> UnitSystem:
     s = str(raw or "us").strip().lower()
     return "metric" if s == "metric" else "us"
 
-
 def _round_ratio_columns(df: pd.DataFrame, decimals: int = 6) -> pd.DataFrame:
     df_out = df.copy()
     ratio_cols = [c for c in df_out.columns if "_ratio_" in c]
     if ratio_cols:
         df_out[ratio_cols] = df_out[ratio_cols].round(decimals)
     return df_out
-
 
 def _select_trace_columns(
     df: pd.DataFrame,
@@ -243,7 +236,7 @@ def _select_trace_columns(
     trace_option: str,
     kind: str,  # "raw" | "ratio" | "all"
 ) -> pd.DataFrame:
-    cols: List[str] = []
+    cols: list[str] = []
 
     if "timestamp" in df.columns:
         cols.append("timestamp")
@@ -251,15 +244,16 @@ def _select_trace_columns(
     source_var = "VWC" if variable == "SWC" else variable
     raw_expected: set[str] = set()
 
-    if trace_option == "depth":
+    is_grouped_by_depth = str(trace_option).strip().lower() in {"depth", "depths"}
+
+    if is_grouped_by_depth:
         raw_expected = {
             f"{source_var}_{d}_raw_{strip}_{logger_location}"
             for d in SENSOR_DEPTH_CODES
         }
     else:
         raw_expected = {
-            f"{source_var}_{depth}_raw_{strip}_{loc}"
-            for loc in LOGGER_LOCATION_MAPPING
+            f"{source_var}_{depth}_raw_{strip}_{loc}" for loc in LOGGER_LOCATION_MAPPING
         }
 
     def is_ratio_col(col: str) -> bool:
@@ -309,10 +303,9 @@ def _select_trace_columns(
 
     return df[cols]
 
-
 def _add_unit_suffixes_for_download(df: pd.DataFrame, variable: str) -> pd.DataFrame:
     df_out = df.copy()
-    rename_map: Dict[str, str] = {}
+    rename_map: dict[str, str] = {}
     var_upper = (variable or "").upper()
 
     for col in df_out.columns:
@@ -336,21 +329,19 @@ def _add_unit_suffixes_for_download(df: pd.DataFrame, variable: str) -> pd.DataF
 
     return df_out
 
-
 # ---------------------------------------------------------------------------
 # Bulk download endpoints (loggers + weather)  [NON-API routes]
 # ---------------------------------------------------------------------------
 @main_router.get("/bulk_download/options")
 async def get_bulk_download_options():
-    logger.info("📦 get_bulk_download_options() called")
 
-    available: Dict[str, Dict[str, bool]] = {}
+    available: dict[str, dict[str, bool]] = {}
 
     for year in YEARS:
         loggers_zip = LOGGER_DOWNLOADS_DIR / f"Biochar_Loggers_15min_{year}_USunits.zip"
         weather_zip = WEATHER_DOWNLOADS_DIR / f"Biochar_Weather_15min_{year}_USunits.zip"
 
-        ancillary: Dict[str, bool] = {}
+        ancillary: dict[str, bool] = {}
         for key in ANCILLARY_DATASETS.keys():
             try:
                 exists = _ancillary_available_for_year(BIOCHAR_MASTER_WORKBOOK, key, int(year))
@@ -366,7 +357,6 @@ async def get_bulk_download_options():
 
     return JSONResponse({"available": available})
 
-
 @main_router.get("/bulk_download/loggers/{year}")
 async def download_loggers_zip(year: int):
     _ensure_year_allowed(year)
@@ -376,7 +366,6 @@ async def download_loggers_zip(year: int):
         raise HTTPException(status_code=404, detail=f"Logger download ZIP not found for {year}.")
 
     return FileResponse(path=str(zip_path), filename=zip_path.name, media_type="application/zip")
-
 
 @main_router.get("/bulk_download/weather/{year}")
 async def download_weather_zip(year: int):
@@ -388,7 +377,6 @@ async def download_weather_zip(year: int):
 
     return FileResponse(path=str(zip_path), filename=zip_path.name, media_type="application/zip")
 
-
 @main_router.get("/bulk_download/irrigation/{year}")
 async def download_irrigation_zip(year: int):
     _ensure_year_allowed(year)
@@ -398,7 +386,6 @@ async def download_irrigation_zip(year: int):
         raise HTTPException(status_code=404, detail=f"Irrigation data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_Irrigation_{year}.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
-
 
 @main_router.get("/bulk_download/soil_chem/{year}")
 async def download_soil_chem_zip(year: int):
@@ -410,7 +397,6 @@ async def download_soil_chem_zip(year: int):
     headers = {"Content-Disposition": f'attachment; filename="Biochar_SoilChem_{year}.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
-
 @main_router.get("/bulk_download/soil_bio/{year}")
 async def download_soil_bio_zip(year: int):
     _ensure_year_allowed(year)
@@ -420,7 +406,6 @@ async def download_soil_bio_zip(year: int):
         raise HTTPException(status_code=404, detail=f"Soil biology data not found for {year}.")
     headers = {"Content-Disposition": f'attachment; filename="Biochar_SoilBio_{year}.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
-
 
 @main_router.get("/bulk_download/biomass/{year}")
 async def download_biomass_zip(year: int):
@@ -432,14 +417,12 @@ async def download_biomass_zip(year: int):
     headers = {"Content-Disposition": f'attachment; filename="Biochar_BiomassHay_{year}.zip"'}
     return Response(content=zip_bytes, media_type="application/zip", headers=headers)
 
-
-ANCILLARY_DATASETS: Dict[str, Dict[str, str]] = {
+ANCILLARY_DATASETS: dict[str, dict[str, str]] = {
     "irrigation": {"sheet": "IRRIGATION", "csv": "irrigation.csv"},
     "soil_chem": {"sheet": "SOIL CHEM", "csv": "soil_chem.csv"},
     "soil_bio": {"sheet": "SOIL BIO", "csv": "soil_bio.csv"},
     "biomass": {"sheet": "Hay Data All", "csv": "biomass_hay.csv"},
 }
-
 
 def _find_sheet_for_year(xlsx_path: Path | str, base_sheet: str, year: int) -> Optional[str]:
     try:
@@ -466,7 +449,6 @@ def _find_sheet_for_year(xlsx_path: Path | str, base_sheet: str, year: int) -> O
             return name
 
     return None
-
 
 def _load_ancillary_df_for_year(xlsx_path: Path | str, dataset_key: str, year: int) -> pd.DataFrame:
     if dataset_key not in ANCILLARY_DATASETS:
@@ -549,7 +531,6 @@ def _ancillary_available_for_year(xlsx_path: Path | str, dataset_key: str, year:
     except Exception:
         return False
 
-
 # ---------------------------------------------------------------------------
 # Defaults / options endpoint
 # ---------------------------------------------------------------------------
@@ -557,7 +538,6 @@ def _ancillary_available_for_year(xlsx_path: Path | str, dataset_key: str, year:
 async def get_markdown_files():
     mapping = build_markdown_mapping()
     return JSONResponse(mapping)
-
 
 @api_router.get("/get_defaults_and_options")
 async def get_defaults_and_options():
@@ -607,7 +587,6 @@ async def get_defaults_and_options():
 
     return JSONResponse(response_data)
 
-
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -616,7 +595,6 @@ class PeriodSpec(BaseModel):
     label: str
     start: str
     end: str
-
 
 class PlotRequest(BaseModel):
     year: int
@@ -629,8 +607,7 @@ class PlotRequest(BaseModel):
     depth: str
     traceOption: str
     unitSystem: str
-    periods: Optional[List[PeriodSpec]] = Field(default=None)
-
+    periods: Optional[list[PeriodSpec]] = Field(default=None)
 
 class DownloadDataRequest(BaseModel):
     year: int
@@ -656,7 +633,7 @@ class DownloadSummaryDataRequest(BaseModel):
     depth: str
     unitSystem: str = "us"
     mode: str = "all"
-    summaryStats: Dict[str, Any] | None = None
+    summaryStats: dict[str, Any] | None = None
 # ---------------------------------------------------------------------------
 # Plot routes
 # ---------------------------------------------------------------------------
@@ -712,10 +689,17 @@ async def api_plot_raw(req: PlotRequest):
         & (df["timestamp"] < end_ts)
         ].copy()
 
-    if trace_option == "depth":
-        expected = [f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS]
+    is_grouped_by_depth = str(trace_option).strip().lower() in {"depth", "depths"}
+
+    if is_grouped_by_depth:
+        expected = [
+            f"{source_var}_{d}_raw_{strip}_{logger_loc}" for d in SENSOR_DEPTH_LABELS
+        ]
     else:
-        expected = [f"{source_var}_{depth}_raw_{strip}_{lkey}" for lkey in LOGGER_LOCATION_MAPPING]
+        expected = [
+            f"{source_var}_{depth}_raw_{strip}_{lkey}"
+            for lkey in LOGGER_LOCATION_MAPPING
+        ]
 
     present = [c for c in expected if c in df.columns]
     non_empty = [c for c in present if df[c].notna().any()]
@@ -744,13 +728,11 @@ async def api_plot_raw(req: PlotRequest):
         end=end_ts.isoformat(),
     )
 
-
     layout = fig.setdefault("layout", {})
     xaxis = layout.setdefault("xaxis", {})
     xaxis["range"] = [start_ts.isoformat(), end_ts.isoformat()]
     xaxis["autorange"] = False
     return JSONResponse(fig)
-
 
 @api_router.post("/plot_ratio")
 async def api_plot_ratio(req: PlotRequest):
@@ -821,9 +803,8 @@ async def api_plot_ratio(req: PlotRequest):
 
     return JSONResponse(fig)
 
-
 @api_router.post("/get_summary_stats")
-async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
+async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
     required = ["year", "variable", "strip", "granularity", "depth"]
     missing = [k for k in required if payload.get(k) is None]
     if missing:
@@ -858,7 +839,7 @@ async def api_get_summary_stats(payload: Dict[str, Any] = Body(...)):
 
     label_entry = label_name_mapping.get(variable, variable)
     if isinstance(label_entry, dict):
-        pretty_var = cast(Dict[UnitSystem, str], label_entry).get(unit_system) or variable
+        pretty_var = cast(dict[UnitSystem, str], label_entry).get(unit_system) or variable
     else:
         pretty_var = str(label_entry)
 
@@ -1126,12 +1107,10 @@ async def api_get_soilbio_table():
     payload = build_soilbio_table(WARD_MASTER_SOILBIO_CSV, min_year=2023)
     return JSONResponse(payload)
 
-
 @api_router.get("/get_soilchem_table")
 async def api_get_soilchem_table():
     payload = build_soilchem_table(WARD_MASTER_SOILCHEM_CSV, min_year=2023)
     return JSONResponse(payload)
-
 
 @api_router.get("/get_nir_table")
 async def api_get_nir_table():
@@ -1140,7 +1119,7 @@ async def api_get_nir_table():
     set3 = build_nir_set3_table(WARD_MASTER_NIR_CSV)
     set4 = build_nir_set4_table(WARD_MASTER_NIR_CSV)
 
-    def _coerce_to_set(obj: Dict[str, Any], fallback_key: str, fallback_label: str) -> Dict[str, Any]:
+    def _coerce_to_set(obj: dict[str, Any], fallback_key: str, fallback_label: str) -> dict[str, Any]:
         if not isinstance(obj, dict):
             return {
                 "key": fallback_key,
@@ -1184,7 +1163,6 @@ async def api_get_nir_table():
         }
     )
 
-
 # ---------------------------------------------------------------------------
 # Markdown + custom gseason pages
 # ---------------------------------------------------------------------------
@@ -1198,7 +1176,6 @@ async def serve_markdown(filename: str):
 
     return FileResponse(fullpath, media_type="text/markdown")
 
-
 @main_router.get("/custom-gseason")
 async def custom_gseason(request: Request):
     return templates.TemplateResponse(
@@ -1206,19 +1183,16 @@ async def custom_gseason(request: Request):
         "_custom_gseason.html",
     )
 
-
 # ---------------------------------------------------------------------------
 # Registry-based bulk download (checkbox UI) [API routes]
 # ---------------------------------------------------------------------------
 class BulkDownloadRequest(BaseModel):
-    keys: List[str]
-
+    keys: list[str]
 
 @api_router.get("/bulk_download_manifest")
 async def api_bulk_download_manifest():
     manifest = build_manifest(BIOCHAR_MASTER_WORKBOOK)
     return JSONResponse(manifest)
-
 
 @api_router.post("/bulk_download")
 async def api_bulk_download(req: BulkDownloadRequest):
@@ -1246,7 +1220,6 @@ async def api_bulk_download(req: BulkDownloadRequest):
         headers={"Content-Disposition": 'attachment; filename="biochar_bulk_download.zip"'},
     )
 
-
 @api_router.get("/get_biomass_field_table")
 async def api_get_biomass_field_table():
     payload = get_biomass_field_table_payload(BIOMASS_FIELD_CSV, min_year=2023)
@@ -1269,10 +1242,21 @@ async def api_download_plot_data(req: DownloadDataRequest):
     depth = str(req.depth)
     unit_system: UnitSystem = _normalize_unit_system(req.unitSystem)
     download_type = str(req.downloadType or "all").lower()
-    logger_location = str(req.loggerLocation or DEFAULT_LOGGER_LOCATION)
+
+    logger_location = str(
+        req.loggerLocation
+        or getattr(req, "logger_location", None)
+        or DEFAULT_LOGGER_LOCATION
+    ).upper()
 
     trace_option_raw = str(req.traceOption or "depth").strip().lower()
     trace_option = TRACE_OPTION_MAP.get(trace_option_raw, trace_option_raw)
+
+    logger.info(
+        "trace_option_raw=%s -> trace_option=%s",
+        trace_option_raw,
+        trace_option,
+    )
 
     is_grouped_by_depth = (
         trace_option_raw in {"depth", "depths"}
@@ -1280,7 +1264,10 @@ async def api_download_plot_data(req: DownloadDataRequest):
     )
 
     if download_type not in ("raw", "ratio", "all"):
-        raise HTTPException(status_code=400, detail=f"Invalid downloadType: {download_type}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid downloadType: {download_type}",
+        )
 
     _ensure_year_allowed(year)
 
@@ -1308,6 +1295,16 @@ async def api_download_plot_data(req: DownloadDataRequest):
             if pd.notna(end_dt):
                 df = df[df["timestamp"] <= end_dt]
 
+    logger.info(
+        "DOWNLOAD REQUEST: variable=%s strip=%s depth=%s logger=%s trace_option=%s kind=%s",
+        variable,
+        strip,
+        depth,
+        logger_location,
+        trace_option,
+        download_type,
+    )
+    
     df_out = _select_trace_columns(
         df=df,
         variable=variable,
@@ -1318,6 +1315,7 @@ async def api_download_plot_data(req: DownloadDataRequest):
         kind=download_type,
     )
 
+    logger.info("DOWNLOAD OUTPUT COLUMNS: %s", list(df_out.columns))
     df_out = _round_ratio_columns(df_out)
     df_out = _add_unit_suffixes_for_download(df_out, variable)
 
@@ -1354,6 +1352,19 @@ async def api_download_plot_data(req: DownloadDataRequest):
             "-------------\n"
             "Top Plot grouped by: Depth\n"
         )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by depth and logger location "
+            f"{logger_location} ({logger_location_label}) is selected, raw "
+            f"{variable} columns should include all three depths for that logger:\n\n"
+            f"- {variable}_1_raw_{strip}_{logger_location}_pct = 6 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_2_raw_{strip}_{logger_location}_pct = 12 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+            f"- {variable}_3_raw_{strip}_{logger_location}_pct = 18 in sensor, "
+            f"{strip}, {logger_location_label} logger\n"
+        )
     else:
         csv_name = (
             f"biochar_{download_type}_{variable}_{strip}_"
@@ -1373,6 +1384,19 @@ async def api_download_plot_data(req: DownloadDataRequest):
             "-------------\n"
             "Top Plot grouped by: Logger location\n"
         )
+        column_examples = (
+            "Column examples for this selection\n"
+            "----------------------------------\n"
+            f"Because the top plot is grouped by logger location and depth "
+            f"{depth} ({depth_label_us}) is selected, raw {variable} columns "
+            f"should include Top, Middle, and Bottom logger locations:\n\n"
+            f"- {variable}_{depth}_raw_{strip}_T_pct = {depth_label_us} sensor, "
+            f"{strip}, Top logger\n"
+            f"- {variable}_{depth}_raw_{strip}_M_pct = {depth_label_us} sensor, "
+            f"{strip}, Middle logger\n"
+            f"- {variable}_{depth}_raw_{strip}_B_pct = {depth_label_us} sensor, "
+            f"{strip}, Bottom logger\n"
+        )
 
     if download_type == "all":
         depth_selection_text = (
@@ -1380,29 +1404,16 @@ async def api_download_plot_data(req: DownloadDataRequest):
             f"Selected depth for ratio columns: {selected_depth_text}"
         )
 
-    readme_header = build_download_header(
-        title="Biochar Project — Interactive Plot Data Download",
+    readme = build_plot_download_readme(
+        download_type=download_type,
         year=year,
         variable=variable,
         strip=strip,
         granularity=granularity,
         unit_system=unit_system,
-        extra_lines=[
-            location_selection_text,
-            depth_selection_text,
-            f"Download type: {download_type}",
-        ],
-    )
-
-    notes = load_readme_fragment(f"plot_download_{download_type}_notes")
-    readme = (
-        readme_header
-        + grouping_text
-        + "\n"
-        + notes
-        + "\n\n"
-        + build_experiment_lookup_section(unit_system)
-        + "\n"
+        logger_location=logger_location,
+        trace_option=trace_option,
+        depth=depth,
     )
 
     out = BytesIO()
@@ -1456,18 +1467,15 @@ async def ward_guide():
     file_path = WARD_HTML_DIR / "ward_guide_20211118.html"
     return file_path.read_text(encoding="utf-8")
 
-
 @main_router.get("/lab-references/soil-health-guide", response_class=HTMLResponse)
 async def soil_health_guide():
     file_path = WARD_HTML_DIR / "ward_soil_health_guide_final_may.html"
     return file_path.read_text(encoding="utf-8")
 
-
 @main_router.get("/lab-references/ward-biological-report", response_class=HTMLResponse)
 async def ward_biological_report():
     file_path = get_latest_ward_html("ward_biological_report_*.html")
     return file_path.read_text(encoding="utf-8")
-
 
 @main_router.get("/lab-references/ward-biological-report/pdf")
 async def ward_biological_report_pdf():
@@ -1482,7 +1490,6 @@ async def ward_biological_report_pdf():
 async def ward_nirs_report():
     file_path = get_latest_ward_html("ward_nirs_report_*.html")
     return file_path.read_text(encoding="utf-8")
-
 
 @main_router.get("/lab-references/ward-soil-sha-report", response_class=HTMLResponse)
 async def ward_soil_sha_report():

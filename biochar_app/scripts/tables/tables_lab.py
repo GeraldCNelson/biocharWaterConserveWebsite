@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import pandas as pd
 
 from biochar_app.config import table_specs
-
 
 # -----------------------------
 # Normalization helpers
@@ -46,11 +45,9 @@ def normalize_strip(value: Any) -> str:
 
     return s
 
-
 def coerce_date_to_iso(series: pd.Series) -> pd.Series:
     dt = pd.to_datetime(series, errors="coerce")
     return dt.dt.strftime("%Y-%m-%d")
-
 
 def choose_first_present(columns: Iterable[str], candidates: Sequence[str]) -> Optional[str]:
     colset = {c for c in columns}
@@ -59,13 +56,12 @@ def choose_first_present(columns: Iterable[str], candidates: Sequence[str]) -> O
             return c
     return None
 
-
 # -----------------------------
 # Payload shape used by frontend tables.js
 # -----------------------------
 
-def _payload_template(label: str, note: str = "") -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
+def _payload_template(label: str, note: str = "") -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "label": label,          # e.g. "Set 1: Pasture Quality Metrics"
         "periods": [],           # list[str] (column headers)
         "rows": [],              # list[str] (row keys)
@@ -75,7 +71,6 @@ def _payload_template(label: str, note: str = "") -> Dict[str, Any]:
     if note:
         payload["note"] = note
     return payload
-
 
 # -----------------------------
 # Core builders
@@ -90,7 +85,7 @@ def build_lab_table_payload_long(
     period_key: str,
     variable_specs: Sequence[Any],  # dicts: {"key","label","candidates"}
     normalize_row_as_strip: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Convert a LONG-ish lab dataset into the wide-table payload:
       rows => entity (strip or location)
@@ -146,9 +141,9 @@ def build_lab_table_payload_long(
             .reindex(index=rows, columns=events)
         )
 
-        block: Dict[str, Dict[str, Any]] = {}
+        block: dict[str, dict[str, Any]] = {}
         for rk in rows:
-            rowvals: Dict[str, Any] = {}
+            rowvals: dict[str, Any] = {}
             for ev in events:
                 v = pv.at[rk, ev]
                 rowvals[ev] = None if pd.isna(v) else float(v)
@@ -158,7 +153,6 @@ def build_lab_table_payload_long(
 
     return out
 
-
 def build_lab_table_payload_wide(
     df: pd.DataFrame,
     *,
@@ -167,7 +161,7 @@ def build_lab_table_payload_wide(
     row_key: str,
     normalize_row_as_strip: bool = False,
     wide_variable_key: str = "value",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Wide dataset:
       first column = row_key
@@ -184,7 +178,7 @@ def build_lab_table_payload_wide(
     event_cols = [c for c in tmp.columns if c != row_key]
 
     # Convert event headers to ISO if possible
-    event_iso_map: Dict[str, str] = {}
+    event_iso_map: dict[str, str] = {}
     for c in event_cols:
         iso = pd.to_datetime(c, errors="coerce")
         event_iso_map[c] = str(c) if pd.isna(iso) else iso.strftime("%Y-%m-%d")
@@ -210,10 +204,10 @@ def build_lab_table_payload_wide(
     out["rowLabels"] = {rk: rk for rk in rows}
 
     # Single variable matrix
-    matrix: Dict[str, Dict[str, Any]] = {}
+    matrix: dict[str, dict[str, Any]] = {}
     for _, r in tmp.iterrows():
         rk = normalize_strip(r[row_key]) if normalize_row_as_strip else str(r[row_key])
-        rowvals: Dict[str, Any] = {}
+        rowvals: dict[str, Any] = {}
         for c in event_cols:
             ev = event_iso_map[c]
             v = r[c]
@@ -222,7 +216,6 @@ def build_lab_table_payload_wide(
 
     out["data"][wide_variable_key] = matrix
     return out
-
 
 # -----------------------------
 # High-level entry point: build full table from config.table_specs
@@ -233,8 +226,7 @@ def _load_csv(path: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"Missing lab source CSV: {path}")
     return pd.read_csv(path)
 
-
-def build_lab_table(tab_key: str) -> Dict[str, Any]:
+def build_lab_table(tab_key: str) -> dict[str, Any]:
     """
     Generic builder for ALL lab-based wide tables.
 
@@ -264,7 +256,7 @@ def build_lab_table(tab_key: str) -> Dict[str, Any]:
     # If row_key was configured as "strip", normalize to STRIP 1..4
     normalize_row_as_strip = (source.row_key == "strip")
 
-    sets_payload: List[Dict[str, Any]] = []
+    sets_payload: list[dict[str, Any]] = []
 
     for set_spec in table.sets:
         # set-specific note (optional) + source-level notes

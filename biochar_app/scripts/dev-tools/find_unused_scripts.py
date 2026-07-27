@@ -19,14 +19,12 @@ import ast
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Optional, Set, Tuple
-
+from typing import Iterator, Optional
 
 @dataclass(frozen=True)
 class ImportHit:
     importer_file: str
     imported_name: str  # as written (module or from-module)
-
 
 def iter_py_files(root: Path) -> Iterator[Path]:
     for p in root.rglob("*.py"):
@@ -37,7 +35,6 @@ def iter_py_files(root: Path) -> Iterator[Path]:
         if any(part.startswith(".") for part in p.parts):
             continue
         yield p
-
 
 def safe_read_text(path: Path) -> Optional[str]:
     try:
@@ -50,8 +47,7 @@ def safe_read_text(path: Path) -> Optional[str]:
     except Exception:
         return None
 
-
-def parse_imports(py_file: Path) -> Tuple[Set[str], Set[str]]:
+def parse_imports(py_file: Path) -> tuple[set[str], set[str]]:
     """
     Returns:
       (import_modules, from_modules)
@@ -69,8 +65,8 @@ def parse_imports(py_file: Path) -> Tuple[Set[str], Set[str]]:
         # Skip files that aren't parseable for any reason
         return set(), set()
 
-    import_mods: Set[str] = set()
-    from_mods: Set[str] = set()
+    import_mods: set[str] = set()
+    from_mods: set[str] = set()
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -85,7 +81,6 @@ def parse_imports(py_file: Path) -> Tuple[Set[str], Set[str]]:
 
     return import_mods, from_mods
 
-
 def file_to_module(project_root: Path, file_path: Path) -> str:
     """
     Convert a file path like:
@@ -97,8 +92,7 @@ def file_to_module(project_root: Path, file_path: Path) -> str:
     rel_no_suffix = rel.with_suffix("")
     return ".".join(rel_no_suffix.parts)
 
-
-def module_prefixes(mod: str) -> Set[str]:
+def module_prefixes(mod: str) -> set[str]:
     """
     "a.b.c" -> {"a", "a.b", "a.b.c"}
     Useful because code might import only "a.b" while the file is "a.b.c".
@@ -108,7 +102,6 @@ def module_prefixes(mod: str) -> Set[str]:
     for i in range(1, len(parts) + 1):
         out.add(".".join(parts[:i]))
     return out
-
 
 def is_likely_manual_script(path: Path) -> bool:
     """
@@ -124,7 +117,6 @@ def is_likely_manual_script(path: Path) -> bool:
     if "argparse" in text:
         return True
     return False
-
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -148,7 +140,7 @@ def main() -> None:
     if not scripts_dir.exists():
         raise SystemExit(f"scripts-dir not found: {scripts_dir}")
 
-    imported_modules: Set[str] = set()
+    imported_modules: set[str] = set()
 
     # Scan package for imports
     for py in iter_py_files(package_dir):
@@ -157,7 +149,7 @@ def main() -> None:
         imported_modules.update(from_mods)
 
     # Expand prefixes so importing "biochar.scripts" counts as using submodules
-    imported_with_prefixes: Set[str] = set()
+    imported_with_prefixes: set[str] = set()
     for mod in imported_modules:
         imported_with_prefixes.update(module_prefixes(mod))
 
@@ -205,7 +197,6 @@ def main() -> None:
         out_path.write_text(json.dumps(unused, indent=2), encoding="utf-8")
         print()
         print(f"Wrote JSON: {out_path}")
-
 
 if __name__ == "__main__":
     main()
