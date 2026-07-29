@@ -99,6 +99,7 @@ from biochar_app.config.irrigation_config import (
 
 from biochar_app.config.paths import (
     DATA_RAW_DIR,
+    DATA_PROCESSED_DIR,
     LOGGER_DOWNLOADS_DIR,
     PARQUET_DIR,
     WEATHER_DOWNLOADS_DIR,
@@ -277,6 +278,304 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
 # (Etc/GMT+7 is fixed UTC-7; the sign is reversed by POSIX convention.)
 LOGGER_FIXED_STANDARD_TZ = "Etc/GMT+7"
 
+# Documentation metadata for LOGGER_CLOCK_CORRECTIONS.
+#
+# Each correction entry represents a logger clock state change. The offset
+# values in LOGGER_CLOCK_CORRECTIONS are operational values used by the ETL.
+# This table documents why each correction exists and the evidence supporting it.
+#
+# Evidence confidence:
+#   High   - direct PC400 synchronization screenshots or recorded field action
+#   Medium - supported by multiple independent timestamp comparisons
+#   Low    - inferred from limited evidence or unresolved ambiguity
+
+LOGGER_CLOCK_CORRECTION_METADATA = {
+    ("S1B", "2024-02-23 15:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:15:00 -> "
+            "2024-02-23 15:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S1M", "2024-02-23 15:15:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:00:00 -> "
+            "2024-02-23 15:15:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S1T", "2024-02-23 10:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 11:30:00 -> "
+            "2024-02-23 10:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2B", "2024-02-23 15:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:30:00 -> "
+            "2024-02-23 15:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2M", "2026-02-23 08:45:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit. "
+            "Correction represents the post-synchronization clock state."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S2T", "2024-04-02 16:00:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-04-02 14:45:00 -> "
+            "2024-04-02 16:00:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2023-04-28 10:45:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-04-28 09:30:00 -> "
+            "2023-04-28 10:45:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2024-03-28 17:15:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-03-28 16:00:00 -> "
+            "2024-03-28 17:15:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2026-02-23 08:45:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2023-09-04 10:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-04 09:15:00 -> "
+            "2023-09-04 10:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2024-07-07 06:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-07-07 05:15:00 -> "
+            "2024-07-07 06:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2025-01-16 23:45:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2025-01-16 22:30:00 -> "
+            "2025-01-16 23:45:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2026-02-19 15:00:00"): {
+        "reason": (
+            "Logger clock was verified after battery replacement. "
+            "Historical timestamps required a new clock-state correction "
+            "starting after the field service event."
+        ),
+        "evidence": (
+            "PC400 screenshot comparison of S3M logger time and server time "
+            "after battery replacement."
+        ),
+        "details": (
+            "Battery replaced approximately 2026-02-19 13:30 MST. "
+            "Logger time and server time differed by approximately 1 second."
+        ),
+        "confidence": "high",
+    },
+
+    ("S3T", "2024-02-23 11:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 12:15:00 -> "
+            "2024-02-23 11:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2023-09-04 10:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-04 09:15:00 -> "
+            "2023-09-04 10:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2023-09-20 18:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-20 17:15:00 -> "
+            "2023-09-20 18:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2026-02-23 09:00:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S4M", "2024-02-23 14:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 15:15:00 -> "
+            "2024-02-23 14:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4T", "2024-02-23 11:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 12:30:00 -> "
+            "2024-02-23 11:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Timezone helpers
 # ---------------------------------------------------------------------------
@@ -334,6 +633,85 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
                 raw + pd.Timedelta(minutes=int(add_min)),
             )
     return out
+
+def build_logger_clock_corrections_audit() -> pd.DataFrame:
+    """
+    Build an audit table documenting logger clock corrections.
+
+    Combines operational correction values with provenance metadata.
+    """
+
+    rows = []
+
+    for logger, corrections in LOGGER_CLOCK_CORRECTIONS.items():
+        for start_s, offset_min in sorted(
+            corrections,
+            key=lambda item: pd.Timestamp(item[0]),
+        ):
+
+            metadata = LOGGER_CLOCK_CORRECTION_METADATA.get(
+                (logger, start_s),
+                {},
+            )
+
+            rows.append(
+                {
+                    "logger": logger,
+                    "correction_start_raw": start_s,
+                    "offset_minutes": int(offset_min),
+                    "offset_hours": float(offset_min) / 60.0,
+                    "reason": metadata.get(
+                        "reason",
+                        "No reason documented",
+                    ),
+                    "evidence": metadata.get(
+                        "evidence",
+                        "No evidence documented",
+                    ),
+                    "details": metadata.get(
+                        "details",
+                        "",
+                    ),
+                    "confidence": metadata.get(
+                        "confidence",
+                        "unknown",
+                    ),
+                }
+            )
+
+    return (
+        pd.DataFrame(rows)
+        .sort_values(
+            ["logger", "correction_start_raw"]
+        )
+        .reset_index(drop=True)
+    )
+
+def write_logger_clock_corrections_audit(output_path: Path) -> None:
+    """
+    Write logger clock correction metadata audit CSV.
+    """
+
+    df = build_logger_clock_corrections_audit()
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    df.to_csv(
+        output_path,
+        index=False,
+    )
+
+
+audit_path = (
+    DATA_PROCESSED_DIR
+    / "diagnostics"
+    / "logger_clock_corrections_audit.csv"
+)
+
+write_logger_clock_corrections_audit(audit_path)
 
 def apply_logger_seasonal_civil_time(
     ts: pd.Series,
