@@ -687,6 +687,29 @@ def build_logger_clock_corrections_audit() -> pd.DataFrame:
         .reset_index(drop=True)
     )
 
+# Logger timestamp correction methodology
+#
+# Logger internal clocks record time with second-level resolution.
+# The Campbell logger program generates 15-minute .dat records by
+# averaging higher-frequency measurements internally.
+#
+# Historical timestamp transitions detected in .dat files may appear as
+# offsets such as +75 minutes rather than exactly +60 minutes. These
+# transitions represent a combination of:
+#
+#   1. approximately one hour of MDT/MST clock-state difference, and
+#   2. alignment of the timestamp transition with the 15-minute averaged
+#      .dat record boundaries.
+#
+# Therefore, a +75 minute discontinuity in the .dat record sequence does
+# not necessarily indicate that the logger clock was manually advanced
+# by exactly 75 minutes. It indicates a change in the effective timestamp
+# state of the recorded data.
+#
+# LOGGER_CLOCK_CORRECTIONS stores absolute timestamp states, not
+# cumulative adjustments.
+
+
 def write_logger_clock_corrections_audit(output_path: Path) -> None:
     """
     Write logger clock correction metadata audit CSV.
