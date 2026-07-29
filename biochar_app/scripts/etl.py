@@ -233,6 +233,26 @@ def write_dataset_metadata(
 
     logger.info(f"✅ Wrote dataset metadata: {output_path}")
 
+# Logger timestamps are 15-minute aggregation labels generated from each
+# logger's internal wall clock. PC400 clock synchronization copied the
+# laptop's current wall time into the logger, which could be either MST or
+# MDT depending on the date of the field visit. Consequently, an individual
+# logger file may contain multiple clock regimes.
+#
+# These entries reconstruct the logger's clock-state history and normalize
+# raw timestamps to a fixed MST (UTC-7) base. Each offset is the complete
+# number of minutes to add beginning at the listed raw timestamp; offsets
+# are absolute states, not cumulative changes.
+#
+# After these corrections, apply_logger_seasonal_civil_time() interprets
+# the normalized values as fixed MST and converts them to America/Denver
+# civil time, restoring MDT where seasonally appropriate.
+#
+# The logger clocks and PC400 synchronization screenshots include seconds,
+# but the stored .dat records are 15-minute aggregation timestamps. The
+# correction map therefore represents interval-label clock states rather
+# than second-level oscillator drift.
+
 LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S1B": [("2024-02-23 15:30:00", 60)],
     "S1M": [("2024-02-23 15:15:00", 60)],
