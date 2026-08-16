@@ -1199,11 +1199,13 @@ def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPAC
     figure_dir.mkdir(parents=True, exist_ok=True)
 
     df = zone_df.copy()
-    df["event_storage_in"] = pd.to_numeric(df["event_storage_in"], errors="coerce")
-
+    df["estimated_zone_storage_in_0_18in"] = pd.to_numeric(
+        df["estimated_zone_storage_in_0_18in"],
+        errors="coerce",
+    )
     for year, sub in df.groupby("year"):
         summary = (
-            sub.groupby(["logger_position", "strip"])["event_storage_in"]
+            sub.groupby(["logger_position", "strip"])["estimated_zone_storage_in_0_18in"]
             .mean()
             .unstack("strip")
             .reindex(LOGGER_LOCATIONS)
@@ -1232,7 +1234,10 @@ def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPAC
         fig.savefig(out_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-def plot_mean_storage_by_zone(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
+def plot_mean_storage_by_zone(
+    zone_df: pd.DataFrame,
+    HOLDING_CAPACITY_DIR: Path,
+) -> None:
     if zone_df.empty:
         return
 
@@ -1240,56 +1245,120 @@ def plot_mean_storage_by_zone(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path)
     figure_dir.mkdir(parents=True, exist_ok=True)
 
     df = zone_df.copy()
-    df["event_storage_gal"] = pd.to_numeric(df["event_storage_gal"], errors="coerce")
 
-    summary = (
-        df.groupby(["logger_position", "strip"])["event_storage_gal"]
-        .mean()
-        .unstack("strip")
-        .reindex(["T", "M", "B"])
+    storage_col = "estimated_zone_storage_gal_0_18in"
+
+    df[storage_col] = pd.to_numeric(
+        df[storage_col],
+        errors="coerce",
     )
 
-    ax = summary.plot(kind="bar", figsize=(8, 5))
-    ax.set_xlabel("Logger position")
-    ax.set_ylabel("Mean event storage (gal)")
-    ax.set_title("Mean event storage by logger position and strip")
-    ax.set_xticklabels(["Top", "Middle", "Bottom"], rotation=0)
-    ax.legend(title="Strip")
-    
+    summary = (
+        df.groupby(
+            ["logger_position", "strip"]
+        )[storage_col]
+        .mean()
+        .unstack("strip")
+        .reindex(LOGGER_LOCATIONS)
+    )
 
-    out_path = figure_dir / "mean_event_storage_by_zone_all_years.png"
-    fig = cast(Figure, ax.figure)
+    ax = summary.plot(
+        kind="bar",
+        figsize=(8, 5),
+    )
+
+    ax.set_xlabel("Logger influence zone")
+    ax.set_ylabel("Mean estimated storage, 0–18 in (gal)")
+    ax.set_title(
+        "Mean estimated 0–18 in storage by logger influence zone and strip"
+    )
+    ax.set_xticklabels(
+        ["Top", "Middle", "Bottom"],
+        rotation=0,
+    )
+    ax.legend(title="Strip")
+
+    out_path = (
+        figure_dir
+        / "mean_estimated_storage_0_18in_by_zone_all_years.png"
+    )
+
+    fig = cast(
+        Figure,
+        ax.figure,
+    )
+
     fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    fig.savefig(
+        out_path,
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
-def plot_mean_storage_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
+def plot_mean_storage_by_zone_by_year(
+    zone_df: pd.DataFrame,
+    HOLDING_CAPACITY_DIR: Path,
+) -> None:
     if zone_df.empty:
         return
 
     figure_dir = HOLDING_CAPACITY_DIR / "figures"
-    figure_dir.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     df = zone_df.copy()
-    df["event_storage_gal"] = pd.to_numeric(df["event_storage_gal"], errors="coerce")
+
+    storage_col = "estimated_zone_storage_gal_0_18in"
+
+    df[storage_col] = pd.to_numeric(
+        df[storage_col],
+        errors="coerce",
+    )
 
     for year, sub in df.groupby("year"):
         summary = (
-            sub.groupby(["logger_position", "strip"])["event_storage_gal"]
+            sub.groupby(
+                ["logger_position", "strip"]
+            )[storage_col]
             .mean()
             .unstack("strip")
             .reindex(LOGGER_LOCATIONS)
         )
 
-        ax = summary.plot(kind="bar", figsize=(8, 5))
-        ax.set_xlabel("Logger position")
-        ax.set_ylabel("Mean event storage (gal)")
-        ax.set_title(f"Mean event storage by logger position and strip, {year}")
-        ax.set_xticklabels(["Top", "Middle", "Bottom"], rotation=0)
+        ax = summary.plot(
+            kind="bar",
+            figsize=(8, 5),
+        )
+
+        ax.set_xlabel("Logger influence zone")
+        ax.set_ylabel("Mean estimated storage, 0–18 in (gal)")
+        ax.set_title(
+            f"Mean estimated 0–18 in storage by logger influence zone "
+            f"and strip, {year}"
+        )
+        ax.set_xticklabels(
+            ["Top", "Middle", "Bottom"],
+            rotation=0,
+        )
         ax.legend(title="Strip")
 
-        out_path = figure_dir / f"mean_event_storage_by_zone_{year}.png"
-        fig = cast(Figure, ax.figure)
+        out_path = (
+            figure_dir
+            / f"mean_estimated_storage_0_18in_by_zone_{year}.png"
+        )
+
+        fig = cast(
+            Figure,
+            ax.figure,
+        )
+
         fig.tight_layout()
-        fig.savefig(out_path, dpi=300, bbox_inches="tight")
+        fig.savefig(
+            out_path,
+            dpi=300,
+            bbox_inches="tight",
+        )
         plt.close(fig)

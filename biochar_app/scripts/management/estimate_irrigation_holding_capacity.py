@@ -73,7 +73,9 @@ from biochar_app.config.field_management_metadata import (
     PROFILE_AREA_SQFT,
 )
 
-from biochar_app.config.experiment_config import (LOGGER_LOCATIONS)
+from biochar_app.config.experiment_config import (
+    LOGGER_LOCATIONS,
+)
 # Ballpark logger service area:
 # strip width 46 ft × strip length 280 ft ÷ 3 logger positions.
 
@@ -138,6 +140,7 @@ from biochar_app.scripts.management.irrigation_analysis.holding_capacity import 
     build_zone_anomaly_diagnostics,
     build_zone_ordering_frequency,
     build_zone_storage_summary,
+    build_biochar_performance_summary,
 )
 
 from biochar_app.scripts.management.irrigation_analysis.arrival import (
@@ -819,6 +822,13 @@ def build_enhanced_event_debug_table(
         "event_storage_gal",
         "efficiency_strip",
         "estimated_loss_gal_strip",
+        "local_water_diagnostic_method",
+        "sensor_profile_baseline_cs650_water_gal",
+        "sensor_profile_plateau_cs650_water_gal",
+        "sensor_profile_delta_cs650_water_gal",
+        "sensor_profile_baseline_legacy_swc_gal",
+        "sensor_profile_plateau_legacy_swc_gal",
+        "sensor_profile_delta_legacy_swc_gal",
     ]
 
     keep_cols = [c for c in keep_cols if c in event_results.columns]
@@ -913,6 +923,7 @@ def write_year_outputs(
     year: int,
     df_15min: pd.DataFrame,
     results: pd.DataFrame,
+    zone_storage_table: pd.DataFrame,
     plot_results: pd.DataFrame | None = None,
     *,
     diagnostics_dir: Path = IRRIGATION_DIAGNOSTICS_DIR,
@@ -925,6 +936,32 @@ def write_year_outputs(
     pd.DataFrame,
     pd.DataFrame,
 ]:
+    """
+    Write yearly irrigation-analysis outputs.
+
+    Parameters
+    ----------
+    year
+        Calendar year being analyzed.
+
+    df_15min
+        Prepared 15-minute logger dataframe.
+
+    results
+        Bottom-logger event results. These continue to drive the legacy/stable
+        holding-capacity, pre-start-response, and trustworthy-event workflows.
+
+    zone_storage_table
+        Three-zone storage table built from all logger positions (T, M, B).
+        This is the spatial storage input used by the whole-strip water-balance
+        calculation.
+
+    plot_results
+        Event results for all logger positions. Used for arrival analysis,
+        response summaries, and multidepth plotting. If omitted, falls back
+        to ``results``.
+    """
+
     diagnostics_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -955,57 +992,112 @@ def write_year_outputs(
         exist_ok=True,
     )
 
-    results = add_scaled_storage_fields(results)
+    # ------------------------------------------------------------------
+    # Bottom-logger holding-capacity workflow
+    # ------------------------------------------------------------------
+    results = add_scaled_storage_fields(
+        results
+    )
 
-    debug_table = build_enhanced_event_debug_table(results)
-    targets, _ = summarize_targets_and_runtimes(results)
-    runtimes = build_enhanced_runtime_table(results)
+    debug_table = build_enhanced_event_debug_table(
+        results
+    )
+
+    targets, _ = summarize_targets_and_runtimes(
+        results
+    )
+
+    runtimes = build_enhanced_runtime_table(
+        results
+    )
+
     definitions = build_variable_definitions_table()
 
-    if not targets.empty and "depth_index" in results.columns:
+    if (
+        not targets.empty
+        and "depth_index" in results.columns
+    ):
         sensor_depth_lookup = (
-            results[["sensor_col", "depth_index", "depth_inches"]]
+            results[
+                [
+                    "sensor_col",
+                    "depth_index",
+                    "depth_inches",
+                ]
+            ]
             .drop_duplicates()
             .copy()
         )
-        targets = targets.merge(sensor_depth_lookup, on="sensor_col", how="left")
 
-    for table in [debug_table, targets, runtimes]:
+        targets = targets.merge(
+            sensor_depth_lookup,
+            on="sensor_col",
+            how="left",
+        )
+
+    for table in [
+        debug_table,
+        targets,
+        runtimes,
+    ]:
         if not table.empty:
             table["year"] = year
 
-    debug_table = force_float(move_id_columns_left(debug_table))
-    targets = force_float(move_id_columns_left(targets))
-    runtimes = force_float(move_id_columns_left(runtimes))
+    debug_table = force_float(
+        move_id_columns_left(
+            debug_table
+        )
+    )
+
+    targets = force_float(
+        move_id_columns_left(
+            targets
+        )
+    )
+
+    runtimes = force_float(
+        move_id_columns_left(
+            runtimes
+        )
+    )
 
     debug_table.to_csv(
-        holding_capacity_dir / f"debug_irrigation_events_{year}_all_depths.csv",
+        holding_capacity_dir
+        / f"debug_irrigation_events_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     targets.to_csv(
-        holding_capacity_dir / f"irrigation_targets_{year}_all_depths.csv",
+        holding_capacity_dir
+        / f"irrigation_targets_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     runtimes.to_csv(
-        holding_capacity_dir / f"irrigation_runtimes_{year}_all_depths.csv",
+        holding_capacity_dir
+        / f"irrigation_runtimes_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
     )
 
     definitions.to_csv(
-        reports_dir / f"irrigation_variable_definitions_{year}.csv",
+        reports_dir
+        / f"irrigation_variable_definitions_{year}.csv",
         index=False,
     )
 
     build_variable_definitions_with_sources(
-        output_dir=str(reports_dir),
+        output_dir=str(
+            reports_dir
+        ),
         year=year,
     )
 
+    # ------------------------------------------------------------------
+    # All-logger workflow: arrival timing, response diagnostics, and plots
+    # ------------------------------------------------------------------
     if plot_results is None:
         plot_results = results
 
@@ -1014,90 +1106,177 @@ def write_year_outputs(
     arrival_times = build_irrigation_arrival_times(
         df_15min=df_15min,
         event_results=plot_results,
-        response_threshold_vwc=ARRIVAL_RESPONSE_THRESHOLD_VWC,
+        response_threshold_vwc=(
+            ARRIVAL_RESPONSE_THRESHOLD_VWC
+        ),
         hours_before=EVENT_PLOT_HOURS_BEFORE,
         hours_after=EVENT_PLOT_HOURS_AFTER,
     )
-    
-    response_summary = build_irrigation_event_response_summary(
-        arrival_times=arrival_times,
-        event_results=results,
+
+    # Use all logger positions here, not bottom-only results.
+    response_summary = (
+        build_irrigation_event_response_summary(
+            arrival_times=arrival_times,
+            event_results=plot_results,
+        )
     )
 
-    response_summary["distance_from_furrow_start_ft"] = response_summary[
-        "logger_position"
-    ].apply(_logger_distance_ft)
+    if (
+        not response_summary.empty
+        and "logger_position"
+        in response_summary.columns
+    ):
+        response_summary[
+            "distance_from_furrow_start_ft"
+        ] = response_summary[
+            "logger_position"
+        ].apply(
+            _logger_distance_ft
+        )
 
-    response_summary = add_vertical_velocity_fields(response_summary)
+        response_summary = (
+            add_vertical_velocity_fields(
+                response_summary
+            )
+        )
 
     response_summary.to_csv(
-        diagnostics_dir / f"irrigation_event_response_summary_{year}.csv",
+        diagnostics_dir
+        / f"irrigation_event_response_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
 
-    horizontal_advance = build_irrigation_horizontal_advance_summary(
-        arrival_times=arrival_times,
+    horizontal_advance = (
+        build_irrigation_horizontal_advance_summary(
+            arrival_times=arrival_times,
+        )
     )
 
     horizontal_advance.to_csv(
-        diagnostics_dir / f"irrigation_horizontal_advance_summary_{year}.csv",
+        diagnostics_dir
+        / f"irrigation_horizontal_advance_summary_{year}.csv",
         index=False,
         float_format="%.2f",
     )
 
-    print(f"\n=== ARRIVAL TIMES COLUMNS BEFORE CSV WRITE ({year}) ===")
-    print(arrival_times.columns.tolist())
+    print(
+        f"\n=== ARRIVAL TIMES COLUMNS "
+        f"BEFORE CSV WRITE ({year}) ==="
+    )
+
+    print(
+        arrival_times.columns.tolist()
+    )
 
     arrival_times.to_csv(
-        diagnostics_dir / f"irrigation_arrival_times_{year}.csv",
+        diagnostics_dir
+        / f"irrigation_arrival_times_{year}.csv",
         index=False,
     )
 
-    arrival_order_table = build_arrival_order_diagnostics(
-        arrival_times=arrival_times,
+    arrival_order_table = (
+        build_arrival_order_diagnostics(
+            arrival_times=arrival_times,
+        )
     )
 
     arrival_order_table.to_csv(
-        diagnostics_dir / f"arrival_order_diagnostics_{year}.csv",
+        diagnostics_dir
+        / f"arrival_order_diagnostics_{year}.csv",
         index=False,
     )
 
-    print(f"\n=== ARRIVAL ORDER SUMMARY ({year}) ===")
-    if not arrival_order_table.empty:
-        print(arrival_order_table["order_class"].value_counts(dropna=False).to_string())
+    print(
+        f"\n=== ARRIVAL ORDER SUMMARY "
+        f"({year}) ==="
+    )
 
-    print(f"\n=== ARRIVAL ORDER BY LOGGER POSITION ({year}) ===")
     if not arrival_order_table.empty:
         print(
-            arrival_order_table.groupby(["logger_position", "order_class"])
-            .size()
-            .unstack(fill_value=0)
+            arrival_order_table[
+                "order_class"
+            ]
+            .value_counts(
+                dropna=False
+            )
             .to_string()
         )
 
-    print(f"\n=== ARRIVAL ORDER BY STRIP ({year}) ===")
+    print(
+        f"\n=== ARRIVAL ORDER BY "
+        f"LOGGER POSITION ({year}) ==="
+    )
+
     if not arrival_order_table.empty:
         print(
-            arrival_order_table.groupby(["strip", "order_class"])
+            arrival_order_table
+            .groupby(
+                [
+                    "logger_position",
+                    "order_class",
+                ]
+            )
             .size()
-            .unstack(fill_value=0)
+            .unstack(
+                fill_value=0
+            )
+            .to_string()
+        )
+
+    print(
+        f"\n=== ARRIVAL ORDER BY "
+        f"STRIP ({year}) ==="
+    )
+
+    if not arrival_order_table.empty:
+        print(
+            arrival_order_table
+            .groupby(
+                [
+                    "strip",
+                    "order_class",
+                ]
+            )
+            .size()
+            .unstack(
+                fill_value=0
+            )
             .to_string()
         )
 
     if not arrival_order_table.empty:
-        missing_depth_rows = arrival_order_table[
-            arrival_order_table["order_class"].eq("missing_depths")
-        ]
+        missing_depth_rows = (
+            arrival_order_table[
+                arrival_order_table[
+                    "order_class"
+                ].eq(
+                    "missing_depths"
+                )
+            ]
+        )
 
-        print(f"\n=== MISSING DEPTHS BY STRIP / LOGGER ({year}) ===")
+        print(
+            f"\n=== MISSING DEPTHS BY "
+            f"STRIP / LOGGER ({year}) ==="
+        )
+
         if missing_depth_rows.empty:
             print("None")
+
         else:
             print(
-                missing_depth_rows.groupby(["strip", "logger_position"])
+                missing_depth_rows
+                .groupby(
+                    [
+                        "strip",
+                        "logger_position",
+                    ]
+                )
                 .size()
-                .unstack(fill_value=0)
+                .unstack(
+                    fill_value=0
+                )
                 .to_string()
             )
 
@@ -1111,26 +1290,65 @@ def write_year_outputs(
                 "alt_before_start_depths",
             ]
 
-            print(f"\n=== MISSING DEPTH ARRIVAL DETAILS ({year}) ===")
+            detail_cols = [
+                col
+                for col in detail_cols
+                if col
+                in missing_depth_rows.columns
+            ]
+
             print(
-                missing_depth_rows[detail_cols]
-                .sort_values(["strip", "logger_position", "event_id"])
-                .to_string(index=False)
+                f"\n=== MISSING DEPTH ARRIVAL "
+                f"DETAILS ({year}) ==="
+            )
+
+            print(
+                missing_depth_rows[
+                    detail_cols
+                ]
+                .sort_values(
+                    [
+                        col
+                        for col in [
+                            "strip",
+                            "logger_position",
+                            "event_id",
+                        ]
+                        if col
+                        in detail_cols
+                    ]
+                )
+                .to_string(
+                    index=False
+                )
             )
 
     if not arrival_order_table.empty:
-        logger_order_flag_rows = logger_order_flag_summary(
-            arrival_order_table
+        logger_order_flag_rows = (
+            logger_order_flag_summary(
+                arrival_order_table
+            )
         )
 
-        print(f"\n=== LOGGER ORDER FLAGS ({year}) ===")
+        print(
+            f"\n=== LOGGER ORDER FLAGS "
+            f"({year}) ==="
+        )
+
         if logger_order_flag_rows.empty:
             print("None")
+
         else:
             print(
-                logger_order_flag_rows.to_string(index=False)
+                logger_order_flag_rows
+                .to_string(
+                    index=False
+                )
             )
 
+    # ------------------------------------------------------------------
+    # Attach primary arrival information to plotting dataframe
+    # ------------------------------------------------------------------
     if not arrival_times.empty:
         arrival_cols = [
             "event_id",
@@ -1142,138 +1360,299 @@ def write_year_outputs(
             "arrival_threshold_vwc",
         ]
 
-        plot_results = plot_results.merge(
-            arrival_times[arrival_cols],
-            on=["event_id", "strip", "sensor_col", "logger_position"],
-            how="left",
-        )
+        arrival_cols = [
+            col
+            for col in arrival_cols
+            if col in arrival_times.columns
+        ]
 
-    plot_logs: list[pd.DataFrame] = []
+        merge_keys = [
+            "event_id",
+            "strip",
+            "sensor_col",
+            "logger_position",
+        ]
 
-    print("\n=== PLOT RESULTS LOGGER POSITION COUNTS ===")
+        if all(
+            key in arrival_cols
+            for key in merge_keys
+        ):
+            plot_results = plot_results.merge(
+                arrival_times[
+                    arrival_cols
+                ],
+                on=merge_keys,
+                how="left",
+            )
+
+    # ------------------------------------------------------------------
+    # Multidepth event plots
+    # ------------------------------------------------------------------
+    plot_logs: list[
+        pd.DataFrame
+    ] = []
+
     print(
-        plot_results["logger_position"]
-        .astype(str)
-        .value_counts(dropna=False)
-        .sort_index()
-        .to_string()
+        "\n=== PLOT RESULTS "
+        "LOGGER POSITION COUNTS ==="
     )
 
-    print("\n=== PLOT RESULTS STRIP / LOGGER COUNTS ===")
-    print(
-        plot_results.groupby(["strip", "logger_position"], dropna=False)
-        .size()
-        .reset_index(name="n")
-        .to_string(index=False)
-    )
-
-    print("\nLOGGER_LOCATIONS used for plot generation:")
-    print(LOGGER_LOCATIONS)
-
-    for logger_position_raw in LOGGER_LOCATIONS:
-        logger_position = str(logger_position_raw).strip()
-
-        position_plot_dir = multidepth_plot_dir / logger_position
-        position_plot_dir.mkdir(parents=True, exist_ok=True)
-
-        print(f"\nWriting {logger_position} plots to:")
-        print(position_plot_dir)
-
-        plot_log = save_irrigation_event_multidepth_plots(
-            df=df_15min,
-            event_results=plot_results,
-            output_dir=position_plot_dir,
-            strip_filter=STRIPS,
-            event_ids=None,
-            logger_position=logger_position,
-            depths=tuple(int(d) for d in SENSOR_DEPTH_CODES),
-            hours_before=EVENT_PLOT_HOURS_BEFORE,
-            hours_after=EVENT_PLOT_HOURS_AFTER,
-            max_plots=None,
-            precip_col="precip_in",
-            use_common_y_axis=True,
+    if (
+        not plot_results.empty
+        and "logger_position"
+        in plot_results.columns
+    ):
+        print(
+            plot_results[
+                "logger_position"
+            ]
+            .astype(str)
+            .value_counts(
+                dropna=False
+            )
+            .sort_index()
+            .to_string()
         )
 
-        print(f"{logger_position}: {len(plot_log)} plot-log rows returned")
+        print(
+            "\n=== PLOT RESULTS "
+            "STRIP / LOGGER COUNTS ==="
+        )
+
+        print(
+            plot_results
+            .groupby(
+                [
+                    "strip",
+                    "logger_position",
+                ],
+                dropna=False,
+            )
+            .size()
+            .reset_index(
+                name="n"
+            )
+            .to_string(
+                index=False
+            )
+        )
+
+    print(
+        "\nLOGGER_LOCATIONS used "
+        "for plot generation:"
+    )
+
+    print(
+        LOGGER_LOCATIONS
+    )
+
+    for logger_position_raw in (
+        LOGGER_LOCATIONS
+    ):
+        logger_position = str(
+            logger_position_raw
+        ).strip()
+
+        position_plot_dir = (
+            multidepth_plot_dir
+            / logger_position
+        )
+
+        position_plot_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        print(
+            f"\nWriting "
+            f"{logger_position} plots to:"
+        )
+
+        print(
+            position_plot_dir
+        )
+
+        plot_log = (
+            save_irrigation_event_multidepth_plots(
+                df=df_15min,
+                event_results=plot_results,
+                output_dir=position_plot_dir,
+                strip_filter=STRIPS,
+                event_ids=None,
+                logger_position=(
+                    logger_position
+                ),
+                depths=tuple(
+                    int(d)
+                    for d
+                    in SENSOR_DEPTH_CODES
+                ),
+                hours_before=(
+                    EVENT_PLOT_HOURS_BEFORE
+                ),
+                hours_after=(
+                    EVENT_PLOT_HOURS_AFTER
+                ),
+                max_plots=None,
+                precip_col="precip_in",
+                use_common_y_axis=True,
+            )
+        )
+
+        print(
+            f"{logger_position}: "
+            f"{len(plot_log)} "
+            "plot-log rows returned"
+        )
 
         if not plot_log.empty:
-            print(plot_log["status"].value_counts(dropna=False).to_string())
+            print(
+                plot_log[
+                    "status"
+                ]
+                .value_counts(
+                    dropna=False
+                )
+                .to_string()
+            )
 
-            if "output_file" in plot_log.columns:
+            if (
+                "output_file"
+                in plot_log.columns
+            ):
                 print(
-                    f"{logger_position} example file:\n"
+                    f"{logger_position} "
+                    "example file:\n"
                     f"{plot_log.iloc[0]['output_file']}"
                 )
 
-            plot_log["logger_position_requested"] = logger_position
-            plot_logs.append(plot_log)
+            plot_log[
+                "logger_position_requested"
+            ] = logger_position
+
+            plot_logs.append(
+                plot_log
+            )
 
     multidepth_plot_log = (
-        pd.concat(plot_logs, ignore_index=True)
+        pd.concat(
+            plot_logs,
+            ignore_index=True,
+        )
         if plot_logs
         else pd.DataFrame()
     )
 
     plot_log_path = (
-            figures_dir
-            / f"irrigation_event_multidepth_plot_log_{year}.csv"
+        figures_dir
+        / f"irrigation_event_multidepth_plot_log_{year}.csv"
     )
-    multidepth_plot_log.to_csv(plot_log_path, index=False)
 
-    stale_plot_paths = prune_stale_multidepth_figures(
-        year=year,
-        plot_log=multidepth_plot_log,
-        multidepth_plot_dir=multidepth_plot_dir,
+    multidepth_plot_log.to_csv(
+        plot_log_path,
+        index=False,
     )
+
+    stale_plot_paths = (
+        prune_stale_multidepth_figures(
+            year=year,
+            plot_log=(
+                multidepth_plot_log
+            ),
+            multidepth_plot_dir=(
+                multidepth_plot_dir
+            ),
+        )
+    )
+
     print(
-        f"Year {year}: removed {len(stale_plot_paths)} stale "
+        f"Year {year}: removed "
+        f"{len(stale_plot_paths)} stale "
         "multidepth event plot(s)."
     )
 
-    pre_start_table = detect_pre_start_response(
-        df_15min=df_15min,
-        event_results=results,
-        lookback_hours=6.0,
-        min_increase=0.5,
-        precip_col="precip_in",
-        min_precip_in=0.01,
+    # ------------------------------------------------------------------
+    # Bottom-logger quality-control workflow
+    # ------------------------------------------------------------------
+    pre_start_table = (
+        detect_pre_start_response(
+            df_15min=df_15min,
+            event_results=results,
+            lookback_hours=6.0,
+            min_increase=0.5,
+            precip_col="precip_in",
+            min_precip_in=0.01,
+        )
     )
 
     pre_start_table.to_csv(
-        diagnostics_dir / f"irrigation_pre_start_response_flags_{year}.csv",
+        diagnostics_dir
+        / f"irrigation_pre_start_response_flags_{year}.csv",
         index=False,
     )
 
-    trustworthy_table = classify_trustworthy_irrigation_events(pre_start_table)
+    trustworthy_table = (
+        classify_trustworthy_irrigation_events(
+            pre_start_table
+        )
+    )
 
     trustworthy_table.to_csv(
-        diagnostics_dir / f"trustworthy_irrigation_events_{year}.csv",
+        diagnostics_dir
+        / f"trustworthy_irrigation_events_{year}.csv",
         index=False,
     )
 
-    holding_capacity_table = build_trustworthy_holding_capacity_summary(
-        trustworthy_table=trustworthy_table,
-        event_results=results,
+    holding_capacity_table = (
+        build_trustworthy_holding_capacity_summary(
+            trustworthy_table=(
+                trustworthy_table
+            ),
+            event_results=results,
+        )
     )
 
     holding_capacity_table.to_csv(
-        holding_capacity_dir / f"trustworthy_holding_capacity_summary_{year}.csv",
+        holding_capacity_dir
+        / f"trustworthy_holding_capacity_summary_{year}.csv",
         index=False,
     )
 
-    water_balance_table = build_first_pass_water_balance_table(
-        trustworthy_table=trustworthy_table,
-        event_results=results,
+    # ------------------------------------------------------------------
+    # Three-zone whole-strip water balance
+    #
+    # Important:
+    # trustworthy_table is derived from the established bottom-logger QC
+    # workflow, while zone_storage_table contains the spatial T/M/B storage
+    # estimates. arrival_times supplies the downstream 6-inch timing
+    # constraint used to determine when surface runoff first becomes possible.
+    # ------------------------------------------------------------------
+    water_balance_table = (
+        build_first_pass_water_balance_table(
+            trustworthy_table=(
+                trustworthy_table
+            ),
+            zone_storage_table=(
+                zone_storage_table
+            ),
+            arrival_times=(
+                arrival_times
+            ),
+        )
     )
 
     water_balance_table.to_csv(
-        holding_capacity_dir / f"first_pass_water_balance_{year}.csv",
+        holding_capacity_dir
+        / f"first_pass_water_balance_{year}.csv",
         index=False,
+        float_format="%.2f",
     )
 
     print(
-        f"Year {year}: wrote holding-capacity tables, diagnostic tables, "
-        f"plot log, arrival table, and multidepth event plots."
+        f"Year {year}: wrote "
+        "holding-capacity tables, diagnostic tables, "
+        "plot log, arrival table, three-zone storage, "
+        "and first-pass water balance."
     )
 
     return (
@@ -1318,14 +1697,15 @@ def _write_zone_storage_outputs(
     combined_zone_storage.to_csv(
         zone_storage_path,
         index=False,
+        float_format="%.2f",
     )
 
-    build_event_storage_by_event(
-        combined_zone_storage
-    ).to_csv(
-        holding_capacity_dir
-        / "event_storage_by_event.csv",
+    event_storage_by_event = build_event_storage_by_event(combined_zone_storage)
+    event_storage_by_event = round_for_reporting(event_storage_by_event)
+    event_storage_by_event.to_csv(
+        holding_capacity_dir / "event_storage_by_event.csv",
         index=False,
+        float_format="%.2f",
     )
 
     build_zone_storage_summary(
@@ -1377,11 +1757,78 @@ def _write_zone_storage_outputs(
 
     return combined_zone_storage
 
+def write_all_logger_debug_table(
+    *,
+    year: int,
+    all_logger_results: pd.DataFrame,
+    holding_capacity_dir: Path,
+) -> pd.DataFrame:
+    """
+    Write depth-level irrigation diagnostics for all logger positions.
+
+    Unlike ``debug_irrigation_events_{year}_all_depths.csv``, which is based
+    on the legacy bottom-logger workflow, this table includes:
+
+        T = top logger
+        M = middle logger
+        B = bottom logger
+
+    at all available sensor depths.
+
+    This output is intended for diagnosing zone-storage calculations, including
+    negative or otherwise anomalous top/middle/bottom zone storage estimates.
+    """
+    if all_logger_results.empty:
+        return pd.DataFrame()
+
+    holding_capacity_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    debug_source = add_scaled_storage_fields(
+        all_logger_results.copy()
+    )
+
+    debug_table = build_enhanced_event_debug_table(
+        debug_source
+    )
+
+    if debug_table.empty:
+        return debug_table
+
+    debug_table["year"] = year
+
+    debug_table = force_float(
+        move_id_columns_left(
+            debug_table
+        )
+    )
+
+    output_path = (
+        holding_capacity_dir
+        / f"debug_irrigation_events_{year}_all_loggers_all_depths.csv"
+    )
+
+    debug_table.to_csv(
+        output_path,
+        index=False,
+        float_format="%.2f",
+    )
+
+    print(
+        f"Year {year}: wrote all-logger depth-level debug table: "
+        f"{output_path}"
+    )
+
+    return debug_table
+
 def _write_combined_year_outputs(
     all_pre_start_flags: list[pd.DataFrame],
     all_trustworthy_tables: list[pd.DataFrame],
     all_holding_capacity_tables: list[pd.DataFrame],
     all_water_balance_tables: list[pd.DataFrame],
+    combined_zone_storage: pd.DataFrame,
     *,
     diagnostics_dir: Path,
     holding_capacity_dir: Path,
@@ -1444,10 +1891,78 @@ def _write_combined_year_outputs(
     )
 
     combined_water_balance.to_csv(
-        holding_capacity_dir
-        / "first_pass_water_balance_all_years.csv",
+         holding_capacity_dir
+         / "first_pass_water_balance_all_years.csv",
+         index=False,
+         float_format="%.2f",
+     )
+
+    print("Building biochar performance summaries...")
+
+    (
+        biochar_strip_summary,
+        biochar_pair_summary,
+        biochar_matched_events,
+        biochar_pair_year_summary,
+    ) = build_biochar_performance_summary(combined_water_balance)
+
+    biochar_strip_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_strip_summary.csv",
         index=False,
+        float_format="%.2f",
     )
+
+    biochar_pair_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_pair_summary.csv",
+        index=False,
+        float_format="%.2f",
+    )
+
+    biochar_matched_events.to_csv(
+        holding_capacity_dir / "biochar_performance_matched_events.csv",
+        index=False,
+        float_format="%.2f",
+    )
+
+    biochar_pair_year_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_pair_year_summary.csv",
+        index=False,
+        float_format="%.2f",
+    )
+
+    print("Building biochar performance summaries...")
+
+    (
+        biochar_strip_summary,
+        biochar_pair_summary,
+        biochar_matched_events,
+        biochar_pair_year_summary,
+    ) = build_biochar_performance_summary(combined_water_balance)
+
+    biochar_strip_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_strip_summary.csv",
+        index=False,
+    float_format="%.2f",
+    )
+
+    biochar_pair_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_pair_summary.csv",
+        index=False,
+    float_format="%.2f",
+    )
+
+    biochar_matched_events.to_csv(
+        holding_capacity_dir / "biochar_performance_matched_events.csv",
+        index=False,
+        float_format="%.2f",
+    )
+
+    biochar_pair_year_summary.to_csv(
+        holding_capacity_dir / "biochar_performance_pair_year_summary.csv",
+        index=False,
+        float_format="%.2f",
+    )
+
 
     return (
         combined_pre_start,
@@ -1513,12 +2028,16 @@ def main() -> None:
             logger_positions=LOGGER_LOCATIONS,
         )
 
+        write_all_logger_debug_table(
+            year=year,
+            all_logger_results=all_logger_results,
+            holding_capacity_dir=HOLDING_CAPACITY_DIR,
+        )
+
+        zone_storage_table = pd.DataFrame()
+
         if not all_logger_results.empty:
-            zone_storage_table = (
-                build_event_storage_by_zone(
-                    all_logger_results
-                )
-            )
+            zone_storage_table = build_event_storage_by_zone(all_logger_results)
 
             _append_if_not_empty(
                 all_event_storage_zone_tables,
@@ -1535,18 +2054,11 @@ def main() -> None:
             df_15min=df_15min,
             results=bottom_results,
             plot_results=all_logger_results,
-            diagnostics_dir=(
-                IRRIGATION_DIAGNOSTICS_DIR
-            ),
-            holding_capacity_dir=(
-                HOLDING_CAPACITY_DIR
-            ),
-            figures_dir=(
-                IRRIGATION_FIGURES_DIR
-            ),
-            reports_dir=(
-                IRRIGATION_REPORTS_DIR
-            ),
+            zone_storage_table=zone_storage_table,
+            diagnostics_dir=(IRRIGATION_DIAGNOSTICS_DIR),
+            holding_capacity_dir=(HOLDING_CAPACITY_DIR),
+            figures_dir=(IRRIGATION_FIGURES_DIR),
+            reports_dir=(IRRIGATION_REPORTS_DIR),
         )
 
         _append_if_not_empty(
@@ -1603,6 +2115,7 @@ def main() -> None:
         all_water_balance_tables=(
             all_water_balance_tables
         ),
+        combined_zone_storage=combined_zone_storage,
         diagnostics_dir=(
             IRRIGATION_DIAGNOSTICS_DIR
         ),
