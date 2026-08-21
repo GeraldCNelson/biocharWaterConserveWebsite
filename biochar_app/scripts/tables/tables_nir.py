@@ -18,10 +18,9 @@ from biochar_app.scripts.tables.table_metadata_helpers import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------
-# NIR period rules (derived from data; filtered by year window)
+# NIR period rules (derived from data; exclude only pre-project records)
 # ---------------------------------------------------------------------
 NIR_MIN_YEAR = 2023
-NIR_MAX_YEAR = 2025  # inclusive
 
 # ---------------------------------------------------------------------
 # Variable sets
@@ -476,7 +475,7 @@ def _filter_period_years(df: pd.DataFrame) -> pd.DataFrame:
     if out.empty:
         return out
     years = out["nir_date"].dt.year
-    return out[(years >= NIR_MIN_YEAR) & (years <= NIR_MAX_YEAR)]
+    return out[years >= NIR_MIN_YEAR]
 
 # ---------------------------------------------------------------------
 # Loading sources
@@ -670,7 +669,7 @@ def build_nir_tables(
     """
     Build the full NIR payload (title + 4 sets) from the authoritative Ward master CSV.
 
-    Periods are derived from nir_date values present in the data (filtered to 2023–2025).
+    Periods are derived from project-era nir_date values present in the data.
     """
     return {
         "title": "Pasture Quality Metrics",

@@ -7,6 +7,8 @@ Full ETL including growing-season (gseason) summaries:
   - Require the macOS OneDrive application unless master refresh is skipped
   - Validate and install the synchronized authoritative master-workbook
     snapshot before downstream data processing
+  - Rebuild field-biomass data from the master workbook and merge new Ward NIR
+    files into the cleaned laboratory master
   - Parse raw logger timestamps as naive clock text
   - Apply per-logger clock corrections (MST/MDT jumps, resets) using LOGGER_CLOCK_CORRECTIONS
   - Convert corrected logger timestamps from a fixed MST base into America/Denver civil time
@@ -121,6 +123,10 @@ from biochar_app.scripts.management.update_master_workbook_snapshot import (
     require_onedrive_desktop_app,
     update_snapshot,
 )
+from biochar_app.scripts.lab.build_field_biomass_from_master import (
+    build_and_install_field_biomass,
+)
+from biochar_app.scripts.lab.update_ward_master_nir import update_ward_master_nir
 from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
 
 from biochar_app.config.dataset_metadata import (
@@ -1984,6 +1990,14 @@ def main() -> None:
             "workbook snapshot."
         ),
     )
+    parser.add_argument(
+        "--skip-lab-build",
+        action="store_true",
+        help=(
+            "Do not rebuild field biomass or merge supplemental Ward NIR "
+            "data into the cleaned laboratory outputs."
+        ),
+    )
     args = parser.parse_args()
 
     os.makedirs(PARQUET_DIR, exist_ok=True)
@@ -2010,6 +2024,22 @@ def main() -> None:
             irrigation_audit["latest_irrigation_start"],
             irrigation_audit["invalid_group_events"],
         )
+
+    if args.skip_lab_build:
+        logger.warning(
+            "Laboratory-data builds were skipped. Biomass and NIR dashboard "
+            "data may be stale."
+        )
+    else:
+        biomass_audit = build_and_install_field_biomass()
+        logger.info(
+            "Field biomass rebuilt: rows=%s sampling_dates=%s latest=%s",
+            biomass_audit["rows"],
+            biomass_audit["sampling_dates"],
+            biomass_audit["latest_sampling_date"],
+        )
+        update_ward_master_nir()
+        logger.info("Ward NIR clean master rebuilt with supplemental files.")
 
     years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
 

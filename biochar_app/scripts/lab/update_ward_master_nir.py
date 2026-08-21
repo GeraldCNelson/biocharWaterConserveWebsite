@@ -62,6 +62,7 @@ from biochar_app.config.lab_source_mappings import (
 )
 
 from biochar_app.scripts.lab.clean_ward_master_common import (
+    make_machine_name,
     read_ward_two_header_csv,
     standardize_ward_dataframe,
     validate_and_report,
@@ -87,32 +88,30 @@ SUPPLEMENT_FILES = [
 
 OUT_CLEAN_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
 OUT_HEADERS_JSON = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_headers_machine_to_human.json"
-SUPPLEMENTAL_NIR_FILES: list[Path] = []
-
-# SUPPLEMENTAL_NIR_FILES = [
-#     HAY_RAW_DIR / "NIR_2026-xx-xx.csv",
-# ]
+SUPPLEMENTAL_NIR_FILES: list[Path] = [
+    HAY_TESTS_RAW_DIR / "NIR_2026-07-28.csv",
+]
 
 MINERAL_COLUMNS = [
-    "Ca_pct",
-    "Ca_pct_db",
-    "P_pct",
-    "P_pct_db",
-    "K_pct",
-    "K_pct_db",
-    "Mg_pct",
-    "Mg_pct_db",
+    "ca_pct",
+    "ca_pct_db",
+    "p_pct",
+    "p_pct_db",
+    "k_pct",
+    "k_pct_db",
+    "mg_pct",
+    "mg_pct_db",
 ]
 
 HEADER_MAP_ADDITIONS = {
-    "Ca_pct": "Calcium (As Received, %)",
-    "Ca_pct_db": "Calcium (Dry Basis, %)",
-    "P_pct": "Phosphorus (As Received, %)",
-    "P_pct_db": "Phosphorus (Dry Basis, %)",
-    "K_pct": "Potassium (As Received, %)",
-    "K_pct_db": "Potassium (Dry Basis, %)",
-    "Mg_pct": "Magnesium (As Received, %)",
-    "Mg_pct_db": "Magnesium (Dry Basis, %)",
+    "ca_pct": "Calcium (As Received, %)",
+    "ca_pct_db": "Calcium (Dry Basis, %)",
+    "p_pct": "Phosphorus (As Received, %)",
+    "p_pct_db": "Phosphorus (Dry Basis, %)",
+    "k_pct": "Potassium (As Received, %)",
+    "k_pct_db": "Potassium (Dry Basis, %)",
+    "mg_pct": "Magnesium (As Received, %)",
+    "mg_pct_db": "Magnesium (Dry Basis, %)",
 }
 
 def _apply_raw_to_canonical_map(df: pd.DataFrame) -> pd.DataFrame:
@@ -127,6 +126,86 @@ def _apply_raw_to_canonical_map(df: pd.DataFrame) -> pd.DataFrame:
     out = out.rename(columns=applicable)
 
     return out
+
+
+def _canonicalize_header_map(header_map: dict[str, str]) -> dict[str, str]:
+    """Keep the label map synchronized with source-to-canonical renames."""
+    canonical: dict[str, str] = {}
+    for source, human_label in header_map.items():
+        canonical.setdefault(RAW_TO_CANONICAL_NIR.get(source, source), human_label)
+    return canonical
+
+
+def _read_supplemental_nir_csv(
+    path: Path,
+    header_map: dict[str, str],
+) -> pd.DataFrame:
+    """Read one-header Ward NIR data and return canonical cleaned rows."""
+    logger.info(f"➕ Reading supplemental Ward NIR CSV: {path}")
+    raw = pd.read_csv(path)
+    raw.columns = [make_machine_name(column) for column in raw.columns]
+
+    # Reuse the compiled master's human-to-machine vocabulary wherever the
+    # Ward export labels match, then cover the two required identity fields.
+    reverse_header_map = {
+        make_machine_name(human): machine
+        for machine, human in header_map.items()
+    }
+    raw = raw.rename(
+        columns={
+            column: reverse_header_map[column]
+            for column in raw.columns
+            if column in reverse_header_map
+        }
+    )
+    raw = raw.rename(
+        columns={
+            "sample_id_1": "sample_id",
+            "date_received": "date_rec",
+        }
+    )
+    raw = _apply_raw_to_canonical_map(raw)
+
+    if "sample_id" not in raw.columns:
+        raise ValueError(f"Expected Sample ID 1 column in supplemental NIR file: {path}")
+
+    match = re.fullmatch(r"NIR_(\d{4}-\d{2}-\d{2})\.csv", path.name, flags=re.IGNORECASE)
+    if match is None:
+        raise ValueError(f"Supplemental NIR filename must contain the sampling date: {path.name}")
+    sampling_date = match.group(1)
+
+    cleaned = standardize_ward_dataframe(
+        raw,
+        strip_source_candidates=("strip", "sample_id"),
+        date_cols={"date_rec": "date_rec"},
+        below_detection_to_zero=True,
+        extra_drop_cols=DROP_COLUMNS_NIR,
+        fixed_depth=None,
+        numeric_exclude_cols=("strip", "date_rec", "nir_date"),
+        add_compatibility_aliases=True,
+    )
+    cleaned["nir_date"] = sampling_date
+    cleaned = cleaned[cleaned["strip"].notna()].copy()
+    if len(cleaned) != 4 or cleaned["strip"].nunique() != 4:
+        raise ValueError(f"Expected exactly one supplemental NIR row for each strip in {path.name}")
+    return cleaned
+
+
+def _merge_supplemental_nir_rows(
+    dataframe: pd.DataFrame,
+    header_map: dict[str, str],
+) -> pd.DataFrame:
+    out = dataframe.copy()
+    for path in SUPPLEMENTAL_NIR_FILES:
+        if not path.exists():
+            logger.warning(f"⚠️ Supplemental NIR file not found, skipping: {path}")
+            continue
+        supplement = _read_supplemental_nir_csv(path, header_map)
+        supplement = _drop_as_received_pct_when_dry_basis_exists(supplement)
+        supplement = supplement.reindex(columns=out.columns, fill_value=pd.NA)
+        out = pd.concat([out, supplement], ignore_index=True)
+        out = out.drop_duplicates(subset=["strip", "nir_date"], keep="last")
+    return out.sort_values(["nir_date", "strip"], kind="stable").reset_index(drop=True)
 
 def _rename_nir_date(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -184,14 +263,14 @@ def _read_one_2024_mineral_workbook(path: Path) -> pd.DataFrame:
     minerals = minerals.rename(
         columns={
             "Sample name": "lab_no",
-            "Ca Dry Basis": "Ca_pct_db",
-            "P Dry Basis": "P_pct_db",
-            "K Dry Basis": "K_pct_db",
-            "Mg Dry Basis": "Mg_pct_db",
-            "Ca As received": "Ca_pct",
-            "P As received": "P_pct",
-            "K As received": "K_pct",
-            "Mg As received": "Mg_pct",
+            "Ca Dry Basis": "ca_pct_db",
+            "P Dry Basis": "p_pct_db",
+            "K Dry Basis": "k_pct_db",
+            "Mg Dry Basis": "mg_pct_db",
+            "Ca As received": "ca_pct",
+            "P As received": "p_pct",
+            "K As received": "k_pct",
+            "Mg As received": "mg_pct",
         }
     )
 
@@ -330,10 +409,9 @@ def _patch_missing_minerals(
 def update_ward_master_nir() -> None:
     logger.info(f"📥 Reading Ward NIR master CSV: {IN_MASTER_CSV}")
     df, header_map = read_ward_two_header_csv(IN_MASTER_CSV)
-    df, header_map = read_ward_two_header_csv(IN_MASTER_CSV)
+    header_map = _canonicalize_header_map(header_map)
     df = _apply_raw_to_canonical_map(df)
 
-    logger.info(f"🧠 Loaded {df.shape[0]} rows × {df.shape[1]} columns")
     logger.info(f"🧠 Loaded {df.shape[0]} rows × {df.shape[1]} columns")
 
     if "date_rec" not in df.columns:
@@ -368,6 +446,9 @@ def update_ward_master_nir() -> None:
     # Prefer dry-basis forage/NIR values when both as-received and dry-basis exist
     df = _drop_as_received_pct_when_dry_basis_exists(df)
 
+    # Append one-header Ward exports that have not yet reached the compiled master.
+    df = _merge_supplemental_nir_rows(df, header_map)
+
     # Put keys first
     key_cols = [c for c in ["strip", "nir_date"] if c in df.columns]
     other_cols = [c for c in df.columns if c not in key_cols]
@@ -400,4 +481,6 @@ def update_ward_master_nir() -> None:
     logger.info("✅ Done.")
 
 if __name__ == "__main__":
+    # TODO(delete after ETL adoption): remove this standalone entry point once
+    # operations have used biochar_app/scripts/etl.py for a full update cycle.
     update_ward_master_nir()

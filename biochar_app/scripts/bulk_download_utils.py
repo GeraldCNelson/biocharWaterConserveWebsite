@@ -130,6 +130,7 @@ def default_bulk_registry() -> list[BulkSheetSpec]:
         BulkSheetSpec("biomass_2023", "Biomass (2023)", "2023 BIOMASS", 2023, "biomass_2023.csv"),
         BulkSheetSpec("biomass_2024", "Biomass (2024)", "2024 BIOMASS", 2024, "biomass_2024.csv"),
         BulkSheetSpec("biomass_2025", "Biomass (2025)", "2025 BIOMASS", 2025, "biomass_2025.csv"),
+        BulkSheetSpec("biomass_2026", "Biomass (2026)", "2026 BIOMASS", 2026, "biomass_2026.csv"),
 
         # File-backed datasets
         BulkSheetSpec(

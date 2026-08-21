@@ -58,6 +58,10 @@ BIOCHAR_MASTER_SOURCE = WorkbookDataSource(
         "2024 IRRIGATION",
         "2025 IRRIGATION",
         "2026 IRRIGATION",
+        "2023 BIOMASS",
+        "2024 BIOMASS",
+        "2025 BIOMASS",
+        "2026 BIOMASS",
     ),
 )
 

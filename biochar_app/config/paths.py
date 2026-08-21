@@ -60,6 +60,7 @@ SOIL_CHEM_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files"
 SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files"
 SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
 BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"
+BIOMASS_HISTORICAL_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_2023_2025.csv"
 
 # Authoritative cleaned masters
 WARD_MASTER_NIR_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
