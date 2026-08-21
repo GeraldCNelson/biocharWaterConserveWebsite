@@ -31,6 +31,7 @@ from biochar_app.config.core import (
 from biochar_app.config.units import UNIT_CONVERSIONS, label_name_mapping
 from biochar_app.scripts.type_utils import UnitSystem
 from biochar_app.scripts.data_loading import load_irrigation_data
+from biochar_app.config.irrigation_config import get_irrigation_analysis_options
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ GALLONS_PER_ACRE_FT = 325_851.0
 _IRRIGATION_SHEETS_CACHE: dict[int, pd.DataFrame] = {}
 _IRRIGATION_XLS: Optional[pd.ExcelFile] = None
 _IRRIGATION_CACHE: dict[tuple[int, str], pd.DataFrame] = {}
+_IRRIGATION_CACHE_SOURCE_SIGNATURE: tuple[int, int] | None = None
 
 COLUMN_CATEGORY_RULES = {
     "temp": [
@@ -572,6 +574,19 @@ def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
         total_meter_gallons
         event_duration_hours
     """
+    global _IRRIGATION_CACHE_SOURCE_SIGNATURE
+
+    irrigation_path = get_irrigation_analysis_options().input_csv
+    try:
+        stat = irrigation_path.stat()
+        source_signature = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        source_signature = None
+
+    if source_signature != _IRRIGATION_CACHE_SOURCE_SIGNATURE:
+        _IRRIGATION_CACHE.clear()
+        _IRRIGATION_CACHE_SOURCE_SIGNATURE = source_signature
+
     cache_key = (year, strip)
 
     if cache_key in _IRRIGATION_CACHE:

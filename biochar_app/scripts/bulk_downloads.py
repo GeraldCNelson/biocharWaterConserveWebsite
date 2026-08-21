@@ -39,6 +39,7 @@ from biochar_app.config.paths import (
     WARD_MASTER_SOILCHEM_CSV,
     WARD_MASTER_SOILBIO_CSV,
     WARD_MASTER_NIR_CSV,
+    BIOMASS_FIELD_CSV,
     FERTILIZER_CSV_OUT,
     BIOCHAR_MASTER_WORKBOOK,
 )
@@ -64,7 +65,7 @@ ALLOWED_RESOLUTIONS = ["15min", "hourly", "daily", "monthly", "gseason"]
 FILE_BACKED_DOWNLOADS: dict[str, tuple[str, Path, str]] = {
     "soil_chem_all": ("Soil Chemistry (all years)", WARD_MASTER_SOILCHEM_CSV, "biochar_soil_chemistry_all_years.csv"),
     "soil_bio_all": ("Soil Biology (all years)", WARD_MASTER_SOILBIO_CSV, "biochar_soil_biology_all_years.csv"),
-    "hay_all": ("Biomass / Hay NIR (all years)", WARD_MASTER_NIR_CSV, "biochar_biomass_hay_all_years.csv"),
+    "hay_all": ("Field Biomass and Hay NIR (all years)", WARD_MASTER_NIR_CSV, "biochar_hay_nir_all_years.csv"),
 }
 
 MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
@@ -245,6 +246,70 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     buf.seek(0)
     return buf.read()
 
+
+def _build_biomass_hay_files() -> list[tuple[str, bytes]]:
+    """Build the combined all-years field-biomass and hay-NIR archive files."""
+    missing = [path for path in (BIOMASS_FIELD_CSV, WARD_MASTER_NIR_CSV) if not path.exists()]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Biomass/hay dataset not found on disk: {missing}",
+        )
+
+    try:
+        biomass_df = pd.read_csv(BIOMASS_FIELD_CSV)
+        nir_df = pd.read_csv(WARD_MASTER_NIR_CSV)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read biomass/hay CSV data: {exc}",
+        ) from exc
+
+    biomass_dates = [column for column in biomass_df.columns if str(column) != "location"]
+    nir_dates = (
+        pd.to_datetime(nir_df.get("nir_date"), errors="coerce")
+        .dropna()
+        .dt.date.astype(str)
+        .tolist()
+    )
+    dates = sorted(set(biomass_dates + nir_dates))
+    coverage = f"{dates[0][:4]}–{dates[-1][:4]}" if dates else "not available"
+    readme = "\n".join(
+        [
+            "Biochar Fruita CSU – Bulk Download",
+            "",
+            "Dataset: Field Biomass and Hay NIR (all years)",
+            f"Coverage: {coverage}",
+            "File type: two standardized CSV datasets packaged as ZIP",
+            "",
+            "Contents",
+            "--------",
+            "- biochar_field_biomass_all_years.csv",
+            "  Dry field-biomass weights in grams. Rows are field locations;",
+            "  columns are sampling dates.",
+            "- biochar_hay_nir_all_years.csv",
+            "  Ward Labs hay/forage NIR measurements. Rows are strip/date samples;",
+            "  columns are forage-quality measurements.",
+            "",
+            f"Field biomass rows: {len(biomass_df)}",
+            f"Field biomass sampling dates: {len(biomass_dates)}",
+            f"Hay NIR rows: {len(nir_df)}",
+            f"Hay NIR sampling dates: {len(set(nir_dates))}",
+            "",
+        ]
+    )
+    return [
+        (
+            "biochar_field_biomass_all_years.csv",
+            biomass_df.to_csv(index=False).encode("utf-8"),
+        ),
+        (
+            "biochar_hay_nir_all_years.csv",
+            nir_df.to_csv(index=False).encode("utf-8"),
+        ),
+        ("README.txt", readme.encode("utf-8")),
+    ]
+
 @bulk_router.get("/bulk_download_manifest")
 def bulk_download_manifest() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
@@ -329,7 +394,10 @@ def bulk_download_manifest() -> dict[str, Any]:
                 )
 
     for key, (label, p, _) in FILE_BACKED_DOWNLOADS.items():
-        if p.exists():
+        available = p.exists()
+        if key == "hay_all":
+            available = available and BIOMASS_FIELD_CSV.exists()
+        if available:
             items.append(
                 {
                     "key": key,
@@ -370,6 +438,14 @@ async def bulk_download(payload: dict[str, Any]):
 
     if key in FILE_BACKED_DOWNLOADS:
         dataset_label, p, zip_filename = FILE_BACKED_DOWNLOADS[key]
+
+        if key == "hay_all":
+            zip_bytes = _zip_bytes(_build_biomass_hay_files())
+            return StreamingResponse(
+                io.BytesIO(zip_bytes),
+                media_type="application/zip",
+                headers={"Content-Disposition": 'attachment; filename="biochar_hay_all.zip"'},
+            )
 
         if not p.exists():
             raise HTTPException(status_code=404, detail=f"File dataset not found on disk for key: {key}")
