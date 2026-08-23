@@ -505,6 +505,9 @@ async def bulk_download(payload: dict[str, Any]):
                 numeric_columns = ratios_df.select_dtypes(include="number").columns
                 ratios_df[numeric_columns] = ratios_df[numeric_columns].round(3)
                 ratios_bytes = ratios_df.to_csv(index=False).encode("utf-8")
+                files.append(
+                    (f"biochar_loggers_{year}_{resolution}_ratios.csv", ratios_bytes)
+                )
                 ratios_included = True
 
             readme = build_timeseries_yearly_readme(
