@@ -4,7 +4,7 @@ console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
 import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js";
 import { updateSummaryStatistics } from "./tab_summary.js";
-import { renderMainPlots } from "./plots.js";
+import { renderMainPlots } from "./plots.js?v=20260822-plot-layout-1";
 
 /**
  * @typedef {Window & {

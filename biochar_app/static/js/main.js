@@ -19,7 +19,7 @@ import {
 } from "./downloads.js";
 
 // 3) Debugging & logging
-import { renderMainPlots, waitForAllDropdowns } from "./plots.js";
+import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20260822-plot-layout-1";
 import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader

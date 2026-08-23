@@ -33,6 +33,8 @@ function getPlotly() {
  *   _fullData?: any,
  *   data?: any,
  *   layout?: any,
+ *   _biocharBaseHeight?: number,
+ *   _biocharBaseBottomMargin?: number,
  *   on?: (eventName: string, handler: (ev: any) => void) => void
  * }} PlotlyGraphDiv
  */
@@ -50,6 +52,12 @@ function getPlotly() {
 
 /** @type {PlotWindow} */
 const plotWindow = /** @type {PlotWindow} */ (window);
+
+// Must match config/plot_config.py:DEFAULT_PLOT_HEIGHT. Server-provided
+// layout.height is authoritative; this is only a defensive fallback.
+const FALLBACK_PLOT_HEIGHT = 400;
+const DEFAULT_BOTTOM_MARGIN = 50;
+const DEFAULT_RIGHT_LEGEND_MARGIN = 160;
 
 /**
  * Pause until each of the given dropdown IDs exists in the DOM
@@ -175,8 +183,10 @@ function maybeAttachZoomSyncHandlers() {
 function measurePlotWidth(el) {
   if (!el) return 1200;
   return (
-    el.clientWidth ||
+    // Plotly receives an explicit width during relayout. Read the responsive
+    // parent first so a plot can grow again after the browser widens.
     el.parentElement?.clientWidth ||
+    el.clientWidth ||
     el.getBoundingClientRect?.().width ||
     1200
   );
@@ -311,7 +321,37 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
     yanchor: "top",
     orientation: "h",
   };
-  return { extraBottom: 45, minRight: 70 };
+  return { extraBottom: 25, minRight: 70 };
+}
+
+/**
+ * Calculate the responsive dimensions used by every plot layout path.
+ * Keeping this in one helper prevents initial render and resize behavior
+ * from drifting apart.
+ *
+ * @param {number} rightGutterPx
+ * @param {{ extraBottom: number, minRight: number }} legendResponse
+ * @param {number} [baseHeight=FALLBACK_PLOT_HEIGHT]
+ * @param {number} [baseBottomMargin=DEFAULT_BOTTOM_MARGIN]
+ * @returns {{ height: number, rightMargin: number, bottomMargin: number }}
+ */
+function computeResponsivePlotGeometry(
+  rightGutterPx,
+  legendResponse,
+  baseHeight = FALLBACK_PLOT_HEIGHT,
+  baseBottomMargin = DEFAULT_BOTTOM_MARGIN
+) {
+  return {
+    height: baseHeight + legendResponse.extraBottom,
+    rightMargin: Math.max(
+      rightGutterPx,
+      legendResponse.minRight ?? DEFAULT_RIGHT_LEGEND_MARGIN
+    ),
+    bottomMargin: Math.max(
+      baseBottomMargin,
+      DEFAULT_BOTTOM_MARGIN + legendResponse.extraBottom
+    ),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,22 +501,25 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
     const legendAdjust = { legend: plotData.layout?.legend || {} };
     const legendResponse = applyResponsiveLegend(legendAdjust, rightGutter, targetId);
-
-    const effectiveRight = Math.max(
+    const baseHeight = plotData.layout?.height ?? FALLBACK_PLOT_HEIGHT;
+    const baseBottomMargin = plotData.layout?.margin?.b ?? DEFAULT_BOTTOM_MARGIN;
+    const geometry = computeResponsivePlotGeometry(
       rightGutter,
-      legendResponse.minRight ?? 160
+      legendResponse,
+      baseHeight,
+      baseBottomMargin
     );
 
     const layout = {
       ...plotData.layout,
       autosize: false,
       width: renderWidth,
-      height: 500,
+      height: geometry.height,
       margin: {
         l: leftMargin,
-        r: effectiveRight,
+        r: geometry.rightMargin,
         t: plotData.layout?.margin?.t ?? 50,
-        b: Math.max(plotData.layout?.margin?.b ?? 50, 50 + legendResponse.extraBottom),
+        b: geometry.bottomMargin,
       },
       legend: legendAdjust.legend,
     };
@@ -496,6 +539,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     const gd = /** @type {PlotlyGraphDiv} */ (
       await plotly.newPlot(container, plotData.data, layout, plotConfig)
     );
+    gd._biocharBaseHeight = baseHeight;
+    gd._biocharBaseBottomMargin = baseBottomMargin;
 
     if (targetId === "plot-1") rawPlotDiv = gd;
     if (targetId === "plot-2") ratioPlotDiv = gd;
@@ -515,10 +560,11 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
       const tmp = { legend: gd.layout?.legend || {} };
       const legendResult = applyResponsiveLegend(tmp, g, targetId);
-
-      const effectiveRightAfterRender = Math.max(
+      const geometryAfterRender = computeResponsivePlotGeometry(
         g,
-        legendResult.minRight ?? 160
+        legendResult,
+        baseHeight,
+        baseBottomMargin
       );
 
       const sharedWidth =
@@ -529,9 +575,10 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
       /** @type {Record<string, any>} */
       const update = {
         width: sharedWidth,
+        height: geometryAfterRender.height,
         "margin.l": plotWindow._plotLeftMargin ?? 60,
-        "margin.r": effectiveRightAfterRender,
-        "margin.b": Math.max(gd.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
+        "margin.r": geometryAfterRender.rightMargin,
+        "margin.b": geometryAfterRender.bottomMargin,
         "yaxis.automargin": false,
         legend: tmp.legend,
       };
@@ -595,18 +642,20 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
 
         const tmp = { legend: el.layout?.legend || {} };
         const legendResult = applyResponsiveLegend(tmp, gutter, targetIdForLegend);
-
-        const effectiveRightOnResize = Math.max(
+        const geometryOnResize = computeResponsivePlotGeometry(
           gutter,
-          legendResult.minRight ?? 160
+          legendResult,
+          el._biocharBaseHeight,
+          el._biocharBaseBottomMargin
         );
 
         /** @type {Record<string, any>} */
         const update = {
           width: w,
+          height: geometryOnResize.height,
           "margin.l": plotWindow._plotLeftMargin ?? 60,
-          "margin.r": effectiveRightOnResize,
-          "margin.b": Math.max(el.layout?.margin?.b ?? 50, 50 + legendResult.extraBottom),
+          "margin.r": geometryOnResize.rightMargin,
+          "margin.b": geometryOnResize.bottomMargin,
           "yaxis.automargin": false,
           legend: tmp.legend,
         };

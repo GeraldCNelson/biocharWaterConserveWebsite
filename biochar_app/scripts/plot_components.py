@@ -256,14 +256,10 @@ def common_yaxis_config(
     return axis_cfg
 
 def common_yaxis2_config(unit_system: UnitSystem = "us") -> dict[str, Any]:
-    unit_label = "mm" if unit_system == "metric" else "in"
-
     return {
-        "title": {
-            "text": f"Precip ({unit_label})",
-            "font": {"size": 12},
-            "standoff": 20,
-        },
+        # Units are included in the precipitation legend entry, so a vertical
+        # secondary-axis title would repeat the same information.
+        "title": {"text": ""},
         "overlaying": "y",
         "side": "right",
         "showgrid": False,
