@@ -37,8 +37,8 @@ One counter unit represents 100 gallons.
 
 Inputs
 ------
-- meter_photo_readings_clean.csv
-- Biochar Injection Concept - Master-4.xlsx
+- photos/photo_inventory_unique.csv
+- the validated repository snapshot of the master workbook
 - worksheets named like:
     2023 IRRIGATION
     2024 IRRIGATION
@@ -77,10 +77,10 @@ from biochar_app.config.paths import (
 # ============================================================
 # Paths and constants
 # ============================================================
-PHOTO_DIR = IRRIGATION_DIR / "photos_Lobato_phone"
+PHOTO_DIR = IRRIGATION_DIR / "photos"
 
 DEFAULT_PHOTO_CSV = (
-    PHOTO_DIR / "meter_photo_readings_clean.csv"
+    PHOTO_DIR / "photo_inventory_unique.csv"
 )
 
 
@@ -130,7 +130,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_PHOTO_CSV,
         help=(
-            "Clean meter-photo CSV. "
+            "Canonical unique-photo inventory CSV. "
             f"Default: {DEFAULT_PHOTO_CSV}"
         ),
     )
@@ -312,6 +312,33 @@ def parse_datetime_series(
         text,
         format="mixed",
         errors="coerce",
+    )
+
+
+def parse_local_wall_datetime_series(
+    series: pd.Series,
+) -> pd.Series:
+    """Parse local observations and discard offsets without shifting time."""
+
+    def parse_one(value: object) -> pd.Timestamp:
+        text = clean_text(value)
+        if not text:
+            return pd.NaT
+
+        try:
+            timestamp = pd.Timestamp(text)
+        except (TypeError, ValueError):
+            return pd.NaT
+
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.tz_localize(None)
+
+        return timestamp
+
+    return pd.Series(
+        (parse_one(value) for value in series),
+        index=series.index,
+        dtype="datetime64[ns]",
     )
 
 
@@ -575,58 +602,104 @@ def load_photo_readings(
     df = pd.read_csv(path)
     df = normalize_columns(df)
 
-    require_columns(
-        df,
-        (
-            "photo_id",
-            "photo_datetime",
-            "meter_counter_value",
-            "qc_status",
-        ),
-        source_name="Meter-photo CSV",
-    )
+    canonical_columns = {
+        "filename",
+        "sha256",
+        "effective_datetime",
+        "meter_reading",
+        "review_status",
+    }
 
-    filename_column = (
-        "preferred_filename"
-        if "preferred_filename" in df.columns
-        else (
-            "filename"
-            if "filename" in df.columns
-            else None
+    if canonical_columns.issubset(df.columns):
+        include = (
+            df["include"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .isin({"true", "1", "yes", "y"})
+            if "include" in df.columns
+            else pd.Series(True, index=df.index)
         )
-    )
+        review_status = (
+            df["review_status"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        counter = parse_numeric_series(df["meter_reading"])
+        valid_counter = (
+            counter.notna()
+            & counter.between(100_000, 999_999)
+            & counter.mod(1).eq(0)
+        )
 
-    out = pd.DataFrame(
-        {
-            "photo_id": df[
-                "photo_id"
-            ].map(clean_text),
-
-            "photo_datetime": parse_datetime_series(
-                df["photo_datetime"]
+        out = pd.DataFrame(
+            {
+                "photo_id": df["sha256"].map(clean_text),
+                "photo_datetime": parse_local_wall_datetime_series(
+                    df["effective_datetime"]
+                ),
+                "photo_counter_value": counter,
+                "photo_qc_status": "clean",
+                "photo_filename": df["filename"].map(clean_text),
+                "photo_notes": (
+                    df["notes"].map(clean_text)
+                    if "notes" in df.columns
+                    else ""
+                ),
+            }
+        )
+        out = out.loc[
+            include
+            & review_status.eq("readable")
+            & valid_counter
+        ].copy()
+    else:
+        require_columns(
+            df,
+            (
+                "photo_id",
+                "photo_datetime",
+                "meter_counter_value",
+                "qc_status",
             ),
+            source_name="Meter-photo CSV",
+        )
 
-            "photo_counter_value": parse_numeric_series(
-                df["meter_counter_value"]
-            ),
+        filename_column = (
+            "preferred_filename"
+            if "preferred_filename" in df.columns
+            else (
+                "filename"
+                if "filename" in df.columns
+                else None
+            )
+        )
 
-            "photo_qc_status": df[
-                "qc_status"
-            ].map(clean_text),
-
-            "photo_filename": (
-                df[filename_column].map(clean_text)
-                if filename_column is not None
-                else ""
-            ),
-
-            "photo_notes": (
-                df["notes"].map(clean_text)
-                if "notes" in df.columns
-                else ""
-            ),
-        }
-    )
+        out = pd.DataFrame(
+            {
+                "photo_id": df["photo_id"].map(clean_text),
+                "photo_datetime": parse_datetime_series(
+                    df["photo_datetime"]
+                ),
+                "photo_counter_value": parse_numeric_series(
+                    df["meter_counter_value"]
+                ),
+                "photo_qc_status": df["qc_status"].map(clean_text),
+                "photo_filename": (
+                    df[filename_column].map(clean_text)
+                    if filename_column is not None
+                    else ""
+                ),
+                "photo_notes": (
+                    df["notes"].map(clean_text)
+                    if "notes" in df.columns
+                    else ""
+                ),
+            }
+        )
 
     out = out.loc[
         out["photo_qc_status"]
