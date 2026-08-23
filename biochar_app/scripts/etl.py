@@ -77,7 +77,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 from pandas import Series
 
-from biochar_app.config import SENSOR_DEPTH_VALUES
+from biochar_app.config import (
+    CS650_SENSING_VOLUME_CM3,
+    SENSOR_DEPTH_VALUES,
+)
 from biochar_app.config.core import (
     COAGMET_VARIABLE_MAP,
     COAG_STATION,
@@ -740,8 +743,6 @@ audit_path = (
     / "logger_clock_corrections_audit.csv"
 )
 
-write_logger_clock_corrections_audit(audit_path)
-
 def apply_logger_seasonal_civil_time(
     ts: pd.Series,
     *,
@@ -1067,6 +1068,11 @@ def scale_vwc_to_percent(df_in: pd.DataFrame, *, copy: bool = True) -> pd.DataFr
     return df
 
 def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+    """Retain legacy VWC-scaled reference-cylinder water volumes.
+
+    The assumed 10 cm by 4 cm-radius cylinder is not the documented CS650
+    sensing volume. These columns remain for backward compatibility only.
+    """
     df = df_in.copy() if copy else df_in
     cyl_m3 = cylinder_volume_m3()
     cyl_l = cyl_m3 * 1000.0
@@ -1082,7 +1088,43 @@ def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataF
                 df[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_l
                 df[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
 
-    logger.info("💧 Added SWC cylinder volumes (L & gallons) per sensor")
+    logger.info("💧 Added legacy SWC reference-cylinder volumes")
+    return df
+
+
+def add_cs650_sensing_volume_water(
+    df_in: pd.DataFrame,
+    copy: bool = True,
+) -> pd.DataFrame:
+    """Estimate local water volume within the documented CS650 sensing volume.
+
+    The manufacturer's 7,800 cm3 sensing volume is approximate and spatially
+    weighted, with greatest sensitivity near the rods. These fields are local
+    sensor diagnostics and must not be summed or treated as field-zone gallons.
+    """
+    df = df_in.copy() if copy else df_in
+    sensing_volume_l = CS650_SENSING_VOLUME_CM3 / 1000.0
+    sensing_volume_gal = UNIT_CONVERSIONS["metric_to_us"]["irrigation"](
+        sensing_volume_l
+    )
+
+    for strip in STRIPS:
+        for loc in LOGGER_LOCATIONS:
+            for depth in SENSOR_DEPTH_VALUES:
+                vwc_col = f"VWC_{depth}_raw_{strip}_{loc}"
+                if vwc_col not in df.columns:
+                    continue
+                fraction = (
+                    pd.to_numeric(df[vwc_col], errors="coerce") / 100.0
+                )
+                df[f"CS650_water_L_{strip}_{loc}_{depth}"] = (
+                    fraction * sensing_volume_l
+                )
+                df[f"CS650_water_gal_{strip}_{loc}_{depth}"] = (
+                    fraction * sensing_volume_gal
+                )
+
+    logger.info("💧 Added CS650 sensing-volume water diagnostics")
     return df
 
 def add_temperature_differences(
@@ -1333,8 +1375,10 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
                 "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
                 "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
-                "  SWC_vol_L_<strip>_<loc>_<depth>   : soil water content volume (liters)",
-                "  SWC_vol_gal_<strip>_<loc>_<depth> : soil water content volume (gallons)",
+                "  SWC_vol_L_<strip>_<loc>_<depth>   : legacy reference-cylinder water volume (liters)",
+                "  SWC_vol_gal_<strip>_<loc>_<depth> : legacy reference-cylinder water volume (gallons)",
+                "  CS650_water_L_<strip>_<loc>_<depth>   : local water in approximate CS650 sensing volume (liters)",
+                "  CS650_water_gal_<strip>_<loc>_<depth> : local water in approximate CS650 sensing volume (gallons)",
                 "",
                 "Notes",
                 "-----",
@@ -1609,6 +1653,7 @@ def generate_summaries(years: list[int]) -> None:
                             )
 
             df = add_swc_cylinder_volumes(df)
+            df = add_cs650_sensing_volume_water(df)
             df = add_temperature_differences(df)
             df = add_swc_differences(df)
 
@@ -2001,6 +2046,7 @@ def main() -> None:
     args = parser.parse_args()
 
     os.makedirs(PARQUET_DIR, exist_ok=True)
+    write_logger_clock_corrections_audit(audit_path)
 
     if args.skip_master_workbook_refresh:
         logger.warning(
