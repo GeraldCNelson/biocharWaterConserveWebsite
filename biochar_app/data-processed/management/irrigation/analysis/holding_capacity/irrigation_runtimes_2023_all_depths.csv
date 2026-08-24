@@ -1,10 +1,10 @@
 year,strip,depth_inches,n_events,rec_runtime_hours,rec_runtime_minutes,rec_runtime_is_trustworthy,actual_runtime_hours,actual_runtime_minutes,source_time_col,summary_stat,median_avg_flow_gph_strip,median_lag_after_irrigation_hr
-2023.00,S1,6.00,4.00,16.98,1018.50,True,6.48,389.00,time_to_plateau_hours,median,6859.34,11.49
-2023.00,S1,12.00,5.00,16.38,983.00,True,6.48,389.00,time_to_plateau_hours,median,6859.34,9.35
-2023.00,S1,18.00,4.00,25.61,1536.50,True,6.48,389.00,time_to_plateau_hours,median,6859.34,19.52
-2023.00,S2,6.00,7.00,17.22,1033.00,True,6.48,389.00,time_to_plateau_hours,median,6859.34,13.18
-2023.00,S2,12.00,7.00,15.97,958.00,True,6.48,389.00,time_to_plateau_hours,median,6859.34,10.72
-2023.00,S2,18.00,7.00,11.73,704.00,True,6.48,389.00,time_to_plateau_hours,median,6859.34,5.47
+2023.00,S1,6.00,4.00,17.47,1048.43,True,6.52,391.00,time_to_plateau_hours,median,6859.34,11.49
+2023.00,S1,12.00,5.00,16.38,983.00,True,6.52,391.00,time_to_plateau_hours,median,6859.34,9.35
+2023.00,S1,18.00,4.00,25.61,1536.50,True,6.52,391.00,time_to_plateau_hours,median,6859.34,19.52
+2023.00,S2,6.00,7.00,17.22,1033.00,True,6.52,391.00,time_to_plateau_hours,median,6859.34,13.18
+2023.00,S2,12.00,7.00,15.97,958.00,True,6.52,391.00,time_to_plateau_hours,median,6859.34,10.72
+2023.00,S2,18.00,7.00,11.98,719.00,True,6.52,391.00,time_to_plateau_hours,median,6859.34,5.47
 2023.00,S3,6.00,12.00,15.24,914.50,True,7.74,464.50,time_to_plateau_hours,median,7822.41,10.22
 2023.00,S3,12.00,12.00,14.08,845.00,True,7.74,464.50,time_to_plateau_hours,median,7822.41,7.46
 2023.00,S3,18.00,12.00,12.56,753.50,True,7.74,464.50,time_to_plateau_hours,median,7822.41,4.50

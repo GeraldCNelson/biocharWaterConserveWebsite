@@ -1,3 +1,3 @@
 pair,regime,biochar,control,n_matched,bio_storage_gal,ctrl_storage_gal,storage_diff_gal,storage_diff_pct,n_storage_better,storage_better_pct,n_runoff,bio_runoff_gal,ctrl_runoff_gal,runoff_diff_gal,runoff_diff_pct,n_runoff_better,runoff_better_pct,n_arrival,bio_arrival_hr,ctrl_arrival_hr,arrival_diff_hr
-S1_S2,monthly,S1,S2,15,28063.00,35067.00,-7003.00,-9.33,2,13.33,15,42859.00,35855.00,7003.00,9.33,2,13.33,17,7.94,5.13,2.81
-S3_S4,biweekly,S3,S4,9,22072.00,21874.00,198.00,0.80,4,44.44,7,43901.00,42469.00,1432.00,1.66,2,28.57,26,1.23,5.38,-4.15
+S1_S2,monthly,S1,S2,17,26290.00,33267.00,-6977.00,-11.30,2,11.76,17,39515.00,32665.00,6850.00,10.70,2,11.76,19,7.81,4.93,2.88
+S3_S4,biweekly,S3,S4,9,22072.00,21874.00,198.00,0.80,4,44.44,7,43901.00,42469.00,1432.00,1.66,2,28.57,27,1.21,5.25,-4.04
