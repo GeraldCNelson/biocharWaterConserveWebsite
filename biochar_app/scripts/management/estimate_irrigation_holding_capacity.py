@@ -1,6 +1,11 @@
 """
 biochar_app.scripts.management.estimate_irrigation_holding_capacity.py
 
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for the
+complete irrigation-analysis workflow, timestamp policy, and output lineage.
+
 Purpose
 -------
 Evaluate irrigation-event soil-water response using 15-minute logger VWC data
@@ -96,7 +101,6 @@ from biochar_app.scripts.data_loading import (
 from biochar_app.scripts.management.irrigation_analysis.irrigation_response_analysis import (
      analyze_irrigation_events,
      build_variable_definitions_table,
-     build_variable_definitions_with_sources,
      summarize_targets_and_runtimes,
 )
 
@@ -929,7 +933,6 @@ def write_year_outputs(
     diagnostics_dir: Path = IRRIGATION_DIAGNOSTICS_DIR,
     holding_capacity_dir: Path = HOLDING_CAPACITY_DIR,
     figures_dir: Path = IRRIGATION_FIGURES_DIR,
-    reports_dir: Path = IRRIGATION_REPORTS_DIR,
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
@@ -977,11 +980,6 @@ def write_year_outputs(
         exist_ok=True,
     )
 
-    reports_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
     multidepth_plot_dir = (
         figures_dir
         / "event_multidepth"
@@ -1010,8 +1008,6 @@ def write_year_outputs(
     runtimes = build_enhanced_runtime_table(
         results
     )
-
-    definitions = build_variable_definitions_table()
 
     if (
         not targets.empty
@@ -1080,19 +1076,6 @@ def write_year_outputs(
         / f"irrigation_runtimes_{year}_all_depths.csv",
         index=False,
         float_format="%.2f",
-    )
-
-    definitions.to_csv(
-        reports_dir
-        / f"irrigation_variable_definitions_{year}.csv",
-        index=False,
-    )
-
-    build_variable_definitions_with_sources(
-        output_dir=str(
-            reports_dir
-        ),
-        year=year,
     )
 
     # ------------------------------------------------------------------
@@ -1897,6 +1880,7 @@ def _write_combined_year_outputs(
          float_format="%.2f",
      )
 
+
     print("Building biochar performance summaries...")
 
     (
@@ -1929,8 +1913,6 @@ def _write_combined_year_outputs(
         index=False,
         float_format="%.2f",
     )
-
-    print("Building biochar performance summaries...")
 
     (
         biochar_strip_summary,
@@ -1995,6 +1977,17 @@ def main() -> None:
     print(f"Output root: {IRRIGATION_ANALYSIS_DIR}")
     print(f"Description: {ANALYSIS_OPTIONS.description}")
 
+    IRRIGATION_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    definitions_path = (
+        IRRIGATION_REPORTS_DIR
+        / "irrigation_variable_definitions.csv"
+    )
+    build_variable_definitions_table().to_csv(
+        definitions_path,
+        index=False,
+    )
+    print(f"Variable definitions: {definitions_path}")
+
     all_pre_start_flags: list[pd.DataFrame] = []
     all_trustworthy_tables: list[pd.DataFrame] = []
     all_holding_capacity_tables: list[pd.DataFrame] = []
@@ -2058,7 +2051,6 @@ def main() -> None:
             diagnostics_dir=(IRRIGATION_DIAGNOSTICS_DIR),
             holding_capacity_dir=(HOLDING_CAPACITY_DIR),
             figures_dir=(IRRIGATION_FIGURES_DIR),
-            reports_dir=(IRRIGATION_REPORTS_DIR),
         )
 
         _append_if_not_empty(

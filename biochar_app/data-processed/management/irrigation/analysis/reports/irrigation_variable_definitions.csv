@@ -13,9 +13,9 @@ avg_flow_gph_strip,Average strip-level application flow rate during one irrigati
 plateau_method,Method used to estimate plateau_vwc for one event.,flat_segment = sustained low-slope zone found; fallback_window = delayed post-peak summary window used; no_peak = no meaningful wetting peak detected.
 depth_index,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
 depth_inches,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
-event_storage_gal,Change in estimated profile water storage during one event.,profile_plateau_storage_gal - profile_baseline_storage_gal
-efficiency_strip,Fraction of strip-applied irrigation volume retained in measured profile storage.,event_storage_gal / gallons_strip
-estimated_loss_gal_strip,Applied strip volume not accounted for as measured profile storage gain.,gallons_strip - event_storage_gal
+event_storage_gal,Legacy profile-area-scaled VWC diagnostic. Use the three-zone storage output for whole-strip accounting.,profile_plateau_storage_gal - profile_baseline_storage_gal
+efficiency_strip,Legacy diagnostic retained for compatibility; it is not the canonical three-zone strip storage fraction.,event_storage_gal / gallons_strip (legacy workflow only)
+estimated_loss_gal_strip,Legacy diagnostic retained for compatibility. Use the three-zone not-stored and tailwater-bound fields instead.,gallons_strip - event_storage_gal (legacy workflow only)
 target_vwc,Operational target VWC based on historical plateau responses.,"min(mean_value + k_std * sd_value, quantile_cap)"
 runtime_hours,Recommended runtime in hours based on historical event response.,"Median, mean, or p75 of time_to_plateau_hours within each group"
 runtime_minutes,Recommended runtime in minutes based on historical event response.,runtime_hours * 60
