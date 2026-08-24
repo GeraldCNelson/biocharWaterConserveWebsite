@@ -67,6 +67,27 @@ THREE_SENSOR_PROFILE_UPPER_BOUND_IN = max(
 THREE_SENSOR_PROFILE_NOMINAL_THICKNESS_IN = sum(
     REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX.values()
 )
+
+STRIP_TREATMENT = {
+    "S1": "biochar",
+    "S2": "control",
+    "S3": "biochar",
+    "S4": "control",
+}
+
+STRIP_IRRIGATION_REGIME = {
+    "S1": "monthly",
+    "S2": "monthly",
+    "S3": "biweekly",
+    "S4": "biweekly",
+}
+
+STRIP_TREATMENT_PAIR = {
+    "S1": "S1_S2",
+    "S2": "S1_S2",
+    "S3": "S3_S4",
+    "S4": "S3_S4",
+}
 # ---------------------------------------------------------------------
 # Experimental units
 # ---------------------------------------------------------------------
@@ -133,6 +154,11 @@ LOGGER_LOCATION_MAPPING = {
     "T": "Top",
     "M": "Middle",
     "B": "Bottom",
+}
+
+ZONE_LABELS = {
+    code: label.lower()
+    for code, label in LOGGER_LOCATION_MAPPING.items()
 }
 
 LOGGER_GEOMETRY = {
