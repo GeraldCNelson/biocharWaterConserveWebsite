@@ -2,6 +2,11 @@
 """
 etl.py
 
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for this
+module's role in logger timestamp normalization and downstream rebuild order.
+
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
   - Require the macOS OneDrive application unless master refresh is skipped
@@ -269,7 +274,10 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S1T": [("2024-02-23 10:45:00", 60)],
     "S2B": [("2024-02-23 15:45:00", 60)],
     "S2M": [("2026-02-23 08:45:00", 60)],
-    "S2T": [("2024-04-02 16:00:00", -60)],
+    "S2T": [
+        ("2024-04-02 16:00:00", -60),
+        ("2026-02-18 08:45:00", 0),
+    ],
     "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
     "S3M": [
         ("2023-09-04 10:30:00", -60),
@@ -385,6 +393,26 @@ LOGGER_CLOCK_CORRECTION_METADATA = {
         "details": (
             "Detected transition: 2024-04-02 14:45:00 -> "
             "2024-04-02 16:00:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2T", "2026-02-18 08:45:00"): {
+        "reason": (
+            "The S2T logger clock was synchronized to the field computer's "
+            "MST clock, ending the prior manual offset state."
+        ),
+        "evidence": (
+            "The February 18, 2026 S2T PC400 screenshot in "
+            "diagnostics/logger_times_updates.docx was captured immediately "
+            "before the logger clock was set."
+        ),
+        "details": (
+            "PC400 showed S2T at 2026-02-18 08:32:41 and the adjusted server "
+            "at 08:31:23. The clock was then set to the MST computer time. "
+            "The first subsequent 15-minute S2T record is 08:45. Round-two "
+            "screenshots on 2026-08-24 confirm S2T remained on MST; seasonal "
+            "MDT conversion is applied later by ETL."
         ),
         "confidence": "high",
     },

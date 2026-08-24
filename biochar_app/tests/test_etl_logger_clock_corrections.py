@@ -79,6 +79,36 @@ class LoggerClockCorrectionTests(unittest.TestCase):
         expected = pd.Series(pd.to_datetime(["2026-07-24 08:45:00"]))
         pd.testing.assert_series_equal(corrected, expected)
 
+    def test_s2t_2026_mst_sync_ends_the_manual_offset(self) -> None:
+        raw = pd.Series(
+            pd.to_datetime(
+                [
+                    "2026-02-18 08:44:59",
+                    "2026-02-18 08:45:00",
+                    "2026-04-21 14:15:00",
+                ]
+            )
+        )
+
+        corrected_mst = apply_logger_clock_corrections(raw, "S2T")
+
+        expected_mst = pd.Series(
+            pd.to_datetime(
+                [
+                    "2026-02-18 07:44:59",
+                    "2026-02-18 08:45:00",
+                    "2026-04-21 14:15:00",
+                ]
+            )
+        )
+        pd.testing.assert_series_equal(corrected_mst, expected_mst)
+
+        april_civil = apply_logger_seasonal_civil_time(corrected_mst.iloc[[2]])
+        self.assertEqual(
+            april_civil.iloc[0].strftime("%Y-%m-%d %H:%M %z"),
+            "2026-04-21 15:15 -0600",
+        )
+
     def test_summer_standard_time_is_converted_to_denver_daylight_time(self) -> None:
         corrected_mst = pd.Series(pd.to_datetime(["2026-07-24 09:45:00"]))
 
