@@ -27,6 +27,7 @@ WARD_DOCX_DIR = DATA_PROCESSED_DIR / "ward-docx"
 WARD_HTML_DIR = DATA_PROCESSED_DIR / "ward-html"
 WARD_PDF_DIR = DATA_RAW_DIR / "ward-pdf"
 WARD_MEDIA_DIR = STATIC_DIR / "lab_reference_media"
+BIOCHAR_LAB_REPORTS_DIR = DATA_RAW_DIR / "labs_biochar"
 
 DOWNLOADS_BASE_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
@@ -60,6 +61,7 @@ SOIL_CHEM_RAW_DIR = LAB_TESTS_RAW_DIR / "soil-tests-chem" / "csv-files"
 SOIL_BIO_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-bio" / "csv-files"
 SOIL_CHEM_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "soil-tests-chem" / "csv-files"
 BIOMASS_PROCESSED_DIR = LAB_TESTS_PROCESSED_DIR / "biomass-field" / "csv-files"
+BIOMASS_HISTORICAL_CSV = BIOMASS_PROCESSED_DIR / "field_biomass_dry_g_2023_2025.csv"
 
 # Authoritative cleaned masters
 WARD_MASTER_NIR_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
@@ -110,6 +112,13 @@ LIDAR_ANALYSIS_DIR = LIDAR_DIR / "analysis"
 LIDAR_PIPELINES_DIR = LIDAR_DIR / "pipelines"
 DRONE_DIR = GEOSPATIAL_DIR / "drone"
 
+# =============================================================================
+# Markdown directories
+# =============================================================================
+MARKDOWN_DIR = BASE_DIR / "markdown"
+MARKDOWN_DOCX_DIR = MARKDOWN_DIR / "docx"
+MARKDOWN_OUTPUTS_DIR = MARKDOWN_DIR / "outputs_md"
+MARKDOWN_GENERATED_IMAGES_DIR = STATIC_DIR / "images" / "generated"
         
 def irrigation_analysis_paths(
     variant: str | None = None,

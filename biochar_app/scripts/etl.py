@@ -2,11 +2,18 @@
 """
 etl.py
 
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for this
+module's role in logger timestamp normalization and downstream rebuild order.
+
 Full ETL including growing-season (gseason) summaries:
   - Read all .dat logger files per year (in data-raw/datfiles_{year})
   - Require the macOS OneDrive application unless master refresh is skipped
   - Validate and install the synchronized authoritative master-workbook
     snapshot before downstream data processing
+  - Rebuild field-biomass data from the master workbook and merge new Ward NIR
+    files into the cleaned laboratory master
   - Parse raw logger timestamps as naive clock text
   - Apply per-logger clock corrections (MST/MDT jumps, resets) using LOGGER_CLOCK_CORRECTIONS
   - Convert corrected logger timestamps from a fixed MST base into America/Denver civil time
@@ -75,7 +82,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 from pandas import Series
 
-from biochar_app.config import SENSOR_DEPTH_VALUES
+from biochar_app.config import (
+    CS650_SENSING_VOLUME_CM3,
+    SENSOR_DEPTH_VALUES,
+)
 from biochar_app.config.core import (
     COAGMET_VARIABLE_MAP,
     COAG_STATION,
@@ -99,6 +109,7 @@ from biochar_app.config.irrigation_config import (
 
 from biochar_app.config.paths import (
     DATA_RAW_DIR,
+    DATA_PROCESSED_DIR,
     LOGGER_DOWNLOADS_DIR,
     PARQUET_DIR,
     WEATHER_DOWNLOADS_DIR,
@@ -120,6 +131,10 @@ from biochar_app.scripts.management.update_master_workbook_snapshot import (
     require_onedrive_desktop_app,
     update_snapshot,
 )
+from biochar_app.scripts.lab.build_field_biomass_from_master import (
+    build_and_install_field_biomass,
+)
+from biochar_app.scripts.lab.update_ward_master_nir import update_ward_master_nir
 from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
 
 from biochar_app.config.dataset_metadata import (
@@ -233,13 +248,36 @@ def write_dataset_metadata(
 
     logger.info(f"✅ Wrote dataset metadata: {output_path}")
 
+# Logger timestamps are 15-minute aggregation labels generated from each
+# logger's internal wall clock. PC400 clock synchronization copied the
+# laptop's current wall time into the logger, which could be either MST or
+# MDT depending on the date of the field visit. Consequently, an individual
+# logger file may contain multiple clock regimes.
+#
+# These entries reconstruct the logger's clock-state history and normalize
+# raw timestamps to a fixed MST (UTC-7) base. Each offset is the complete
+# number of minutes to add beginning at the listed raw timestamp; offsets
+# are absolute states, not cumulative changes.
+#
+# After these corrections, apply_logger_seasonal_civil_time() interprets
+# the normalized values as fixed MST and converts them to America/Denver
+# civil time, restoring MDT where seasonally appropriate.
+#
+# The logger clocks and PC400 synchronization screenshots include seconds,
+# but the stored .dat records are 15-minute aggregation timestamps. The
+# correction map therefore represents interval-label clock states rather
+# than second-level oscillator drift.
+
 LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
     "S1B": [("2024-02-23 15:30:00", 60)],
     "S1M": [("2024-02-23 15:15:00", 60)],
     "S1T": [("2024-02-23 10:45:00", 60)],
     "S2B": [("2024-02-23 15:45:00", 60)],
     "S2M": [("2026-02-23 08:45:00", 60)],
-    "S2T": [("2024-04-02 16:00:00", -60)],
+    "S2T": [
+        ("2024-04-02 16:00:00", -60),
+        ("2026-02-18 08:45:00", 0),
+    ],
     "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
     "S3M": [
         ("2023-09-04 10:30:00", -60),
@@ -256,6 +294,324 @@ LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
 # Fixed Mountain Standard Time base used before converting to civil Denver time.
 # (Etc/GMT+7 is fixed UTC-7; the sign is reversed by POSIX convention.)
 LOGGER_FIXED_STANDARD_TZ = "Etc/GMT+7"
+
+# Documentation metadata for LOGGER_CLOCK_CORRECTIONS.
+#
+# Each correction entry represents a logger clock state change. The offset
+# values in LOGGER_CLOCK_CORRECTIONS are operational values used by the ETL.
+# This table documents why each correction exists and the evidence supporting it.
+#
+# Evidence confidence:
+#   High   - direct PC400 synchronization screenshots or recorded field action
+#   Medium - supported by multiple independent timestamp comparisons
+#   Low    - inferred from limited evidence or unresolved ambiguity
+
+LOGGER_CLOCK_CORRECTION_METADATA = {
+    ("S1B", "2024-02-23 15:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:15:00 -> "
+            "2024-02-23 15:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S1M", "2024-02-23 15:15:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:00:00 -> "
+            "2024-02-23 15:15:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S1T", "2024-02-23 10:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 11:30:00 -> "
+            "2024-02-23 10:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2B", "2024-02-23 15:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 16:30:00 -> "
+            "2024-02-23 15:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2M", "2026-02-23 08:45:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit. "
+            "Correction represents the post-synchronization clock state."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S2T", "2024-04-02 16:00:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-04-02 14:45:00 -> "
+            "2024-04-02 16:00:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S2T", "2026-02-18 08:45:00"): {
+        "reason": (
+            "The S2T logger clock was synchronized to the field computer's "
+            "MST clock, ending the prior manual offset state."
+        ),
+        "evidence": (
+            "The February 18, 2026 S2T PC400 screenshot in "
+            "diagnostics/logger_times_updates.docx was captured immediately "
+            "before the logger clock was set."
+        ),
+        "details": (
+            "PC400 showed S2T at 2026-02-18 08:32:41 and the adjusted server "
+            "at 08:31:23. The clock was then set to the MST computer time. "
+            "The first subsequent 15-minute S2T record is 08:45. Round-two "
+            "screenshots on 2026-08-24 confirm S2T remained on MST; seasonal "
+            "MDT conversion is applied later by ETL."
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2023-04-28 10:45:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-04-28 09:30:00 -> "
+            "2023-04-28 10:45:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2024-03-28 17:15:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-03-28 16:00:00 -> "
+            "2024-03-28 17:15:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3B", "2026-02-23 08:45:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2023-09-04 10:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-04 09:15:00 -> "
+            "2023-09-04 10:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2024-07-07 06:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-07-07 05:15:00 -> "
+            "2024-07-07 06:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2025-01-16 23:45:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2025-01-16 22:30:00 -> "
+            "2025-01-16 23:45:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S3M", "2026-02-19 15:00:00"): {
+        "reason": (
+            "Logger clock was verified after battery replacement. "
+            "Historical timestamps required a new clock-state correction "
+            "starting after the field service event."
+        ),
+        "evidence": (
+            "PC400 screenshot comparison of S3M logger time and server time "
+            "after battery replacement."
+        ),
+        "details": (
+            "Battery replaced approximately 2026-02-19 13:30 MST. "
+            "Logger time and server time differed by approximately 1 second."
+        ),
+        "confidence": "high",
+    },
+
+    ("S3T", "2024-02-23 11:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 12:15:00 -> "
+            "2024-02-23 11:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2023-09-04 10:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-04 09:15:00 -> "
+            "2023-09-04 10:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2023-09-20 18:30:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected FORWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2023-09-20 17:15:00 -> "
+            "2023-09-20 18:30:00 (+75.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4B", "2026-02-23 09:00:00"): {
+        "reason": (
+            "Logger synchronized during PC400 field visit."
+        ),
+        "evidence": (
+            "PC400 before/after clock synchronization screenshots "
+            "collected February 23, 2026."
+        ),
+        "details": (
+            "Logger synchronized to laptop time during field visit."
+        ),
+        "confidence": "high",
+    },
+
+    ("S4M", "2024-02-23 14:30:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 15:15:00 -> "
+            "2024-02-23 14:30:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+
+    ("S4T", "2024-02-23 11:45:00"): {
+        "reason": (
+            "Logger clock moved backward by 45 minutes. "
+            "Correction establishes the new logger clock state."
+        ),
+        "evidence": (
+            "scan_dat_chron_timeline.py detected BACKWARD transition."
+        ),
+        "details": (
+            "Detected transition: 2024-02-23 12:30:00 -> "
+            "2024-02-23 11:45:00 (-45.0 min)"
+        ),
+        "confidence": "high",
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Timezone helpers
@@ -314,6 +670,106 @@ def apply_logger_clock_corrections(ts: pd.Series, logger_tag: str) -> pd.Series:
                 raw + pd.Timedelta(minutes=int(add_min)),
             )
     return out
+
+def build_logger_clock_corrections_audit() -> pd.DataFrame:
+    """
+    Build an audit table documenting logger clock corrections.
+
+    Combines operational correction values with provenance metadata.
+    """
+
+    rows = []
+
+    for logger, corrections in LOGGER_CLOCK_CORRECTIONS.items():
+        for start_s, offset_min in sorted(
+            corrections,
+            key=lambda item: pd.Timestamp(item[0]),
+        ):
+
+            metadata = LOGGER_CLOCK_CORRECTION_METADATA.get(
+                (logger, start_s),
+                {},
+            )
+
+            rows.append(
+                {
+                    "logger": logger,
+                    "correction_start_raw": start_s,
+                    "offset_minutes": int(offset_min),
+                    "offset_hours": float(offset_min) / 60.0,
+                    "reason": metadata.get(
+                        "reason",
+                        "No reason documented",
+                    ),
+                    "evidence": metadata.get(
+                        "evidence",
+                        "No evidence documented",
+                    ),
+                    "details": metadata.get(
+                        "details",
+                        "",
+                    ),
+                    "confidence": metadata.get(
+                        "confidence",
+                        "unknown",
+                    ),
+                }
+            )
+
+    return (
+        pd.DataFrame(rows)
+        .sort_values(
+            ["logger", "correction_start_raw"]
+        )
+        .reset_index(drop=True)
+    )
+
+# Logger timestamp correction methodology
+#
+# Logger internal clocks record time with second-level resolution.
+# The Campbell logger program generates 15-minute .dat records by
+# averaging higher-frequency measurements internally.
+#
+# Historical timestamp transitions detected in .dat files may appear as
+# offsets such as +75 minutes rather than exactly +60 minutes. These
+# transitions represent a combination of:
+#
+#   1. approximately one hour of MDT/MST clock-state difference, and
+#   2. alignment of the timestamp transition with the 15-minute averaged
+#      .dat record boundaries.
+#
+# Therefore, a +75 minute discontinuity in the .dat record sequence does
+# not necessarily indicate that the logger clock was manually advanced
+# by exactly 75 minutes. It indicates a change in the effective timestamp
+# state of the recorded data.
+#
+# LOGGER_CLOCK_CORRECTIONS stores absolute timestamp states, not
+# cumulative adjustments.
+
+
+def write_logger_clock_corrections_audit(output_path: Path) -> None:
+    """
+    Write logger clock correction metadata audit CSV.
+    """
+
+    df = build_logger_clock_corrections_audit()
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    df.to_csv(
+        output_path,
+        index=False,
+    )
+
+
+audit_path = (
+    DATA_PROCESSED_DIR
+    / "diagnostics"
+    / "logger_clock_corrections_audit.csv"
+)
 
 def apply_logger_seasonal_civil_time(
     ts: pd.Series,
@@ -640,6 +1096,11 @@ def scale_vwc_to_percent(df_in: pd.DataFrame, *, copy: bool = True) -> pd.DataFr
     return df
 
 def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
+    """Retain legacy VWC-scaled reference-cylinder water volumes.
+
+    The assumed 10 cm by 4 cm-radius cylinder is not the documented CS650
+    sensing volume. These columns remain for backward compatibility only.
+    """
     df = df_in.copy() if copy else df_in
     cyl_m3 = cylinder_volume_m3()
     cyl_l = cyl_m3 * 1000.0
@@ -655,7 +1116,43 @@ def add_swc_cylinder_volumes(df_in: pd.DataFrame, copy: bool = True) -> pd.DataF
                 df[f"SWC_vol_L_{strip}_{loc}_{depth}"] = frac * cyl_l
                 df[f"SWC_vol_gal_{strip}_{loc}_{depth}"] = frac * cyl_gal
 
-    logger.info("💧 Added SWC cylinder volumes (L & gallons) per sensor")
+    logger.info("💧 Added legacy SWC reference-cylinder volumes")
+    return df
+
+
+def add_cs650_sensing_volume_water(
+    df_in: pd.DataFrame,
+    copy: bool = True,
+) -> pd.DataFrame:
+    """Estimate local water volume within the documented CS650 sensing volume.
+
+    The manufacturer's 7,800 cm3 sensing volume is approximate and spatially
+    weighted, with greatest sensitivity near the rods. These fields are local
+    sensor diagnostics and must not be summed or treated as field-zone gallons.
+    """
+    df = df_in.copy() if copy else df_in
+    sensing_volume_l = CS650_SENSING_VOLUME_CM3 / 1000.0
+    sensing_volume_gal = UNIT_CONVERSIONS["metric_to_us"]["irrigation"](
+        sensing_volume_l
+    )
+
+    for strip in STRIPS:
+        for loc in LOGGER_LOCATIONS:
+            for depth in SENSOR_DEPTH_VALUES:
+                vwc_col = f"VWC_{depth}_raw_{strip}_{loc}"
+                if vwc_col not in df.columns:
+                    continue
+                fraction = (
+                    pd.to_numeric(df[vwc_col], errors="coerce") / 100.0
+                )
+                df[f"CS650_water_L_{strip}_{loc}_{depth}"] = (
+                    fraction * sensing_volume_l
+                )
+                df[f"CS650_water_gal_{strip}_{loc}_{depth}"] = (
+                    fraction * sensing_volume_gal
+                )
+
+    logger.info("💧 Added CS650 sensing-volume water diagnostics")
     return df
 
 def add_temperature_differences(
@@ -906,8 +1403,10 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
                 "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
                 "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
-                "  SWC_vol_L_<strip>_<loc>_<depth>   : soil water content volume (liters)",
-                "  SWC_vol_gal_<strip>_<loc>_<depth> : soil water content volume (gallons)",
+                "  SWC_vol_L_<strip>_<loc>_<depth>   : legacy reference-cylinder water volume (liters)",
+                "  SWC_vol_gal_<strip>_<loc>_<depth> : legacy reference-cylinder water volume (gallons)",
+                "  CS650_water_L_<strip>_<loc>_<depth>   : local water in approximate CS650 sensing volume (liters)",
+                "  CS650_water_gal_<strip>_<loc>_<depth> : local water in approximate CS650 sensing volume (gallons)",
                 "",
                 "Notes",
                 "-----",
@@ -1182,6 +1681,7 @@ def generate_summaries(years: list[int]) -> None:
                             )
 
             df = add_swc_cylinder_volumes(df)
+            df = add_cs650_sensing_volume_water(df)
             df = add_temperature_differences(df)
             df = add_swc_differences(df)
 
@@ -1563,9 +2063,18 @@ def main() -> None:
             "workbook snapshot."
         ),
     )
+    parser.add_argument(
+        "--skip-lab-build",
+        action="store_true",
+        help=(
+            "Do not rebuild field biomass or merge supplemental Ward NIR "
+            "data into the cleaned laboratory outputs."
+        ),
+    )
     args = parser.parse_args()
 
     os.makedirs(PARQUET_DIR, exist_ok=True)
+    write_logger_clock_corrections_audit(audit_path)
 
     if args.skip_master_workbook_refresh:
         logger.warning(
@@ -1589,6 +2098,22 @@ def main() -> None:
             irrigation_audit["latest_irrigation_start"],
             irrigation_audit["invalid_group_events"],
         )
+
+    if args.skip_lab_build:
+        logger.warning(
+            "Laboratory-data builds were skipped. Biomass and NIR dashboard "
+            "data may be stale."
+        )
+    else:
+        biomass_audit = build_and_install_field_biomass()
+        logger.info(
+            "Field biomass rebuilt: rows=%s sampling_dates=%s latest=%s",
+            biomass_audit["rows"],
+            biomass_audit["sampling_dates"],
+            biomass_audit["latest_sampling_date"],
+        )
+        update_ward_master_nir()
+        logger.info("Ward NIR clean master rebuilt with supplemental files.")
 
     years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
 

@@ -30,6 +30,64 @@ SENSOR_DEPTH_VALUES: SensorDepthValues = {
         "metric": {"value": 45.0, "unit": "cm"},
     },
 }
+
+# CS650 geometry from the Campbell Scientific CS650/CS655 manual. The CS650
+# has 30 cm rods and an approximate sensing volume of 7,800 cm3. For a
+# horizontally installed sensor, sensitivity extends about 7.5 cm (3 inches)
+# above and below the rod plane and is strongest nearest the rods.
+CS650_SENSING_VOLUME_CM3 = 7800.0
+CS650_VERTICAL_SENSITIVITY_RADIUS_IN = 3.0
+
+# Derive the represented vertical bands from the configured installation
+# depths so the bounds cannot silently diverge from SENSOR_DEPTH_VALUES.
+SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX: dict[
+    int, tuple[float, float]
+] = {
+    int(depth_code): (
+        float(systems["us"]["value"])
+        - CS650_VERTICAL_SENSITIVITY_RADIUS_IN,
+        float(systems["us"]["value"])
+        + CS650_VERTICAL_SENSITIVITY_RADIUS_IN,
+    )
+    for depth_code, systems in SENSOR_DEPTH_VALUES.items()
+}
+
+REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX: dict[int, float] = {
+    depth_index: upper - lower
+    for depth_index, (lower, upper)
+    in SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX.items()
+}
+
+THREE_SENSOR_PROFILE_LOWER_BOUND_IN = min(
+    lower for lower, _ in SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX.values()
+)
+THREE_SENSOR_PROFILE_UPPER_BOUND_IN = max(
+    upper for _, upper in SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX.values()
+)
+THREE_SENSOR_PROFILE_NOMINAL_THICKNESS_IN = sum(
+    REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX.values()
+)
+
+STRIP_TREATMENT = {
+    "S1": "biochar",
+    "S2": "control",
+    "S3": "biochar",
+    "S4": "control",
+}
+
+STRIP_IRRIGATION_REGIME = {
+    "S1": "monthly",
+    "S2": "monthly",
+    "S3": "biweekly",
+    "S4": "biweekly",
+}
+
+STRIP_TREATMENT_PAIR = {
+    "S1": "S1_S2",
+    "S2": "S1_S2",
+    "S3": "S3_S4",
+    "S4": "S3_S4",
+}
 # ---------------------------------------------------------------------
 # Experimental units
 # ---------------------------------------------------------------------
@@ -96,6 +154,11 @@ LOGGER_LOCATION_MAPPING = {
     "T": "Top",
     "M": "Middle",
     "B": "Bottom",
+}
+
+ZONE_LABELS = {
+    code: label.lower()
+    for code, label in LOGGER_LOCATION_MAPPING.items()
 }
 
 LOGGER_GEOMETRY = {

@@ -98,6 +98,7 @@ TAB_LINKS = {
     "Biomass (Field Samples)": "biomass-field-tab",
     "Biological Health": "soilbio-tab",
     "Soil Chemistry": "soilchem-tab",
+    "Biochar Material Characterization": "biochar-analysis-tab"
 }
 # ---------------------------------------------------------------------
 # Growing-season defaults
@@ -269,16 +270,20 @@ PLOT_COLORS = {
 }
 
 # ---------------------------------------------------------------------
-# SWC geometry (kept here because it’s conceptually “core experiment”)
+# Legacy SWC reference-cylinder geometry.
+#
+# These values predate use of the documented CS650 sensing volume and are
+# retained only so existing SWC_vol_* fields remain reproducible. New local
+# sensor-volume fields use CS650_SENSING_VOLUME_CM3 from experiment_config.
 # ---------------------------------------------------------------------
 
-SWC_CYLINDER_LENGTH_CM = 10  # reliable probe length
-SWC_CYLINDER_RADIUS_CM = 4  # midpoint of 3–5 cm
+SWC_CYLINDER_LENGTH_CM = 10
+SWC_CYLINDER_RADIUS_CM = 4
 
 
 def cylinder_volume_m3(length_cm: float = SWC_CYLINDER_LENGTH_CM,
                        radius_cm: float = SWC_CYLINDER_RADIUS_CM) -> float:
-    """Compute π·r²·h in m³."""
+    """Compute the legacy reference-cylinder volume in cubic metres."""
     h = length_cm / 100.0
     r = radius_cm / 100.0
     return pi * r * r * h

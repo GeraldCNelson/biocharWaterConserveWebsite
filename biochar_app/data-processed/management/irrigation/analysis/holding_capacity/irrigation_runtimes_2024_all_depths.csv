@@ -5,9 +5,9 @@ year,strip,depth_inches,n_events,rec_runtime_hours,rec_runtime_minutes,rec_runti
 2024.00,S2,6.00,6.00,17.04,1022.50,True,8.82,529.00,time_to_plateau_hours,median,6723.04,6.63
 2024.00,S2,12.00,6.00,18.49,1109.50,True,8.82,529.00,time_to_plateau_hours,median,6723.04,8.73
 2024.00,S2,18.00,6.00,17.88,1073.00,True,8.82,529.00,time_to_plateau_hours,median,6723.04,6.73
-2024.00,S3,6.00,14.00,13.27,796.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,8.21
-2024.00,S3,12.00,14.00,13.66,819.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,7.15
-2024.00,S3,18.00,14.00,9.72,583.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,2.57
-2024.00,S4,6.00,9.00,16.73,1004.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,9.65
-2024.00,S4,12.00,10.00,14.46,867.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,8.35
-2024.00,S4,18.00,6.00,12.91,774.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,7.03
+2024.00,S3,6.00,14.00,14.27,856.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,9.21
+2024.00,S3,12.00,14.00,14.66,879.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,8.15
+2024.00,S3,18.00,14.00,10.72,643.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,3.57
+2024.00,S4,6.00,9.00,17.73,1064.00,True,7.01,420.50,time_to_plateau_hours,median,6501.07,10.65
+2024.00,S4,12.00,10.00,15.46,927.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,9.35
+2024.00,S4,18.00,6.00,13.91,834.50,True,7.01,420.50,time_to_plateau_hours,median,6501.07,8.03

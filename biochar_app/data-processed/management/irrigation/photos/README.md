@@ -145,7 +145,7 @@ Management scripts:
 - build_meter_photo_inventory.py
 - apply_duplicate_actions.py
 - build_meter_review_workbook.py
-- clean_meter_photo_readings.py
+- finalize_meter_photo_inventory.py
 - compare_meter_photos_to_irrigation.py
 
 Utility scripts:
@@ -155,6 +155,12 @@ Utility scripts:
 
 These scripts together provide the workflow for importing, validating,
 deduplicating, reviewing, and maintaining irrigation meter photographs.
+
+`compare_meter_photos_to_irrigation.py` reads the canonical
+`photo_inventory_unique.csv` directly. The former
+`clean_meter_photo_readings.py` step belonged to the archived
+`photos_Lobato_phone` workflow and is no longer required by the canonical
+pipeline.
 
 ## Postscript
 # Reproducible Irrigation Meter-Photo Review Pipeline

@@ -109,9 +109,14 @@ from biochar_app.config.units import (
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
     LOGGER_DOWNLOADS_DIR,
+    MARKDOWN_OUTPUTS_DIR,
     WARD_HTML_DIR,
     WARD_PDF_DIR,
     WEATHER_DOWNLOADS_DIR,
+)
+from biochar_app.config.biochar_lab_reports import (
+    BIOCHAR_LAB_REPORTS,
+    biochar_lab_report_path,
 )
 from biochar_app.markdown.tools.markdown_config import build_markdown_mapping
 
@@ -1168,10 +1173,9 @@ async def api_get_nir_table():
 # ---------------------------------------------------------------------------
 @main_router.get("/markdown/{filename}")
 async def serve_markdown(filename: str):
-    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown", "outputs_md")
-    fullpath = os.path.abspath(os.path.join(md_dir, filename))
+    fullpath = MARKDOWN_OUTPUTS_DIR / filename
 
-    if not os.path.exists(fullpath):
+    if not fullpath.exists():
         raise HTTPException(status_code=404, detail=f"Markdown file '{filename}' not found")
 
     return FileResponse(fullpath, media_type="text/markdown")
@@ -1484,6 +1488,30 @@ async def ward_biological_report_pdf():
         path=file_path,
         media_type="application/pdf",
         filename=file_path.name,
+    )
+
+
+@main_router.get("/lab-reports/biochar/{report_key}")
+async def biochar_lab_report(report_key: str, download: bool = False):
+    """Serve one explicitly configured biochar analysis report."""
+    report = BIOCHAR_LAB_REPORTS.get(report_key)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Biochar report not found")
+
+    file_path = biochar_lab_report_path(report_key)
+    if not file_path.is_file():
+        logger.error("Configured biochar report is missing: %s", file_path)
+        raise HTTPException(status_code=404, detail="Biochar report file not found")
+
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{report["download_name"]}"'
+            )
+        },
     )
 
 @main_router.get("/lab-references/ward-nirs-report", response_class=HTMLResponse)

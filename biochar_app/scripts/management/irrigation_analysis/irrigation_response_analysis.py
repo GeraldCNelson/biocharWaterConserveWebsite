@@ -65,7 +65,9 @@ from biochar_app.config.field_management_metadata import (
 )
 
 from biochar_app.config.experiment_config import (
+    REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX,
     SENSOR_DEPTH_CODES,
+    SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX,
     SENSOR_DEPTH_INDEX_TO_INCHES,
 )
 profile_area_sqft = PROFILE_AREA_SQFT
@@ -171,10 +173,22 @@ def parse_vwc_sensor_column(sensor_col: str) -> SensorMeta:
     return result
 
 def _build_profile_swc_gal_cols(strip: str, logger_position: str) -> list[str]:
+    """Return legacy reference-cylinder SWC columns for compatibility."""
     return [
         f"SWC_vol_gal_{strip}_{logger_position}_1",
         f"SWC_vol_gal_{strip}_{logger_position}_2",
         f"SWC_vol_gal_{strip}_{logger_position}_3",
+    ]
+
+
+def _build_profile_cs650_water_gal_cols(
+    strip: str,
+    logger_position: str,
+) -> list[str]:
+    """Return local-water columns based on the documented CS650 volume."""
+    return [
+        f"CS650_water_gal_{strip}_{logger_position}_{depth_index}"
+        for depth_index in [1, 2, 3]
     ]
 
 # ---------------------------------------------------------------------
@@ -319,6 +333,41 @@ def build_variable_definitions_table() -> pd.DataFrame:
             "formula_or_rule": "gallons_strip / event_duration_hours",
         },
         {
+            "variable": "start_flow_gpm",
+            "definition": (
+                "Point-in-time meter-needle flow at irrigation start, as "
+                "recorded in the master workbook."
+            ),
+            "formula_or_rule": "Master workbook FLOW RATE START; not photo-derived.",
+        },
+        {
+            "variable": "end_flow_gpm",
+            "definition": (
+                "Point-in-time meter-needle flow near irrigation end, as "
+                "recorded in the master workbook."
+            ),
+            "formula_or_rule": "Master workbook FLOW RATE END; not photo-derived.",
+        },
+        {
+            "variable": "avg_flow_gpm_group",
+            "definition": (
+                "Calculated event-average flow delivered to the active strip group."
+            ),
+            "formula_or_rule": "gallons_group / (event_duration_hours * 60).",
+        },
+        {
+            "variable": "flow_rate_review_required",
+            "definition": (
+                "Diagnostic flag for a large difference between a workbook "
+                "boundary-flow reading and calculated event-average group flow."
+            ),
+            "formula_or_rule": (
+                "True when the largest available absolute difference exceeds "
+                "both 50 GPM and 25% of avg_flow_gpm_group. Flow can vary during "
+                "an event, so this flag requests review rather than declaring an error."
+            ),
+        },
+        {
             "variable": "plateau_method",
             "definition": "Method used to estimate plateau_vwc for one event.",
             "formula_or_rule": (
@@ -339,18 +388,56 @@ def build_variable_definitions_table() -> pd.DataFrame:
         },
         {
             "variable": "event_storage_gal",
-            "definition": "Change in estimated profile water storage during one event.",
+            "definition": (
+                "Legacy profile-area-scaled VWC diagnostic. Use the "
+                "three-zone storage output for whole-strip accounting."
+            ),
             "formula_or_rule": "profile_plateau_storage_gal - profile_baseline_storage_gal",
         },
         {
             "variable": "efficiency_strip",
-            "definition": "Fraction of strip-applied irrigation volume retained in measured profile storage.",
-            "formula_or_rule": "event_storage_gal / gallons_strip",
+            "definition": (
+                "Legacy diagnostic retained for compatibility; it is not the "
+                "canonical three-zone strip storage fraction."
+            ),
+            "formula_or_rule": (
+                "event_storage_gal / gallons_strip (legacy workflow only)"
+            ),
         },
         {
             "variable": "estimated_loss_gal_strip",
-            "definition": "Applied strip volume not accounted for as measured profile storage gain.",
-            "formula_or_rule": "gallons_strip - event_storage_gal",
+            "definition": (
+                "Legacy diagnostic retained for compatibility. Use the "
+                "canonical unretained-water fields instead."
+            ),
+            "formula_or_rule": (
+                "gallons_strip - event_storage_gal (legacy workflow only)"
+            ),
+        },
+        {
+            "variable": "unretained_gal_strip",
+            "definition": (
+                "Applied irrigation not retained as increased soil-water "
+                "storage in the measured 0-18 inch strip profile."
+            ),
+            "formula_or_rule": (
+                "max(gallons_strip - estimated_storage_gal_strip_0_18in, 0)"
+            ),
+        },
+        {
+            "variable": "unretained_fraction",
+            "definition": "Fraction of applied strip water not retained.",
+            "formula_or_rule": "unretained_gal_strip / gallons_strip",
+        },
+        {
+            "variable": "holding_capacity_eligible",
+            "definition": "Whether the event may be used for holding-capacity analysis.",
+            "formula_or_rule": "Passes event QC and has a complete three-zone storage estimate.",
+        },
+        {
+            "variable": "unretained_eligible",
+            "definition": "Whether the event may be used for unretained-water analysis.",
+            "formula_or_rule": "holding_capacity_eligible and gallons_strip > 0.",
         },
         {
             "variable": "target_vwc",
@@ -382,54 +469,121 @@ def compute_event_storage_metrics(
     plateau_time: Optional[pd.Timestamp],
     gallons_strip: Optional[float],
 ) -> dict[str, object]:
+    """Build local sensor-volume diagnostics for an event.
+
+    These values describe water within three local sensing volumes. They are
+    not logger-zone or whole-strip storage and therefore are not compared with
+    ``gallons_strip`` here. Whole-strip accounting is performed from VWC and
+    configured influence-zone areas in ``holding_capacity.py``.
+    """
     strip_from_col = sensor_meta["strip_from_col"]
     logger_position = sensor_meta["logger_position"]
 
     if strip_from_col is None or logger_position is None:
         return {
+            "local_water_diagnostic_method": None,
+            "sensor_profile_baseline_cs650_water_gal": None,
+            "sensor_profile_plateau_cs650_water_gal": None,
+            "sensor_profile_delta_cs650_water_gal": None,
+            "sensor_profile_baseline_legacy_swc_gal": None,
+            "sensor_profile_plateau_legacy_swc_gal": None,
+            "sensor_profile_delta_legacy_swc_gal": None,
             "profile_baseline_storage_gal": None,
             "profile_plateau_storage_gal": None,
             "event_storage_gal": None,
             "efficiency_strip": None,
             "estimated_loss_gal_strip": None,
             "swc_missing_cols": "",
+            "cs650_missing_cols": "",
         }
 
     swc_cols = _build_profile_swc_gal_cols(strip_from_col, logger_position)
-    missing_cols = [c for c in swc_cols if c not in df.columns]
+    cs650_cols = _build_profile_cs650_water_gal_cols(
+        strip_from_col,
+        logger_position,
+    )
+    missing_swc_cols = [c for c in swc_cols if c not in df.columns]
+    missing_cs650_cols = [c for c in cs650_cols if c not in df.columns]
 
-    baseline_values = [
-        value
-        for col in swc_cols
-        if (value := _safe_value_at_timestamp(df, baseline_time, col)) is not None
-    ]
-    plateau_values = [
-        value
-        for col in swc_cols
-        if (value := _safe_value_at_timestamp(df, plateau_time, col)) is not None
-    ]
+    def values_at(
+        columns: Sequence[str],
+        timestamp: Optional[pd.Timestamp],
+    ) -> list[float]:
+        return [
+            value
+            for col in columns
+            if (value := _safe_value_at_timestamp(
+                df,
+                timestamp,
+                col,
+            )) is not None
+        ]
 
-    profile_baseline_storage_gal = float(sum(baseline_values)) if baseline_values else None
-    profile_plateau_storage_gal = float(sum(plateau_values)) if plateau_values else None
+    legacy_baseline_values = values_at(swc_cols, baseline_time)
+    legacy_plateau_values = values_at(swc_cols, plateau_time)
+    cs650_baseline_values = values_at(cs650_cols, baseline_time)
+    cs650_plateau_values = values_at(cs650_cols, plateau_time)
+
+    legacy_baseline = (
+        float(sum(legacy_baseline_values))
+        if legacy_baseline_values else None
+    )
+    legacy_plateau = (
+        float(sum(legacy_plateau_values))
+        if legacy_plateau_values else None
+    )
+    cs650_baseline = (
+        float(sum(cs650_baseline_values))
+        if cs650_baseline_values else None
+    )
+    cs650_plateau = (
+        float(sum(cs650_plateau_values))
+        if cs650_plateau_values else None
+    )
+
+    # Prefer the documented CS650 volume after the ETL has generated it;
+    # retain a legacy fallback so older processed files remain readable.
+    profile_baseline_storage_gal = (
+        cs650_baseline if cs650_baseline is not None else legacy_baseline
+    )
+    profile_plateau_storage_gal = (
+        cs650_plateau if cs650_plateau is not None else legacy_plateau
+    )
 
     event_storage_gal: Optional[float] = None
     if profile_baseline_storage_gal is not None and profile_plateau_storage_gal is not None:
         event_storage_gal = profile_plateau_storage_gal - profile_baseline_storage_gal
 
-    efficiency_strip: Optional[float] = None
-    estimated_loss_gal_strip: Optional[float] = None
-
-    if gallons_strip is not None and gallons_strip > 0 and event_storage_gal is not None:
-        efficiency_strip = event_storage_gal / gallons_strip
-        estimated_loss_gal_strip = gallons_strip - event_storage_gal
-
     return {
+        "local_water_diagnostic_method": (
+            "cs650_approximate_sensing_volume"
+            if cs650_baseline is not None
+            else "legacy_reference_cylinder"
+        ),
+        "sensor_profile_baseline_cs650_water_gal": cs650_baseline,
+        "sensor_profile_plateau_cs650_water_gal": cs650_plateau,
+        "sensor_profile_delta_cs650_water_gal": (
+            cs650_plateau - cs650_baseline
+            if cs650_baseline is not None and cs650_plateau is not None
+            else None
+        ),
+        "sensor_profile_baseline_legacy_swc_gal": legacy_baseline,
+        "sensor_profile_plateau_legacy_swc_gal": legacy_plateau,
+        "sensor_profile_delta_legacy_swc_gal": (
+            legacy_plateau - legacy_baseline
+            if legacy_baseline is not None and legacy_plateau is not None
+            else None
+        ),
         "profile_baseline_storage_gal": profile_baseline_storage_gal,
         "profile_plateau_storage_gal": profile_plateau_storage_gal,
         "event_storage_gal": event_storage_gal,
-        "efficiency_strip": efficiency_strip,
-        "estimated_loss_gal_strip": estimated_loss_gal_strip,
-        "swc_missing_cols": "; ".join(missing_cols),
+        # Comparing a local sensing-volume estimate with strip-applied gallons
+        # is dimensionally misleading. Keep these aliases empty rather than
+        # reporting a false whole-strip efficiency or loss.
+        "efficiency_strip": None,
+        "estimated_loss_gal_strip": None,
+        "swc_missing_cols": "; ".join(missing_swc_cols),
+        "cs650_missing_cols": "; ".join(missing_cs650_cols),
     }
 
 # ---------------------------------------------------------------------
@@ -675,6 +829,27 @@ def analyze_single_event_sensor(
         "event_storage_gal": storage_metrics["event_storage_gal"],
         "efficiency_strip": storage_metrics["efficiency_strip"],
         "estimated_loss_gal_strip": storage_metrics["estimated_loss_gal_strip"],
+        "local_water_diagnostic_method": storage_metrics[
+            "local_water_diagnostic_method"
+        ],
+        "sensor_profile_baseline_cs650_water_gal": storage_metrics[
+            "sensor_profile_baseline_cs650_water_gal"
+        ],
+        "sensor_profile_plateau_cs650_water_gal": storage_metrics[
+            "sensor_profile_plateau_cs650_water_gal"
+        ],
+        "sensor_profile_delta_cs650_water_gal": storage_metrics[
+            "sensor_profile_delta_cs650_water_gal"
+        ],
+        "sensor_profile_baseline_legacy_swc_gal": storage_metrics[
+            "sensor_profile_baseline_legacy_swc_gal"
+        ],
+        "sensor_profile_plateau_legacy_swc_gal": storage_metrics[
+            "sensor_profile_plateau_legacy_swc_gal"
+        ],
+        "sensor_profile_delta_legacy_swc_gal": storage_metrics[
+            "sensor_profile_delta_legacy_swc_gal"
+        ],
     }
 
 def analyze_irrigation_events(
@@ -704,10 +879,15 @@ def analyze_irrigation_events(
 
         profile_storage_in = sum((VWC_pct / 100) * layer_thickness_inches)
 
-    By default, each depth sensor is assumed to represent a 6-inch layer:
-        depth 1 = 0-6 in
-        depth 2 = 6-12 in
-        depth 3 = 12-18 in
+    Configured sensor depths and CS650 sensitivity geometry define three
+    approximately adjacent, sensor-centered bands:
+        depth 1 = approximately 3-9 in
+        depth 2 = approximately 9-15 in
+        depth 3 = approximately 15-21 in
+
+    ``layer_thickness_inches`` remains for API compatibility. Configured layer
+    thicknesses are preferred and the argument is only a fallback for an
+    unrecognized depth index.
 
     If profile_area_sqft is provided, equivalent water depth is converted to
     gallons:
@@ -800,11 +980,33 @@ def analyze_irrigation_events(
     out["plateau_vwc"] = pd.to_numeric(out["plateau_vwc"], errors="coerce")
     out["gallons_strip"] = pd.to_numeric(out["gallons_strip"], errors="coerce")
 
+    numeric_depth_index = pd.to_numeric(out["depth_index"], errors="coerce")
+    out["represented_layer_thickness_in"] = (
+        numeric_depth_index
+        .map(REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX)
+        .fillna(float(layer_thickness_inches))
+    )
+    out["represented_layer_lower_bound_in"] = numeric_depth_index.map(
+        {
+            index: bounds[0]
+            for index, bounds
+            in SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX.items()
+        }
+    )
+    out["represented_layer_upper_bound_in"] = numeric_depth_index.map(
+        {
+            index: bounds[1]
+            for index, bounds
+            in SENSOR_CENTERED_LAYER_BOUNDS_IN_BY_DEPTH_INDEX.items()
+        }
+    )
     out["baseline_storage_in_layer"] = (
-        out["baseline_vwc"] / 100.0 * layer_thickness_inches
+        out["baseline_vwc"] / 100.0
+        * out["represented_layer_thickness_in"]
     )
     out["plateau_storage_in_layer"] = (
-        out["plateau_vwc"] / 100.0 * layer_thickness_inches
+        out["plateau_vwc"] / 100.0
+        * out["represented_layer_thickness_in"]
     )
     out["event_storage_in_layer"] = (
         out["plateau_storage_in_layer"] - out["baseline_storage_in_layer"]
@@ -1309,57 +1511,3 @@ def build_depth_target_runtime_summary(
         out = out.sort_values(["strip", "depth_inches"]).reset_index(drop=True)
 
     return out
-
-# ---------------------------------------------------------------------
-# Definitions helpers
-# ---------------------------------------------------------------------
-
-def build_variable_definitions_with_sources(
-    output_dir: str | Path,
-    year: int,
-) -> pd.DataFrame:
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    csv_files = [
-        f
-        for f in output_path.glob(f"irrigation_*_{year}*.csv")
-        if "variable_definitions" not in f.name
-    ]
-
-    records: list[dict[str, object]] = []
-
-    for csv_file in csv_files:
-        try:
-            df = pd.read_csv(csv_file, nrows=0)
-        except Exception as exc:
-            logger.warning("Skipping %s while building definitions: %s", csv_file, exc)
-            continue
-
-        for col in df.columns:
-            records.append(
-                {
-                    "variable_name": col,
-                    "source_csv": csv_file.name,
-                }
-            )
-
-    source_df = pd.DataFrame(records)
-
-    definitions_df = build_variable_definitions_table().copy()
-    if not definitions_df.empty and "variable" in definitions_df.columns:
-        definitions_df = definitions_df.rename(columns={"variable": "variable_name"})
-
-    if source_df.empty:
-        merged = pd.DataFrame(
-            columns=["variable_name", "source_csv", "definition", "formula_or_rule"]
-        )
-    else:
-        merged = source_df.merge(definitions_df, on="variable_name", how="left")
-        merged = merged.sort_values(["source_csv", "variable_name"]).reset_index(drop=True)
-
-    out_path = output_path / f"irrigation_variable_definitions_{year}_expanded.csv"
-    merged.to_csv(out_path, index=False)
-
-    logger.info("Saved expanded irrigation variable definitions to: %s", out_path)
-    return merged

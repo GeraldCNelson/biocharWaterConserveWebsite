@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from biochar_app.config.paths import BIOMASS_FIELD_CSV
 from biochar_app.config.lab_specs import LabVarSpec
 from biochar_app.scripts.tables.tables_common import build_variable_meta
 
@@ -56,7 +57,7 @@ def _input_csv_path() -> Path:
     Default CSV location for the cleaned wide-form Biomass Field dataset.
     Adjust this path if you move the processed CSV.
     """
-    return Path("biochar_app/data-processed/field_biomass_dry_g_wide_clean.csv")
+    return BIOMASS_FIELD_CSV
 
 def _as_period_obj(p: str) -> dict[str, str]:
     p = str(p).strip()

@@ -1,72 +1,53 @@
 #!/usr/bin/env python3
-"""
-convert_word_to_html.py
+"""Convert configured Word documents into website-ready HTML fragments.
 
-Convert Word (.docx) files in biochar_app/markdown/docx/ to HTML (via pandoc),
-then post-process:
-- inject CSS
-- rewrite image src paths based on markdown_config.docx_markdown_config
-- normalize figure/table captions with numbering
-- write output HTML content into biochar_app/markdown/outputs_md/
+Word is authoritative for text, headings, tables, hyperlinks, embedded images,
+and captions. Pandoc extracts the document content and media; this script then
+converts raster images to WebP, stores them under
+``static/images/generated/<document>/``, rewrites their URLs, normalizes
+captions, injects application tab links, and writes the resulting HTML into the
+configured ``markdown/outputs_md`` file.
 
-Notes:
-- This script writes HTML content (not Markdown) into .md files, matching the
-  current workflow where serve_markdown() serves converted HTML.
-- CRITICAL: Uses biochar_app.markdown.tools.markdown_config as the single
-  source of truth.
+Convert every Word document in ``biochar_app/markdown/docx``::
+
+    python -m biochar_app.markdown.tools.convert_word_to_html
+
+Run only Experiment Design::
+
+    python -m biochar_app.markdown.tools.convert_word_to_html \
+        experimentDesign.docx
+
+The output files retain the historical ``.md`` suffix for compatibility even
+though their content is HTML.
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional, cast
+from typing import Iterable, cast
 
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
+from PIL import Image
 
 from biochar_app.config.core import TAB_LINKS
+from biochar_app.config.paths import (
+    MARKDOWN_DOCX_DIR,
+    MARKDOWN_GENERATED_IMAGES_DIR,
+    MARKDOWN_OUTPUTS_DIR,
+)
 from biochar_app.markdown.tools.markdown_config import (
-    DocxConfig,
-    docx_markdown_config,
-    modal_config,
+    DocumentSpec,
+    iter_document_specs,
+    output_name_for_spec,
 )
 
 
-# ---------------------------------------------------------------------
-# Paths (robust to script location inside biochar_app)
-# ---------------------------------------------------------------------
-
-HERE = Path(__file__).resolve()
-
-try:
-    BIOCHAR_APP = next(p for p in [HERE.parent, *HERE.parents] if p.name == "biochar_app")
-except StopIteration as exc:
-    raise RuntimeError(
-        f"Could not locate 'biochar_app' in parents of: {HERE}"
-    ) from exc
-
-MARKDOWN_DIR = BIOCHAR_APP / "markdown"
-DOCX_DIR = MARKDOWN_DIR / "docx"
-OUTPUTS_MD_DIR = MARKDOWN_DIR / "outputs_md"
-OUTPUTS_HTML_DIR = MARKDOWN_DIR / "outputs_html"
-
-for d in [DOCX_DIR, OUTPUTS_MD_DIR, OUTPUTS_HTML_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
-
-print(f"BIOCHAR_APP: {BIOCHAR_APP}")
-print(f"MARKDOWN_DIR: {MARKDOWN_DIR}")
-print(f"DOCX_DIR: {DOCX_DIR}")
-print(f"OUTPUTS_MD_DIR: {OUTPUTS_MD_DIR}")
-print(f"OUTPUTS_HTML_DIR: {OUTPUTS_HTML_DIR}")
-
-
-# ---------------------------------------------------------------------
-# Pandoc CSS
-# ---------------------------------------------------------------------
-
-pandoc_css: str = """
+PANDOC_CSS = """
 html {
   color: #1a1a1a;
   background-color: #fdfdfd;
@@ -74,17 +55,14 @@ html {
 body {
   margin: 0 auto;
   max-width: 1500px;
-  padding-left: 50px;
-  padding-right: 50px;
-  padding-top: 50px;
-  padding-bottom: 50px;
+  padding: 50px;
   hyphens: auto;
   overflow-wrap: break-word;
   text-rendering: optimizeLegibility;
   font-kerning: normal;
   font-family: Georgia, serif;
 }
-img { max-width: 100%; }
+img { max-width: 100%; height: auto; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -98,8 +76,26 @@ th, td {
 }
 figcaption, caption {
   font-style: italic;
+  font-weight: normal;
   text-align: center;
   margin-top: 0.5em;
+}
+table.figure-grid {
+  table-layout: fixed;
+}
+table.figure-grid th,
+table.figure-grid td {
+  vertical-align: top;
+  text-align: center;
+  font-weight: normal;
+}
+table.figure-grid figure {
+  margin: 0;
+}
+table.figure-grid img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
 }
 .tab-link {
   color: #2c5aa0;
@@ -113,10 +109,14 @@ figcaption, caption {
 }
 """.strip()
 
+_FIGURE_PREFIX_RE = re.compile(r"^\s*figure\b", flags=re.IGNORECASE)
+_TABLE_PREFIX_RE = re.compile(r"^\s*table\b", flags=re.IGNORECASE)
 
-# ---------------------------------------------------------------------
-# Soup helpers
-# ---------------------------------------------------------------------
+
+def _safe_directory_name(stem: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-").lower()
+    return name or "document"
+
 
 def _ensure_head(soup: BeautifulSoup) -> Tag:
     head = soup.head
@@ -128,338 +128,322 @@ def _ensure_head(soup: BeautifulSoup) -> Tag:
 
 
 def _inject_css(soup: BeautifulSoup) -> None:
-    head = _ensure_head(soup)
     style_tag = soup.new_tag("style")
-    style_tag.string = pandoc_css
-    head.append(style_tag)
+    style_tag.string = PANDOC_CSS
+    _ensure_head(soup).append(style_tag)
 
 
 def inject_tab_links(soup: BeautifulSoup) -> None:
-    """Replace known tab labels with clickable links in <p> and <li> text."""
+    """Replace known application-tab labels in paragraph and list text."""
     for tag in soup.find_all(["p", "li"]):
         if not isinstance(tag, Tag):
             continue
 
         html = str(tag)
         original_html = html
-
         for label, tab_id in TAB_LINKS.items():
             if f'data-tab="{tab_id}"' in html:
                 continue
-
-            link_html = f'<a href="#" class="tab-link" data-tab="{tab_id}">{label}</a>'
-            html = html.replace(label, link_html)
+            html = html.replace(
+                label,
+                f'<a href="#" class="tab-link" data-tab="{tab_id}">{label}</a>',
+            )
 
         if html != original_html:
             replacement = BeautifulSoup(html, "html.parser")
-            if replacement.body:
-                tag.replace_with(*replacement.body.contents)
-            else:
-                tag.replace_with(*replacement.contents)
-
-
-def _rewrite_images(soup: BeautifulSoup, cfg: DocxConfig) -> None:
-    """
-    Rewrite <img src="..."> to /static/images/<file> using the ordered
-    list from cfg["images"].
-    """
-    images = cfg.get("images") or []
-    if not images:
-        return
-
-    img_tags = soup.find_all("img")
-    for img_tag, spec in zip(img_tags, images):
-        if not isinstance(img_tag, Tag):
-            continue
-        file_name = spec.get("file")
-        if not file_name:
-            continue
-        img_tag.attrs["src"] = f"/static/images/{file_name}"
-
-
-# ---------------------------------------------------------------------
-# Caption normalization helpers
-# ---------------------------------------------------------------------
-
-_FIGURE_PREFIX_RE = re.compile(r"^\s*figure\b", flags=re.IGNORECASE)
-_TABLE_PREFIX_RE = re.compile(r"^\s*table\b", flags=re.IGNORECASE)
+            contents = replacement.body.contents if replacement.body else replacement.contents
+            tag.replace_with(*contents)
 
 
 def _clean_caption_remainder(text: str, label: str) -> str:
-    """
-    Normalize caption text so these all become a clean remainder:
-
-    - "Figure 1. Caption"
-    - "Figure 1 Caption"
-    - "Figure. Caption"
-    - ". Caption"
-    - ": Caption"
-    - "Caption"
-
-    Returns only the caption body, without the leading Figure/Table label.
-    """
     cleaned = " ".join(text.replace("\xa0", " ").split()).strip()
     if not cleaned:
         return ""
 
     prefix_re = _FIGURE_PREFIX_RE if label.lower() == "figure" else _TABLE_PREFIX_RE
-
     if prefix_re.match(cleaned):
         cleaned = prefix_re.sub("", cleaned, count=1).strip()
 
     cleaned = re.sub(r"^\d+\s*", "", cleaned).strip()
     cleaned = re.sub(r"^[\.\:\;\-\–\—\)\]]+\s*", "", cleaned).strip()
-    cleaned = re.sub(r"^\d+\s*", "", cleaned).strip()
-    cleaned = re.sub(r"^[\.\:\;\-\–\—\)\]]+\s*", "", cleaned).strip()
-
     return cleaned
 
 
 def _format_numbered_caption(label: str, number: int, text: str) -> str:
     remainder = _clean_caption_remainder(text, label)
-    if remainder:
-        return f"{label} {number}. {remainder}"
-    return f"{label} {number}."
+    return f"{label} {number}. {remainder}" if remainder else f"{label} {number}."
 
 
-def _tag_contains_only_image(tag: Tag) -> bool:
-    """
-    True for tags like <p><img ...></p> and false for mixed content.
-    """
-    has_img = False
-
-    for child in tag.contents:
-        if isinstance(child, NavigableString):
-            if str(child).strip():
-                return False
-            continue
-
-        if not isinstance(child, Tag):
-            return False
-
-        if child.name == "img":
-            has_img = True
-            continue
-
-        return False
-
-    return has_img
-
-
-def _tag_contains_any_image(tag: Tag) -> bool:
-    return tag.find("img") is not None
-
-
-def _looks_like_figure_caption_text(text: str) -> bool:
-    """
-    Heuristic for paragraph captions associated with images.
-
-    Accept things like:
-    - "Figure 2. Lignin chemical structure"
-    - ". Lignin chemical structure"
-    - "Lignin chemical structure"
-
-    Reject empty strings and likely normal prose.
-    """
-    cleaned = " ".join(text.replace("\xa0", " ").split()).strip()
-    if not cleaned:
-        return False
-
-    if _FIGURE_PREFIX_RE.match(cleaned):
-        return True
-
-    if re.match(r"^[\.\:\;\-\–\—]+\s*\S", cleaned):
-        return True
-
-    word_count = len(cleaned.split())
-    if 1 <= word_count <= 12 and cleaned[0].isupper():
-        return True
-
-    return False
-
-
-def _normalize_figure_captions(soup: BeautifulSoup) -> int:
-    """
-    Normalize true <figure><figcaption>...</figcaption></figure> captions.
-
-    Returns the next figure number after finishing.
-    """
-    figure_count = 1
-
-    for fig in soup.find_all("figure"):
-        if not isinstance(fig, Tag):
-            continue
-
-        cap = fig.find("figcaption")
-        if not isinstance(cap, Tag):
-            continue
-
-        text = cap.get_text(" ", strip=True)
-        if not text:
-            continue
-
-        cap.string = _format_numbered_caption("Figure", figure_count, text)
-        figure_count += 1
-
-    return figure_count
-
-
-def _normalize_table_captions(soup: BeautifulSoup) -> None:
-    table_count = 1
-
-    for tbl in soup.find_all("table"):
-        if not isinstance(tbl, Tag):
-            continue
-
-        cap = tbl.find("caption")
-        if not isinstance(cap, Tag):
-            continue
-
-        text = cap.get_text(" ", strip=True)
-        if not text:
-            continue
-
-        cap.string = _format_numbered_caption("Table", table_count, text)
-        table_count += 1
-
-
-def _normalize_paragraph_image_captions(
-    soup: BeautifulSoup,
-    starting_figure_count: int,
-) -> int:
-    """
-    Normalize captions that Pandoc emitted as ordinary paragraphs instead of
-    <figcaption>, including captions inside table cells.
-
-    Pattern handled:
-    - a paragraph/tag containing only an image
-    - followed by a paragraph with caption-like text
-    """
-    figure_count = starting_figure_count
-
-    candidate_containers = soup.find_all(["body", "td", "th", "div"])
-    for container in candidate_containers:
-        if not isinstance(container, Tag):
-            continue
-
-        children = [child for child in container.children if isinstance(child, Tag)]
-        i = 0
-
-        while i < len(children) - 1:
-            current = children[i]
-            nxt = children[i + 1]
-
-            if (
-                current.name == "p"
-                and nxt.name == "p"
-                and _tag_contains_only_image(current)
-                and not _tag_contains_any_image(nxt)
-            ):
-                caption_text = nxt.get_text(" ", strip=True)
-                if _looks_like_figure_caption_text(caption_text):
-                    nxt.string = _format_numbered_caption(
-                        "Figure",
-                        figure_count,
-                        caption_text,
-                    )
-                    figure_count += 1
-                    i += 2
-                    continue
-
-            i += 1
-
-    return figure_count
-
-
-def _normalize_all_captions(soup: BeautifulSoup) -> None:
-    next_figure_count = _normalize_figure_captions(soup)
-    _normalize_paragraph_image_captions(
-        soup,
-        starting_figure_count=next_figure_count,
+def _number_caption_tag(caption: Tag, label: str, number: int) -> None:
+    """Number a caption without discarding hyperlinks or inline formatting."""
+    first_text = next(
+        (
+            node
+            for node in caption.descendants
+            if isinstance(node, NavigableString) and str(node).strip()
+        ),
+        None,
     )
-    _normalize_table_captions(soup)
+    if first_text is None:
+        caption.insert(0, f"{label} {number}.")
+        return
+
+    replacement = _format_numbered_caption(label, number, str(first_text))
+    if str(first_text).endswith(" "):
+        replacement += " "
+    first_text.replace_with(replacement)
 
 
-# ---------------------------------------------------------------------
-# Config lookup
-# ---------------------------------------------------------------------
+def _promote_table_cell_figures(soup: BeautifulSoup) -> None:
+    """Turn Word table-cell image/caption pairs into semantic figures.
 
-def _output_name_for_docx(filename: str) -> str:
+    Pandoc emits a real Word caption inside a table cell as an ordinary
+    paragraph immediately following the image paragraph. Promoting that pair
+    lets the normal document-wide figure numbering and accessibility handling
+    work exactly as they do for figures outside tables.
     """
-    Decide output filename (.md) for a given docx.
-    Priority:
-      1) docx_markdown_config entry (output_md)
-      2) modal_config entry (output)
-      3) default: <stem>.md
+    for cell in soup.find_all(["th", "td"]):
+        if not isinstance(cell, Tag):
+            continue
+
+        children = [child for child in cell.children if isinstance(child, Tag)]
+        for image_paragraph, caption_paragraph in zip(children, children[1:]):
+            if image_paragraph.name != "p" or caption_paragraph.name != "p":
+                continue
+            image_tags = image_paragraph.find_all("img")
+            if len(image_tags) != 1 or image_paragraph.get_text(strip=True):
+                continue
+            if not caption_paragraph.get_text(" ", strip=True):
+                continue
+
+            figure = soup.new_tag("figure")
+            image_paragraph.replace_with(figure)
+            for child in list(image_paragraph.contents):
+                figure.append(child.extract())
+
+            caption = soup.new_tag("figcaption")
+            for child in list(caption_paragraph.contents):
+                caption.append(child.extract())
+            figure.append(caption)
+            caption_paragraph.decompose()
+
+            table = figure.find_parent("table")
+            if isinstance(table, Tag):
+                existing_classes = list(table.get("class", []))
+                if "figure-grid" not in existing_classes:
+                    table["class"] = [*existing_classes, "figure-grid"]
+
+
+def _normalize_captions(soup: BeautifulSoup) -> None:
+    for number, figure in enumerate(soup.find_all("figure"), start=1):
+        if not isinstance(figure, Tag):
+            continue
+        caption = figure.find("figcaption")
+        if isinstance(caption, Tag):
+            _number_caption_tag(caption, "Figure", number)
+
+    for number, table in enumerate(soup.find_all("table"), start=1):
+        if not isinstance(table, Tag):
+            continue
+        caption = table.find("caption")
+        if isinstance(caption, Tag):
+            _number_caption_tag(caption, "Table", number)
+
+
+def _caption_for_image(image_tag: Tag) -> str:
+    figure = image_tag.find_parent("figure")
+    if not isinstance(figure, Tag):
+        return ""
+    caption = figure.find("figcaption")
+    if not isinstance(caption, Tag):
+        return ""
+    text = caption.get_text(" ", strip=True)
+    text = re.sub(r"\s+([\.,;!?])", r"\1", text)
+    return re.sub(r"^Figure\s+\d+\.\s*", "", text, flags=re.IGNORECASE).strip()
+
+
+def _convert_to_webp(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(source) as image:
+        has_alpha = image.mode in {"RGBA", "LA"} or (
+            image.mode == "P" and "transparency" in image.info
+        )
+        converted = image.convert("RGBA" if has_alpha else "RGB")
+        converted.save(
+            destination,
+            "WEBP",
+            quality=90,
+            method=6,
+            lossless=source.suffix.lower() == ".png",
+        )
+
+
+def _rewrite_extracted_images(
+    soup: BeautifulSoup,
+    *,
+    document_stem: str,
+) -> list[Path]:
+    """Convert Pandoc-extracted images and rewrite their browser URLs."""
+    web_directory_name = _safe_directory_name(document_stem)
+    output_directory = MARKDOWN_GENERATED_IMAGES_DIR / web_directory_name
+    written: list[Path] = []
+
+    for number, image_tag in enumerate(soup.find_all("img"), start=1):
+        if not isinstance(image_tag, Tag):
+            continue
+        source_value = image_tag.get("src")
+        if not isinstance(source_value, str):
+            raise ValueError(f"Image {number} has no usable src attribute.")
+
+        source = Path(source_value)
+        if not source.exists():
+            raise FileNotFoundError(f"Pandoc-extracted image not found: {source}")
+
+        output = output_directory / f"image-{number:02d}.webp"
+        _convert_to_webp(source, output)
+        written.append(output)
+        image_tag["src"] = (
+            f"/static/images/generated/{web_directory_name}/{output.name}"
+        )
+
+    if written:
+        expected = {path.resolve() for path in written}
+        for existing in output_directory.glob("*"):
+            if existing.is_file() and existing.resolve() not in expected:
+                existing.unlink()
+
+    return written
+
+
+def _add_image_accessibility_text(soup: BeautifulSoup) -> None:
+    for number, image_tag in enumerate(soup.find_all("img"), start=1):
+        if not isinstance(image_tag, Tag):
+            continue
+        caption = _caption_for_image(image_tag)
+        alt_text = caption or f"Document image {number}"
+        if not str(image_tag.get("alt", "")).strip():
+            image_tag["alt"] = alt_text
+        if not str(image_tag.get("title", "")).strip():
+            image_tag["title"] = alt_text
+
+
+def _document_specs(selected_sources: Iterable[str]) -> list[DocumentSpec]:
+    """Build conversion specs from explicit names or every DOCX in the folder.
+
+    Application configuration is consulted only for intentional output-name
+    overrides. A Word document does not need a ``markdown_config.py`` entry to
+    be converted.
     """
-    if filename in docx_markdown_config:
-        return docx_markdown_config[filename]["output_md"]
+    configured = {
+        spec["source"]: spec
+        for spec in iter_document_specs()
+    }
+    selected = {Path(value).name for value in selected_sources}
 
-    for spec in modal_config.values():
-        if spec.get("source") == filename:
-            return spec["output"]
+    if selected:
+        missing = sorted(
+            name for name in selected
+            if not (MARKDOWN_DOCX_DIR / name).is_file()
+        )
+        if missing:
+            raise ValueError(
+                "Word document(s) not found in "
+                f"{MARKDOWN_DOCX_DIR}: {', '.join(missing)}"
+            )
+        source_names = sorted(selected)
+    else:
+        source_names = sorted(
+            path.name
+            for path in MARKDOWN_DOCX_DIR.glob("*.docx")
+            if path.is_file() and not path.name.startswith("~$")
+        )
 
-    return Path(filename).with_suffix(".md").name
+    return [
+        configured.get(source_name, {"source": source_name})
+        for source_name in source_names
+    ]
 
 
-def _cfg_for_docx(filename: str) -> Optional[DocxConfig]:
-    return docx_markdown_config.get(filename)
+def convert_document(spec: DocumentSpec) -> tuple[Path, list[Path]]:
+    source = MARKDOWN_DOCX_DIR / spec["source"]
+    if not source.exists():
+        raise FileNotFoundError(f"Configured Word document not found: {source}")
+
+    output = MARKDOWN_OUTPUTS_DIR / output_name_for_spec(spec)
+    MARKDOWN_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix=f"{source.stem}-media-") as temp_dir:
+        media_root = Path(temp_dir) / "media"
+        result = subprocess.run(
+            [
+                "pandoc",
+                str(source),
+                "--from=docx",
+                "--to=html",
+                "--wrap=none",
+                f"--extract-media={media_root}",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            text=True,
+        )
+
+        soup = BeautifulSoup(result.stdout, "html.parser")
+        _inject_css(soup)
+        _promote_table_cell_figures(soup)
+        generated_images = _rewrite_extracted_images(
+            soup,
+            document_stem=source.stem,
+        )
+        _normalize_captions(soup)
+        _add_image_accessibility_text(soup)
+        inject_tab_links(soup)
+        output.write_text(str(soup), encoding="utf-8")
+
+    return output, generated_images
 
 
-# ---------------------------------------------------------------------
-# Main conversion loop
-# ---------------------------------------------------------------------
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Convert Word documents into website HTML."
+    )
+    parser.add_argument(
+        "documents",
+        nargs="*",
+        help=(
+            "Optional DOCX filenames from biochar_app/markdown/docx; "
+            "omit to convert every DOCX in that directory."
+        ),
+    )
+    return parser.parse_args()
+
 
 def main() -> int:
-    docx_files = sorted(
-        [
-            p
-            for p in DOCX_DIR.iterdir()
-            if p.suffix.lower() == ".docx" and not p.name.startswith("~$")
-        ]
-    )
+    args = parse_args()
+    try:
+        specs = _document_specs(args.documents)
+    except ValueError as error:
+        print(f"ERROR: {error}")
+        return 2
 
-    if not docx_files:
-        print(f"⚠️ No .docx files found in: {DOCX_DIR}")
-        return 0
-
-    for docx_path in docx_files:
-        filename = docx_path.name
-        output_name = _output_name_for_docx(filename)
-        out_path = OUTPUTS_MD_DIR / output_name
-
-        print(f"\n📄 Converting {filename} → {output_name}")
-
+    failed = False
+    for spec in specs:
+        source_name = spec["source"]
+        print(f"\nConverting {source_name} -> {output_name_for_spec(spec)}")
         try:
-            result = subprocess.run(
-                ["pandoc", str(docx_path), "-f", "docx", "-t", "html", "--wrap=none"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-                text=True,
-            )
+            output, images = convert_document(spec)
+            print(f"Saved HTML content: {output}")
+            print(f"Generated WebP images: {len(images)}")
+        except subprocess.CalledProcessError as error:
+            failed = True
+            detail = (error.stderr or "").strip() or str(error)
+            print(f"ERROR: Pandoc failed for {source_name}: {detail}")
+        except Exception as error:
+            failed = True
+            print(f"ERROR: Failed to convert {source_name}: {error}")
 
-            soup = BeautifulSoup(result.stdout, "html.parser")
-            _inject_css(soup)
-
-            cfg = _cfg_for_docx(filename)
-            if cfg is not None:
-                _rewrite_images(soup, cfg)
-
-            _normalize_all_captions(soup)
-            inject_tab_links(soup)
-
-            html = str(soup)
-            out_path.write_text(html, encoding="utf-8")
-            print(f"✅ Saved cleaned HTML to: {out_path}")
-
-        except subprocess.CalledProcessError as e:
-            err = (e.stderr or "").strip()
-            print(f"❌ Pandoc failed for {filename}: {err or e}")
-        except Exception as e:
-            print(f"❌ Failed to convert {filename}: {e}")
-
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

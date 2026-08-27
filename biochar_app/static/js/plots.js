@@ -8,7 +8,7 @@ import {
   renderMainPlots,
   wireMainPlotZoomSync,
   waitForAllDropdowns,
-} from "./plot_utils.js";
+} from "./plot_utils.js?v=20260822-plot-layout-1";
 
 export {
   fetchAndRenderPlot,

@@ -64,9 +64,10 @@ from biochar_app.config.dataset_metadata import (
     DAILY_PRECIPITATION_MAX_IN,
     VWC_MAX_PERCENT,
 )
+from biochar_app.config.plot_config import DEFAULT_PLOT_HEIGHT
 
 # TODO:
-# Move plot layout constants (margins, heights, fonts, colors)
+# Move remaining plot layout constants (margins, fonts, colors)
 # into config/plot_config.py after plot refactoring stabilizes.
 
 PLOT_MARGINS = {
@@ -306,7 +307,7 @@ def add_precipitation_bars(
                 vals
             ),
             yaxis="y2",
-            name="Precip",
+            name=f"Precip ({unit_suffix})",
             width=bw,
             marker=dict(
                 color=PLOT_COLORS.get(
@@ -652,7 +653,7 @@ def make_raw_figure(
         legend=common_legend_config("Legend"),
         template="plotly_white",
         margin=_plot_margin("standard"),
-        height=400,
+        height=DEFAULT_PLOT_HEIGHT,
         autosize=True,
     )
 
@@ -801,7 +802,7 @@ def make_ratio_figure(
         margin=_plot_margin(
             "standard" if is_gs else ("dual_axis_metric" if usys == "metric" else "dual_axis_us")
         ),
-        height=400,
+        height=DEFAULT_PLOT_HEIGHT,
         autosize=True,
     )
 
@@ -925,7 +926,7 @@ def make_temperature_delta_figure(
         legend=common_legend_config("Legend"),
         template="plotly_white",
         margin=_plot_margin("standard_tall"),
-        height=400,
+        height=DEFAULT_PLOT_HEIGHT,
         autosize=True,
     )
 
@@ -1141,7 +1142,7 @@ def make_raw_gseason_figure(
             else "dual_axis_tall_us" if have_precip
             else "standard_tall"
         ),
-        height=400,
+        height=DEFAULT_PLOT_HEIGHT,
     )
 
     return prepare_plot_for_json(fig)
@@ -1288,7 +1289,7 @@ def make_ratio_gseason_figure(
             legend=common_legend_config(f"{abbr} ratio"),
             template="plotly_white",
             margin=_plot_margin("standard"),
-            height=400,
+            height=DEFAULT_PLOT_HEIGHT,
         )
 
         return prepare_plot_for_json(fig)
@@ -1388,7 +1389,7 @@ def make_ratio_gseason_figure(
         legend=common_legend_config(f"{abbr} ratio"),
         template="plotly_white",
         margin=_plot_margin("standard"),
-        height=400,
+        height=DEFAULT_PLOT_HEIGHT,
     )
 
     return prepare_plot_for_json(fig)

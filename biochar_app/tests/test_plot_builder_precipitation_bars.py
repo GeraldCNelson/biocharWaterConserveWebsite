@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 
 from biochar_app.config.core import bar_width_map
 from biochar_app.scripts.plot_builder import add_precipitation_bars
+from biochar_app.scripts.plot_components import common_yaxis2_config
 
 
 class PrecipitationBarWidthTests(unittest.TestCase):
@@ -32,6 +33,19 @@ class PrecipitationBarWidthTests(unittest.TestCase):
         )
         self.assertEqual(len(figure.data), 1)
         return int(figure.data[0].width)
+
+    def test_units_are_in_legend_instead_of_right_axis_title(self) -> None:
+        figure = go.Figure()
+        add_precipitation_bars(
+            figure,
+            self.data,
+            unit_system="us",
+            granularity="daily",
+        )
+
+        self.assertEqual(figure.data[0].name, "Precip (in)")
+        self.assertEqual(figure.layout.yaxis2.title.text, "")
+        self.assertEqual(common_yaxis2_config("us")["title"]["text"], "")
 
     def test_15min_bar_uses_visible_30_minute_display_width(self) -> None:
         self.assertEqual(

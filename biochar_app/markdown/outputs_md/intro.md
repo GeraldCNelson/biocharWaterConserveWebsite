@@ -5,17 +5,14 @@
 body {
   margin: 0 auto;
   max-width: 1500px;
-  padding-left: 50px;
-  padding-right: 50px;
-  padding-top: 50px;
-  padding-bottom: 50px;
+  padding: 50px;
   hyphens: auto;
   overflow-wrap: break-word;
   text-rendering: optimizeLegibility;
   font-kerning: normal;
   font-family: Georgia, serif;
 }
-img { max-width: 100%; }
+img { max-width: 100%; height: auto; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -29,8 +26,26 @@ th, td {
 }
 figcaption, caption {
   font-style: italic;
+  font-weight: normal;
   text-align: center;
   margin-top: 0.5em;
+}
+table.figure-grid {
+  table-layout: fixed;
+}
+table.figure-grid th,
+table.figure-grid td {
+  vertical-align: top;
+  text-align: center;
+  font-weight: normal;
+}
+table.figure-grid figure {
+  margin: 0;
+}
+table.figure-grid img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
 }
 .tab-link {
   color: #2c5aa0;
@@ -66,27 +81,24 @@ figcaption, caption {
 <h2 id="what-is-biochar">What is biochar?</h2>
 <p>Biochar is the solid material obtained from the thermochemical conversion of biomass in an oxygen-limited environment (<a href="https://biochar-international.org/">International Biochar Initiative</a>). The surface area inside the biochar pores is approximately 2,000 ft/gram (about half a basketball court!). Its water holding capacity is up to 7 times the weight of the biochar (Figure 1).</p>
 <figure>
-<img src="/static/images/biocharMicro1.webp" style="width:3.3809in;height:2.54483in"/>
-<figcaption>Figure 1. Scanning electron microscope image of biochar</figcaption>
+<img alt="Scanning electron microscope image of biochar" src="/static/images/generated/intro/image-01.webp" style="width:3.3809in;height:2.54483in" title="Scanning electron microscope image of biochar"/>
+<figcaption><p>Figure 1. Scanning electron microscope image of biochar</p></figcaption>
 </figure>
 <h2 id="plant-biology-and-biochar-structure">Plant biology and biochar structure</h2>
 <p>For those interested in chemistry, a bit of biological history is in order. Most biochar is plant-based. A key element of vascular plants is the carbohydrate lignin which consists of carbon rings (the hexagonal elements in the figures below) and various molecular add-ons (Figure 2). It provided the support structure for plants allowing them to adapt to life on land. Figure 3 is a similar diagram for a well-processed biochar. Note that the components that make lignin a carbohydrate almost gone, leaving only the hexagonal structures. Microbes have evolved to break down and extract nutrients from carbohydrates but not carbon rings. This is why biochar remains in the soil for 100s to 1000s of years.</p>
-<table>
+<table class="figure-grid">
 <colgroup>
 <col style="width: 52%"/>
 <col style="width: 47%"/>
 </colgroup>
 <thead>
 <tr>
-<th><p><img src="/static/images/lignin_diagram.webp" style="width:3.28481in;height:3.80989in"/></p>
-<p>Figure 2. Lignin chemical structure</p></th>
-<th><p><img src="/static/images/biochar_diagram.webp" style="width:2.96261in;height:2.36111in"/></p>
-<p>Figure 3. Biochar chemical structure</p></th>
+<th><figure><img alt="Lignin chemical structure. Source: ScienceDirect." src="/static/images/generated/intro/image-02.webp" style="width:3.28481in;height:3.80989in" title="Lignin chemical structure. Source: ScienceDirect."/><figcaption>Figure 2. Lignin chemical structure. Source: <a href="https://www.sciencedirect.com/topics/materials-science/lignin">ScienceDirect</a>.</figcaption></figure>
+</th>
+<th><figure><img alt="Biochar chemical structure. Source: Environmental Chemistry Group." src="/static/images/generated/intro/image-03.webp" style="width:2.96261in;height:2.36111in" title="Biochar chemical structure. Source: Environmental Chemistry Group."/><figcaption>Figure 3. Biochar chemical structure. Source: <a href="https://www.envchemgroup.com/nanostructures-biochar.html">Environmental Chemistry Group</a>.</figcaption></figure>
+</th>
 </tr>
 </thead>
 <tbody>
 </tbody>
 </table>
-<p>Image sources:</p>
-<p>Figure 2- <a href="https://www.sciencedirect.com/topics/materials-science/lignin">https://www.sciencedirect.com/topics/materials-science/lignin</a></p>
-<p>Figure 3 - <a href="https://www.envchemgroup.com/nanostructures-biochar.html">https://www.envchemgroup.com/nanostructures-biochar.html</a></p>

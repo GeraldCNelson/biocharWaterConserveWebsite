@@ -45,6 +45,10 @@ REQUIRED_SHEETS = (
     "2024 IRRIGATION",
     "2025 IRRIGATION",
     "2026 IRRIGATION",
+    "2023 BIOMASS",
+    "2024 BIOMASS",
+    "2025 BIOMASS",
+    "2026 BIOMASS",
 )
 
 
@@ -128,6 +132,10 @@ class MasterWorkbookSnapshotTests(unittest.TestCase):
                     "2024 IRRIGATION",
                     "2025 IRRIGATION",
                     "2026 IRRIGATION",
+                    "2023 BIOMASS",
+                    "2024 BIOMASS",
+                    "2025 BIOMASS",
+                    "2026 BIOMASS",
                 ),
             )
 

@@ -104,12 +104,6 @@ PROFILE_GALLONS_PER_INCH = PROFILE_AREA_SQFT * INCHES_WATER_TO_GALLONS_PER_SQFT
 # Influence-zone geometry for T/M/B loggers
 # ---------------------------------------------------------------------
 
-ZONE_LABELS = {
-    "T": "top",
-    "M": "middle",
-    "B": "bottom",
-}
-
 
 def build_zone_lengths_ft(strip: str) -> dict[str, float]:
     seg = LOGGER_ZONE_SEGMENTS_FT[strip]

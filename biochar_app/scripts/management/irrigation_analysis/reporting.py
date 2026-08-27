@@ -1,3 +1,11 @@
+"""Build irrigation-arrival DOCX reports from canonical diagnostics and plots.
+
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for input
+lineage, plot generation, timestamp policy, and the required rebuild order.
+"""
+
 from pathlib import Path
 from typing import Optional
 

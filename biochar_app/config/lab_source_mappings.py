@@ -85,10 +85,14 @@ RAW_TO_CANONICAL_NIR: dict[str, str] = {
     "RFQ": "rfq",
 
     # minerals
-    "Ca_pct_db": "Ca_pct_db",
-    "P_pct_db": "P_pct_db",
-    "K_pct_db": "K_pct_db",
-    "Mg_pct_db": "Mg_pct_db",
+    "Ca_pct": "ca_pct",
+    "Ca_pct_db": "ca_pct_db",
+    "P_pct": "p_pct",
+    "P_pct_db": "p_pct_db",
+    "K_pct": "k_pct",
+    "K_pct_db": "k_pct_db",
+    "Mg_pct": "mg_pct",
+    "Mg_pct_db": "mg_pct_db",
 
     # additional dry-basis fractions
     "ash_pct_db": "ash_pct_db",
