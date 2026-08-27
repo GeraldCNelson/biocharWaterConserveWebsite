@@ -114,6 +114,10 @@ from biochar_app.config.paths import (
     WARD_PDF_DIR,
     WEATHER_DOWNLOADS_DIR,
 )
+from biochar_app.config.biochar_lab_reports import (
+    BIOCHAR_LAB_REPORTS,
+    biochar_lab_report_path,
+)
 from biochar_app.markdown.tools.markdown_config import build_markdown_mapping
 
 from types import SimpleNamespace
@@ -1484,6 +1488,30 @@ async def ward_biological_report_pdf():
         path=file_path,
         media_type="application/pdf",
         filename=file_path.name,
+    )
+
+
+@main_router.get("/lab-reports/biochar/{report_key}")
+async def biochar_lab_report(report_key: str, download: bool = False):
+    """Serve one explicitly configured biochar analysis report."""
+    report = BIOCHAR_LAB_REPORTS.get(report_key)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Biochar report not found")
+
+    file_path = biochar_lab_report_path(report_key)
+    if not file_path.is_file():
+        logger.error("Configured biochar report is missing: %s", file_path)
+        raise HTTPException(status_code=404, detail="Biochar report file not found")
+
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'{disposition}; filename="{report["download_name"]}"'
+            )
+        },
     )
 
 @main_router.get("/lab-references/ward-nirs-report", response_class=HTMLResponse)

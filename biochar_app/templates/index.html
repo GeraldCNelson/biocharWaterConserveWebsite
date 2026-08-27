@@ -152,6 +152,13 @@
                     </button>
                     <ul class="dropdown-menu" aria-labelledby="labDropdown">
                         <li>
+                            <button id="biochar-analysis-tab" class="dropdown-item" type="button"
+                                    data-bs-toggle="tab" data-bs-target="#biochar-analysis" role="tab"
+                                    aria-controls="biochar-analysis" aria-selected="false">
+                                Biochar Material Characterization
+                            </button>
+                        </li>
+                        <li>
                             <button id="nir-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
                                     data-bs-target="#nir" role="tab" aria-controls="nir" aria-selected="false">
                                 Pasture Quality Metrics
@@ -524,6 +531,91 @@
                     </p>
                     <div class="nir-scroll">
                         <div id="nir-content" class="nir-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Biochar Material Characterization Pane -->
+            <div class="tab-pane fade" id="biochar-analysis" role="tabpanel"
+                 aria-labelledby="biochar-analysis-tab">
+                <div class="container-fluid mt-2 biochar-analysis-content">
+                    <h4 class="mb-2">Biochar Material Characterization</h4>
+                    <p>
+                        The experiment uses pistachio-shell biochar supplied by VGrid Energy Systems.
+                        The reports below characterize material from two production lots.
+                    </p>
+                    <div class="alert alert-secondary py-2" role="note">
+                        These reports describe different samples analyzed in different years using
+                        different methods. Values should not be interpreted as repeated measurements
+                        of one batch or as evidence of change through time.
+                    </div>
+
+                    <div class="row g-3 biochar-report-grid">
+                        <div class="col-12 col-xl-6">
+                            <article class="card h-100 biochar-report-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Control Laboratories, 2022</h5>
+                                    <p class="card-subtitle text-muted mb-3">
+                                        Lot 1542 Pistachio Shell Biochar; received July 6, 2022
+                                    </p>
+                                    <dl class="biochar-key-results">
+                                        <dt>Organic carbon</dt><dd>84.9% of dry mass</dd>
+                                        <dt>H:C molar ratio</dt><dd>0.37</dd>
+                                        <dt>Total ash</dt><dd>3.4% of dry mass</dd>
+                                        <dt>Total nitrogen</dt><dd>0.78% of dry mass</dd>
+                                        <dt>pH</dt><dd>8.82</dd>
+                                        <dt>Electrical conductivity</dt><dd>0.120 dS/m</dd>
+                                        <dt>Surface-area correlation</dt><dd>227 m²/g dry</dd>
+                                    </dl>
+                                    <p class="small text-muted">
+                                        The report also includes trace elements, particle-size
+                                        distribution, nutrients, volatile matter, and IBI test ranges.
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent d-flex flex-wrap gap-2">
+                                    <a class="btn btn-primary btn-sm"
+                                       href="/lab-reports/biochar/control-laboratories-2022"
+                                       target="_blank" rel="noopener">View original report</a>
+                                    <a class="btn btn-outline-primary btn-sm"
+                                       href="/lab-reports/biochar/control-laboratories-2022?download=true">
+                                        Download PDF
+                                    </a>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="col-12 col-xl-6">
+                            <article class="card h-100 biochar-report-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Wyoming Analytical Laboratories, 2020</h5>
+                                    <p class="card-subtitle text-muted mb-3">
+                                        Pistachio Shell Biochar sampled February 4, 2020; report dated June 26, 2020
+                                    </p>
+                                    <dl class="biochar-key-results">
+                                        <dt>Carbon</dt><dd>90.58% moisture-free</dd>
+                                        <dt>Fixed carbon</dt><dd>90.59% moisture-free</dd>
+                                        <dt>Ash</dt><dd>3.96% moisture-free</dd>
+                                        <dt>Volatile matter</dt><dd>5.45% moisture-free</dd>
+                                        <dt>Hydrogen</dt><dd>0.73% moisture-free</dd>
+                                        <dt>Nitrogen</dt><dd>&lt;0.01% moisture-free</dd>
+                                        <dt>Sulfur</dt><dd>0.058% moisture-free</dd>
+                                    </dl>
+                                    <p class="small text-muted">
+                                        The report also includes ultimate analysis and concentrations
+                                        of metals, potassium, phosphorus, boron, silica, and chlorine.
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent d-flex flex-wrap gap-2">
+                                    <a class="btn btn-primary btn-sm"
+                                       href="/lab-reports/biochar/wyoming-analytical-2020"
+                                       target="_blank" rel="noopener">View original report</a>
+                                    <a class="btn btn-outline-primary btn-sm"
+                                       href="/lab-reports/biochar/wyoming-analytical-2020?download=true">
+                                        Download PDF
+                                    </a>
+                                </div>
+                            </article>
+                        </div>
                     </div>
                 </div>
             </div>
