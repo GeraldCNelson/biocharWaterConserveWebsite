@@ -109,6 +109,7 @@ from biochar_app.config.units import (
 from biochar_app.config.paths import (
     BIOMASS_FIELD_CSV,
     LOGGER_DOWNLOADS_DIR,
+    MARKDOWN_OUTPUTS_DIR,
     WARD_HTML_DIR,
     WARD_PDF_DIR,
     WEATHER_DOWNLOADS_DIR,
@@ -1168,10 +1169,9 @@ async def api_get_nir_table():
 # ---------------------------------------------------------------------------
 @main_router.get("/markdown/{filename}")
 async def serve_markdown(filename: str):
-    md_dir = os.path.join(os.path.dirname(__file__), "..", "markdown", "outputs_md")
-    fullpath = os.path.abspath(os.path.join(md_dir, filename))
+    fullpath = MARKDOWN_OUTPUTS_DIR / filename
 
-    if not os.path.exists(fullpath):
+    if not fullpath.exists():
         raise HTTPException(status_code=404, detail=f"Markdown file '{filename}' not found")
 
     return FileResponse(fullpath, media_type="text/markdown")

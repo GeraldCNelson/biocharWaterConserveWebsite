@@ -5,17 +5,14 @@
 body {
   margin: 0 auto;
   max-width: 1500px;
-  padding-left: 50px;
-  padding-right: 50px;
-  padding-top: 50px;
-  padding-bottom: 50px;
+  padding: 50px;
   hyphens: auto;
   overflow-wrap: break-word;
   text-rendering: optimizeLegibility;
   font-kerning: normal;
   font-family: Georgia, serif;
 }
-img { max-width: 100%; }
+img { max-width: 100%; height: auto; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -29,8 +26,26 @@ th, td {
 }
 figcaption, caption {
   font-style: italic;
+  font-weight: normal;
   text-align: center;
   margin-top: 0.5em;
+}
+table.figure-grid {
+  table-layout: fixed;
+}
+table.figure-grid th,
+table.figure-grid td {
+  vertical-align: top;
+  text-align: center;
+  font-weight: normal;
+}
+table.figure-grid figure {
+  margin: 0;
+}
+table.figure-grid img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
 }
 .tab-link {
   color: #2c5aa0;

@@ -111,6 +111,13 @@ LIDAR_ANALYSIS_DIR = LIDAR_DIR / "analysis"
 LIDAR_PIPELINES_DIR = LIDAR_DIR / "pipelines"
 DRONE_DIR = GEOSPATIAL_DIR / "drone"
 
+# =============================================================================
+# Markdown directories
+# =============================================================================
+MARKDOWN_DIR = BASE_DIR / "markdown"
+MARKDOWN_DOCX_DIR = MARKDOWN_DIR / "docx"
+MARKDOWN_OUTPUTS_DIR = MARKDOWN_DIR / "outputs_md"
+MARKDOWN_GENERATED_IMAGES_DIR = STATIC_DIR / "images" / "generated"
         
 def irrigation_analysis_paths(
     variant: str | None = None,
