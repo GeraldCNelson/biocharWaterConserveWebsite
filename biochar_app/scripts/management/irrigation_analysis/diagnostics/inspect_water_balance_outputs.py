@@ -18,7 +18,7 @@ The script reads:
 and produces compact diagnostic summaries describing:
 
 1. Overall 0-18 inch storage behavior
-2. Potential surface-runoff residuals
+2. Unretained-water residuals
 3. Bottom 6-inch irrigation-arrival timing
 4. Strip-level differences
 5. Top / middle / bottom zone contributions
@@ -33,11 +33,12 @@ and produces compact diagnostic summaries describing:
 
 Important interpretation
 ------------------------
-``potential_surface_runoff_gal`` is NOT measured runoff.
+``unretained_gal_strip`` is NOT measured runoff.
 
 It is the portion of applied irrigation not represented by increased
-0-18 inch soil-water storage for an event where bottom 6-inch response
-was observed.
+0-18 inch soil-water storage for an eligible event with complete three-zone
+coverage. Bottom 6-inch response is reported separately as a timing
+diagnostic.
 
 That residual may also include:
 - storage below 18 inches
@@ -120,17 +121,15 @@ KEY_NUMERIC_COLS = [
     "n_zones_with_storage",
     "estimated_storage_gal_strip_0_18in",
     "water_balance_residual_gal_strip",
-    "water_not_stored_0_18in_gal_strip",
+    "unretained_gal_strip",
     "estimated_storage_fraction_0_18in",
-    "water_not_stored_0_18in_fraction",
+    "unretained_fraction",
     "bottom_6in_arrival_delay_hr",
     "post_bottom_6in_arrival_runtime_hr",
     "post_bottom_6in_arrival_applied_gal",
     "post_bottom_6in_arrival_applied_fraction",
-    "potential_surface_runoff_gal",
-    "potential_surface_runoff_fraction",
     "estimated_storage_percent",
-    "potential_surface_runoff_percent",
+    "unretained_percent",
 ]
 
 CORRELATION_COLS = [
@@ -138,9 +137,8 @@ CORRELATION_COLS = [
     "avg_flow_gph_strip",
     "estimated_storage_gal_strip_0_18in",
     "estimated_storage_fraction_0_18in",
-    "water_not_stored_0_18in_gal_strip",
-    "potential_surface_runoff_gal",
-    "potential_surface_runoff_fraction",
+    "unretained_gal_strip",
+    "unretained_fraction",
     "bottom_6in_arrival_delay_hr",
 ]
 
@@ -272,7 +270,7 @@ def load_water_balance() -> pd.DataFrame:
             "event_id",
             "gallons_strip",
             "estimated_storage_gal_strip_0_18in",
-            "water_not_stored_0_18in_gal_strip",
+            "unretained_gal_strip",
             "estimated_storage_fraction_0_18in",
         ],
         table_name="first_pass_water_balance_all_years.csv",
@@ -322,20 +320,20 @@ def build_overall_summary(
         "estimated_storage_fraction_0_18in":
             "estimated_storage_fraction_0_18in",
 
-        "water_not_stored_gal_0_18in":
-            "water_not_stored_0_18in_gal_strip",
+        "unretained_gal":
+            "unretained_gal_strip",
 
-        "water_not_stored_fraction_0_18in":
-            "water_not_stored_0_18in_fraction",
+        "unretained_fraction":
+            "unretained_fraction",
 
         "bottom_6in_arrival_delay_hr":
             "bottom_6in_arrival_delay_hr",
 
-        "potential_surface_runoff_gal":
-            "potential_surface_runoff_gal",
+        "unretained_gal_strip":
+            "unretained_gal_strip",
 
-        "potential_surface_runoff_fraction":
-            "potential_surface_runoff_fraction",
+        "unretained_fraction":
+            "unretained_fraction",
     }
 
     for metric_name, col in metrics.items():
@@ -401,19 +399,19 @@ def build_strip_summary(
             "estimated_storage_fraction_0_18in",
             "mean",
         ),
-        "mean_water_not_stored_gal_0_18in": (
-            "water_not_stored_0_18in_gal_strip",
+        "mean_unretained_gal": (
+            "unretained_gal_strip",
             "mean",
         ),
     }
 
     optional_specs = {
-        "mean_potential_surface_runoff_gal": (
-            "potential_surface_runoff_gal",
+        "mean_unretained_gal_strip": (
+            "unretained_gal_strip",
             "mean",
         ),
-        "mean_potential_surface_runoff_fraction": (
-            "potential_surface_runoff_fraction",
+        "mean_unretained_fraction": (
+            "unretained_fraction",
             "mean",
         ),
         "mean_bottom_6in_arrival_delay_hr": (
@@ -666,7 +664,7 @@ def build_correlations_by_strip(
         ),
         (
             "gallons_strip",
-            "water_not_stored_0_18in_gal_strip",
+            "unretained_gal_strip",
         ),
     ]
 
@@ -734,14 +732,14 @@ def build_largest_residuals(
         *ZONE_STORAGE_COLS,
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
-        "water_not_stored_0_18in_gal_strip",
-        "water_not_stored_0_18in_fraction",
+        "unretained_gal_strip",
+        "unretained_fraction",
         "bottom_6in_arrival_time",
         "bottom_6in_arrival_delay_hr",
         "bottom_6in_arrival_before_irrigation_end",
         "bottom_6in_arrival_after_irrigation_end",
-        "potential_surface_runoff_gal",
-        "potential_surface_runoff_fraction",
+        "unretained_gal_strip",
+        "unretained_fraction",
     ]
 
     keep_cols = [
@@ -753,7 +751,7 @@ def build_largest_residuals(
     out = (
         df[keep_cols]
         .sort_values(
-            "water_not_stored_0_18in_gal_strip",
+            "unretained_gal_strip",
             ascending=False,
         )
         .head(
@@ -797,7 +795,7 @@ def build_storage_exceeds_applied_events(
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
         "water_balance_residual_gal_strip",
-        "water_not_stored_0_18in_gal_strip",
+        "unretained_gal_strip",
     ]
 
     keep_cols = [
@@ -838,8 +836,8 @@ def build_incomplete_zone_events(
         *ZONE_STORAGE_COLS,
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
-        "water_not_stored_0_18in_gal_strip",
-        "water_not_stored_0_18in_fraction",
+        "unretained_gal_strip",
+        "unretained_fraction",
     ]
 
     keep_cols = [
@@ -890,7 +888,7 @@ def build_negative_zone_storage_events(
         "complete_three_zone_coverage",
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
-        "water_not_stored_0_18in_gal_strip",
+        "unretained_gal_strip",
     ]
 
     keep_cols = [
@@ -943,19 +941,19 @@ def build_complete_zone_strip_summary(
             "estimated_storage_fraction_0_18in",
             "mean",
         ),
-        "mean_water_not_stored_gal_0_18in": (
-            "water_not_stored_0_18in_gal_strip",
+        "mean_unretained_gal": (
+            "unretained_gal_strip",
             "mean",
         ),
     }
 
     optional_specs = {
-        "mean_potential_surface_runoff_gal": (
-            "potential_surface_runoff_gal",
+        "mean_unretained_gal_strip": (
+            "unretained_gal_strip",
             "mean",
         ),
-        "mean_potential_surface_runoff_fraction": (
-            "potential_surface_runoff_fraction",
+        "mean_unretained_fraction": (
+            "unretained_fraction",
             "mean",
         ),
         "mean_bottom_6in_arrival_delay_hr": (
@@ -997,7 +995,7 @@ def build_complete_vs_all_summary(
         "n_events",
         "mean_storage_gal_0_18in",
         "mean_storage_fraction_0_18in",
-        "mean_water_not_stored_gal_0_18in",
+        "mean_unretained_gal",
     ]
 
     all_keep = [
@@ -1011,7 +1009,7 @@ def build_complete_vs_all_summary(
         "n_events",
         "mean_storage_gal_0_18in",
         "mean_storage_fraction_0_18in",
-        "mean_water_not_stored_gal_0_18in",
+        "mean_unretained_gal",
     ]
 
     complete_keep = [
@@ -1036,8 +1034,8 @@ def build_complete_vs_all_summary(
                 "all_mean_storage_gal_0_18in",
             "mean_storage_fraction_0_18in":
                 "all_mean_storage_fraction_0_18in",
-            "mean_water_not_stored_gal_0_18in":
-                "all_mean_water_not_stored_gal_0_18in",
+            "mean_unretained_gal":
+                "all_mean_unretained_gal",
         }
     )
 
@@ -1049,8 +1047,8 @@ def build_complete_vs_all_summary(
                 "complete_mean_storage_gal_0_18in",
             "mean_storage_fraction_0_18in":
                 "complete_mean_storage_fraction_0_18in",
-            "mean_water_not_stored_gal_0_18in":
-                "complete_mean_water_not_stored_gal_0_18in",
+            "mean_unretained_gal":
+                "complete_mean_unretained_gal",
         }
     )
 

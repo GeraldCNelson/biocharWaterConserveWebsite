@@ -33,12 +33,9 @@ The residual:
     applied irrigation
     - estimated 0-18 inch whole-strip storage
 
-is water not accounted for as storage in the measured soil profile. It must
-not automatically be interpreted as surface runoff. Surface runoff is assumed
-to become physically possible only after irrigation water reaches the
-downstream end of the field, represented by response of the bottom-position
-6-inch sensor. That arrival constraint is incorporated in the first-pass
-water-balance workflow.
+is reported as unretained water in the measured soil profile. It is not a
+runoff measurement. Response of the bottom-position 6-inch sensor is retained
+separately as a hydraulic timing diagnostic.
 """
 
 from __future__ import annotations
@@ -288,7 +285,7 @@ def build_event_storage_by_event(
     # Negative residual is clipped to zero for this descriptive quantity,
     # while water_balance_residual_gal_strip retains the signed difference.
     event_summary[
-        "water_not_stored_0_18in_gal_strip"
+        "unretained_gal_strip"
     ] = np.where(
         storage.notna()
         & applied.notna(),
@@ -311,13 +308,13 @@ def build_event_storage_by_event(
     )
 
     event_summary[
-        "water_not_stored_0_18in_fraction"
+        "unretained_fraction"
     ] = np.where(
         applied
         > 0,
         (
             event_summary[
-                "water_not_stored_0_18in_gal_strip"
+                "unretained_gal_strip"
             ]
             / applied
         ),
@@ -780,7 +777,7 @@ def build_event_storage_by_zone(
     all three represented layers have valid storage estimates.
 
     Partial layer sums are retained separately for diagnostics, but must not be
-    used for whole-strip water balance or runoff estimation.
+    used for whole-strip water-balance or unretained-water estimation.
     """
     if event_results.empty:
         return pd.DataFrame()
@@ -1462,19 +1459,15 @@ def build_first_pass_water_balance_table(
     field indicator that irrigation water has reached the downstream portion
     of the strip.
 
-    Bottom arrival is used as a timing/evidence condition only. It is NOT used
-    as a volumetric cutoff on runoff.
-
-    This distinction is important because water applied before bottom arrival
-    can remain in transit through the furrow/soil system and can continue
-    reaching and leaving the downstream end after irrigation inflow stops.
+    Bottom arrival is retained as an independent hydraulic timing diagnostic.
+    It does not determine whether the water-balance residual is available.
 
     Water-balance interpretation
     ----------------------------
     The difference between applied irrigation and estimated increase in
     0-18 inch soil-water storage is:
 
-        water_not_stored_0_18in_gal_strip
+        unretained_gal_strip
 
     This residual can include:
 
@@ -1484,16 +1477,8 @@ def build_first_pass_water_balance_table(
     - lateral redistribution
     - measurement and spatial-representation error
 
-    When bottom 6-inch response is observed, the residual is reported as:
-
-        potential_surface_runoff_gal
-
-    This is NOT a direct runoff measurement. It is the amount of applied water
-    not accounted for as increased 0-18 inch storage during an event for which
-    irrigation water demonstrably reached the downstream portion of the strip.
-
-    If bottom 6-inch response is not observed, potential surface runoff is left
-    missing rather than assumed to be zero.
+    It is not a runoff measurement. ``unretained`` is intentionally concise;
+    the metadata and eligibility fields preserve this full interpretation.
     """
 
     if (
@@ -1515,15 +1500,6 @@ def build_first_pass_water_balance_table(
             "'trustworthy_event'."
         )
 
-    trusted = trustworthy_table[
-        trustworthy_table[
-            "trustworthy_event"
-        ].fillna(False)
-    ].copy()
-
-    if trusted.empty:
-        return pd.DataFrame()
-
     event_key_cols = [
         "year",
         "strip",
@@ -1532,7 +1508,7 @@ def build_first_pass_water_balance_table(
 
     missing_trusted_keys = (
         set(event_key_cols)
-        - set(trusted.columns)
+        - set(trustworthy_table.columns)
     )
 
     if missing_trusted_keys:
@@ -1552,31 +1528,47 @@ def build_first_pass_water_balance_table(
             f"{sorted(missing_zone_keys)}"
         )
 
-    trusted_event_keys = (
-        trusted[
-            event_key_cols
-        ]
-        .drop_duplicates()
-        .copy()
+    event_qc = trustworthy_table.copy()
+    event_qc["_qc_pass"] = event_qc["trustworthy_event"].fillna(False)
+
+    def combine_qc_reasons(values: pd.Series) -> str:
+        reasons = sorted(
+            {
+                reason
+                for value in values.dropna().astype(str)
+                for reason in value.split("; ")
+                if reason and reason != "ok"
+            }
+        )
+        return "ok" if not reasons else "; ".join(reasons)
+
+    event_eligibility = (
+        event_qc.groupby(event_key_cols, dropna=False)
+        .agg(
+            event_qc_eligible=("_qc_pass", "all"),
+            event_qc_reason=("trustworthy_reason", combine_qc_reasons),
+        )
+        .reset_index()
     )
 
     # ------------------------------------------------------------------
-    # Keep all three spatial zones for trustworthy events.
+    # Keep all zones for classified events, including QC failures, so this
+    # output is also the complete event inclusion/exclusion list.
     #
     # Trustworthy-event QC currently originates from the established
     # bottom-logger workflow. Once an event is accepted, however, all
     # available T/M/B zone-storage records are retained for whole-strip
     # accounting.
     # ------------------------------------------------------------------
-    trusted_zone_storage = (
+    classified_zone_storage = (
         zone_storage_table.merge(
-            trusted_event_keys,
+            event_eligibility[event_key_cols],
             on=event_key_cols,
             how="inner",
         )
     )
 
-    if trusted_zone_storage.empty:
+    if classified_zone_storage.empty:
         return pd.DataFrame()
 
     # ------------------------------------------------------------------
@@ -1590,15 +1582,17 @@ def build_first_pass_water_balance_table(
     #   estimated_storage_gal_strip_0_18in
     #   estimated_storage_fraction_0_18in
     #   water_balance_residual_gal_strip
-    #   water_not_stored_0_18in_gal_strip
-    #   water_not_stored_0_18in_fraction
+    #   unretained_gal_strip
+    #   unretained_fraction
     # ------------------------------------------------------------------
     out = build_event_storage_by_event(
-        trusted_zone_storage
+        classified_zone_storage
     )
 
     if out.empty:
         return pd.DataFrame()
+
+    out = out.merge(event_eligibility, on=event_key_cols, how="left")
 
     # ------------------------------------------------------------------
     # Determine primary bottom 6-inch arrival.
@@ -1793,7 +1787,7 @@ def build_first_pass_water_balance_table(
     #
     # These describe when the downstream portion of the field responded.
     # They are retained for interpretation but are NOT used as a volumetric
-    # cap on potential runoff.
+    # cap on unretained water.
     # ------------------------------------------------------------------
     out[
         "bottom_6in_response_observed"
@@ -1853,58 +1847,31 @@ def build_first_pass_water_balance_table(
     )
 
     # ------------------------------------------------------------------
-    # Potential surface-runoff quantity.
+    # Unretained-water eligibility.
     #
-    # Bottom arrival is an evidence condition, not a gallon limit.
-    #
-    # Water applied before bottom arrival can remain in transit and continue
-    # reaching the downstream end after irrigation inflow stops. Therefore
-    # post_bottom_6in_arrival_applied_gal must NOT be used as an upper bound
-    # on total runoff.
-    #
-    # When downstream arrival is observed, the full non-storage residual is
-    # retained as potential surface runoff.
+    # The residual was calculated above for complete three-zone storage
+    # estimates. Bottom arrival remains diagnostic and is not an eligibility
+    # condition because the residual is not interpreted as measured runoff.
     # ------------------------------------------------------------------
-    water_not_stored = pd.to_numeric(
-        out[
-            "water_not_stored_0_18in_gal_strip"
-        ],
-        errors="coerce",
-    )
-
     out[
-        "potential_surface_runoff_gal"
-    ] = np.where(
-        out[
-            "bottom_6in_response_observed"
-        ],
-        water_not_stored,
-        np.nan,
-    )
-
-    out[
-        "potential_surface_runoff_fraction"
-    ] = np.where(
-        applied > 0,
-        (
-            out[
-                "potential_surface_runoff_gal"
-            ]
-            / applied
-        ),
-        np.nan,
-    )
-
-    out[
-        "potential_surface_runoff_available"
+        "unretained_available"
     ] = (
-        out[
-            "bottom_6in_response_observed"
-        ]
-        & out[
-            "potential_surface_runoff_gal"
-        ].notna()
+        out["event_qc_eligible"].fillna(False)
+        & out["complete_three_zone_coverage"].fillna(False)
+        & applied.gt(0)
+        & out["unretained_gal_strip"].notna()
     )
+    out["holding_capacity_eligible"] = out[
+        "unretained_available"
+    ]
+    profile_failure = "incomplete_three_zone_storage_or_missing_applied_water"
+    out["holding_capacity_reason"] = np.where(
+        ~out["event_qc_eligible"].fillna(False),
+        out["event_qc_reason"].fillna("event_qc_failed"),
+        np.where(out["holding_capacity_eligible"], "ok", profile_failure),
+    )
+    out["unretained_eligible"] = out["unretained_available"]
+    out["unretained_reason"] = out["holding_capacity_reason"]
 
     # ------------------------------------------------------------------
     # Reporting conveniences.
@@ -1922,12 +1889,12 @@ def build_first_pass_water_balance_table(
     )
 
     out[
-        "potential_surface_runoff_percent"
+        "unretained_percent"
     ] = (
         100.0
         * pd.to_numeric(
             out[
-                "potential_surface_runoff_fraction"
+                "unretained_fraction"
             ],
             errors="coerce",
         )
@@ -1974,14 +1941,13 @@ def build_biochar_performance_summary(
     Performance dimensions
     ----------------------
     1. 0-18 inch soil-water storage.
-    2. Potential surface-runoff / surplus-water residual.
+    2. Water not retained as increased measured-profile storage.
     3. Bottom 6-inch arrival timing as an independent hydraulic indicator.
 
     Important interpretation
     ------------------------
-    ``pot_runoff_gal`` and ``pot_runoff_pct`` are not measured runoff.
-    They are the water-balance residual currently interpreted as potential
-    surface tailwater when the required QC conditions are satisfied.
+    ``unretained_gal`` and ``unretained_pct`` are water-balance residuals,
+    not measured runoff.
 
     Whole-strip storage comparisons require a valid complete three-zone
     storage estimate for both strips in a matched event.
@@ -2007,9 +1973,9 @@ def build_biochar_performance_summary(
         biochar - control
         Positive = more storage in biochar strip.
 
-    runoff_diff_gal:
+    unretained_diff_gal:
         biochar - control
-        Negative = less potential runoff in biochar strip.
+        Negative = less unretained water in the biochar strip.
 
     arrival_diff_hr:
         biochar - control
@@ -2123,10 +2089,8 @@ def build_biochar_performance_summary(
         "avg_flow_gph_strip",
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
-        "water_not_stored_0_18in_gal_strip",
-        "water_not_stored_0_18in_fraction",
-        "potential_surface_runoff_gal",
-        "potential_surface_runoff_fraction",
+        "unretained_gal_strip",
+        "unretained_fraction",
         "bottom_6in_arrival_delay_hr",
     ]
 
@@ -2174,45 +2138,45 @@ def build_biochar_performance_summary(
     df["storage_ok"] = storage_available
 
     # ------------------------------------------------------------------
-    # Potential runoff availability
+    # Unretained-water availability
     # ------------------------------------------------------------------
-    if "surface_runoff_estimate_available" in df.columns:
-        runoff_available = (
+    if "unretained_available" in df.columns:
+        unretained_available = (
             df[
-                "surface_runoff_estimate_available"
+                "unretained_available"
             ]
             .fillna(False)
             .astype(bool)
         )
 
-    elif "potential_surface_runoff_gal" in df.columns:
-        runoff_available = (
+    elif "unretained_gal_strip" in df.columns:
+        unretained_available = (
             df[
-                "potential_surface_runoff_gal"
+                "unretained_gal_strip"
             ].notna()
         )
 
     else:
-        runoff_available = pd.Series(
+        unretained_available = pd.Series(
             False,
             index=df.index,
             dtype=bool,
         )
 
-    runoff_available = (
-        runoff_available
+    unretained_available = (
+        unretained_available
         & storage_available
     )
 
-    if "potential_surface_runoff_gal" in df.columns:
-        runoff_available = (
-            runoff_available
+    if "unretained_gal_strip" in df.columns:
+        unretained_available = (
+            unretained_available
             & df[
-                "potential_surface_runoff_gal"
+                "unretained_gal_strip"
             ].notna()
         )
 
-    df["runoff_ok"] = runoff_available
+    df["unretained_ok"] = unretained_available
 
     # ------------------------------------------------------------------
     # Small helpers
@@ -2306,10 +2270,10 @@ def build_biochar_performance_summary(
                 "year",
                 "n_events",
                 "n_storage",
-                "n_runoff",
+                "n_unretained",
                 "n_matched",
                 "n_storage_better",
-                "n_runoff_better",
+                "n_lower_unretained",
             }:
                 continue
 
@@ -2361,8 +2325,8 @@ def build_biochar_performance_summary(
             sub["storage_ok"]
         ].copy()
 
-        runoff_sub = sub[
-            sub["runoff_ok"]
+        unretained_sub = sub[
+            sub["unretained_ok"]
         ].copy()
 
         n_events = int(
@@ -2375,8 +2339,8 @@ def build_biochar_performance_summary(
             ].nunique()
         )
 
-        n_runoff = int(
-            runoff_sub[
+        n_unretained = int(
+            unretained_sub[
                 "event_id"
             ].nunique()
         )
@@ -2409,7 +2373,7 @@ def build_biochar_performance_summary(
                     if n_events > 0
                     else pd.NA
                 ),
-                "n_runoff": n_runoff,
+                "n_unretained": n_unretained,
 
                 "applied_gal": (
                     mean_value(
@@ -2435,20 +2399,20 @@ def build_biochar_performance_summary(
                     else pd.NA
                 ),
 
-                "pot_runoff_gal": (
+                "unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "potential_surface_runoff_gal",
+                        unretained_sub,
+                        "unretained_gal_strip",
                     )
                 ),
 
-                "pot_runoff_pct": (
+                "unretained_pct": (
                     100.0
                     * mean_value(
-                        runoff_sub,
-                        "potential_surface_runoff_fraction",
+                        unretained_sub,
+                        "unretained_fraction",
                     )
-                    if not runoff_sub.empty
+                    if not unretained_sub.empty
                     else pd.NA
                 ),
 
@@ -2547,17 +2511,17 @@ def build_biochar_performance_summary(
                 and c_storage_ok
             )
 
-            b_runoff_ok = bool(
-                b["runoff_ok"]
+            b_unretained_ok = bool(
+                b["unretained_ok"]
             )
 
-            c_runoff_ok = bool(
-                c["runoff_ok"]
+            c_unretained_ok = bool(
+                c["unretained_ok"]
             )
 
-            matched_runoff_ok = (
-                b_runoff_ok
-                and c_runoff_ok
+            matched_unretained_ok = (
+                b_unretained_ok
+                and c_unretained_ok
             )
 
             year = b.get(
@@ -2636,49 +2600,49 @@ def build_biochar_performance_summary(
                 else np.nan
             )
 
-            b_runoff_gal = (
+            b_unretained_gal = (
                 pd.to_numeric(
                     b.get(
-                        "potential_surface_runoff_gal"
+                        "unretained_gal_strip"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            c_runoff_gal = (
+            c_unretained_gal = (
                 pd.to_numeric(
                     c.get(
-                        "potential_surface_runoff_gal"
+                        "unretained_gal_strip"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            b_runoff_pct = (
+            b_unretained_pct = (
                 100.0
                 * pd.to_numeric(
                     b.get(
-                        "potential_surface_runoff_fraction"
+                        "unretained_fraction"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            c_runoff_pct = (
+            c_unretained_pct = (
                 100.0
                 * pd.to_numeric(
                     c.get(
-                        "potential_surface_runoff_fraction"
+                        "unretained_fraction"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
@@ -2759,33 +2723,33 @@ def build_biochar_performance_summary(
                         else np.nan
                     ),
 
-                    "matched_runoff_ok": (
-                        matched_runoff_ok
+                    "matched_unretained_ok": (
+                        matched_unretained_ok
                     ),
 
-                    "bio_runoff_gal": (
-                        b_runoff_gal
+                    "bio_unretained_gal": (
+                        b_unretained_gal
                     ),
-                    "ctrl_runoff_gal": (
-                        c_runoff_gal
+                    "ctrl_unretained_gal": (
+                        c_unretained_gal
                     ),
-                    "runoff_diff_gal": (
-                        b_runoff_gal
-                        - c_runoff_gal
-                        if matched_runoff_ok
+                    "unretained_diff_gal": (
+                        b_unretained_gal
+                        - c_unretained_gal
+                        if matched_unretained_ok
                         else np.nan
                     ),
 
-                    "bio_runoff_pct": (
-                        b_runoff_pct
+                    "bio_unretained_pct": (
+                        b_unretained_pct
                     ),
-                    "ctrl_runoff_pct": (
-                        c_runoff_pct
+                    "ctrl_unretained_pct": (
+                        c_unretained_pct
                     ),
-                    "runoff_diff_pct": (
-                        b_runoff_pct
-                        - c_runoff_pct
-                        if matched_runoff_ok
+                    "unretained_diff_pct": (
+                        b_unretained_pct
+                        - c_unretained_pct
+                        if matched_unretained_ok
                         else np.nan
                     ),
 
@@ -2857,9 +2821,9 @@ def build_biochar_performance_summary(
             ].fillna(False)
         ].copy()
 
-        runoff_sub = sub[
+        unretained_sub = sub[
             sub[
-                "matched_runoff_ok"
+                "matched_unretained_ok"
             ].fillna(False)
         ].copy()
 
@@ -2874,9 +2838,9 @@ def build_biochar_performance_summary(
             "storage_diff_gal",
         )
 
-        runoff_diff = numeric_values(
-            runoff_sub,
-            "runoff_diff_gal",
+        unretained_diff = numeric_values(
+            unretained_sub,
+            "unretained_diff_gal",
         )
 
         pair_rows.append(
@@ -2945,49 +2909,49 @@ def build_biochar_performance_summary(
                     else pd.NA
                 ),
 
-                "n_runoff": int(
+                "n_unretained": int(
                     len(
-                        runoff_sub
+                        unretained_sub
                     )
                 ),
-                "bio_runoff_gal": (
+                "bio_unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "bio_runoff_gal",
+                        unretained_sub,
+                        "bio_unretained_gal",
                     )
                 ),
-                "ctrl_runoff_gal": (
+                "ctrl_unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "ctrl_runoff_gal",
+                        unretained_sub,
+                        "ctrl_unretained_gal",
                     )
                 ),
-                "runoff_diff_gal": (
+                "unretained_diff_gal": (
                     mean_value(
-                        runoff_sub,
-                        "runoff_diff_gal",
+                        unretained_sub,
+                        "unretained_diff_gal",
                     )
                 ),
-                "runoff_diff_pct": (
+                "unretained_diff_pct": (
                     mean_value(
-                        runoff_sub,
-                        "runoff_diff_pct",
+                        unretained_sub,
+                        "unretained_diff_pct",
                     )
                 ),
 
-                "n_runoff_better": int(
+                "n_lower_unretained": int(
                     (
-                        runoff_diff
+                        unretained_diff
                         < 0
                     ).sum()
                 ),
-                "runoff_better_pct": (
+                "lower_unretained_pct": (
                     100.0
                     * (
-                        runoff_diff
+                        unretained_diff
                         < 0
                     ).mean()
-                    if not runoff_diff.empty
+                    if not unretained_diff.empty
                     else pd.NA
                 ),
 
@@ -3047,9 +3011,9 @@ def build_biochar_performance_summary(
                 ].fillna(False)
             ].copy()
 
-            runoff_sub = sub[
+            unretained_sub = sub[
                 sub[
-                    "matched_runoff_ok"
+                    "matched_unretained_ok"
                 ].fillna(False)
             ].copy()
 
@@ -3064,9 +3028,9 @@ def build_biochar_performance_summary(
                 "storage_diff_gal",
             )
 
-            runoff_diff = numeric_values(
-                runoff_sub,
-                "runoff_diff_gal",
+            unretained_diff = numeric_values(
+                unretained_sub,
+                "unretained_diff_gal",
             )
 
             year_rows.append(
@@ -3120,30 +3084,30 @@ def build_biochar_performance_summary(
                         else pd.NA
                     ),
 
-                    "n_runoff": int(
+                    "n_unretained": int(
                         len(
-                            runoff_sub
+                            unretained_sub
                         )
                     ),
-                    "runoff_diff_gal": (
+                    "unretained_diff_gal": (
                         mean_value(
-                            runoff_sub,
-                            "runoff_diff_gal",
+                            unretained_sub,
+                            "unretained_diff_gal",
                         )
                     ),
-                    "runoff_diff_pct": (
+                    "unretained_diff_pct": (
                         mean_value(
-                            runoff_sub,
-                            "runoff_diff_pct",
+                            unretained_sub,
+                            "unretained_diff_pct",
                         )
                     ),
-                    "runoff_better_pct": (
+                    "lower_unretained_pct": (
                         100.0
                         * (
-                            runoff_diff
+                            unretained_diff
                             < 0
                         ).mean()
-                        if not runoff_diff.empty
+                        if not unretained_diff.empty
                         else pd.NA
                     ),
 
@@ -3216,14 +3180,13 @@ def build_biochar_performance_summary(
     Performance dimensions
     ----------------------
     1. 0-18 inch soil-water storage.
-    2. Potential surface-runoff / surplus-water residual.
+    2. Water not retained as increased measured-profile storage.
     3. Bottom 6-inch arrival timing as an independent hydraulic indicator.
 
     Important interpretation
     ------------------------
-    ``pot_runoff_gal`` and ``pot_runoff_pct`` are not measured runoff.
-    They are the water-balance residual currently interpreted as potential
-    surface tailwater when the required QC conditions are satisfied.
+    ``unretained_gal`` and ``unretained_pct`` are water-balance residuals,
+    not measured runoff.
 
     Whole-strip storage comparisons require a valid complete three-zone
     storage estimate for both strips in a matched event.
@@ -3249,9 +3212,9 @@ def build_biochar_performance_summary(
         biochar - control
         Positive = more storage in biochar strip.
 
-    runoff_diff_gal:
+    unretained_diff_gal:
         biochar - control
-        Negative = less potential runoff in biochar strip.
+        Negative = less unretained water in biochar strip.
 
     arrival_diff_hr:
         biochar - control
@@ -3365,10 +3328,8 @@ def build_biochar_performance_summary(
         "avg_flow_gph_strip",
         "estimated_storage_gal_strip_0_18in",
         "estimated_storage_fraction_0_18in",
-        "water_not_stored_0_18in_gal_strip",
-        "water_not_stored_0_18in_fraction",
-        "potential_surface_runoff_gal",
-        "potential_surface_runoff_fraction",
+        "unretained_gal_strip",
+        "unretained_fraction",
         "bottom_6in_arrival_delay_hr",
     ]
 
@@ -3416,45 +3377,45 @@ def build_biochar_performance_summary(
     df["storage_ok"] = storage_available
 
     # ------------------------------------------------------------------
-    # Potential runoff availability
+    # Unretained-water availability
     # ------------------------------------------------------------------
-    if "surface_runoff_estimate_available" in df.columns:
-        runoff_available = (
+    if "unretained_available" in df.columns:
+        unretained_available = (
             df[
-                "surface_runoff_estimate_available"
+                "unretained_available"
             ]
             .fillna(False)
             .astype(bool)
         )
 
-    elif "potential_surface_runoff_gal" in df.columns:
-        runoff_available = (
+    elif "unretained_gal_strip" in df.columns:
+        unretained_available = (
             df[
-                "potential_surface_runoff_gal"
+                "unretained_gal_strip"
             ].notna()
         )
 
     else:
-        runoff_available = pd.Series(
+        unretained_available = pd.Series(
             False,
             index=df.index,
             dtype=bool,
         )
 
-    runoff_available = (
-        runoff_available
+    unretained_available = (
+        unretained_available
         & storage_available
     )
 
-    if "potential_surface_runoff_gal" in df.columns:
-        runoff_available = (
-            runoff_available
+    if "unretained_gal_strip" in df.columns:
+        unretained_available = (
+            unretained_available
             & df[
-                "potential_surface_runoff_gal"
+                "unretained_gal_strip"
             ].notna()
         )
 
-    df["runoff_ok"] = runoff_available
+    df["unretained_ok"] = unretained_available
 
     # ------------------------------------------------------------------
     # Small helpers
@@ -3548,10 +3509,10 @@ def build_biochar_performance_summary(
                 "year",
                 "n_events",
                 "n_storage",
-                "n_runoff",
+                "n_unretained",
                 "n_matched",
                 "n_storage_better",
-                "n_runoff_better",
+                "n_lower_unretained",
             }:
                 continue
 
@@ -3603,8 +3564,8 @@ def build_biochar_performance_summary(
             sub["storage_ok"]
         ].copy()
 
-        runoff_sub = sub[
-            sub["runoff_ok"]
+        unretained_sub = sub[
+            sub["unretained_ok"]
         ].copy()
 
         n_events = int(
@@ -3617,8 +3578,8 @@ def build_biochar_performance_summary(
             ].nunique()
         )
 
-        n_runoff = int(
-            runoff_sub[
+        n_unretained = int(
+            unretained_sub[
                 "event_id"
             ].nunique()
         )
@@ -3651,7 +3612,7 @@ def build_biochar_performance_summary(
                     if n_events > 0
                     else pd.NA
                 ),
-                "n_runoff": n_runoff,
+                "n_unretained": n_unretained,
 
                 "applied_gal": (
                     mean_value(
@@ -3677,20 +3638,20 @@ def build_biochar_performance_summary(
                     else pd.NA
                 ),
 
-                "pot_runoff_gal": (
+                "unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "potential_surface_runoff_gal",
+                        unretained_sub,
+                        "unretained_gal_strip",
                     )
                 ),
 
-                "pot_runoff_pct": (
+                "unretained_pct": (
                     100.0
                     * mean_value(
-                        runoff_sub,
-                        "potential_surface_runoff_fraction",
+                        unretained_sub,
+                        "unretained_fraction",
                     )
-                    if not runoff_sub.empty
+                    if not unretained_sub.empty
                     else pd.NA
                 ),
 
@@ -3789,17 +3750,17 @@ def build_biochar_performance_summary(
                 and c_storage_ok
             )
 
-            b_runoff_ok = bool(
-                b["runoff_ok"]
+            b_unretained_ok = bool(
+                b["unretained_ok"]
             )
 
-            c_runoff_ok = bool(
-                c["runoff_ok"]
+            c_unretained_ok = bool(
+                c["unretained_ok"]
             )
 
-            matched_runoff_ok = (
-                b_runoff_ok
-                and c_runoff_ok
+            matched_unretained_ok = (
+                b_unretained_ok
+                and c_unretained_ok
             )
 
             year = b.get(
@@ -3878,49 +3839,49 @@ def build_biochar_performance_summary(
                 else np.nan
             )
 
-            b_runoff_gal = (
+            b_unretained_gal = (
                 pd.to_numeric(
                     b.get(
-                        "potential_surface_runoff_gal"
+                        "unretained_gal_strip"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            c_runoff_gal = (
+            c_unretained_gal = (
                 pd.to_numeric(
                     c.get(
-                        "potential_surface_runoff_gal"
+                        "unretained_gal_strip"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            b_runoff_pct = (
+            b_unretained_pct = (
                 100.0
                 * pd.to_numeric(
                     b.get(
-                        "potential_surface_runoff_fraction"
+                        "unretained_fraction"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
-            c_runoff_pct = (
+            c_unretained_pct = (
                 100.0
                 * pd.to_numeric(
                     c.get(
-                        "potential_surface_runoff_fraction"
+                        "unretained_fraction"
                     ),
                     errors="coerce",
                 )
-                if matched_runoff_ok
+                if matched_unretained_ok
                 else np.nan
             )
 
@@ -4001,33 +3962,33 @@ def build_biochar_performance_summary(
                         else np.nan
                     ),
 
-                    "matched_runoff_ok": (
-                        matched_runoff_ok
+                    "matched_unretained_ok": (
+                        matched_unretained_ok
                     ),
 
-                    "bio_runoff_gal": (
-                        b_runoff_gal
+                    "bio_unretained_gal": (
+                        b_unretained_gal
                     ),
-                    "ctrl_runoff_gal": (
-                        c_runoff_gal
+                    "ctrl_unretained_gal": (
+                        c_unretained_gal
                     ),
-                    "runoff_diff_gal": (
-                        b_runoff_gal
-                        - c_runoff_gal
-                        if matched_runoff_ok
+                    "unretained_diff_gal": (
+                        b_unretained_gal
+                        - c_unretained_gal
+                        if matched_unretained_ok
                         else np.nan
                     ),
 
-                    "bio_runoff_pct": (
-                        b_runoff_pct
+                    "bio_unretained_pct": (
+                        b_unretained_pct
                     ),
-                    "ctrl_runoff_pct": (
-                        c_runoff_pct
+                    "ctrl_unretained_pct": (
+                        c_unretained_pct
                     ),
-                    "runoff_diff_pct": (
-                        b_runoff_pct
-                        - c_runoff_pct
-                        if matched_runoff_ok
+                    "unretained_diff_pct": (
+                        b_unretained_pct
+                        - c_unretained_pct
+                        if matched_unretained_ok
                         else np.nan
                     ),
 
@@ -4099,9 +4060,9 @@ def build_biochar_performance_summary(
             ].fillna(False)
         ].copy()
 
-        runoff_sub = sub[
+        unretained_sub = sub[
             sub[
-                "matched_runoff_ok"
+                "matched_unretained_ok"
             ].fillna(False)
         ].copy()
 
@@ -4116,9 +4077,9 @@ def build_biochar_performance_summary(
             "storage_diff_gal",
         )
 
-        runoff_diff = numeric_values(
-            runoff_sub,
-            "runoff_diff_gal",
+        unretained_diff = numeric_values(
+            unretained_sub,
+            "unretained_diff_gal",
         )
 
         pair_rows.append(
@@ -4187,49 +4148,49 @@ def build_biochar_performance_summary(
                     else pd.NA
                 ),
 
-                "n_runoff": int(
+                "n_unretained": int(
                     len(
-                        runoff_sub
+                        unretained_sub
                     )
                 ),
-                "bio_runoff_gal": (
+                "bio_unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "bio_runoff_gal",
+                        unretained_sub,
+                        "bio_unretained_gal",
                     )
                 ),
-                "ctrl_runoff_gal": (
+                "ctrl_unretained_gal": (
                     mean_value(
-                        runoff_sub,
-                        "ctrl_runoff_gal",
+                        unretained_sub,
+                        "ctrl_unretained_gal",
                     )
                 ),
-                "runoff_diff_gal": (
+                "unretained_diff_gal": (
                     mean_value(
-                        runoff_sub,
-                        "runoff_diff_gal",
+                        unretained_sub,
+                        "unretained_diff_gal",
                     )
                 ),
-                "runoff_diff_pct": (
+                "unretained_diff_pct": (
                     mean_value(
-                        runoff_sub,
-                        "runoff_diff_pct",
+                        unretained_sub,
+                        "unretained_diff_pct",
                     )
                 ),
 
-                "n_runoff_better": int(
+                "n_lower_unretained": int(
                     (
-                        runoff_diff
+                        unretained_diff
                         < 0
                     ).sum()
                 ),
-                "runoff_better_pct": (
+                "lower_unretained_pct": (
                     100.0
                     * (
-                        runoff_diff
+                        unretained_diff
                         < 0
                     ).mean()
-                    if not runoff_diff.empty
+                    if not unretained_diff.empty
                     else pd.NA
                 ),
 
@@ -4289,9 +4250,9 @@ def build_biochar_performance_summary(
                 ].fillna(False)
             ].copy()
 
-            runoff_sub = sub[
+            unretained_sub = sub[
                 sub[
-                    "matched_runoff_ok"
+                    "matched_unretained_ok"
                 ].fillna(False)
             ].copy()
 
@@ -4306,9 +4267,9 @@ def build_biochar_performance_summary(
                 "storage_diff_gal",
             )
 
-            runoff_diff = numeric_values(
-                runoff_sub,
-                "runoff_diff_gal",
+            unretained_diff = numeric_values(
+                unretained_sub,
+                "unretained_diff_gal",
             )
 
             year_rows.append(
@@ -4362,30 +4323,30 @@ def build_biochar_performance_summary(
                         else pd.NA
                     ),
 
-                    "n_runoff": int(
+                    "n_unretained": int(
                         len(
-                            runoff_sub
+                            unretained_sub
                         )
                     ),
-                    "runoff_diff_gal": (
+                    "unretained_diff_gal": (
                         mean_value(
-                            runoff_sub,
-                            "runoff_diff_gal",
+                            unretained_sub,
+                            "unretained_diff_gal",
                         )
                     ),
-                    "runoff_diff_pct": (
+                    "unretained_diff_pct": (
                         mean_value(
-                            runoff_sub,
-                            "runoff_diff_pct",
+                            unretained_sub,
+                            "unretained_diff_pct",
                         )
                     ),
-                    "runoff_better_pct": (
+                    "lower_unretained_pct": (
                         100.0
                         * (
-                            runoff_diff
+                            unretained_diff
                             < 0
                         ).mean()
-                        if not runoff_diff.empty
+                        if not unretained_diff.empty
                         else pd.NA
                     ),
 

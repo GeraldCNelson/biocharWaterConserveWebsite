@@ -8,6 +8,10 @@ from biochar_app.config.experiment_config import (
 )
 
 from biochar_app.config.paths import IRRIGATION_DIR
+from biochar_app.config.irrigation_config import (
+    FLOW_RATE_REVIEW_ABSOLUTE_GPM,
+    FLOW_RATE_REVIEW_RELATIVE_FRACTION,
+)
 
 from biochar_app.scripts.data_loading import (load_logger_data, prepare_irrigation_input)
 
@@ -183,7 +187,14 @@ def attach_event_metadata(results: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
     out = results.copy()
 
     meta_cols = ["start", "end"]
-    for col in ["event_id", "strip_group", "location"]:
+    for col in [
+        "event_id",
+        "strip_group",
+        "location",
+        "start_flow_gpm",
+        "end_flow_gpm",
+        "avg_flow_gpm_group",
+    ]:
         if col in events.columns:
             meta_cols.append(col)
 
@@ -229,6 +240,71 @@ def attach_event_metadata(results: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
                     else:
                         out = out.rename(columns={fallback_col: col})
 
+    return out
+
+
+def add_flow_rate_comparison_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """Compare workbook boundary GPM readings with calculated event-average GPM.
+
+    Start and end flow are point observations transcribed in the master
+    workbook. ``avg_flow_gpm_group`` is calculated from group gallons divided
+    by event duration. A review flag indicates a large difference worth
+    checking; it does not by itself mean either measurement is wrong because
+    flow can legitimately vary during an irrigation event.
+    """
+    out = df.copy()
+    index = out.index
+
+    def numeric(column: str) -> pd.Series:
+        if column not in out.columns:
+            return pd.Series(float("nan"), index=index, dtype="float64")
+        return pd.to_numeric(out[column], errors="coerce")
+
+    start = numeric("start_flow_gpm")
+    end = numeric("end_flow_gpm")
+    calculated = numeric("avg_flow_gpm_group")
+
+    out["start_flow_minus_calculated_gpm"] = start - calculated
+    out["end_flow_minus_calculated_gpm"] = end - calculated
+
+    differences = pd.concat(
+        [
+            out["start_flow_minus_calculated_gpm"].abs(),
+            out["end_flow_minus_calculated_gpm"].abs(),
+        ],
+        axis=1,
+    )
+    out["max_boundary_flow_difference_gpm"] = differences.max(
+        axis=1,
+        skipna=True,
+    )
+    out.loc[differences.notna().sum(axis=1).eq(0), "max_boundary_flow_difference_gpm"] = pd.NA
+
+    comparable = calculated.gt(0) & (start.notna() | end.notna())
+    review_threshold = pd.concat(
+        [
+            pd.Series(FLOW_RATE_REVIEW_ABSOLUTE_GPM, index=index),
+            calculated.abs() * FLOW_RATE_REVIEW_RELATIVE_FRACTION,
+        ],
+        axis=1,
+    ).max(axis=1)
+    review = comparable & out["max_boundary_flow_difference_gpm"].gt(
+        review_threshold
+    )
+
+    out["flow_rate_review_required"] = review
+    out["flow_rate_comparison_status"] = "within_review_threshold"
+    out.loc[~comparable, "flow_rate_comparison_status"] = "insufficient_data"
+    out.loc[review, "flow_rate_comparison_status"] = "review_large_difference"
+    out["flow_rate_review_reason"] = ""
+    out.loc[~comparable, "flow_rate_review_reason"] = (
+        "A calculated event-average group flow and at least one workbook "
+        "boundary-flow reading are required."
+    )
+    out.loc[review, "flow_rate_review_reason"] = (
+        "Workbook start or end flow differs from the calculated event-average "
+        "group flow by more than both the absolute and relative review limits."
+    )
     return out
 
 

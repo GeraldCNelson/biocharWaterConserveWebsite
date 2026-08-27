@@ -2,7 +2,10 @@
 """
 Irrigation plotting utilities for estimate_irrigation_holding_capacity.py.
 
-from biochar_app.config.experiment_config import LOGGER_LOCATIONS
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for the
+event-PNG generation and reporting workflow.
 
 Purpose
 -------
@@ -539,6 +542,10 @@ def plot_event_multidepth(
     y_limits: Optional[tuple[float, float]] = None,
     title_prefix: str = "Event Multi-depth VWC",
     response_threshold: float = ARRIVAL_RESPONSE_THRESHOLD_VWC,
+    workbook_start_flow_gpm: Optional[float] = None,
+    workbook_end_flow_gpm: Optional[float] = None,
+    calculated_avg_flow_gpm_group: Optional[float] = None,
+    flow_rate_comparison_status: Optional[str] = None,
 ) -> None:
     sub = _prepare_plot_window_df(df, start=start, end=end)
     if sub.empty:
@@ -818,6 +825,27 @@ def plot_event_multidepth(
         "Strip volume = total water applied to the strip during the event.",
     ]
 
+    flow_values = (
+        workbook_start_flow_gpm,
+        workbook_end_flow_gpm,
+        calculated_avg_flow_gpm_group,
+    )
+    if any(value is not None for value in flow_values):
+        def flow_text(value: Optional[float]) -> str:
+            return "NA" if value is None else f"{value:,.0f}"
+
+        footer_lines.append(
+            "Workbook meter flow: "
+            f"start={flow_text(workbook_start_flow_gpm)} GPM, "
+            f"end={flow_text(workbook_end_flow_gpm)} GPM | "
+            "Calculated event average: "
+            f"{flow_text(calculated_avg_flow_gpm_group)} GPM"
+        )
+        if flow_rate_comparison_status == "review_large_difference":
+            footer_lines.append(
+                "Flow QC: review large boundary-versus-event-average difference."
+            )
+
     fig.text(
         0.50,
         0.025,
@@ -918,6 +946,12 @@ def plot_event_multidepth_from_results(
     gallons_strip_f = _as_float_or_none(gallons_strip)
     duration_hours_f = _as_float_or_none(duration_hours)
     avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
+    workbook_start_flow_gpm = _as_float_or_none(first_row.get("start_flow_gpm"))
+    workbook_end_flow_gpm = _as_float_or_none(first_row.get("end_flow_gpm"))
+    calculated_avg_flow_gpm_group = _as_float_or_none(
+        first_row.get("avg_flow_gpm_group")
+    )
+    flow_rate_comparison_status = first_row.get("flow_rate_comparison_status")
 
     if (
         gallons_strip_f is not None
@@ -989,6 +1023,15 @@ def plot_event_multidepth_from_results(
         precip_col=precip_col,
         y_limits=y_limits,
         title_prefix=title_prefix_with_flow,
+        workbook_start_flow_gpm=workbook_start_flow_gpm,
+        workbook_end_flow_gpm=workbook_end_flow_gpm,
+        calculated_avg_flow_gpm_group=calculated_avg_flow_gpm_group,
+        flow_rate_comparison_status=(
+            None
+            if flow_rate_comparison_status is None
+            or _is_missing(flow_rate_comparison_status)
+            else str(flow_rate_comparison_status)
+        ),
     )
 
 def save_irrigation_event_multidepth_plots(
@@ -1016,6 +1059,10 @@ def save_irrigation_event_multidepth_plots(
         "event_duration_hours",
         "gallons_strip",
         "avg_flow_gph_strip",
+        "workbook_start_flow_gpm",
+        "workbook_end_flow_gpm",
+        "calculated_avg_flow_gpm_group",
+        "flow_rate_comparison_status",
         "output_file",
         "status",
     ]
@@ -1127,6 +1174,11 @@ def save_irrigation_event_multidepth_plots(
         gallons_strip_f = _as_float_or_none(gallons_strip)
         duration_hours_f = _as_float_or_none(duration_hours)
         avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
+        workbook_start_flow_gpm = _as_float_or_none(first_row.get("start_flow_gpm"))
+        workbook_end_flow_gpm = _as_float_or_none(first_row.get("end_flow_gpm"))
+        calculated_avg_flow_gpm_group = _as_float_or_none(
+            first_row.get("avg_flow_gpm_group")
+        )
 
         if irrigation_start is None:
             continue
@@ -1184,12 +1236,110 @@ def save_irrigation_event_multidepth_plots(
                     if avg_flow_gph_strip_f is not None
                     else pd.NA
                 ),
+                "workbook_start_flow_gpm": workbook_start_flow_gpm,
+                "workbook_end_flow_gpm": workbook_end_flow_gpm,
+                "calculated_avg_flow_gpm_group": calculated_avg_flow_gpm_group,
+                "flow_rate_comparison_status": first_row.get(
+                    "flow_rate_comparison_status",
+                    "insufficient_data",
+                ),
                 "output_file": str(output_file),
                 "status": status,
             }
         )
 
     return pd.DataFrame(log_rows)
+
+
+def save_failed_event_pair_qc_plots(
+    df: pd.DataFrame,
+    trustworthy_table: pd.DataFrame,
+    output_dir: str | Path,
+    hours_before: float = 6.0,
+    hours_after: float = 24.0,
+) -> pd.DataFrame:
+    """Write paired-strip T/M/B comparison figures for failed QC events."""
+    if trustworthy_table.empty:
+        return pd.DataFrame()
+
+    failed = trustworthy_table[
+        ~trustworthy_table["trustworthy_event"].fillna(False)
+    ].copy()
+    if failed.empty:
+        return pd.DataFrame()
+
+    output_root = Path(output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, object]] = []
+
+    for event_id, event_failures in failed.groupby("event_id", dropna=False):
+        first = event_failures.iloc[0]
+        irrigation_start = pd.to_datetime(first["irrigation_start"])
+        irrigation_end = pd.to_datetime(first["irrigation_end"])
+        plot_start = irrigation_start - pd.Timedelta(hours=hours_before)
+        plot_end = irrigation_end + pd.Timedelta(hours=hours_after)
+        window = df.loc[plot_start:plot_end]
+        strips = ["S1", "S2"] if "S1_S2" in str(event_id) else ["S3", "S4"]
+        failed_depths = {
+            (str(row.strip), int(row.depth_inches))
+            for row in event_failures.itertuples()
+            if pd.notna(row.depth_inches)
+        }
+        reasons = "; ".join(sorted({
+            reason
+            for value in event_failures["trustworthy_reason"].dropna().astype(str)
+            for reason in value.split("; ")
+        }))
+
+        fig, axes = plt.subplots(3, 2, figsize=(16, 12), sharex=True, sharey=True)
+        for row_index, position in enumerate(LOGGER_LOCATIONS):
+            for column_index, strip in enumerate(strips):
+                ax = axes[row_index, column_index]
+                for depth_code, depth_inches in SENSOR_DEPTH_INDEX_TO_INCHES.items():
+                    sensor = f"VWC_{depth_code}_raw_{strip}_{position}"
+                    if sensor not in window.columns:
+                        continue
+                    is_failed = position == "B" and (strip, int(depth_inches)) in failed_depths
+                    ax.plot(
+                        window.index,
+                        pd.to_numeric(window[sensor], errors="coerce"),
+                        color=DEPTH_COLORS[str(depth_code)],
+                        linewidth=3.2 if is_failed else 1.7,
+                        linestyle="--" if is_failed else "-",
+                        label=f"{depth_inches} in" + (" — QC FAIL" if is_failed else ""),
+                    )
+                ax.axvspan(irrigation_start, irrigation_end, color=PLOT_COLORS["precip"], alpha=0.15)
+                ax.axvline(irrigation_start, color="black", linestyle="--", linewidth=1)
+                ax.axvline(irrigation_end, color=PLOT_COLORS["air_temp"], linestyle=":", linewidth=1)
+                ax.set_title(f"{strip} — {LOGGER_LOCATION_MAPPING[position]} logger")
+                ax.set_ylabel("VWC (%)")
+                ax.grid(True, alpha=0.25)
+                ax.legend(loc="best", fontsize=8)
+
+        for ax in axes[-1, :]:
+            ax.set_xlabel("Timestamp")
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d\n%H:%M"))
+
+        fig.suptitle(
+            f"QC review: {event_id}\nFailed Bottom depth(s) shown dashed/bold — {reasons}",
+            fontsize=14,
+            fontweight="bold",
+        )
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        output_file = output_root / _safe_filename(f"{event_id}_paired_qc.png")
+        fig.savefig(output_file, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        rows.append({
+            "event_id": event_id,
+            "irrigation_start": irrigation_start,
+            "strip_pair": "/".join(strips),
+            "failed_sensor_rows": len(event_failures),
+            "qc_reasons": reasons,
+            "output_file": str(output_file),
+            "status": "written",
+        })
+
+    return pd.DataFrame(rows)
 
 def plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None:
     if zone_df.empty:

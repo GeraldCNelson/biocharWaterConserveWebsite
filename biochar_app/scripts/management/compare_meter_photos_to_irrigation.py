@@ -2,6 +2,11 @@
 """
 Compare irrigation meter photographs directly with the master workbook.
 
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md`` for this
+camera-versus-workbook QA stage and its relationship to logger civil time.
+
 Camera-first QC model
 ---------------------
 The camera EXIF timestamp and the manually transcribed meter reading are treated
@@ -1873,7 +1878,7 @@ def boundary_record_for_event(
     boundary_qc: pd.DataFrame,
 ) -> pd.Series | None:
     event_pattern = re.compile(
-        rf"(^|\s\|\s){re.escape(event_key)}($|\s\|\s)"
+        rf"(?:^|\s\|\s){re.escape(event_key)}(?:$|\s\|\s)"
     )
 
     mask = (

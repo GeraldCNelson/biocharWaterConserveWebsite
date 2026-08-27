@@ -99,6 +99,14 @@ PRE_START_MIN_PRECIP_IN = 0.01
 # Irrigation timestamp QA
 # ============================================================
 PHOTO_TIMESTAMP_REVIEW_THRESHOLD_MIN = 15.0
+
+# Workbook boundary-flow readings are point observations from the meter needle.
+# Compare them with the event-average meter flow calculated from delivered
+# gallons and duration. Require both an absolute and a relative difference
+# before flagging an event, so ordinary needle-reading variation is not
+# overinterpreted.
+FLOW_RATE_REVIEW_ABSOLUTE_GPM = 50.0
+FLOW_RATE_REVIEW_RELATIVE_FRACTION = 0.25
 # ============================================================
 # Backup raw data
 # ============================================================

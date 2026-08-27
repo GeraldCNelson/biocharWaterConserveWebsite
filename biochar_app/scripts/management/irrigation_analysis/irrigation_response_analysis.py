@@ -333,6 +333,41 @@ def build_variable_definitions_table() -> pd.DataFrame:
             "formula_or_rule": "gallons_strip / event_duration_hours",
         },
         {
+            "variable": "start_flow_gpm",
+            "definition": (
+                "Point-in-time meter-needle flow at irrigation start, as "
+                "recorded in the master workbook."
+            ),
+            "formula_or_rule": "Master workbook FLOW RATE START; not photo-derived.",
+        },
+        {
+            "variable": "end_flow_gpm",
+            "definition": (
+                "Point-in-time meter-needle flow near irrigation end, as "
+                "recorded in the master workbook."
+            ),
+            "formula_or_rule": "Master workbook FLOW RATE END; not photo-derived.",
+        },
+        {
+            "variable": "avg_flow_gpm_group",
+            "definition": (
+                "Calculated event-average flow delivered to the active strip group."
+            ),
+            "formula_or_rule": "gallons_group / (event_duration_hours * 60).",
+        },
+        {
+            "variable": "flow_rate_review_required",
+            "definition": (
+                "Diagnostic flag for a large difference between a workbook "
+                "boundary-flow reading and calculated event-average group flow."
+            ),
+            "formula_or_rule": (
+                "True when the largest available absolute difference exceeds "
+                "both 50 GPM and 25% of avg_flow_gpm_group. Flow can vary during "
+                "an event, so this flag requests review rather than declaring an error."
+            ),
+        },
+        {
             "variable": "plateau_method",
             "definition": "Method used to estimate plateau_vwc for one event.",
             "formula_or_rule": (
@@ -373,11 +408,36 @@ def build_variable_definitions_table() -> pd.DataFrame:
             "variable": "estimated_loss_gal_strip",
             "definition": (
                 "Legacy diagnostic retained for compatibility. Use the "
-                "three-zone not-stored and tailwater-bound fields instead."
+                "canonical unretained-water fields instead."
             ),
             "formula_or_rule": (
                 "gallons_strip - event_storage_gal (legacy workflow only)"
             ),
+        },
+        {
+            "variable": "unretained_gal_strip",
+            "definition": (
+                "Applied irrigation not retained as increased soil-water "
+                "storage in the measured 0-18 inch strip profile."
+            ),
+            "formula_or_rule": (
+                "max(gallons_strip - estimated_storage_gal_strip_0_18in, 0)"
+            ),
+        },
+        {
+            "variable": "unretained_fraction",
+            "definition": "Fraction of applied strip water not retained.",
+            "formula_or_rule": "unretained_gal_strip / gallons_strip",
+        },
+        {
+            "variable": "holding_capacity_eligible",
+            "definition": "Whether the event may be used for holding-capacity analysis.",
+            "formula_or_rule": "Passes event QC and has a complete three-zone storage estimate.",
+        },
+        {
+            "variable": "unretained_eligible",
+            "definition": "Whether the event may be used for unretained-water analysis.",
+            "formula_or_rule": "holding_capacity_eligible and gallons_strip > 0.",
         },
         {
             "variable": "target_vwc",

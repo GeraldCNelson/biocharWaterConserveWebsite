@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+build_meter_photo_inventory.py
 Build an inventory of original irrigation-meter photographs.
 
 The inventory records:

@@ -1,5 +1,10 @@
 """
 Diagnostic and QA routines for irrigation analysis.
+
+Pipeline documentation
+----------------------
+See ``biochar_app/docs/operations/irrigation_analysis_pipeline.md``. This
+module owns the canonical depth-order and logger-position-order diagnostics.
 """
 from __future__ import annotations
 

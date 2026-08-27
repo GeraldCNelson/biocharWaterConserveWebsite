@@ -27,8 +27,8 @@ The script currently supports two related workflows:
    The three-zone workflow estimates event water storage by logger influence
    zone using zone-specific field areas and gallons-per-inch conversion factors.
    It is intended to help identify spatial differences in irrigation response
-   along each strip and estimate where applied irrigation water is being stored
-   or potentially leaving the strip as tailwater/runoff.
+   along each strip and estimate the applied water not retained as increased
+   storage in the measured 0-18 inch profile.
 
 Important caution
 -----------------
@@ -106,6 +106,7 @@ from biochar_app.scripts.management.irrigation_analysis.irrigation_response_anal
 
 from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_irrigation_event_multidepth_plots,
+    save_failed_event_pair_qc_plots,
     plot_mean_storage_depth_by_zone_by_year,
     plot_mean_storage_by_zone,
     plot_mean_storage_by_zone_by_year,
@@ -152,6 +153,7 @@ from biochar_app.scripts.management.irrigation_analysis.arrival import (
 )
 
 from biochar_app.scripts.management.irrigation_analysis.utils import (
+    add_flow_rate_comparison_fields,
     add_derived_event_fields,
     attach_event_metadata,
     force_float,
@@ -714,6 +716,9 @@ def analyze_loggers_all_depths(
             "event_id",
             "strip_group",
             "location",
+            "start_flow_gpm",
+            "end_flow_gpm",
+            "avg_flow_gpm_group",
             "gallons_source",
             "gallons_estimated",
             "meter_volume_shared_between_groups",
@@ -767,6 +772,7 @@ def analyze_loggers_all_depths(
             strip_results,
             events,
         )
+        strip_results = add_flow_rate_comparison_fields(strip_results)
 
         # print(
         #     "\n=== STRIP RESULTS COLUMNS "
@@ -812,6 +818,15 @@ def build_enhanced_event_debug_table(
         "gallons_strip",
         "event_duration_hours",
         "avg_flow_gph_strip",
+        "start_flow_gpm",
+        "end_flow_gpm",
+        "avg_flow_gpm_group",
+        "start_flow_minus_calculated_gpm",
+        "end_flow_minus_calculated_gpm",
+        "max_boundary_flow_difference_gpm",
+        "flow_rate_review_required",
+        "flow_rate_comparison_status",
+        "flow_rate_review_reason",
         "baseline_vwc",
         "peak_vwc",
         "peak_increase",
@@ -1584,6 +1599,19 @@ def write_year_outputs(
         diagnostics_dir
         / f"trustworthy_irrigation_events_{year}.csv",
         index=False,
+    )
+
+    failed_qc_plot_log = save_failed_event_pair_qc_plots(
+        df=df_15min,
+        trustworthy_table=trustworthy_table,
+        output_dir=figures_dir / "qc_failed_events",
+    )
+    failed_qc_plot_log.to_csv(
+        figures_dir / f"failed_event_pair_qc_plot_log_{year}.csv",
+        index=False,
+    )
+    print(
+        f"Year {year}: wrote {len(failed_qc_plot_log)} paired failed-event QC plot(s)."
     )
 
     holding_capacity_table = (
