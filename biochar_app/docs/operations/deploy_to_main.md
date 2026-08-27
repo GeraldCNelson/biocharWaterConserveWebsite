@@ -1,20 +1,22 @@
 # Deploying Updates to the Biochar Website
 
-This document describes the standard workflow for moving approved code and data from development into production.
+Document Status: Current
+Last Updated: 2026-08-27
+
+This document describes the standard workflow for moving approved code and data from development on a local computer into production.
 
 Development is normally performed using PyCharm, but deployment itself uses Git, SSH, rsync, and standard Linux command-line tools.
 
 ---
 
 # Website URLs
-
-## Test site
+### Test site
 
 Initial destination for testing new code and data:
 
 - https://test.biocharresearch.org
 
-## Production site
+### Production site
 
 Public-facing website:
 
@@ -42,12 +44,18 @@ Both servers run Ubuntu Linux and are accessed through SSH aliases defined in:
 
 ```bash
 ~/.ssh/config
+```
+
+The local ~/.ssh/config file contains aliases for both servers.
+
+The test server also needs a ~/.ssh/config file containing an alias for the production server. This allows rsync transfers directly from the test server to the production server.
+
 
 # Current Python Virtual Environments
 
 A Python virtual environment is an isolated folder that contains its own Python interpreter and installed packages. It allows project-specific dependencies to be managed independently of the operating system Python installation.
 
-Current locations:
+Current locations and their virtual environment names:
 
 ### Local development computer
 
@@ -77,8 +85,6 @@ Standardize both servers on:
 ~/biocharWaterConserveWebsite/venv
 ```
 
----
-
 # Key Idea
 
 Deployment consists of two separate activities.
@@ -98,52 +104,30 @@ GitHub repository:
 https://github.com/GeraldCNelson/biocharWaterConserveWebsite
 ```
 
-The production branch is:
-
-```text
-main
-```
+The test branch is _etl-refactor_. The production branch is _main_.
 
 ## 2. Data updates
 
 Many generated data products are not reliably managed through Git.
 
-Examples include:
+These include:
 
-- parquet files
-- download packages
-- lab-test outputs
-- irrigation outputs
+- parquet files (logger, ratio, weather, and summary data)
 
-These files are transferred using:
+- pre-generated download ZIP files used by the Bulk Downloads page
 
-```bash
-rsync
-```
 
-A `git pull` only updates files tracked by Git. It does not automatically update generated data files.
+These files are transferred using _rsync._
+
+A `git pull` only updates files tracked by Git. It does not update generated data files.
 
 ---
 
 # GitHub Branch Workflow
 
-Normal development occurs on:
+Normal development occurs on a local computer using the _etl-refactor_ branch code. The test website runs this branch.
 
-```text
-etl-refactor
-```
-
-The test website runs from:
-
-```text
-etl-refactor
-```
-
-The production website runs from:
-
-```text
-main
-```
+The production website runs from the _main_ branch code after updating with the _etl-refactor_ branch code.
 
 ## Typical Workflow
 
@@ -153,13 +137,13 @@ main
 4. Verify behavior locally.
 5. Verify behavior on https://test.biocharresearch.org.
 6. Run Playwright smoke tests locally and on the test server.
-7. When everything works correctly on the test server, merge `etl-refactor` into `main`.
-8. Push `main` to GitHub.
-9. Pull `main` on the production server.
-10. Transfer approved data from the test server to the production server.
-11. Restart the production website.
-12. Verify https://biocharresearch.org.
-
+7. Promote approved `etl-refactor` code to `main`:
+   - merge `etl-refactor` into `main`
+   - push `main` to GitHub
+8. Pull `main` on the production server.
+9. Transfer approved data from the test server to the production server.
+10. Restart the production website.
+11. Verify https://biocharresearch.org.
 ---
 
 # 1. Local Checks Before Deployment
@@ -168,7 +152,8 @@ Run from the local project root:
 
 ```bash
 git status
-
+python biochar_app/scripts/dev-tools/check_deployment_requirements.py --git-only
+python -m pytest biochar_app/tests -q
 python biochar_app/tests/playwright_smoke.py
 ```
 
@@ -182,19 +167,15 @@ If the smoke test passes:
 
 ```bash
 git add <changed files>
-
 git commit -m "Brief description"
-
 git push origin etl-refactor
 ```
 
 ---
 
-# 2. Test Server Validation
+# 2. Update Generated Data and Validate the Test Server
 
-Update the test server:
-
-Transfer large files directly to the test server
+Transfer large files from the local computer to the test server.
 
 ```bash
 rsync -av --exclude='.DS_Store' \
@@ -206,27 +187,19 @@ rsync -av --exclude='.DS_Store' \
   biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/
 ```
 
-ssh to the test server and transfer new files stored in from the etl-refactor branch of the biochar website git.
+ssh to the test server and pull new and updated files from the etl-refactor branch.
 
 ```bash
 ssh biochar-test-fetch
-
 cd ~/biocharWaterConserveWebsite
-
 git checkout etl-refactor
-
 git pull origin etl-refactor
-
 source ~/.biochar_py313/bin/activate
-
+python biochar_app/scripts/dev-tools/check_deployment_requirements.py
 python biochar_app/tests/playwright_smoke.py
 ```
 
-Expected result:
-
-```text
-✅ Playwright smoke test completed
-```
+Expected result: ✅ Playwright smoke test completed
 
 Verify that the test website behaves correctly:
 
@@ -237,7 +210,6 @@ Verify that the test website behaves correctly:
 - management data
 - irrigation overlays
 - any newly added functionality
-
 ---
 
 # 3. Promote etl-refactor to main
@@ -246,60 +218,44 @@ Run locally:
 
 ```bash
 git checkout main
-
 git pull origin main
-
 git merge etl-refactor
-
 python biochar_app/tests/playwright_smoke.py
-
 git push origin main
-
 git checkout etl-refactor
 ```
-
 ---
 
 # 4. Transfer Approved Data to Production
 
-After the test server has been verified, it becomes the approved source for production data.
+After testing is complete, the test server becomes the approved source of generated data for production deployment.
 
-Run these commands from the local computer.
+Transferred using rsync:
+- parquet/ - logger data
+- downloads/ - logger and weather data for bulk download
+
+Transferred via git pull origin main:
+- lab-tests/
+- irrigation_clean.csv
+
+
+Run these commands from the test server to transfer the data to the production server.
 
 ## Downloads
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/ \
+  ~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/ \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/downloads/
 ```
-
 ## Parquet files
 
 ```bash
 rsync -av --exclude='.DS_Store' \
-  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/ \
+  ~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/ \
   biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/parquet/
 ```
-
-## Lab-test files
-
-```bash
-rsync -av --exclude='.DS_Store' \
-  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/lab-tests/ \
-  biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/lab-tests/
-```
-
-## Irrigation clean file
-
-```bash
-rsync -av --exclude='.DS_Store' \
-  biochar-test-fetch:~/biocharWaterConserveWebsite/biochar_app/data-processed/management/irrigation/irrigation_clean.csv \
-  biochar-webserver:~/biocharWaterConserveWebsite/biochar_app/data-processed/management/irrigation/
-```
-
 ---
-
 # 5. SSH to the Production Server
 
 ```bash
@@ -311,13 +267,26 @@ SSH aliases are defined in:
 ```bash
 ~/.ssh/config
 ```
+For this project the local config file has an alias for both the test and main server. And the test server has a config file for the main server as well. The test server config file makes it possible to transfer files from the test to main server.
 
+```bash
+~/.ssh/config
+```
+An example config file is below. The pem file is created during setup of the lightsail site.
+
+```bash
+Host biochar-webserver
+    HostName 18.218.206.65
+    User ubuntu
+    IdentityFile ~/.ssh/gnelsonAmazonPrivateKey.pem
+    IdentitiesOnly yes
+```
+Replace the IP address with the current production server IP if it changes.
 To edit:
 
 ```bash
 nano ~/.ssh/config
 ```
-
 ---
 
 # 6. Pull Code on the Production Server
@@ -326,12 +295,16 @@ Run on the production server:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
-
 git status
-
 git pull origin main
 ```
+Expected:
 
+```text
+On branch main
+Your branch is up to date with 'origin/main'
+The working tree should normally be clean before running git pull.
+```
 ---
 
 # 7. Update the Production Python Environment
@@ -340,15 +313,14 @@ Activate the project virtual environment:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
-
 source venv/bin/activate
+python biochar_app/scripts/dev-tools/check_deployment_requirements.py
 ```
 
 Verify:
 
 ```bash
 which python
-
 which pip
 ```
 
@@ -416,31 +388,29 @@ Common causes:
 - missing data file
 - Gunicorn worker crash
 - incorrect virtual environment
-
+Verify that the correct virtual environment is active:
+```bash
+which python
+which pip
+```
 Example:
 
 ```bash
 cd ~/biocharWaterConserveWebsite
-
 source venv/bin/activate
-
 pip install python-multipart
-
 sudo systemctl restart biochar
 ```
 
 ---
 
 # 10. Server Maintenance
-
 Update operating-system packages periodically:
 
 ```bash
 sudo apt update
-
 sudo apt upgrade -y
 ```
-
 Check whether a reboot is required:
 
 ```bash
@@ -452,13 +422,39 @@ Reboot if necessary:
 ```bash
 sudo reboot
 ```
+If login displays:
+
+*** System restart required ***
+
+Ubuntu has installed operating-system updates that require a reboot.
+
+A reboot will temporarily take the website offline.
+
+Before rebooting:
+
+- verify no deployment is in progress
+
+- verify no data transfers are running
+
+Reboot:
+
+sudo reboot
+
+After reconnecting, verify that the website service restarted correctly:
+
+sudo systemctl status biochar
+
+Then verify:
+
+https://biocharresearch.org (or https://test.biocharresearch.org)
+
+still loads successfully.
 
 ---
 
 # 11. Optional Log Cleanup
 
-Clear nginx error logs before testing:
-
+Clear nginx error logs on the test server before testing:
 ```bash
 sudo truncate -s 0 /var/log/nginx/error.log
 ```
@@ -486,7 +482,6 @@ Useful server checks:
 
 ```bash
 sudo systemctl status biochar
-
 sudo tail -n 100 /var/log/nginx/error.log
 ```
 
@@ -514,3 +509,6 @@ Windows users can run the same workflow using:
 - WSL (Windows Subsystem for Linux)
 
 Most local development for this project is performed using PyCharm.
+
+TODO:
+Review whether Bulk Download ZIP files can be regenerated automatically from parquet files during ETL. If so, disaster recovery may only require preserving the parquet directory.
