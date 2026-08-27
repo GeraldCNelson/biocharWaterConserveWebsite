@@ -656,7 +656,7 @@ html {
     padding: 10px 10px 10px 44px;
 }
 #plot-1 {
-    margin-bottom: 10px;
+    margin-bottom: 0px;
 }
 
 #plot-2 {
@@ -878,4 +878,41 @@ input[type="submit"]:hover,
     user-select: none;
     -webkit-touch-callout: none;
     touch-action: manipulation;
+}
+
+/* Biochar laboratory report summary cards */
+.biochar-analysis-content {
+    max-width: 1200px;
+}
+
+.biochar-report-card {
+    border-color: #d8dee8;
+}
+
+.biochar-key-results {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1.35fr) minmax(8rem, 1fr);
+    gap: 0.35rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.biochar-key-results dt,
+.biochar-key-results dd {
+    margin: 0;
+}
+
+.biochar-key-results dd {
+    text-align: right;
+}
+
+@media (max-width: 575.98px) {
+    .biochar-key-results {
+        grid-template-columns: 1fr;
+        gap: 0.1rem;
+    }
+
+    .biochar-key-results dd {
+        margin-bottom: 0.5rem;
+        text-align: left;
+    }
 }
