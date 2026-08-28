@@ -7,7 +7,7 @@ Regenerate both the Markdown and JSON catalogs with:
 python biochar_app/scripts/dev-tools/build_function_catalog.py
 ```
 
-- Python functions and methods: **1618**
+- Python functions and methods: **1603**
 - JavaScript functions: **326**
 - Files with Python parse errors: **4**
 
@@ -975,19 +975,6 @@ and some class/object method syntaxes may require manual review.
 
 - **`extract_functions_with_doc(file_path, file_type='py')`** — line 4; function; public/exported. No docstring.
 - **`scan_directory(base_path)`** — line 38; function; public/exported. No docstring.
-
-### `biochar_app/scripts/dev-tools/logger_health_report.py`
-
-- **`find_battery_columns(df)`** — line 53; function; public/exported. No docstring.
-- **`logger_name_from_column(col)`** — line 60; function; public/exported. No docstring.
-- **`load_year(year)`** — line 64; function; public/exported. No docstring.
-- **`monthly_summary(df, batt_cols)`** — line 78; function; public/exported. No docstring.
-- **`daily_flags(df, batt_cols)`** — line 126; function; public/exported. No docstring.
-- **`summary_table(monthly, daily)`** — line 178; function; public/exported. No docstring.
-- **`recent_summary_table(daily: pd.DataFrame) -> pd.DataFrame`** — line 236; function; public/exported. Summarize current logger battery condition from daily records.
-- **`classify_health(row)`** — line 288; function; public/exported. No docstring.
-- **`round_report_columns(df)`** — line 305; function; public/exported. No docstring.
-- **`main()`** — line 329; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/dev-tools/smoke_downloads.py`
 
@@ -2012,17 +1999,6 @@ and some class/object method syntaxes may require manual review.
 - **`agg(self, spec: Any) -> Any`** — line 142; function; public/exported. No docstring.
 - **`df_agg(obj: Any, spec: AggDict) -> pd.DataFrame`** — line 144; function; public/exported. Typed wrapper around obj.agg(spec) for DataFrame/Resampler/GroupBy.
 - **`gb_agg(gb: Any, spec: AggDict) -> pd.DataFrame`** — line 150; function; public/exported. Typed wrapper around groupby.agg(spec).
-
-### `biochar_app/scripts/utils/compare_photo_directories.py`
-
-- **`build_index(directory: Path)`** — line 26; function; public/exported. No docstring.
-- **`human_size(size)`** — line 34; function; public/exported. No docstring.
-
-### `biochar_app/scripts/utils/compare_photo_hashes.py`
-
-- **`sha256(path: Path, chunk_size: int=1024 * 1024) -> str`** — line 36; function; public/exported. No docstring.
-- **`image_files(directory: Path) -> list[Path]`** — line 46; function; public/exported. No docstring.
-- **`build_hash_index(paths: list[Path]) -> dict[str, list[Path]]`** — line 54; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/utils/type_coercion.py`
 
