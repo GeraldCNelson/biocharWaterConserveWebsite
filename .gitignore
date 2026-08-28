@@ -115,9 +115,32 @@ biochar_app/data-processed/downloads/
 ############################
 biochar_app/diagnostics/plots/
 biochar_app/diagnostics/reports/
+biochar_app/diagnostics/diagnostics_python_metadata_summary.txt
 biochar_app/results/
 biochar_app/special_plots/
 biochar_app/pakbus/pakbus_data/
+
+# Reproducible management and irrigation-analysis products. These remain on
+# the analyst's computer but should not appear as candidate source commits.
+biochar_app/data-processed/management/field_management/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention_statistics/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/water_balance_inspection/
+biochar_app/data-processed/management/irrigation/analysis/figures/failed_event_pair_qc_plot_log_*.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/debug_irrigation_events_*_all_loggers_all_depths.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/matched_treatment_comparison_all_years.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/water_retention_hypothesis_summary.csv
+biochar_app/data-processed/management/irrigation/analysis/qc_candidate/
+biochar_app/data-processed/management/irrigation/analysis/reports/post_irrigation_retention_statistical_summary.md
+biochar_app/data-processed/management/irrigation/irrigation_build_audit.json
+biochar_app/data-processed/management/irrigation/irrigation_clean_candidate*.csv
+biochar_app/data-processed/management/irrigation/irrigation_clean_*candidate*.csv
+biochar_app/data-processed/management/irrigation/irrigation_master_invalid_rows.csv
+biochar_app/data-processed/management/irrigation/irrigation_qc_pending_events.csv
+biochar_app/data-processed/management/irrigation/photo_review_*.csv
+biochar_app/data-processed/management/irrigation/photos/meter_photo_unmatched_clean_photos.csv
+biochar_app/data-processed/management/irrigation/photos/meter_photo_workbook_boundary_qc.csv
+biochar_app/data-processed/management/irrigation/photos/meter_photo_workbook_qc.csv
 
 ############################
 # Archives
@@ -161,7 +184,15 @@ biochar_app/geospatial/**/*.qgz
 ############################
 biochar_app/geospatial/lidar/clipped/**
 biochar_app/geospatial/lidar/hillshade/**
+biochar_app/geospatial/lidar/analysis/**
+biochar_app/geospatial/lidar/terrain/**/*.aux.xml
 biochar_app/geospatial/drone/processed/**
+biochar_app/geospatial/drone/flight_data/**
+biochar_app/geospatial/drone/**/*.JPG
+biochar_app/geospatial/drone/**/*.MP4
+biochar_app/geospatial/drone/**/*_metadata.txt
+biochar_app/geospatial/field_layout/field_photo_locations.csv
+biochar_app/geospatial/field_layout/field_photo_locations.png
 
 ############################
 # Permanent GIS products ARE tracked
@@ -180,6 +211,9 @@ biochar_app/geospatial/drone/processed/**
 .DS_Store
 **/.DS_Store
 .venv
+
+# Original local image retained after creation of the web-ready asset.
+biochar_app/static/images/CS650s_in_field.jpg
 
 biochar_app/data-processed/management/irrigation/photos/originals/
 biochar_app/data-processed/management/irrigation/photos/meter_photo_review*.xlsx
