@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,8 @@ def test_deployment_requirement_keys_are_unique() -> None:
 
 
 def test_git_deployment_requirements_pass_preflight() -> None:
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
     result = subprocess.run(
         [
             sys.executable,
@@ -31,6 +34,7 @@ def test_git_deployment_requirements_pass_preflight() -> None:
             "--git-only",
         ],
         cwd=PROJECT_ROOT,
+        env=environment,
         capture_output=True,
         text=True,
         check=False,

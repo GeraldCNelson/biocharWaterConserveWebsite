@@ -776,31 +776,31 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/dev-tools/build_documentation_catalog.py`
 
-- **`clean_markdown(text: str) -> str`** — line 31; function; public/exported. No docstring.
-- **`document_title(path: Path, text: str) -> str`** — line 38; function; public/exported. No docstring.
-- **`document_description(text: str) -> str`** — line 46; function; public/exported. No docstring.
-- **`classify(path: Path) -> tuple[str, str]`** — line 71; function; public/exported. No docstring.
-- **`collect_documents() -> list[DocumentEntry]`** — line 97; function; public/exported. No docstring.
-- **`render_catalog(entries: list[DocumentEntry]) -> str`** — line 116; function; public/exported. No docstring.
-- **`main() -> int`** — line 151; function; public/exported. No docstring.
+- **`clean_markdown(text: str) -> str`** — line 36; function; public/exported. No docstring.
+- **`document_title(path: Path, text: str) -> str`** — line 43; function; public/exported. No docstring.
+- **`document_description(text: str) -> str`** — line 51; function; public/exported. No docstring.
+- **`classify(path: Path) -> tuple[str, str]`** — line 76; function; public/exported. No docstring.
+- **`collect_documents() -> list[DocumentEntry]`** — line 102; function; public/exported. No docstring.
+- **`render_catalog(entries: list[DocumentEntry]) -> str`** — line 121; function; public/exported. No docstring.
+- **`main() -> int`** — line 156; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/dev-tools/build_function_catalog.py`
 
-- **`summary_line(text: str) -> str`** — line 53; function; public/exported. No docstring.
-- **`safe_unparse(node: ast.AST \| None) -> str`** — line 61; function; public/exported. No docstring.
-- **`PythonFunctionVisitor.__init__(self, relative_path: str) -> None`** — line 71; method; internal. No docstring.
-- **`PythonFunctionVisitor.visit_ClassDef(self, node: ast.ClassDef) -> None`** — line 76; method; public/exported. No docstring.
-- **`PythonFunctionVisitor.visit_FunctionDef(self, node: ast.FunctionDef) -> None`** — line 81; method; public/exported. No docstring.
-- **`PythonFunctionVisitor.visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None`** — line 84; method; public/exported. No docstring.
-- **`PythonFunctionVisitor._record_function(self, node: ast.FunctionDef \| ast.AsyncFunctionDef, *, is_async: bool) -> None`** — line 87; method; internal. No docstring.
-- **`iter_source_files(pattern: str) -> Iterable[Path]`** — line 128; function; public/exported. No docstring.
-- **`collect_python_functions() -> tuple[list[FunctionEntry], list[str]]`** — line 135; function; public/exported. No docstring.
-- **`nearest_jsdoc(lines: list[str], line_index: int) -> str`** — line 169; function; public/exported. No docstring.
-- **`collect_javascript_from_text(text: str, relative_path: str, *, line_offset: int=0) -> list[FunctionEntry]`** — line 196; function; public/exported. No docstring.
-- **`collect_javascript_functions() -> list[FunctionEntry]`** — line 262; function; public/exported. No docstring.
-- **`markdown_safe(text: str) -> str`** — line 283; function; public/exported. No docstring.
-- **`render_markdown(entries: list[FunctionEntry], errors: list[str]) -> str`** — line 287; function; public/exported. No docstring.
-- **`main() -> int`** — line 335; function; public/exported. No docstring.
+- **`summary_line(text: str) -> str`** — line 58; function; public/exported. No docstring.
+- **`safe_unparse(node: ast.AST \| None) -> str`** — line 66; function; public/exported. No docstring.
+- **`PythonFunctionVisitor.__init__(self, relative_path: str) -> None`** — line 76; method; internal. No docstring.
+- **`PythonFunctionVisitor.visit_ClassDef(self, node: ast.ClassDef) -> None`** — line 81; method; public/exported. No docstring.
+- **`PythonFunctionVisitor.visit_FunctionDef(self, node: ast.FunctionDef) -> None`** — line 86; method; public/exported. No docstring.
+- **`PythonFunctionVisitor.visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None`** — line 89; method; public/exported. No docstring.
+- **`PythonFunctionVisitor._record_function(self, node: ast.FunctionDef \| ast.AsyncFunctionDef, *, is_async: bool) -> None`** — line 92; method; internal. No docstring.
+- **`iter_source_files(pattern: str) -> Iterable[Path]`** — line 133; function; public/exported. No docstring.
+- **`collect_python_functions() -> tuple[list[FunctionEntry], list[str]]`** — line 140; function; public/exported. No docstring.
+- **`nearest_jsdoc(lines: list[str], line_index: int) -> str`** — line 174; function; public/exported. No docstring.
+- **`collect_javascript_from_text(text: str, relative_path: str, *, line_offset: int=0) -> list[FunctionEntry]`** — line 201; function; public/exported. No docstring.
+- **`collect_javascript_functions() -> list[FunctionEntry]`** — line 267; function; public/exported. No docstring.
+- **`markdown_safe(text: str) -> str`** — line 288; function; public/exported. No docstring.
+- **`render_markdown(entries: list[FunctionEntry], errors: list[str]) -> str`** — line 292; function; public/exported. No docstring.
+- **`main() -> int`** — line 340; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/dev-tools/check_battery_continuity.py`
 
@@ -811,13 +811,13 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/dev-tools/check_deployment_requirements.py`
 
-- **`is_git_tracked(path: Path) -> bool`** — line 37; function; public/exported. Return whether Git tracks ``path`` relative to the repository root.
-- **`directory_has_files(path: Path) -> bool`** — line 54; function; public/exported. No docstring.
-- **`looks_like_readable_pdf(path: Path) -> bool`** — line 58; function; public/exported. No docstring.
-- **`check_requirement(requirement: dict[str, str]) -> CheckResult`** — line 67; function; public/exported. No docstring.
-- **`run_checks(*, git_only: bool=False) -> list[CheckResult]`** — line 107; function; public/exported. No docstring.
-- **`parse_args() -> argparse.Namespace`** — line 116; function; public/exported. No docstring.
-- **`main() -> int`** — line 131; function; public/exported. No docstring.
+- **`is_git_tracked(path: Path) -> bool`** — line 45; function; public/exported. Return whether Git tracks ``path`` relative to the repository root.
+- **`directory_has_files(path: Path) -> bool`** — line 62; function; public/exported. No docstring.
+- **`looks_like_readable_pdf(path: Path) -> bool`** — line 66; function; public/exported. No docstring.
+- **`check_requirement(requirement: dict[str, str]) -> CheckResult`** — line 75; function; public/exported. No docstring.
+- **`run_checks(*, git_only: bool=False) -> list[CheckResult]`** — line 115; function; public/exported. No docstring.
+- **`parse_args() -> argparse.Namespace`** — line 124; function; public/exported. No docstring.
+- **`main() -> int`** — line 139; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/dev-tools/check_irrigation_timing_alignment.py`
 
@@ -1552,27 +1552,27 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py`
 
-- **`require_columns(df: pd.DataFrame, columns: list[str], *, table_name: str) -> None`** — line 155; function; public/exported. Raise a clear error if required columns are missing.
-- **`numeric_if_present(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame`** — line 176; function; public/exported. Convert listed columns to numeric where present.
-- **`round_numeric(df: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 194; function; public/exported. Round numeric reporting columns.
-- **`print_section(title: str) -> None`** — line 213; function; public/exported. No docstring.
-- **`bool_series_if_present(df: pd.DataFrame, column: str, *, default: bool=False) -> pd.Series`** — line 220; function; public/exported. Return a boolean Series for a column when present.
-- **`load_water_balance() -> pd.DataFrame`** — line 251; function; public/exported. No docstring.
-- **`build_overall_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 311; function; public/exported. No docstring.
-- **`build_strip_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 377; function; public/exported. No docstring.
-- **`build_zone_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 448; function; public/exported. No docstring.
-- **`build_arrival_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 507; function; public/exported. No docstring.
-- **`build_correlation_table(df: pd.DataFrame) -> pd.DataFrame`** — line 596; function; public/exported. No docstring.
-- **`build_correlations_by_strip(df: pd.DataFrame) -> pd.DataFrame`** — line 650; function; public/exported. No docstring.
-- **`build_largest_residuals(df: pd.DataFrame) -> pd.DataFrame`** — line 721; function; public/exported. No docstring.
-- **`build_storage_exceeds_applied_events(df: pd.DataFrame) -> pd.DataFrame`** — line 773; function; public/exported. No docstring.
-- **`build_incomplete_zone_events(df: pd.DataFrame) -> pd.DataFrame`** — line 815; function; public/exported. No docstring.
-- **`build_negative_zone_storage_events(df: pd.DataFrame) -> pd.DataFrame`** — line 857; function; public/exported. No docstring.
-- **`build_complete_zone_strip_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 908; function; public/exported. No docstring.
-- **`build_complete_vs_all_summary(all_summary: pd.DataFrame, complete_summary: pd.DataFrame) -> pd.DataFrame`** — line 986; function; public/exported. No docstring.
-- **`build_consistency_checks(df: pd.DataFrame) -> pd.DataFrame`** — line 1101; function; public/exported. No docstring.
-- **`write_csv(df: pd.DataFrame, filename: str) -> None`** — line 1197; function; public/exported. No docstring.
-- **`main() -> None`** — line 1213; function; public/exported. No docstring.
+- **`require_columns(df: pd.DataFrame, columns: list[str], *, table_name: str) -> None`** — line 152; function; public/exported. Raise a clear error if required columns are missing.
+- **`numeric_if_present(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame`** — line 173; function; public/exported. Convert listed columns to numeric where present.
+- **`round_numeric(df: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 191; function; public/exported. Round numeric reporting columns.
+- **`print_section(title: str) -> None`** — line 210; function; public/exported. No docstring.
+- **`bool_series_if_present(df: pd.DataFrame, column: str, *, default: bool=False) -> pd.Series`** — line 217; function; public/exported. Return a boolean Series for a column when present.
+- **`load_water_balance() -> pd.DataFrame`** — line 248; function; public/exported. No docstring.
+- **`build_overall_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 308; function; public/exported. No docstring.
+- **`build_strip_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 374; function; public/exported. No docstring.
+- **`build_zone_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 445; function; public/exported. No docstring.
+- **`build_arrival_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 504; function; public/exported. No docstring.
+- **`build_correlation_table(df: pd.DataFrame) -> pd.DataFrame`** — line 593; function; public/exported. No docstring.
+- **`build_correlations_by_strip(df: pd.DataFrame) -> pd.DataFrame`** — line 647; function; public/exported. No docstring.
+- **`build_largest_residuals(df: pd.DataFrame) -> pd.DataFrame`** — line 718; function; public/exported. No docstring.
+- **`build_storage_exceeds_applied_events(df: pd.DataFrame) -> pd.DataFrame`** — line 770; function; public/exported. No docstring.
+- **`build_incomplete_zone_events(df: pd.DataFrame) -> pd.DataFrame`** — line 812; function; public/exported. No docstring.
+- **`build_negative_zone_storage_events(df: pd.DataFrame) -> pd.DataFrame`** — line 854; function; public/exported. No docstring.
+- **`build_complete_zone_strip_summary(df: pd.DataFrame) -> pd.DataFrame`** — line 905; function; public/exported. No docstring.
+- **`build_complete_vs_all_summary(all_summary: pd.DataFrame, complete_summary: pd.DataFrame) -> pd.DataFrame`** — line 983; function; public/exported. No docstring.
+- **`build_consistency_checks(df: pd.DataFrame) -> pd.DataFrame`** — line 1098; function; public/exported. No docstring.
+- **`write_csv(df: pd.DataFrame, filename: str) -> None`** — line 1194; function; public/exported. No docstring.
+- **`main() -> None`** — line 1210; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/management/irrigation_analysis/holding_capacity.py`
 
@@ -2155,10 +2155,10 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/tests/test_project_inventories.py`
 
-- **`test_deployment_requirement_keys_are_unique() -> None`** — line 20; function; public/exported. No docstring.
-- **`test_git_deployment_requirements_pass_preflight() -> None`** — line 26; function; public/exported. No docstring.
-- **`test_documentation_catalog_contains_operational_guides() -> None`** — line 41; function; public/exported. No docstring.
-- **`test_function_catalog_is_searchable_and_parseable() -> None`** — line 48; function; public/exported. No docstring.
+- **`test_deployment_requirement_keys_are_unique() -> None`** — line 21; function; public/exported. No docstring.
+- **`test_git_deployment_requirements_pass_preflight() -> None`** — line 27; function; public/exported. No docstring.
+- **`test_documentation_catalog_contains_operational_guides() -> None`** — line 45; function; public/exported. No docstring.
+- **`test_function_catalog_is_searchable_and_parseable() -> None`** — line 52; function; public/exported. No docstring.
 
 ### `biochar_app/tests/test_update_master_workbook_snapshot.py`
 

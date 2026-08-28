@@ -6,6 +6,10 @@ Verify that major website functions still work after code changes.
 
 These tests use Playwright to drive a real browser and confirm that key user workflows continue to function.
 
+Run them on the local development computer and test server. Playwright is not
+required in the production Python environment; production uses the deployment
+requirements checker plus an HTTP response check after restarting the service.
+
 ## Current Tests
 
 - Home page load
@@ -57,7 +61,7 @@ python biochar_app/scripts/dev-tools/build_function_catalog.py
 
 ## Installation of required software
 
-In main project terminal run
+In a local or test-server development environment, run:
 
 ```bash
 pip install playwright
