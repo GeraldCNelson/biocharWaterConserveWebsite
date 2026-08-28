@@ -365,6 +365,16 @@ Confirm that the service status is:
 active (running)
 ```
 
+Confirm that the public site responds successfully:
+
+```bash
+curl -fsS https://biocharresearch.org/ > /dev/null \
+  && echo "Production website responded successfully"
+```
+
+Playwright is a development dependency and is intentionally run locally and on
+the test server. It is not required on the production server.
+
 ---
 
 # 9. Troubleshooting 502 Bad Gateway Errors

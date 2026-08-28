@@ -15,8 +15,16 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+# Direct execution sets ``sys.path[0]`` to ``scripts/dev-tools`` rather than the
+# repository root. Add the root before importing the application package so the
+# documented command works without an external PYTHONPATH setting.
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from biochar_app.config.deployment_manifest import DEPLOYMENT_REQUIREMENTS
 from biochar_app.config.paths import BASE_DIR

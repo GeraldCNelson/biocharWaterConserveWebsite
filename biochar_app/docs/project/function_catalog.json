@@ -10301,7 +10301,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 31,
+      "line": 36,
       "qualified_name": "clean_markdown",
       "signature": "(text: str) -> str",
       "kind": "function",
@@ -10313,7 +10313,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 38,
+      "line": 43,
       "qualified_name": "document_title",
       "signature": "(path: Path, text: str) -> str",
       "kind": "function",
@@ -10325,7 +10325,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 46,
+      "line": 51,
       "qualified_name": "document_description",
       "signature": "(text: str) -> str",
       "kind": "function",
@@ -10337,7 +10337,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 71,
+      "line": 76,
       "qualified_name": "classify",
       "signature": "(path: Path) -> tuple[str, str]",
       "kind": "function",
@@ -10349,7 +10349,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 97,
+      "line": 102,
       "qualified_name": "collect_documents",
       "signature": "() -> list[DocumentEntry]",
       "kind": "function",
@@ -10361,7 +10361,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 116,
+      "line": 121,
       "qualified_name": "render_catalog",
       "signature": "(entries: list[DocumentEntry]) -> str",
       "kind": "function",
@@ -10373,7 +10373,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_documentation_catalog.py",
-      "line": 151,
+      "line": 156,
       "qualified_name": "main",
       "signature": "() -> int",
       "kind": "function",
@@ -10385,7 +10385,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 53,
+      "line": 58,
       "qualified_name": "summary_line",
       "signature": "(text: str) -> str",
       "kind": "function",
@@ -10397,7 +10397,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 61,
+      "line": 66,
       "qualified_name": "safe_unparse",
       "signature": "(node: ast.AST | None) -> str",
       "kind": "function",
@@ -10409,7 +10409,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 71,
+      "line": 76,
       "qualified_name": "PythonFunctionVisitor.__init__",
       "signature": "(self, relative_path: str) -> None",
       "kind": "method",
@@ -10421,7 +10421,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 76,
+      "line": 81,
       "qualified_name": "PythonFunctionVisitor.visit_ClassDef",
       "signature": "(self, node: ast.ClassDef) -> None",
       "kind": "method",
@@ -10433,7 +10433,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 81,
+      "line": 86,
       "qualified_name": "PythonFunctionVisitor.visit_FunctionDef",
       "signature": "(self, node: ast.FunctionDef) -> None",
       "kind": "method",
@@ -10445,7 +10445,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 84,
+      "line": 89,
       "qualified_name": "PythonFunctionVisitor.visit_AsyncFunctionDef",
       "signature": "(self, node: ast.AsyncFunctionDef) -> None",
       "kind": "method",
@@ -10457,7 +10457,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 87,
+      "line": 92,
       "qualified_name": "PythonFunctionVisitor._record_function",
       "signature": "(self, node: ast.FunctionDef | ast.AsyncFunctionDef, *, is_async: bool) -> None",
       "kind": "method",
@@ -10469,7 +10469,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 128,
+      "line": 133,
       "qualified_name": "iter_source_files",
       "signature": "(pattern: str) -> Iterable[Path]",
       "kind": "function",
@@ -10481,7 +10481,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 135,
+      "line": 140,
       "qualified_name": "collect_python_functions",
       "signature": "() -> tuple[list[FunctionEntry], list[str]]",
       "kind": "function",
@@ -10493,7 +10493,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 169,
+      "line": 174,
       "qualified_name": "nearest_jsdoc",
       "signature": "(lines: list[str], line_index: int) -> str",
       "kind": "function",
@@ -10505,7 +10505,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 196,
+      "line": 201,
       "qualified_name": "collect_javascript_from_text",
       "signature": "(text: str, relative_path: str, *, line_offset: int=0) -> list[FunctionEntry]",
       "kind": "function",
@@ -10517,7 +10517,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 262,
+      "line": 267,
       "qualified_name": "collect_javascript_functions",
       "signature": "() -> list[FunctionEntry]",
       "kind": "function",
@@ -10529,7 +10529,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 283,
+      "line": 288,
       "qualified_name": "markdown_safe",
       "signature": "(text: str) -> str",
       "kind": "function",
@@ -10541,7 +10541,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 287,
+      "line": 292,
       "qualified_name": "render_markdown",
       "signature": "(entries: list[FunctionEntry], errors: list[str]) -> str",
       "kind": "function",
@@ -10553,7 +10553,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/build_function_catalog.py",
-      "line": 335,
+      "line": 340,
       "qualified_name": "main",
       "signature": "() -> int",
       "kind": "function",
@@ -10613,7 +10613,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 37,
+      "line": 45,
       "qualified_name": "is_git_tracked",
       "signature": "(path: Path) -> bool",
       "kind": "function",
@@ -10625,7 +10625,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 54,
+      "line": 62,
       "qualified_name": "directory_has_files",
       "signature": "(path: Path) -> bool",
       "kind": "function",
@@ -10637,7 +10637,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 58,
+      "line": 66,
       "qualified_name": "looks_like_readable_pdf",
       "signature": "(path: Path) -> bool",
       "kind": "function",
@@ -10649,7 +10649,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 67,
+      "line": 75,
       "qualified_name": "check_requirement",
       "signature": "(requirement: dict[str, str]) -> CheckResult",
       "kind": "function",
@@ -10661,7 +10661,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 107,
+      "line": 115,
       "qualified_name": "run_checks",
       "signature": "(*, git_only: bool=False) -> list[CheckResult]",
       "kind": "function",
@@ -10673,7 +10673,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 116,
+      "line": 124,
       "qualified_name": "parse_args",
       "signature": "() -> argparse.Namespace",
       "kind": "function",
@@ -10685,7 +10685,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/dev-tools/check_deployment_requirements.py",
-      "line": 131,
+      "line": 139,
       "qualified_name": "main",
       "signature": "() -> int",
       "kind": "function",
@@ -17525,7 +17525,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 155,
+      "line": 152,
       "qualified_name": "require_columns",
       "signature": "(df: pd.DataFrame, columns: list[str], *, table_name: str) -> None",
       "kind": "function",
@@ -17537,7 +17537,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 176,
+      "line": 173,
       "qualified_name": "numeric_if_present",
       "signature": "(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame",
       "kind": "function",
@@ -17549,7 +17549,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 194,
+      "line": 191,
       "qualified_name": "round_numeric",
       "signature": "(df: pd.DataFrame, decimals: int=2) -> pd.DataFrame",
       "kind": "function",
@@ -17561,7 +17561,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 213,
+      "line": 210,
       "qualified_name": "print_section",
       "signature": "(title: str) -> None",
       "kind": "function",
@@ -17573,7 +17573,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 220,
+      "line": 217,
       "qualified_name": "bool_series_if_present",
       "signature": "(df: pd.DataFrame, column: str, *, default: bool=False) -> pd.Series",
       "kind": "function",
@@ -17585,7 +17585,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 251,
+      "line": 248,
       "qualified_name": "load_water_balance",
       "signature": "() -> pd.DataFrame",
       "kind": "function",
@@ -17597,7 +17597,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 311,
+      "line": 308,
       "qualified_name": "build_overall_summary",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17609,7 +17609,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 377,
+      "line": 374,
       "qualified_name": "build_strip_summary",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17621,7 +17621,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 448,
+      "line": 445,
       "qualified_name": "build_zone_summary",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17633,7 +17633,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 507,
+      "line": 504,
       "qualified_name": "build_arrival_summary",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17645,7 +17645,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 596,
+      "line": 593,
       "qualified_name": "build_correlation_table",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17657,7 +17657,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 650,
+      "line": 647,
       "qualified_name": "build_correlations_by_strip",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17669,7 +17669,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 721,
+      "line": 718,
       "qualified_name": "build_largest_residuals",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17681,7 +17681,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 773,
+      "line": 770,
       "qualified_name": "build_storage_exceeds_applied_events",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17693,7 +17693,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 815,
+      "line": 812,
       "qualified_name": "build_incomplete_zone_events",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17705,7 +17705,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 857,
+      "line": 854,
       "qualified_name": "build_negative_zone_storage_events",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17717,7 +17717,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 908,
+      "line": 905,
       "qualified_name": "build_complete_zone_strip_summary",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17729,7 +17729,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 986,
+      "line": 983,
       "qualified_name": "build_complete_vs_all_summary",
       "signature": "(all_summary: pd.DataFrame, complete_summary: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17741,7 +17741,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 1101,
+      "line": 1098,
       "qualified_name": "build_consistency_checks",
       "signature": "(df: pd.DataFrame) -> pd.DataFrame",
       "kind": "function",
@@ -17753,7 +17753,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 1197,
+      "line": 1194,
       "qualified_name": "write_csv",
       "signature": "(df: pd.DataFrame, filename: str) -> None",
       "kind": "function",
@@ -17765,7 +17765,7 @@
     {
       "language": "Python",
       "path": "biochar_app/scripts/management/irrigation_analysis/diagnostics/inspect_water_balance_outputs.py",
-      "line": 1213,
+      "line": 1210,
       "qualified_name": "main",
       "signature": "() -> None",
       "kind": "function",
@@ -23295,7 +23295,7 @@
     {
       "language": "Python",
       "path": "biochar_app/tests/test_project_inventories.py",
-      "line": 20,
+      "line": 21,
       "qualified_name": "test_deployment_requirement_keys_are_unique",
       "signature": "() -> None",
       "kind": "function",
@@ -23307,7 +23307,7 @@
     {
       "language": "Python",
       "path": "biochar_app/tests/test_project_inventories.py",
-      "line": 26,
+      "line": 27,
       "qualified_name": "test_git_deployment_requirements_pass_preflight",
       "signature": "() -> None",
       "kind": "function",
@@ -23319,7 +23319,7 @@
     {
       "language": "Python",
       "path": "biochar_app/tests/test_project_inventories.py",
-      "line": 41,
+      "line": 45,
       "qualified_name": "test_documentation_catalog_contains_operational_guides",
       "signature": "() -> None",
       "kind": "function",
@@ -23331,7 +23331,7 @@
     {
       "language": "Python",
       "path": "biochar_app/tests/test_project_inventories.py",
-      "line": 48,
+      "line": 52,
       "qualified_name": "test_function_catalog_is_searchable_and_parseable",
       "signature": "() -> None",
       "kind": "function",
