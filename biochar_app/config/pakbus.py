@@ -15,6 +15,9 @@ DEFAULT_TABLE = "Table1"
 DEFAULT_HOURS = 1
 DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
 DEFAULT_LAG_MINUTES = 30  # delay before "now" to ensure data availability
+DEFAULT_STATION_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 1.0
+DEFAULT_STATION_PAUSE_SECONDS = 15.0
 
 # Map PakBus numeric IDs to station names and back
 STATION_BY_ID: Dict[int, str] = {
@@ -57,12 +60,16 @@ def parse_ids(s: str) -> List[int]:
 class PakbusConfig:
     host: str
     port: int
+    router_id: int
     base_id: int
     logger_ids: List[int]
 
 PAKBUS = PakbusConfig(
     host=os.getenv("PAKBUS_HOST", "2605:59ca:2202:7700:2d0:2cff:fe02:1ddd"),
     port=int(os.getenv("PAKBUS_PORT", 6785)),
-    base_id=int(os.getenv("PAKBUS_BASE_ID", 4094)),
+    router_id=int(os.getenv("PAKBUS_ROUTER_ID", 1)),
+    # PC400 captures from this installation use 0xFFD (4093) as the
+    # client/source PakBus address.
+    base_id=int(os.getenv("PAKBUS_BASE_ID", 4093)),
     logger_ids=list(range(2, 14)),
 )
