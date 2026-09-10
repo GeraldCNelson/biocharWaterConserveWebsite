@@ -77,7 +77,7 @@ import textwrap
 import argparse
 import json
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pandas as pd
 from pandas import Series
@@ -136,11 +136,6 @@ from biochar_app.scripts.lab.build_field_biomass_from_master import (
 )
 from biochar_app.scripts.lab.update_ward_master_nir import update_ward_master_nir
 from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
-
-from biochar_app.config.dataset_metadata import (
-    DAILY_PRECIPITATION_MAX_IN,
-    VWC_MAX_PERCENT,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -247,6 +242,99 @@ def write_dataset_metadata(
     )
 
     logger.info(f"✅ Wrote dataset metadata: {output_path}")
+
+
+def collect_dataset_metadata_from_processed_outputs(
+    years: list[int],
+    parquet_dir: Path = Path(PARQUET_DIR),
+) -> DatasetMetadata:
+    """Calculate site-wide metadata from canonical outputs for every year.
+
+    A targeted ETL run may rebuild only one year, but the constants consumed by
+    the website describe the complete published dataset. Reading the finished
+    parquet products here keeps those two concerns independent and also allows
+    corrected historical extrema to decrease as well as increase.
+    """
+    metadata: DatasetMetadata = {}
+    missing: list[Path] = []
+
+    for year in sorted(set(years)):
+        logger_path = parquet_dir / str(year) / f"{year}_raw_logger.parquet"
+        weather_path = (
+            parquet_dir
+            / "summary"
+            / "weather"
+            / "15min"
+            / f"{year}_15min.parquet"
+        )
+
+        for path in (logger_path, weather_path):
+            if not path.exists():
+                missing.append(path)
+
+        if not logger_path.exists() or not weather_path.exists():
+            continue
+
+        logger_df = pd.read_parquet(logger_path)
+        column_groups = {
+            "vwc_percent": [
+                column
+                for column in logger_df.columns
+                if column.startswith("VWC_") and "_raw_" in column
+            ],
+            "soil_temperature_f": [
+                column
+                for column in logger_df.columns
+                if column.startswith("T_") and "_raw_" in column
+            ],
+            "soil_ec_ds_per_m": [
+                column
+                for column in logger_df.columns
+                if column.startswith("EC_") and "_raw_" in column
+            ],
+        }
+        for key, columns in column_groups.items():
+            if columns:
+                update_dataset_metadata(
+                    metadata,
+                    key,
+                    cast(pd.Series, logger_df[columns].stack(future_stack=True)),
+                )
+
+        weather_df = pd.read_parquet(weather_path)
+        required_weather_columns = {"timestamp", "temp_air_degF", "precip_in"}
+        absent = required_weather_columns - set(weather_df.columns)
+        if absent:
+            raise ValueError(
+                f"{weather_path} is missing metadata columns: {sorted(absent)}"
+            )
+
+        update_dataset_metadata(
+            metadata,
+            "air_temperature_f",
+            weather_df["temp_air_degF"],
+        )
+        weather_timestamps = pd.to_datetime(weather_df["timestamp"], errors="coerce")
+        daily_precip = (
+            pd.to_numeric(weather_df["precip_in"], errors="coerce")
+            .set_axis(weather_timestamps)
+            .resample("D")
+            .sum(min_count=1)
+        )
+        update_dataset_metadata(
+            metadata,
+            "daily_precipitation_in",
+            daily_precip,
+        )
+
+    if missing:
+        missing_text = "\n".join(f"  - {path}" for path in missing)
+        raise FileNotFoundError(
+            "Cannot generate complete dataset metadata; processed outputs are "
+            f"missing:\n{missing_text}"
+        )
+
+    return metadata
 
 # Logger timestamps are 15-minute aggregation labels generated from each
 # logger's internal wall clock. PC400 clock synchronization copied the
@@ -1814,7 +1902,8 @@ def generate_summaries(years: list[int]) -> None:
                 download_url=coag_download_url,
                 builder_url=builder_url,
             )
-    write_dataset_metadata(dataset_metadata, years)
+    global_metadata = collect_dataset_metadata_from_processed_outputs(list(YEARS))
+    write_dataset_metadata(global_metadata, list(YEARS))
     logger.info("🎉 ETL complete.")
 
 def resolve_target_year(cli_year: Optional[int] = None) -> int:
