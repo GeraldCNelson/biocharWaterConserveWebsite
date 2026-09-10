@@ -141,6 +141,10 @@ from biochar_app.scripts.management.irrigation_analysis.holding_capacity import 
     build_event_storage_by_zone,
     build_first_pass_water_balance_table,
     build_flow_storage_correlation_summary,
+    build_holding_capacity_year_stability_summary,
+    build_holding_capacity_annual_comparison,
+    build_matched_sensor_treatment_events,
+    summarize_matched_sensor_treatment_events,
     build_trustworthy_holding_capacity_summary,
     build_zone_anomaly_diagnostics,
     build_zone_ordering_frequency,
@@ -953,6 +957,9 @@ def write_year_outputs(
     pd.DataFrame,
     pd.DataFrame,
     pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
 ]:
     """
     Write yearly irrigation-analysis outputs.
@@ -966,8 +973,8 @@ def write_year_outputs(
         Prepared 15-minute logger dataframe.
 
     results
-        Bottom-logger event results. These continue to drive the legacy/stable
-        holding-capacity, pre-start-response, and trustworthy-event workflows.
+        Bottom-logger event results. These drive downstream/end-of-field QC
+        and whole-strip water-balance eligibility.
 
     zone_storage_table
         Three-zone storage table built from all logger positions (T, M, B).
@@ -975,9 +982,9 @@ def write_year_outputs(
         calculation.
 
     plot_results
-        Event results for all logger positions. Used for arrival analysis,
-        response summaries, and multidepth plotting. If omitted, falls back
-        to ``results``.
+        Event results for all logger positions. Used for holding-capacity QC,
+        arrival analysis, response summaries, and multidepth plotting. If
+        omitted, falls back to ``results``.
     """
 
     diagnostics_dir.mkdir(
@@ -1099,7 +1106,9 @@ def write_year_outputs(
     if plot_results is None:
         plot_results = results
 
-    plot_results = plot_results.copy()
+    plot_results = add_scaled_storage_fields(
+        plot_results.copy()
+    )
 
     arrival_times = build_irrigation_arrival_times(
         df_15min=df_15min,
@@ -1570,7 +1579,8 @@ def write_year_outputs(
     )
 
     # ------------------------------------------------------------------
-    # Bottom-logger quality-control workflow
+    # Bottom-logger quality-control workflow. This remains the authority for
+    # whole-strip water balance and end-of-field interpretation.
     # ------------------------------------------------------------------
     pre_start_table = (
         detect_pre_start_response(
@@ -1614,12 +1624,38 @@ def write_year_outputs(
         f"Year {year}: wrote {len(failed_qc_plot_log)} paired failed-event QC plot(s)."
     )
 
+    # Holding-capacity stability requires independent QC at every physical
+    # logger position. Do not let the downstream logger stand in for T and M.
+    all_position_pre_start_table = detect_pre_start_response(
+        df_15min=df_15min,
+        event_results=plot_results,
+        lookback_hours=6.0,
+        min_increase=0.5,
+        precip_col="precip_in",
+        min_precip_in=0.01,
+    )
+    all_position_pre_start_table.to_csv(
+        diagnostics_dir
+        / f"irrigation_pre_start_response_flags_all_positions_{year}.csv",
+        index=False,
+    )
+    all_position_trustworthy_table = (
+        classify_trustworthy_irrigation_events(
+            all_position_pre_start_table
+        )
+    )
+    all_position_trustworthy_table.to_csv(
+        diagnostics_dir
+        / f"trustworthy_irrigation_events_all_positions_{year}.csv",
+        index=False,
+    )
+
     holding_capacity_table = (
         build_trustworthy_holding_capacity_summary(
             trustworthy_table=(
-                trustworthy_table
+                all_position_trustworthy_table
             ),
-            event_results=results,
+            event_results=plot_results,
         )
     )
 
@@ -1627,6 +1663,25 @@ def write_year_outputs(
         holding_capacity_dir
         / f"trustworthy_holding_capacity_summary_{year}.csv",
         index=False,
+    )
+
+    matched_sensor_events = build_matched_sensor_treatment_events(
+        event_results=plot_results,
+        trustworthy_table=all_position_trustworthy_table,
+    )
+    matched_sensor_events.to_csv(
+        holding_capacity_dir
+        / f"matched_sensor_treatment_events_{year}.csv",
+        index=False,
+        float_format="%.4f",
+    )
+    summarize_matched_sensor_treatment_events(
+        matched_sensor_events
+    ).to_csv(
+        holding_capacity_dir
+        / f"matched_sensor_treatment_summary_{year}.csv",
+        index=False,
+        float_format="%.4f",
     )
 
     # ------------------------------------------------------------------
@@ -1669,8 +1724,11 @@ def write_year_outputs(
     return (
         pre_start_table,
         trustworthy_table,
+        all_position_pre_start_table,
+        all_position_trustworthy_table,
         holding_capacity_table,
         water_balance_table,
+        matched_sensor_events,
     )
 
 def _append_if_not_empty(collection: list[pd.DataFrame], df: pd.DataFrame) -> None:
@@ -1837,8 +1895,11 @@ def write_all_logger_debug_table(
 def _write_combined_year_outputs(
     all_pre_start_flags: list[pd.DataFrame],
     all_trustworthy_tables: list[pd.DataFrame],
+    all_position_pre_start_flags: list[pd.DataFrame],
+    all_position_trustworthy_tables: list[pd.DataFrame],
     all_holding_capacity_tables: list[pd.DataFrame],
     all_water_balance_tables: list[pd.DataFrame],
+    all_matched_sensor_event_tables: list[pd.DataFrame],
     combined_zone_storage: pd.DataFrame,
     *,
     diagnostics_dir: Path,
@@ -1879,6 +1940,23 @@ def _write_combined_year_outputs(
         index=False,
     )
 
+    combined_all_position_pre_start = concat_nonempty_informative_frames(
+        all_position_pre_start_flags
+    )
+    combined_all_position_pre_start.to_csv(
+        diagnostics_dir
+        / "irrigation_pre_start_response_flags_all_positions_all_years.csv",
+        index=False,
+    )
+    combined_all_position_trustworthy = concat_nonempty_informative_frames(
+        all_position_trustworthy_tables
+    )
+    combined_all_position_trustworthy.to_csv(
+        diagnostics_dir
+        / "trustworthy_irrigation_events_all_positions_all_years.csv",
+        index=False,
+    )
+
     combined_holding_capacity = concat_nonempty_informative_frames(
         all_holding_capacity_tables
     )
@@ -1891,6 +1969,30 @@ def _write_combined_year_outputs(
         holding_capacity_dir
         / "trustworthy_holding_capacity_summary_all_years.csv",
         index=False,
+    )
+
+    holding_capacity_year_stability = (
+        build_holding_capacity_year_stability_summary(
+            combined_holding_capacity
+        )
+    )
+    holding_capacity_year_stability.to_csv(
+        holding_capacity_dir
+        / "holding_capacity_year_stability_summary.csv",
+        index=False,
+        float_format="%.4f",
+    )
+    holding_capacity_annual_comparison = (
+        build_holding_capacity_annual_comparison(
+            combined_holding_capacity,
+            holding_capacity_year_stability,
+        )
+    )
+    holding_capacity_annual_comparison.to_csv(
+        holding_capacity_dir
+        / "holding_capacity_annual_comparison.csv",
+        index=False,
+        float_format="%.4f",
     )
 
     combined_water_balance = concat_nonempty_informative_frames(
@@ -1907,6 +2009,22 @@ def _write_combined_year_outputs(
          index=False,
          float_format="%.2f",
      )
+
+    combined_matched_sensor_events = concat_nonempty_informative_frames(
+        all_matched_sensor_event_tables
+    )
+    combined_matched_sensor_events.to_csv(
+        holding_capacity_dir / "matched_sensor_treatment_events_all_years.csv",
+        index=False,
+        float_format="%.4f",
+    )
+    summarize_matched_sensor_treatment_events(
+        combined_matched_sensor_events
+    ).to_csv(
+        holding_capacity_dir / "matched_sensor_treatment_summary.csv",
+        index=False,
+        float_format="%.4f",
+    )
 
 
     print("Building biochar performance summaries...")
@@ -1941,38 +2059,6 @@ def _write_combined_year_outputs(
         index=False,
         float_format="%.2f",
     )
-
-    (
-        biochar_strip_summary,
-        biochar_pair_summary,
-        biochar_matched_events,
-        biochar_pair_year_summary,
-    ) = build_biochar_performance_summary(combined_water_balance)
-
-    biochar_strip_summary.to_csv(
-        holding_capacity_dir / "biochar_performance_strip_summary.csv",
-        index=False,
-    float_format="%.2f",
-    )
-
-    biochar_pair_summary.to_csv(
-        holding_capacity_dir / "biochar_performance_pair_summary.csv",
-        index=False,
-    float_format="%.2f",
-    )
-
-    biochar_matched_events.to_csv(
-        holding_capacity_dir / "biochar_performance_matched_events.csv",
-        index=False,
-        float_format="%.2f",
-    )
-
-    biochar_pair_year_summary.to_csv(
-        holding_capacity_dir / "biochar_performance_pair_year_summary.csv",
-        index=False,
-        float_format="%.2f",
-    )
-
 
     return (
         combined_pre_start,
@@ -2018,8 +2104,11 @@ def main() -> None:
 
     all_pre_start_flags: list[pd.DataFrame] = []
     all_trustworthy_tables: list[pd.DataFrame] = []
+    all_position_pre_start_flags: list[pd.DataFrame] = []
+    all_position_trustworthy_tables: list[pd.DataFrame] = []
     all_holding_capacity_tables: list[pd.DataFrame] = []
     all_water_balance_tables: list[pd.DataFrame] = []
+    all_matched_sensor_event_tables: list[pd.DataFrame] = []
     all_event_storage_zone_tables: list[pd.DataFrame] = []
 
     for year in YEARS:
@@ -2068,8 +2157,11 @@ def main() -> None:
         (
             pre_start_table,
             trustworthy_table,
+            all_position_pre_start_table,
+            all_position_trustworthy_table,
             holding_capacity_table,
             water_balance_table,
+            matched_sensor_events,
         ) = write_year_outputs(
             year=year,
             df_15min=df_15min,
@@ -2092,6 +2184,16 @@ def main() -> None:
         )
 
         _append_if_not_empty(
+            all_position_pre_start_flags,
+            all_position_pre_start_table,
+        )
+
+        _append_if_not_empty(
+            all_position_trustworthy_tables,
+            all_position_trustworthy_table,
+        )
+
+        _append_if_not_empty(
             all_holding_capacity_tables,
             holding_capacity_table,
         )
@@ -2099,6 +2201,11 @@ def main() -> None:
         _append_if_not_empty(
             all_water_balance_tables,
             water_balance_table,
+        )
+
+        _append_if_not_empty(
+            all_matched_sensor_event_tables,
+            matched_sensor_events,
         )
 
         print(
@@ -2129,11 +2236,20 @@ def main() -> None:
         all_trustworthy_tables=(
             all_trustworthy_tables
         ),
+        all_position_pre_start_flags=(
+            all_position_pre_start_flags
+        ),
+        all_position_trustworthy_tables=(
+            all_position_trustworthy_tables
+        ),
         all_holding_capacity_tables=(
             all_holding_capacity_tables
         ),
         all_water_balance_tables=(
             all_water_balance_tables
+        ),
+        all_matched_sensor_event_tables=(
+            all_matched_sensor_event_tables
         ),
         combined_zone_storage=combined_zone_storage,
         diagnostics_dir=(

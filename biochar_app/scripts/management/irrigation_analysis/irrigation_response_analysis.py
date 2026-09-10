@@ -435,9 +435,66 @@ def build_variable_definitions_table() -> pd.DataFrame:
             "formula_or_rule": "Passes event QC and has a complete three-zone storage estimate.",
         },
         {
+            "variable": "holding_capacity_reason",
+            "definition": "Reason holding-capacity eligibility passed or failed.",
+            "formula_or_rule": "ok, event QC reason, or incomplete three-zone storage.",
+        },
+        {
             "variable": "unretained_eligible",
             "definition": "Whether the event may be used for unretained-water analysis.",
             "formula_or_rule": "holding_capacity_eligible and gallons_strip > 0.",
+        },
+        {
+            "variable": "unretained_reason",
+            "definition": "Reason unretained-water eligibility passed or failed.",
+            "formula_or_rule": (
+                "ok, holding-capacity failure reason, missing/nonpositive "
+                "applied water, or uncalculable residual."
+            ),
+        },
+        {
+            "variable": "end_of_field_unretained_eligible",
+            "definition": (
+                "Whether unretained water may also be interpreted as an "
+                "end-of-field upper-bound proxy. This is not measured runoff."
+            ),
+            "formula_or_rule": (
+                "unretained_eligible and a nonnegative bottom-position "
+                "6-inch arrival delay is observed."
+            ),
+        },
+        {
+            "variable": "estimated_end_of_field_unretained_gal_strip",
+            "definition": (
+                "Irrigation water not retained in the measured 0-18 inch "
+                "profile for events with credible bottom arrival; an "
+                "end-of-field upper-bound proxy, not measured runoff."
+            ),
+            "formula_or_rule": (
+                "unretained_gal_strip when end_of_field_unretained_eligible; "
+                "otherwise missing."
+            ),
+        },
+        {
+            "variable": "end_of_field_unretained_reason",
+            "definition": (
+                "Reason end-of-field proxy eligibility passed or failed."
+            ),
+            "formula_or_rule": (
+                "ok, unretained-water failure reason, missing bottom response, "
+                "or bottom response before irrigation start."
+            ),
+        },
+        {
+            "variable": "estimated_end_of_field_unretained_fraction",
+            "definition": (
+                "Fractional form of the eligible end-of-field unretained-water "
+                "proxy; not a measured runoff fraction."
+            ),
+            "formula_or_rule": (
+                "unretained_fraction when end_of_field_unretained_eligible; "
+                "otherwise missing."
+            ),
         },
         {
             "variable": "target_vwc",
