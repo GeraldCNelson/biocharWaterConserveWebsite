@@ -81,13 +81,19 @@ def _load_legacy_transport() -> None:
 ROUTER_ID = PAKBUS.router_id
 
 # ----------------------------------------------------------------------------
-# Logging (DEBUG as requested)
+# Logging
 # ----------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logging.getLogger("pycampbellcr1000").setLevel(logging.DEBUG)
+def configure_logging(level_name: str) -> None:
+    """Configure concise normal output and opt-in packet-level debugging."""
+    level = getattr(logging, level_name.upper())
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        force=True,
+    )
+    library_level = logging.DEBUG if level == logging.DEBUG else logging.WARNING
+    logging.getLogger("pycampbellcr1000").setLevel(library_level)
+    logging.getLogger("pylink").setLevel(library_level)
 
 # ----------------------------------------------------------------------------
 # Reachability helpers
@@ -466,6 +472,7 @@ def fetch_isolated_stations(
     timezone: str,
     attempts: int,
     station_pause_seconds: float,
+    log_level: str = "INFO",
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -494,6 +501,8 @@ def fetch_isolated_stations(
                 str(attempts),
                 "--output",
                 str(station_output),
+                "--log-level",
+                log_level,
                 "--direct",
             ]
             logging.info(
@@ -569,11 +578,18 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--log-level",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        default="INFO",
+        help="Application log detail; DEBUG also enables packet-level logs.",
+    )
+    parser.add_argument(
         "--direct",
         action="store_true",
         help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     ok, why = quick_port_check_ipv6(PAKBUS.host, PAKBUS.port)
     if args.preflight_only:
@@ -601,6 +617,7 @@ def main() -> None:
             timezone=args.timezone,
             attempts=args.attempts,
             station_pause_seconds=args.station_pause,
+            log_level=args.log_level,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)

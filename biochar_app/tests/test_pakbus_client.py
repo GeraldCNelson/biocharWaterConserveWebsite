@@ -425,4 +425,5 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
     assert len(commands) == 3
     assert all("--direct" in command for command in commands)
+    assert all(command[command.index("--log-level") + 1] == "INFO" for command in commands)
     assert pauses == [15, 15]
