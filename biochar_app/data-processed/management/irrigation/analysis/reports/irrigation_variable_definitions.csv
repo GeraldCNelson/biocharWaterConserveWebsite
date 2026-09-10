@@ -10,12 +10,26 @@ event_duration_hours,Length of time irrigation water was running for one event.,
 gallons_group,Water delivered to the active strip pair/group.,Read from clean irrigation events table.
 gallons_strip,Water assigned to one individual strip.,gallons_group * strip_allocation_fraction
 avg_flow_gph_strip,Average strip-level application flow rate during one irrigation event.,gallons_strip / event_duration_hours
+start_flow_gpm,"Point-in-time meter-needle flow at irrigation start, as recorded in the master workbook.",Master workbook FLOW RATE START; not photo-derived.
+end_flow_gpm,"Point-in-time meter-needle flow near irrigation end, as recorded in the master workbook.",Master workbook FLOW RATE END; not photo-derived.
+avg_flow_gpm_group,Calculated event-average flow delivered to the active strip group.,gallons_group / (event_duration_hours * 60).
+flow_rate_review_required,Diagnostic flag for a large difference between a workbook boundary-flow reading and calculated event-average group flow.,"True when the largest available absolute difference exceeds both 50 GPM and 25% of avg_flow_gpm_group. Flow can vary during an event, so this flag requests review rather than declaring an error."
 plateau_method,Method used to estimate plateau_vwc for one event.,flat_segment = sustained low-slope zone found; fallback_window = delayed post-peak summary window used; no_peak = no meaningful wetting peak detected.
 depth_index,Probe depth index in the logger naming convention.,"1 = 6 in, 2 = 12 in, 3 = 18 in"
 depth_inches,Probe depth in inches.,Mapped from depth_index using DEPTH_INDEX_TO_INCHES[depth_index]
 event_storage_gal,Legacy profile-area-scaled VWC diagnostic. Use the three-zone storage output for whole-strip accounting.,profile_plateau_storage_gal - profile_baseline_storage_gal
 efficiency_strip,Legacy diagnostic retained for compatibility; it is not the canonical three-zone strip storage fraction.,event_storage_gal / gallons_strip (legacy workflow only)
-estimated_loss_gal_strip,Legacy diagnostic retained for compatibility. Use the three-zone not-stored and tailwater-bound fields instead.,gallons_strip - event_storage_gal (legacy workflow only)
+estimated_loss_gal_strip,Legacy diagnostic retained for compatibility. Use the canonical unretained-water fields instead.,gallons_strip - event_storage_gal (legacy workflow only)
+unretained_gal_strip,Applied irrigation not retained as increased soil-water storage in the measured 0-18 inch strip profile.,"max(gallons_strip - estimated_storage_gal_strip_0_18in, 0)"
+unretained_fraction,Fraction of applied strip water not retained.,unretained_gal_strip / gallons_strip
+holding_capacity_eligible,Whether the event may be used for holding-capacity analysis.,Passes event QC and has a complete three-zone storage estimate.
+holding_capacity_reason,Reason holding-capacity eligibility passed or failed.,"ok, event QC reason, or incomplete three-zone storage."
+unretained_eligible,Whether the event may be used for unretained-water analysis.,holding_capacity_eligible and gallons_strip > 0.
+unretained_reason,Reason unretained-water eligibility passed or failed.,"ok, holding-capacity failure reason, missing/nonpositive applied water, or uncalculable residual."
+end_of_field_unretained_eligible,Whether unretained water may also be interpreted as an end-of-field upper-bound proxy. This is not measured runoff.,unretained_eligible and a nonnegative bottom-position 6-inch arrival delay is observed.
+estimated_end_of_field_unretained_gal_strip,"Irrigation water not retained in the measured 0-18 inch profile for events with credible bottom arrival; an end-of-field upper-bound proxy, not measured runoff.",unretained_gal_strip when end_of_field_unretained_eligible; otherwise missing.
+end_of_field_unretained_reason,Reason end-of-field proxy eligibility passed or failed.,"ok, unretained-water failure reason, missing bottom response, or bottom response before irrigation start."
+estimated_end_of_field_unretained_fraction,Fractional form of the eligible end-of-field unretained-water proxy; not a measured runoff fraction.,unretained_fraction when end_of_field_unretained_eligible; otherwise missing.
 target_vwc,Operational target VWC based on historical plateau responses.,"min(mean_value + k_std * sd_value, quantile_cap)"
 runtime_hours,Recommended runtime in hours based on historical event response.,"Median, mean, or p75 of time_to_plateau_hours within each group"
 runtime_minutes,Recommended runtime in minutes based on historical event response.,runtime_hours * 60

@@ -125,9 +125,16 @@ biochar_app/pakbus/pakbus_data/
 biochar_app/data-processed/management/field_management/
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention/
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention_statistics/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/irrigation_pre_start_response_flags_all_positions_*.csv
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/trustworthy_irrigation_events_all_positions_*.csv
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/water_balance_inspection/
 biochar_app/data-processed/management/irrigation/analysis/figures/failed_event_pair_qc_plot_log_*.csv
 biochar_app/data-processed/management/irrigation/analysis/holding_capacity/debug_irrigation_events_*_all_loggers_all_depths.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/holding_capacity_year_stability_summary.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/holding_capacity_annual_comparison.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/matched_sensor_treatment_events_*.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/matched_sensor_treatment_summary*.csv
+biochar_app/data-processed/management/irrigation/analysis/holding_capacity/precipitation_events/
 biochar_app/data-processed/management/irrigation/analysis/holding_capacity/matched_treatment_comparison_all_years.csv
 biochar_app/data-processed/management/irrigation/analysis/holding_capacity/water_retention_hypothesis_summary.csv
 biochar_app/data-processed/management/irrigation/analysis/qc_candidate/
@@ -221,3 +228,6 @@ biochar_app/data-processed/management/irrigation/photos/photo_inventory.csv
 biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique.csv
 biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_manifest.csv
 biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_audit.json
+# Daily PakBus run artifacts and lock state
+biochar_app/data-raw/pakbus_daily/
+biochar_app/data-processed/pakbus_daily.lock
