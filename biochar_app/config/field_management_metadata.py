@@ -3,7 +3,17 @@ Field geometry assumptions used for irrigation water-holding estimates.
 
 Geometry is based on 2026-05-31 geotagged field photos. Values are approximate
 field estimates, not survey-grade measurements.
+
+The active logger-zone areas are loaded from the projected, field-clipped
+Voronoi output produced by ``geospatial/build_fruita_field_layout.py``. The
+older equal-width calculation remains an explicit fallback so imports still
+work before that generated area table exists.
 """
+
+from __future__ import annotations
+
+import csv
+from pathlib import Path
 
 from biochar_app.config.experiment_config import STRIPS
 
@@ -120,13 +130,50 @@ ZONE_LENGTHS_FT_BY_STRIP = {
     for strip in STRIPS
 }
 
-ZONE_AREAS_SQFT_BY_STRIP = {
+EQUAL_WIDTH_ZONE_AREAS_SQFT_BY_STRIP = {
     strip: {
         zone: STRIP_WIDTH_FT * zone_length_ft
         for zone, zone_length_ft in zone_lengths.items()
     }
     for strip, zone_lengths in ZONE_LENGTHS_FT_BY_STRIP.items()
 }
+
+LOGGER_INFLUENCE_ZONE_AREAS_CSV = (
+    Path(__file__).resolve().parents[1]
+    / "geospatial"
+    / "field_layout"
+    / "logger_influence_zone_areas.csv"
+)
+
+
+def load_logger_influence_zone_areas(
+    path: Path = LOGGER_INFLUENCE_ZONE_AREAS_CSV,
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, str]]]:
+    """Load the 12 projected logger influence-zone areas when available."""
+    areas: dict[str, dict[str, float]] = {strip: {} for strip in STRIPS}
+    sources: dict[str, dict[str, str]] = {strip: {} for strip in STRIPS}
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                strip = str(row.get("strip", ""))
+                position = str(row.get("logger_position", ""))
+                if strip in areas and position in {"T", "M", "B"}:
+                    areas[strip][position] = float(row["area_sqft"])
+                    sources[strip][position] = str(row.get("geometry_method", ""))
+    complete = all(set(areas[strip]) == {"T", "M", "B"} for strip in STRIPS)
+    if complete:
+        return areas, sources
+
+    fallback_sources = {
+        strip: {position: "equal_width_centerline_fallback" for position in "TMB"}
+        for strip in STRIPS
+    }
+    return EQUAL_WIDTH_ZONE_AREAS_SQFT_BY_STRIP, fallback_sources
+
+
+ZONE_AREAS_SQFT_BY_STRIP, ZONE_AREA_SOURCE_BY_STRIP = (
+    load_logger_influence_zone_areas()
+)
 
 ZONE_GALLONS_PER_INCH_BY_STRIP = {
     strip: {
@@ -162,6 +209,7 @@ STRIP_GEOMETRY = {
         "logger_zone_segments_ft": LOGGER_ZONE_SEGMENTS_FT[strip],
         "zone_lengths_ft": ZONE_LENGTHS_FT_BY_STRIP[strip],
         "zone_areas_sqft": ZONE_AREAS_SQFT_BY_STRIP[strip],
+        "zone_area_source": ZONE_AREA_SOURCE_BY_STRIP[strip],
         "zone_gallons_per_inch": ZONE_GALLONS_PER_INCH_BY_STRIP[strip],
     }
     for strip in STRIPS
