@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from biochar_app.config.pakbus import ID_BY_STATION, PAKBUS
+from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
 
 
@@ -34,7 +34,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RUN_ROOT = REPO_ROOT / "biochar_app" / "data-raw" / "pakbus_daily"
 DEFAULT_LOCK = REPO_ROOT / "biochar_app" / "data-processed" / "pakbus_daily.lock"
 DEFAULT_ALERT_CONFIG = REPO_ROOT / "biochar_app" / "config" / "pipeline_alerts.json"
-DEFAULT_TIMEZONE = "America/Denver"
+DEFAULT_TIMEZONE = str(DOWNLOAD_SETTINGS["timezone"])
+CSV_FLOAT_FORMAT = f"%.{int(DOWNLOAD_SETTINGS['csv_decimal_places'])}f"
 EXPECTED_STATIONS = tuple(name for name in ID_BY_STATION if name != "CR800")
 
 
@@ -68,8 +69,116 @@ def _release_lock(fd: int) -> None:
     os.close(fd)
 
 
-def _send_failure_email(report: dict, config_path: Path) -> str:
-    """Send one failure summary when SMTP credentials are configured."""
+def _station_names(items: Iterable[str]) -> str:
+    names = list(items)
+    return ", ".join(names) if names else "none"
+
+
+def _build_report_email_body(report: dict) -> str:
+    """Build an operational summary from a completed diagnostic report."""
+    findings = report.get("findings", [])
+    critical_stations = {
+        item.get("station")
+        for item in findings
+        if item.get("severity") == "critical" and item.get("station")
+    }
+    station_summaries = report.get("stations", {})
+    healthy = sorted(set(station_summaries).difference(critical_stations))
+    recovery = report.get("recovery", {})
+    attempted = recovery.get("requested_stations", [])
+    still_missing = recovery.get("still_missing", [])
+    recovered = sorted(set(attempted).difference(still_missing))
+    battery_findings = [
+        item for item in findings if item.get("code") in {"battery_warning", "battery_critical", "battery_missing"}
+    ]
+
+    lines = [
+        f"Daily logger run status: {report.get('status')}",
+        f"Started: {report.get('started_at')}",
+        f"Completed: {report.get('completed_at', 'not completed')}",
+        f"Diagnostic report: {report.get('diagnostic_report')}",
+        "",
+        f"Healthy stations ({len(healthy)}): {_station_names(healthy)}",
+        f"Failed initial attempts ({len(attempted)}): {_station_names(attempted)}",
+        f"Recovered stations ({len(recovered)}): {_station_names(recovered)}",
+        f"Unresolved stations ({len(still_missing)}): {_station_names(still_missing)}",
+        "",
+        "Station download timing:",
+    ]
+    all_timings = [
+        ("initial", item) for item in report.get("station_timings", [])
+    ] + [
+        ("recovery", item) for item in recovery.get("station_timings", [])
+    ]
+    if all_timings:
+        for pass_name, item in all_timings:
+            result = "success" if item.get("exit_code") == 0 and item.get("rows", 0) else "failed"
+            lines.append(
+                f"- {item.get('station')} ({pass_name}, {result}): "
+                f"{item.get('started_at')} to {item.get('completed_at')} "
+                f"({item.get('duration_seconds'):.1f} seconds, {item.get('rows', 0)} rows)"
+            )
+    else:
+        lines.append("- unavailable")
+    lines.extend([
+        "",
+        "Missing time ranges:",
+    ])
+    gaps_found = False
+    for station, summary in sorted(station_summaries.items()):
+        for gap in summary.get("missing_time_ranges", []):
+            gaps_found = True
+            lines.append(
+                f"- {station}: after {gap['after']} through before {gap['before']} "
+                f"({gap['missing_intervals']} missing 15-minute interval(s))"
+            )
+    if not gaps_found:
+        lines.append("- none detected")
+
+    lines.extend(["", "Battery warnings:"])
+    if battery_findings:
+        for item in battery_findings:
+            station = f" [{item['station']}]" if item.get("station") else ""
+            lines.append(f"- {item.get('code')}{station}: {item.get('message')}")
+    else:
+        lines.append("- none")
+
+    critical = [item for item in findings if item.get("severity") == "critical"]
+    lines.extend(["", "Critical findings:"])
+    if critical:
+        for item in critical:
+            station = f" [{item['station']}]" if item.get("station") else ""
+            lines.append(f"- {item.get('code')}{station}: {item.get('message')}")
+    else:
+        lines.append("- none")
+
+    next_steps: list[str] = []
+    if still_missing:
+        next_steps.append(
+            "Compare the station timing above, check logger/radio communications at "
+            f"{_station_names(still_missing)}, then run a station-only PakBus download."
+        )
+    if recovered:
+        next_steps.append(f"Monitor intermittent communications at {_station_names(recovered)} on the next run.")
+    if gaps_found:
+        next_steps.append("Run a targeted backfill for the listed time ranges before publishing the data.")
+    if battery_findings:
+        battery_stations = sorted({item.get("station") for item in battery_findings if item.get("station")})
+        next_steps.append(f"Inspect the power system at {_station_names(battery_stations)}.")
+    if report.get("status") == "failed_preflight":
+        next_steps.append("Check the gateway/network endpoint before testing individual stations.")
+    if report.get("status") == "failed_download":
+        next_steps.append("Review the downloader service log and retry after correcting the reported process error.")
+    if not next_steps:
+        next_steps.append("No action is required.")
+    lines.extend(["", "Next steps:"] + [f"- {step}" for step in next_steps])
+    if report.get("status") == "rejected":
+        lines.extend(["", "This incomplete download was rejected and was not approved for downstream publishing."])
+    return "\n".join(lines)
+
+
+def _send_report_email(report: dict, config_path: Path) -> str:
+    """Send one nightly operational summary when SMTP is configured."""
     username = os.getenv("BIOCHAR_SMTP_USERNAME")
     password = os.getenv("BIOCHAR_SMTP_PASSWORD")
     if not username or not password:
@@ -87,23 +196,11 @@ def _send_failure_email(report: dict, config_path: Path) -> str:
     if not recipients or not sender:
         return "config_incomplete"
 
-    critical = [item for item in report.get("findings", []) if item.get("severity") == "critical"]
-    lines = [
-        f"Daily logger run status: {report.get('status')}",
-        f"Started: {report.get('started_at')}",
-        f"Diagnostic report: {report.get('diagnostic_report')}",
-        "",
-        "Critical findings:",
-    ]
-    for item in critical:
-        station = f" [{item['station']}]" if item.get("station") else ""
-        lines.append(f"- {item.get('code')}{station}: {item.get('message')}")
-
     message = EmailMessage()
     message["Subject"] = f"Biochar logger download {report.get('status', 'failed')}"
     message["From"] = sender
     message["To"] = ", ".join(recipients)
-    message.set_content("\n".join(lines))
+    message.set_content(_build_report_email_body(report))
 
     host = os.getenv("BIOCHAR_SMTP_HOST", "email-smtp.us-east-2.amazonaws.com")
     port = int(os.getenv("BIOCHAR_SMTP_PORT", "587"))
@@ -114,13 +211,13 @@ def _send_failure_email(report: dict, config_path: Path) -> str:
     return "sent"
 
 
-def _finish_failed_report(report: dict, report_path: Path, config_path: Path) -> None:
+def _finish_report(report: dict, report_path: Path, config_path: Path) -> None:
     report["diagnostic_report"] = str(report_path)
     _write_json(report_path, report)
     try:
-        report["failure_email"] = _send_failure_email(report, config_path)
+        report["report_email"] = _send_report_email(report, config_path)
     except Exception as exc:
-        report["failure_email"] = f"failed: {type(exc).__name__}: {exc}"
+        report["report_email"] = f"failed: {type(exc).__name__}: {exc}"
     _write_json(report_path, report)
 
 
@@ -181,6 +278,18 @@ def diagnose_download(
         duplicate_count = int(subset.duplicated(["Datetime"]).sum())
         deltas = subset["Datetime"].drop_duplicates().diff().dropna()
         max_gap = float(deltas.dt.total_seconds().max() / 60) if not deltas.empty else None
+        unique_times = subset["Datetime"].drop_duplicates().sort_values()
+        missing_time_ranges = []
+        for previous, current in zip(unique_times.iloc[:-1], unique_times.iloc[1:]):
+            delta_minutes = (current - previous).total_seconds() / 60
+            if delta_minutes > 15:
+                missing_time_ranges.append(
+                    {
+                        "after": previous.isoformat(),
+                        "before": current.isoformat(),
+                        "missing_intervals": max(1, round(delta_minutes / 15) - 1),
+                    }
+                )
         latest = subset["Datetime"].max()
         age_minutes = float((now - latest).total_seconds() / 60)
         battery_min = (
@@ -195,6 +304,7 @@ def diagnose_download(
             "latest_timestamp": latest.isoformat(),
             "latest_age_minutes": round(age_minutes, 1),
             "maximum_gap_minutes": round(max_gap, 1) if max_gap is not None else None,
+            "missing_time_ranges": missing_time_ranges,
             "duplicate_timestamps": duplicate_count,
             "minimum_battery_volts": round(battery_min, 3) if battery_min is not None else None,
         }
@@ -258,6 +368,8 @@ def _run_client(
     station_pause: float,
     timezone: str,
     stations: Iterable[str] | None = None,
+    timing_output: Path | None = None,
+    response_timeout: float = PAKBUS.response_timeout_seconds,
 ) -> subprocess.CompletedProcess:
     command = [
         sys.executable,
@@ -269,6 +381,8 @@ def _run_client(
         str(attempts),
         "--station-pause",
         str(station_pause),
+        "--response-timeout",
+        str(response_timeout),
         "--timezone",
         timezone,
         "--log-level",
@@ -277,27 +391,30 @@ def _run_client(
     selected = list(stations or [])
     if selected:
         command.extend(["--stations", *selected])
+    if timing_output is not None:
+        command.extend(["--timing-output", str(timing_output)])
     command.extend(["--output", str(output)])
     return subprocess.run(command, check=False)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Diagnose, download, and validate all PakBus logger data")
-    parser.add_argument("--hours", type=int, default=24)
-    parser.add_argument("--attempts", type=int, default=5)
-    parser.add_argument("--station-pause", type=float, default=15.0)
+    parser.add_argument("--hours", type=int, default=int(DAILY_SETTINGS["hours"]))
+    parser.add_argument("--attempts", type=int, default=int(DAILY_SETTINGS["attempts"]))
+    parser.add_argument("--station-pause", type=float, default=float(DAILY_SETTINGS["station_pause_seconds"]))
+    parser.add_argument("--response-timeout", type=float, default=PAKBUS.response_timeout_seconds)
     parser.add_argument("--timezone", default=DEFAULT_TIMEZONE)
     parser.add_argument("--run-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     parser.add_argument("--alert-config", type=Path, default=DEFAULT_ALERT_CONFIG)
-    parser.add_argument("--minimum-rows", type=int, default=90)
-    parser.add_argument("--maximum-gap-minutes", type=int, default=30)
-    parser.add_argument("--maximum-age-minutes", type=int, default=90)
-    parser.add_argument("--battery-warning", type=float, default=11.5)
-    parser.add_argument("--battery-critical", type=float, default=10.5)
-    parser.add_argument("--recovery-attempts", type=int, default=8)
-    parser.add_argument("--recovery-pause", type=float, default=30.0)
-    parser.add_argument("--recovery-wait", type=float, default=120.0)
+    parser.add_argument("--minimum-rows", type=int, default=int(DAILY_SETTINGS["minimum_rows"]))
+    parser.add_argument("--maximum-gap-minutes", type=int, default=int(DAILY_SETTINGS["maximum_gap_minutes"]))
+    parser.add_argument("--maximum-age-minutes", type=int, default=int(DAILY_SETTINGS["maximum_age_minutes"]))
+    parser.add_argument("--battery-warning", type=float, default=float(DAILY_SETTINGS["battery_warning_volts"]))
+    parser.add_argument("--battery-critical", type=float, default=float(DAILY_SETTINGS["battery_critical_volts"]))
+    parser.add_argument("--recovery-attempts", type=int, default=int(DAILY_SETTINGS["recovery_attempts"]))
+    parser.add_argument("--recovery-pause", type=float, default=float(DAILY_SETTINGS["recovery_pause_seconds"]))
+    parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
     args = parser.parse_args(argv)
 
     try:
@@ -328,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
         if not reachable:
             report["status"] = "failed_preflight"
             report["findings"] = [asdict(Finding("critical", "endpoint_unreachable", reason))]
-            _finish_failed_report(report, report_path, args.alert_config)
+            _finish_report(report, report_path, args.alert_config)
             print(f"CRITICAL: PakBus endpoint unavailable: {reason}", file=sys.stderr)
             return 1
 
@@ -339,13 +456,18 @@ def main(argv: list[str] | None = None) -> int:
             attempts=args.attempts,
             station_pause=args.station_pause,
             timezone=args.timezone,
+            timing_output=run_dir / "station_timings.json",
+            response_timeout=args.response_timeout,
         )
+        timing_path = run_dir / "station_timings.json"
+        if timing_path.exists():
+            report["station_timings"] = json.loads(timing_path.read_text(encoding="utf-8"))
         report["download_exit_code"] = result.returncode
         if result.returncode != 0 or not raw_csv.exists():
             finding = Finding("critical", "download_failed", f"Downloader exited with status {result.returncode}")
             report["status"] = "failed_download"
             report["findings"] = [asdict(finding)]
-            _finish_failed_report(report, report_path, args.alert_config)
+            _finish_report(report, report_path, args.alert_config)
             print(f"CRITICAL: {finding.message}; see {report_path}", file=sys.stderr)
             return 1
 
@@ -367,17 +489,24 @@ def main(argv: list[str] | None = None) -> int:
                 station_pause=args.recovery_pause,
                 timezone=args.timezone,
                 stations=initially_missing,
+                timing_output=run_dir / "recovery_station_timings.json",
+                response_timeout=args.response_timeout,
             )
             report["recovery"] = {
                 "requested_stations": initially_missing,
                 "exit_code": recovery_result.returncode,
                 "raw_csv": str(recovery_csv),
             }
+            recovery_timing_path = run_dir / "recovery_station_timings.json"
+            if recovery_timing_path.exists():
+                report["recovery"]["station_timings"] = json.loads(
+                    recovery_timing_path.read_text(encoding="utf-8")
+                )
             if recovery_csv.exists():
                 recovery_frame = pd.read_csv(recovery_csv)
                 report["recovery"]["record_count"] = int(len(recovery_frame))
                 frame = merge_download_frames(frame, recovery_frame)
-                frame.to_csv(raw_csv, index=False)
+                frame.to_csv(raw_csv, index=False, float_format=CSV_FLOAT_FORMAT)
             report["recovery"]["still_missing"] = missing_stations(frame)
 
         findings, station_summary = diagnose_download(
@@ -394,11 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         report["findings"] = [asdict(item) for item in findings]
         report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
         report["status"] = "rejected" if any(item.severity == "critical" for item in findings) else "accepted_with_warnings" if findings else "accepted"
-        if report["status"] == "rejected":
-            _finish_failed_report(report, report_path, args.alert_config)
-        else:
-            report["diagnostic_report"] = str(report_path)
-            _write_json(report_path, report)
+        _finish_report(report, report_path, args.alert_config)
 
         print(f"Raw download: {raw_csv}")
         print(f"Diagnostic report: {report_path}")

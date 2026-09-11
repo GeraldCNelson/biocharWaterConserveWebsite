@@ -25,6 +25,25 @@ pipeline for the Biochar Fruita CSU experiment.
 
 More specialized README files are located near the workflows they document.
 
+## Local PakBus command
+
+Use `tools/pakbus-download station S3B` for a targeted logger download. It
+writes the records and a JSON timing report under
+`biochar_app/data-raw/pakbus_manual/`. Use `tools/pakbus-download daily` to run
+the complete nightly acquisition and strict acceptance checks locally;
+incomplete downloads remain rejected.
+
+When Starlink changes the delegated IPv6 prefix, run
+`tools/pakbus-download discover S3B`. The command signs into the ASUS router,
+finds the Campbell client by its stable IPv6 suffix, validates port 6785,
+updates the shared configuration, and tests S3B. It prompts for credentials;
+they are never written to the repository.
+
+Operational defaults are in
+`biochar_app/config/pakbus_settings.json`. CLI arguments override those defaults
+for one run. Set `BIOCHAR_PAKBUS_CONFIG` to use a different JSON configuration
+file without changing the repository copy.
+
 ## Local development
 
 Create and activate a Python virtual environment, install the requirements, and

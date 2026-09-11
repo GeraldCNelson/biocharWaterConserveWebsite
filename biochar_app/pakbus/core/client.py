@@ -14,6 +14,7 @@ Key points:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import shutil
 import socket
@@ -29,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 from biochar_app.config.pakbus import (
     PAKBUS,
+    DOWNLOAD_SETTINGS,
     DEFAULT_HOURS,
     DEFAULT_TABLE,
     DEFAULT_LAG_MINUTES,
@@ -39,6 +41,8 @@ from biochar_app.config.pakbus import (
     ID_BY_STATION,
     STATION_BY_ID,
 )
+
+CSV_FLOAT_FORMAT = f"%.{int(DOWNLOAD_SETTINGS['csv_decimal_places'])}f"
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -335,6 +339,7 @@ def fetch_batch(
     logger_ids: Iterable[int] | None = None,
     station_attempts: int = DEFAULT_STATION_ATTEMPTS,
     retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
+    response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -367,7 +372,7 @@ def fetch_batch(
             try:
                 # A new socket on every attempt discards late packets from a
                 # previous transaction before another logger is contacted.
-                with open_pakbus_link(host, port) as link:
+                with open_pakbus_link(host, port, connect_timeout=response_timeout_seconds) as link:
                     # Register this fresh client connection with the physical
                     # CR800 router before addressing a logical leaf logger.
                     # Without this handshake, the router answers the leaf
@@ -473,6 +478,8 @@ def fetch_isolated_stations(
     attempts: int,
     station_pause_seconds: float,
     log_level: str = "INFO",
+    timing_output: Path | None = None,
+    response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -482,6 +489,7 @@ def fetch_isolated_stations(
         raise ValueError("station_pause_seconds cannot be negative")
 
     combined_rows: list[dict] = []
+    station_timings: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="pakbus-stations-") as temp_dir:
         for index, station in enumerate(stations):
             station_output = Path(temp_dir) / f"{station}.csv"
@@ -499,6 +507,8 @@ def fetch_isolated_stations(
                 timezone,
                 "--attempts",
                 str(attempts),
+                "--response-timeout",
+                str(response_timeout_seconds),
                 "--output",
                 str(station_output),
                 "--log-level",
@@ -509,7 +519,11 @@ def fetch_isolated_stations(
                 "Starting isolated download for %s (%s of %s)",
                 station, index + 1, len(stations),
             )
+            station_started = datetime.now(ZoneInfo(timezone))
+            monotonic_started = time.monotonic()
             result = subprocess.run(command, check=False)
+            station_completed = datetime.now(ZoneInfo(timezone))
+            row_count = 0
             if result.returncode != 0:
                 logging.error(
                     "Isolated download for %s exited with status %s; continuing.",
@@ -520,9 +534,19 @@ def fetch_isolated_stations(
                     "Isolated download for %s returned no records; continuing.", station
                 )
             else:
-                combined_rows.extend(
-                    pd.read_csv(station_output).to_dict(orient="records")
-                )
+                station_rows = pd.read_csv(station_output).to_dict(orient="records")
+                row_count = len(station_rows)
+                combined_rows.extend(station_rows)
+            station_timings.append(
+                {
+                    "station": station,
+                    "started_at": station_started.isoformat(),
+                    "completed_at": station_completed.isoformat(),
+                    "duration_seconds": round(time.monotonic() - monotonic_started, 3),
+                    "exit_code": result.returncode,
+                    "rows": row_count,
+                }
+            )
 
             if index < len(stations) - 1 and station_pause_seconds > 0:
                 logging.info(
@@ -530,6 +554,12 @@ def fetch_isolated_stations(
                     station_pause_seconds,
                 )
                 time.sleep(station_pause_seconds)
+    if timing_output is not None:
+        timing_output.parent.mkdir(parents=True, exist_ok=True)
+        timing_output.write_text(
+            json.dumps(station_timings, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     return combined_rows
 
 # ----------------------------------------------------------------------------
@@ -563,10 +593,21 @@ def main() -> None:
         help="Optional CSV destination. Without this option, records are printed only.",
     )
     parser.add_argument(
+        "--timing-output",
+        type=Path,
+        help="Optional JSON destination for per-station start, end, and duration data.",
+    )
+    parser.add_argument(
         "--attempts",
         type=int,
         default=DEFAULT_STATION_ATTEMPTS,
         help="Maximum attempts per logger (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--response-timeout",
+        type=float,
+        default=PAKBUS.response_timeout_seconds,
+        help="Seconds to wait for each PakBus socket response (default: %(default)s).",
     )
     parser.add_argument(
         "--station-pause",
@@ -608,7 +649,7 @@ def main() -> None:
     if args.output is not None:
         args.output.unlink(missing_ok=True)
 
-    if len(logger_ids) > 1 and not args.direct:
+    if (len(logger_ids) > 1 or args.timing_output is not None) and not args.direct:
         station_names = [STATION_BY_ID[logger_id] for logger_id in logger_ids]
         output_rows = fetch_isolated_stations(
             station_names,
@@ -618,10 +659,14 @@ def main() -> None:
             attempts=args.attempts,
             station_pause_seconds=args.station_pause,
             log_level=args.log_level,
+            timing_output=args.timing_output,
+            response_timeout_seconds=args.response_timeout,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
-            pd.DataFrame(output_rows).to_csv(args.output, index=False)
+            pd.DataFrame(output_rows).to_csv(
+                args.output, index=False, float_format=CSV_FLOAT_FORMAT
+            )
             print(f"Wrote {len(output_rows)} records to {args.output}")
         elif args.output is None:
             for record in output_rows:
@@ -639,6 +684,7 @@ def main() -> None:
         tz_name=args.timezone,
         station_attempts=args.attempts,
         logger_ids=logger_ids,
+        response_timeout_seconds=args.response_timeout,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):
@@ -654,7 +700,9 @@ def main() -> None:
 
     if args.output is not None and output_rows:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(output_rows).to_csv(args.output, index=False)
+        pd.DataFrame(output_rows).to_csv(
+            args.output, index=False, float_format=CSV_FLOAT_FORMAT
+        )
         print(f"Wrote {len(output_rows)} records to {args.output}")
 
     if not any_output:

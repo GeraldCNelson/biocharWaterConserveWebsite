@@ -29,6 +29,7 @@ from typing import Optional, Iterator
 
 import pylink
 from pylink.link import SerialLink, UDPLink, TCPLink
+from biochar_app.config.pakbus import PAKBUS
 
 def link_from_url(url: str):
     """
@@ -78,7 +79,7 @@ class IPv6TCPLink(TCPLink):
         self._is_ipv6_literal = ":" in host
         self._v6_addr: Optional[tuple[str, int, int, int]] = None
         self._keepalive = tcp_keepalive
-        self.timeout = timeout or 10.0
+        self.timeout = timeout or PAKBUS.response_timeout_seconds
 
         if self._is_ipv6_literal:
             self.host = host
@@ -155,7 +156,7 @@ def pakbus_url(host: str, port: int) -> str:
 def open_pakbus_link(
     host: str,
     port: int,
-    connect_timeout: float = 10.0,
+    connect_timeout: float = PAKBUS.response_timeout_seconds,
     tcp_keepalive: bool = True,
 ) -> Iterator[IPv6TCPLink]:
     link = IPv6TCPLink(host, port, timeout=connect_timeout, tcp_keepalive=tcp_keepalive)

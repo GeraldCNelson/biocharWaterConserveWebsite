@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from contextlib import nullcontext
 from pathlib import Path
+import json
 import struct
 import sys
 import weakref
@@ -228,7 +229,7 @@ def test_fetch_batch_reopens_connection_and_retries_missing_response(monkeypatch
     links: list[object] = []
     leaf_constructor_calls = 0
 
-    def fake_open_link(_host, _port):
+    def fake_open_link(_host, _port, **_kwargs):
         link = object()
         links.append(link)
         return nullcontext(link)
@@ -291,7 +292,7 @@ def test_fetch_batch_keeps_router_session_alive_for_leaf_handshake(monkeypatch) 
 
     monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *_args: (True, "ok"))
     monkeypatch.setattr(client, "ping6", lambda *_args: True)
-    monkeypatch.setattr(client, "open_pakbus_link", lambda *_args: nullcontext(object()))
+    monkeypatch.setattr(client, "open_pakbus_link", lambda *_args, **_kwargs: nullcontext(object()))
     monkeypatch.setattr(client, "CR1000", fake_cr1000)
     monkeypatch.setattr(
         client,
@@ -308,7 +309,7 @@ def test_fetch_batch_retries_broken_pipe_with_fresh_connection(monkeypatch) -> N
     links: list[object] = []
     leaf_constructor_calls = 0
 
-    def fake_open_link(_host, _port):
+    def fake_open_link(_host, _port, **_kwargs):
         link = object()
         links.append(link)
         return nullcontext(link)
@@ -352,7 +353,7 @@ def test_fetch_batch_retries_delivery_failure(monkeypatch) -> None:
     links: list[object] = []
     leaf_constructor_calls = 0
 
-    def fake_open_link(_host, _port):
+    def fake_open_link(_host, _port, **_kwargs):
         link = object()
         links.append(link)
         return nullcontext(link)
@@ -420,6 +421,7 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
         timezone="America/Denver",
         attempts=3,
         station_pause_seconds=15,
+        timing_output=tmp_path / "timings.json",
     )
 
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
@@ -427,3 +429,9 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
     assert all("--direct" in command for command in commands)
     assert all(command[command.index("--log-level") + 1] == "INFO" for command in commands)
     assert pauses == [15, 15]
+    timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8"))
+    assert [item["station"] for item in timings] == ["S1T", "S2T", "S2M"]
+    assert all(item["exit_code"] == 0 for item in timings)
+    assert all(item["rows"] == 1 for item in timings)
+    assert all(item["duration_seconds"] >= 0 for item in timings)
+    assert all(item["started_at"] <= item["completed_at"] for item in timings)

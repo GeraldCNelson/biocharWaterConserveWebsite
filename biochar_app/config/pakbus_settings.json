@@ -1,0 +1,39 @@
+{
+  "connection": {
+    "host": "2605:59ca:227f:e00:2d0:2cff:fe02:1ddd",
+    "port": 6785,
+    "router_id": 1,
+    "base_id": 4093,
+    "logger_ids": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    "response_timeout_seconds": 30.0
+  },
+  "discovery": {
+    "router_url": "https://Biochar-Fruita.asuscomm.com:8443",
+    "client_mac": "00:D0:2C:02:1D:DD",
+    "client_ipv6_suffix": "2d0:2cff:fe02:1ddd",
+    "verify_tls": false
+  },
+  "download": {
+    "table": "Table1",
+    "hours": 1,
+    "timezone": "America/Denver",
+    "lag_minutes": 30,
+    "attempts": 3,
+    "retry_delay_seconds": 1.0,
+    "station_pause_seconds": 15.0,
+    "csv_decimal_places": 4
+  },
+  "daily": {
+    "hours": 24,
+    "attempts": 5,
+    "station_pause_seconds": 15.0,
+    "minimum_rows": 90,
+    "maximum_gap_minutes": 30,
+    "maximum_age_minutes": 90,
+    "battery_warning_volts": 11.5,
+    "battery_critical_volts": 10.5,
+    "recovery_attempts": 8,
+    "recovery_pause_seconds": 30.0,
+    "recovery_wait_seconds": 120.0
+  }
+}

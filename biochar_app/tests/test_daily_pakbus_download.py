@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from biochar_app.pakbus.core.daily_download import (
+    _build_report_email_body,
     diagnose_download,
     merge_download_frames,
     missing_stations,
@@ -71,3 +72,82 @@ def test_recovery_rows_fill_missing_station_without_duplicates() -> None:
 
     assert len(merged) == 192
     assert missing_stations(merged, ["S1T", "S1M"]) == []
+
+
+def test_summary_records_exact_missing_time_range() -> None:
+    frame = _station_rows("S1T", 2).drop(index=[40, 41])
+    _findings, summary = diagnose_download(
+        frame,
+        expected_stations=["S1T"],
+        reference_time=pd.Timestamp("2026-09-09T08:00:00Z"),
+    )
+
+    assert summary["S1T"]["missing_time_ranges"] == [
+        {
+            "after": "2026-09-08T17:30:00+00:00",
+            "before": "2026-09-08T18:15:00+00:00",
+            "missing_intervals": 2,
+        }
+    ]
+
+
+def test_report_email_summarizes_recovery_gaps_battery_and_next_steps() -> None:
+    report = {
+        "status": "rejected",
+        "started_at": "2026-09-11T00:15:17-06:00",
+        "completed_at": "2026-09-11T00:51:27-06:00",
+        "diagnostic_report": "/tmp/report.json",
+        "recovery": {
+            "requested_stations": ["S2T", "S3B", "S4M"],
+            "still_missing": ["S3B"],
+            "station_timings": [
+                {
+                    "station": "S3B",
+                    "started_at": "2026-09-11T00:42:20-06:00",
+                    "completed_at": "2026-09-11T00:50:00-06:00",
+                    "duration_seconds": 460.0,
+                    "exit_code": 1,
+                    "rows": 0,
+                }
+            ],
+        },
+        "station_timings": [
+            {
+                "station": "S2T",
+                "started_at": "2026-09-11T00:18:43-06:00",
+                "completed_at": "2026-09-11T00:22:26-06:00",
+                "duration_seconds": 223.0,
+                "exit_code": 1,
+                "rows": 0,
+            }
+        ],
+        "stations": {
+            "S2T": {"missing_time_ranges": []},
+            "S4M": {
+                "missing_time_ranges": [
+                    {
+                        "after": "2026-09-10T06:00:00+00:00",
+                        "before": "2026-09-10T06:45:00+00:00",
+                        "missing_intervals": 2,
+                    }
+                ]
+            },
+        },
+        "findings": [
+            {"severity": "critical", "code": "station_missing", "message": "No records returned", "station": "S3B"},
+            {"severity": "warning", "code": "battery_warning", "message": "Minimum battery voltage is 11.20 V", "station": "S4M"},
+        ],
+    }
+
+    body = _build_report_email_body(report)
+
+    assert "Healthy stations (2): S2T, S4M" in body
+    assert "Failed initial attempts (3): S2T, S3B, S4M" in body
+    assert "Recovered stations (2): S2T, S4M" in body
+    assert "Unresolved stations (1): S3B" in body
+    assert "S2T (initial, failed): 2026-09-11T00:18:43-06:00 to 2026-09-11T00:22:26-06:00" in body
+    assert "S3B (recovery, failed): 2026-09-11T00:42:20-06:00 to 2026-09-11T00:50:00-06:00" in body
+    assert "S4M: after 2026-09-10T06:00:00+00:00" in body
+    assert "battery_warning [S4M]" in body
+    assert "check logger/radio communications at S3B" in body
+    assert "incomplete download was rejected" in body

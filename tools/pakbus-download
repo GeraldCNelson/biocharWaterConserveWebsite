@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -n "${BIOCHAR_PYTHON:-}" ]]; then
+  python_bin="${BIOCHAR_PYTHON}"
+elif [[ -x "${repo_root}/.biochar_py313/bin/python" ]]; then
+  python_bin="${repo_root}/.biochar_py313/bin/python"
+elif [[ -x "${repo_root}/.venv/bin/python" ]]; then
+  python_bin="${repo_root}/.venv/bin/python"
+else
+  python_bin="python3"
+fi
+
+usage() {
+  printf '%s\n' \
+    "Usage:" \
+    "  tools/pakbus-download station STATION [download options]" \
+    "  tools/pakbus-download discover [STATION]" \
+    "  tools/pakbus-download daily [validation options]" \
+    "" \
+    "Examples:" \
+    "  tools/pakbus-download station S3B" \
+    "  tools/pakbus-download discover S3B" \
+    "  tools/pakbus-download station S3B --hours 48 --attempts 8" \
+    "  tools/pakbus-download daily" \
+    "" \
+    "Station output: biochar_app/data-raw/pakbus_manual/" \
+    "The daily command rejects incomplete downloads."
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 2
+fi
+
+command_name="$1"
+shift
+cd "${repo_root}"
+
+case "${command_name}" in
+  discover)
+    station="${1:-S3B}"
+    if [[ $# -gt 0 ]]; then
+      shift
+    fi
+    exec "${python_bin}" -m biochar_app.pakbus.core.gateway_discovery \
+      --station "${station}" "$@"
+    ;;
+  station)
+    if [[ $# -eq 0 || "$1" == -* ]]; then
+      printf 'A station name is required (for example, S3B).\n' >&2
+      usage >&2
+      exit 2
+    fi
+    station="$1"
+    shift
+    run_stamp="$(date '+%Y%m%dT%H%M%S%z')"
+    run_dir="${repo_root}/biochar_app/data-raw/pakbus_manual/${run_stamp}_${station}"
+    mkdir -p "${run_dir}"
+    data_file="${run_dir}/logger_data.csv"
+    timing_file="${run_dir}/station_timings.json"
+    printf 'Downloading %s...\n' "${station}"
+    set +e
+    "${python_bin}" -m biochar_app.pakbus.core.client \
+      --stations "${station}" \
+      --output "${data_file}" \
+      --timing-output "${timing_file}" \
+      "$@"
+    result=$?
+    set -e
+    printf 'Timing report: %s\n' "${timing_file}"
+    if [[ -f "${data_file}" ]]; then
+      printf 'Downloaded data: %s\n' "${data_file}"
+    else
+      printf 'No data file was produced.\n' >&2
+    fi
+    exit "${result}"
+    ;;
+  daily)
+    exec "${python_bin}" -m biochar_app.pakbus.core.daily_download "$@"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    printf 'Unknown command: %s\n' "${command_name}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
