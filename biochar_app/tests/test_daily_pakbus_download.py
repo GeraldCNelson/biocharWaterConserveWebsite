@@ -60,6 +60,22 @@ def test_moderately_low_battery_is_warning() -> None:
     assert [(item.code, item.severity) for item in findings] == [("battery_warning", "warning")]
 
 
+def test_freshness_uses_each_station_download_completion_time() -> None:
+    frame = _station_rows("S1T", 2)
+    findings, summary = diagnose_download(
+        frame,
+        expected_stations=["S1T"],
+        # A later station can make the complete batch finish much later.
+        reference_time=pd.Timestamp("2026-09-11T10:00:00Z"),
+        station_reference_times={
+            "S1T": pd.Timestamp("2026-09-09T08:00:00Z")
+        },
+    )
+
+    assert findings == []
+    assert summary["S1T"]["latest_age_minutes"] == 30.0
+
+
 def test_recovery_rows_fill_missing_station_without_duplicates() -> None:
     initial = _station_rows("S1T", 2)
     recovery = pd.concat(
@@ -151,3 +167,24 @@ def test_report_email_summarizes_recovery_gaps_battery_and_next_steps() -> None:
     assert "battery_warning [S4M]" in body
     assert "check logger/radio communications at S3B" in body
     assert "incomplete download was rejected" in body
+
+
+def test_report_marks_missing_station_gap_coverage_unavailable() -> None:
+    report = {
+        "status": "rejected",
+        "stations": {"S1T": {"missing_time_ranges": []}},
+        "findings": [
+            {
+                "severity": "critical",
+                "code": "station_missing",
+                "message": "No records returned",
+                "station": "S4T",
+            }
+        ],
+        "recovery": {"requested_stations": ["S4T"], "still_missing": ["S4T"]},
+    }
+
+    body = _build_report_email_body(report)
+
+    assert "none detected in responding stations" in body
+    assert "not assessable for S4T because no records were returned" in body

@@ -28,6 +28,7 @@ import pandas as pd
 
 from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
+from biochar_app.pakbus.core.archive import DEFAULT_ARCHIVE_ROOT, promote_accepted_frame
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -133,7 +134,12 @@ def _build_report_email_body(report: dict) -> str:
                 f"({gap['missing_intervals']} missing 15-minute interval(s))"
             )
     if not gaps_found:
-        lines.append("- none detected")
+        unresolved = sorted(set(still_missing) or critical_stations)
+        lines.append("- none detected in responding stations")
+        if unresolved:
+            lines.append(
+                f"- not assessable for {_station_names(unresolved)} because no records were returned"
+            )
 
     lines.extend(["", "Battery warnings:"])
     if battery_findings:
@@ -142,6 +148,20 @@ def _build_report_email_body(report: dict) -> str:
             lines.append(f"- {item.get('code')}{station}: {item.get('message')}")
     else:
         lines.append("- none")
+
+    archive = report.get("archive", {})
+    lines.extend(["", "Accepted-data archive:"])
+    if archive.get("status") == "promoted":
+        lines.append(
+            f"- promoted {archive.get('rows_received', 0)} validated rows "
+            f"({archive.get('rows_added', 0)} new)"
+        )
+        for path in archive.get("files", []):
+            lines.append(f"- {path}")
+    elif archive:
+        lines.append(f"- {archive.get('status')}: {archive.get('detail', 'no details available')}")
+    else:
+        lines.append("- not promoted")
 
     critical = [item for item in findings if item.get("severity") == "critical"]
     lines.extend(["", "Critical findings:"])
@@ -226,6 +246,7 @@ def diagnose_download(
     *,
     expected_stations: Iterable[str] = EXPECTED_STATIONS,
     reference_time: pd.Timestamp | None = None,
+    station_reference_times: dict[str, pd.Timestamp] | None = None,
     minimum_rows: int = 90,
     maximum_gap_minutes: int = 30,
     maximum_age_minutes: int = 90,
@@ -291,7 +312,13 @@ def diagnose_download(
                     }
                 )
         latest = subset["Datetime"].max()
-        age_minutes = float((now - latest).total_seconds() / 60)
+        station_now = (station_reference_times or {}).get(station, now)
+        station_now = pd.Timestamp(station_now)
+        if station_now.tzinfo is None:
+            station_now = station_now.tz_localize("UTC")
+        else:
+            station_now = station_now.tz_convert("UTC")
+        age_minutes = float((station_now - latest).total_seconds() / 60)
         battery_min = (
             float(subset["BattV_Min"].min())
             if subset["BattV_Min"].notna().any()
@@ -415,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--recovery-attempts", type=int, default=int(DAILY_SETTINGS["recovery_attempts"]))
     parser.add_argument("--recovery-pause", type=float, default=float(DAILY_SETTINGS["recovery_pause_seconds"]))
     parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
+    parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
     args = parser.parse_args(argv)
 
     try:
@@ -509,9 +537,22 @@ def main(argv: list[str] | None = None) -> int:
                 frame.to_csv(raw_csv, index=False, float_format=CSV_FLOAT_FORMAT)
             report["recovery"]["still_missing"] = missing_stations(frame)
 
+        successful_timings = [
+            item
+            for item in (
+                report.get("station_timings", [])
+                + report.get("recovery", {}).get("station_timings", [])
+            )
+            if item.get("exit_code") == 0 and item.get("rows", 0) > 0
+        ]
+        station_reference_times = {
+            str(item["station"]): pd.Timestamp(item["completed_at"])
+            for item in successful_timings
+        }
         findings, station_summary = diagnose_download(
             frame,
             reference_time=pd.Timestamp.now(tz="UTC"),
+            station_reference_times=station_reference_times,
             minimum_rows=args.minimum_rows,
             maximum_gap_minutes=args.maximum_gap_minutes,
             maximum_age_minutes=args.maximum_age_minutes,
@@ -523,6 +564,22 @@ def main(argv: list[str] | None = None) -> int:
         report["findings"] = [asdict(item) for item in findings]
         report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
         report["status"] = "rejected" if any(item.severity == "critical" for item in findings) else "accepted_with_warnings" if findings else "accepted"
+        if report["status"] in {"accepted", "accepted_with_warnings"}:
+            try:
+                report["archive"] = promote_accepted_frame(
+                    frame,
+                    archive_root=args.archive_root,
+                )
+            except Exception as exc:
+                archive_finding = Finding(
+                    "critical",
+                    "archive_promotion_failed",
+                    f"Accepted data could not be archived: {type(exc).__name__}: {exc}",
+                )
+                findings.append(archive_finding)
+                report["findings"] = [asdict(item) for item in findings]
+                report["status"] = "rejected"
+                report["archive"] = {"status": "failed", "detail": str(exc)}
         _finish_report(report, report_path, args.alert_config)
 
         print(f"Raw download: {raw_csv}")

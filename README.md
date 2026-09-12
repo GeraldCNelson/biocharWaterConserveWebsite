@@ -44,6 +44,26 @@ Operational defaults are in
 for one run. Set `BIOCHAR_PAKBUS_CONFIG` to use a different JSON configuration
 file without changing the repository copy.
 
+Accepted daily downloads beginning in 2026 are atomically merged into
+`biochar_app/data-raw/pakbus_archive/<year>/logger_data.csv`. Rejected runs
+remain in their dated diagnostic directory and are never promoted. The archive
+is raw operational data, is excluded from Git, and must be backed up separately.
+
+To compare a downloaded PakBus CSV with overlapping PC400 files on the Mac:
+
+```bash
+tools/pakbus-download compare /path/to/logger_data.csv \
+  --dat-dir biochar_app/data-raw/datfiles_2026 \
+  --output pakbus_comparison.json
+```
+
+To promote an older run after its diagnostic report has been verified as
+`accepted` or `accepted_with_warnings`:
+
+```bash
+tools/pakbus-download promote /path/to/pakbus_daily/YYYY/MM/DD/RUN_DIRECTORY
+```
+
 ## Local development
 
 Create and activate a Python virtual environment, install the requirements, and

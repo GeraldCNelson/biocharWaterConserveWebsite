@@ -19,6 +19,8 @@ usage() {
     "  tools/pakbus-download station STATION [download options]" \
     "  tools/pakbus-download discover [STATION]" \
     "  tools/pakbus-download daily [validation options]" \
+    "  tools/pakbus-download compare PAKBUS_CSV [comparison options]" \
+    "  tools/pakbus-download promote RUN_DIRECTORY" \
     "" \
     "Examples:" \
     "  tools/pakbus-download station S3B" \
@@ -80,6 +82,9 @@ case "${command_name}" in
     ;;
   daily)
     exec "${python_bin}" -m biochar_app.pakbus.core.daily_download "$@"
+    ;;
+  compare|promote)
+    exec "${python_bin}" -m biochar_app.pakbus.core.archive "${command_name}" "$@"
     ;;
   help|-h|--help)
     usage
