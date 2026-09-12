@@ -33,6 +33,11 @@ writes the records and a JSON timing report under
 the complete nightly acquisition and strict acceptance checks locally;
 incomplete downloads remain rejected.
 
+The daily strategy makes one attempt per station, completes the full initial
+pass, then waits five minutes before each of up to two recovery passes over
+only the stations still missing. This avoids repeatedly hammering one stale
+radio route while preserving the all-station acceptance requirement.
+
 When Starlink changes the delegated IPv6 prefix, run
 `tools/pakbus-download discover S3B`. The command signs into the ASUS router,
 finds the Campbell client by its stable IPv6 suffix, validates port 6785,

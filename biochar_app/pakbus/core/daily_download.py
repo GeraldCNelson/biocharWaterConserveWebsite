@@ -113,6 +113,8 @@ def _build_report_email_body(report: dict) -> str:
     ]
     if all_timings:
         for pass_name, item in all_timings:
+            if pass_name == "recovery" and item.get("recovery_pass"):
+                pass_name = f"recovery pass {item['recovery_pass']}"
             result = "success" if item.get("exit_code") == 0 and item.get("rows", 0) else "failed"
             lines.append(
                 f"- {item.get('station')} ({pass_name}, {result}): "
@@ -439,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--maximum-age-minutes", type=int, default=int(DAILY_SETTINGS["maximum_age_minutes"]))
     parser.add_argument("--battery-warning", type=float, default=float(DAILY_SETTINGS["battery_warning_volts"]))
     parser.add_argument("--battery-critical", type=float, default=float(DAILY_SETTINGS["battery_critical_volts"]))
+    parser.add_argument("--recovery-passes", type=int, default=int(DAILY_SETTINGS["recovery_passes"]))
     parser.add_argument("--recovery-attempts", type=int, default=int(DAILY_SETTINGS["recovery_attempts"]))
     parser.add_argument("--recovery-pause", type=float, default=float(DAILY_SETTINGS["recovery_pause_seconds"]))
     parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
@@ -502,40 +505,59 @@ def main(argv: list[str] | None = None) -> int:
         frame = pd.read_csv(raw_csv)
         initially_missing = missing_stations(frame)
         if initially_missing:
-            print(
-                "Initial pass missed "
-                f"{', '.join(initially_missing)}; waiting {args.recovery_wait:.0f} "
-                "seconds before the recovery pass."
-            )
-            if args.recovery_wait > 0:
-                time.sleep(args.recovery_wait)
-            recovery_csv = run_dir / "recovery_logger_data.csv"
-            recovery_result = _run_client(
-                recovery_csv,
-                hours=args.hours,
-                attempts=args.recovery_attempts,
-                station_pause=args.recovery_pause,
-                timezone=args.timezone,
-                stations=initially_missing,
-                timing_output=run_dir / "recovery_station_timings.json",
-                response_timeout=args.response_timeout,
-            )
             report["recovery"] = {
                 "requested_stations": initially_missing,
-                "exit_code": recovery_result.returncode,
-                "raw_csv": str(recovery_csv),
+                "passes": [],
+                "station_timings": [],
             }
-            recovery_timing_path = run_dir / "recovery_station_timings.json"
-            if recovery_timing_path.exists():
-                report["recovery"]["station_timings"] = json.loads(
-                    recovery_timing_path.read_text(encoding="utf-8")
+            remaining = initially_missing
+            for pass_number in range(1, args.recovery_passes + 1):
+                print(
+                    f"Recovery pass {pass_number}/{args.recovery_passes} will retry "
+                    f"{', '.join(remaining)} after {args.recovery_wait:.0f} seconds."
                 )
-            if recovery_csv.exists():
-                recovery_frame = pd.read_csv(recovery_csv)
-                report["recovery"]["record_count"] = int(len(recovery_frame))
-                frame = merge_download_frames(frame, recovery_frame)
-                frame.to_csv(raw_csv, index=False, float_format=CSV_FLOAT_FORMAT)
-            report["recovery"]["still_missing"] = missing_stations(frame)
+                if args.recovery_wait > 0:
+                    time.sleep(args.recovery_wait)
+                recovery_csv = run_dir / f"recovery_{pass_number}_logger_data.csv"
+                recovery_timing_path = run_dir / f"recovery_{pass_number}_station_timings.json"
+                recovery_result = _run_client(
+                    recovery_csv,
+                    hours=args.hours,
+                    attempts=args.recovery_attempts,
+                    station_pause=args.recovery_pause,
+                    timezone=args.timezone,
+                    stations=remaining,
+                    timing_output=recovery_timing_path,
+                    response_timeout=args.response_timeout,
+                )
+                pass_report = {
+                    "pass": pass_number,
+                    "requested_stations": remaining,
+                    "exit_code": recovery_result.returncode,
+                    "raw_csv": str(recovery_csv),
+                    "record_count": 0,
+                    "station_timings": [],
+                }
+                if recovery_timing_path.exists():
+                    pass_report["station_timings"] = json.loads(
+                        recovery_timing_path.read_text(encoding="utf-8")
+                    )
+                    for timing in pass_report["station_timings"]:
+                        timing["recovery_pass"] = pass_number
+                    report["recovery"]["station_timings"].extend(
+                        pass_report["station_timings"]
+                    )
+                if recovery_csv.exists():
+                    recovery_frame = pd.read_csv(recovery_csv)
+                    pass_report["record_count"] = int(len(recovery_frame))
+                    frame = merge_download_frames(frame, recovery_frame)
+                    frame.to_csv(raw_csv, index=False, float_format=CSV_FLOAT_FORMAT)
+                remaining = missing_stations(frame)
+                pass_report["still_missing"] = remaining
+                report["recovery"]["passes"].append(pass_report)
+                if not remaining:
+                    break
+            report["recovery"]["still_missing"] = remaining
 
         successful_timings = [
             item
