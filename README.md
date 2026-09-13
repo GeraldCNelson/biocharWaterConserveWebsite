@@ -208,6 +208,23 @@ Run ETL for a particular year from the repository root:
 python biochar_app/scripts/etl.py --year 2026
 ```
 
+For the routine 2026 logger update, merge the existing PC400 files with the
+accepted PakBus archive and rebuild only the logger-derived Parquet outputs:
+
+```bash
+python biochar_app/scripts/etl.py --year 2026 --logger-only
+```
+
+For overlapping timestamps, the PC400 value is retained because it has more
+decimal precision; newer PakBus timestamps extend the same 2026 dataset. This
+mode does not download weather or rebuild workbook, irrigation, or laboratory
+outputs. Parquet files are written to temporary files and replaced only after
+each write succeeds.
+
+The 2023-2025 Parquet datasets are frozen. ETL refuses to rebuild any of those
+years unless the deliberate override `--rebuild-frozen-years` is supplied.
+That override is intended only for a documented historical correction.
+
 The initial ETL messages should identify:
 
 - the synchronized OneDrive source path;

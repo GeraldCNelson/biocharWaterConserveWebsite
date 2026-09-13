@@ -22,6 +22,7 @@ DATASET_METADATA_PY = CONFIG_DIR / "dataset_metadata.py"
 DATA_RAW_DIR = BASE_DIR / "data-raw"
 DATA_PROCESSED_DIR = BASE_DIR / "data-processed"
 STATIC_DIR = BASE_DIR / "static"
+PAKBUS_ARCHIVE_DIR = DATA_RAW_DIR / "pakbus_archive"
 
 WARD_DOCX_DIR = DATA_PROCESSED_DIR / "ward-docx"
 WARD_HTML_DIR = DATA_PROCESSED_DIR / "ward-html"
