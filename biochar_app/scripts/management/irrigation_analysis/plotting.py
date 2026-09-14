@@ -51,6 +51,12 @@ DEPTH_COLORS = {
     "3": PLOT_COLORS["depth_3"],
 }
 
+LOCATION_COLORS = {
+    "T": PLOT_COLORS["depth_1"],
+    "M": PLOT_COLORS["depth_2"],
+    "B": PLOT_COLORS["depth_3"],
+}
+
 def _depth_color_for_sensor(sensor_col: str) -> str:
     depth_match = re.search(r"VWC_(\d)_", sensor_col)
     if not depth_match:
@@ -172,6 +178,22 @@ def _collect_multidepth_cols(
         cols.append((f"VWC_{depth}_raw_{strip}_{logger_position}", f"{inches} in"))
 
     return cols
+
+def _collect_multilocation_cols(
+    strip: str,
+    depth: int = 1,
+    logger_positions: Sequence[str] = ("T", "M", "B"),
+) -> list[tuple[str, str]]:
+    if depth not in {1, 2, 3}:
+        raise ValueError("depth must be 1, 2, or 3")
+
+    return [
+        (
+            f"VWC_{depth}_raw_{strip}_{position}",
+            LOGGER_LOCATION_MAPPING.get(position, position),
+        )
+        for position in logger_positions
+    ]
 
 def _event_id_mask(series: pd.Series, event_id: object) -> pd.Series:
     if _is_missing(event_id):
@@ -546,6 +568,9 @@ def plot_event_multidepth(
     workbook_end_flow_gpm: Optional[float] = None,
     calculated_avg_flow_gpm_group: Optional[float] = None,
     flow_rate_comparison_status: Optional[str] = None,
+    line_colors: Optional[Mapping[str, str]] = None,
+    arrival_labels: Optional[Mapping[str, str]] = None,
+    extra_footer_lines: Optional[Sequence[str]] = None,
 ) -> None:
     sub = _prepare_plot_window_df(df, start=start, end=end)
     if sub.empty:
@@ -597,7 +622,11 @@ def plot_event_multidepth(
         if sensor_col not in sub.columns:
             continue
 
-        line_color = _depth_color_for_sensor(sensor_col)
+        line_color = (
+            line_colors.get(sensor_col, _depth_color_for_sensor(sensor_col))
+            if line_colors is not None
+            else _depth_color_for_sensor(sensor_col)
+        )
         series = pd.to_numeric(sub[sensor_col], errors="coerce")
 
         ax.plot(
@@ -795,6 +824,11 @@ def plot_event_multidepth(
 
     arrival_parts: list[str] = []
     for sensor_col, arrival_ts in arrival_ts_map.items():
+        if arrival_labels is not None and sensor_col in arrival_labels:
+            arrival_parts.append(
+                f"{arrival_labels[sensor_col]}={arrival_ts.strftime('%H:%M')}"
+            )
+            continue
         depth_match = re.search(r"VWC_(\d)_", sensor_col)
         if depth_match:
             depth_idx = depth_match.group(1)
@@ -824,6 +858,9 @@ def plot_event_multidepth(
         "Plateau VWC is used for estimating stored water after irrigation.",
         "Strip volume = total water applied to the strip during the event.",
     ]
+
+    if extra_footer_lines:
+        footer_lines.extend(str(line) for line in extra_footer_lines)
 
     flow_values = (
         workbook_start_flow_gpm,
@@ -862,7 +899,14 @@ def plot_event_multidepth(
     )
 
     if arrival_ts_map:
-        first_arrival_col = sorted(arrival_ts_map)[0]
+        first_arrival_col = next(
+            (
+                sensor_col
+                for sensor_col, _ in cols
+                if sensor_col in arrival_ts_map
+            ),
+            next(iter(arrival_ts_map)),
+        )
         first_arrival_ts = arrival_ts_map[first_arrival_col]
         if first_arrival_col in sub.columns and first_arrival_ts in sub.index:
             arrival_y = _as_float_or_none(sub.at[first_arrival_ts, first_arrival_col])
@@ -1249,6 +1293,270 @@ def save_irrigation_event_multidepth_plots(
         )
 
     return pd.DataFrame(log_rows)
+
+
+def plot_event_multilocation_from_results(
+    df: pd.DataFrame,
+    event_results: pd.DataFrame,
+    strip: str,
+    event_id: object,
+    depth: int = 1,
+    logger_positions: Sequence[str] = ("T", "M", "B"),
+    hours_before: float = 12.0,
+    hours_after: float = 30.0,
+    output_path: Optional[str | Path] = None,
+    show: bool = False,
+    precip_col: Optional[str] = "precip_in",
+    y_limits: Optional[tuple[float, float]] = None,
+) -> None:
+    """Plot one sensor depth across top, middle, and bottom logger positions."""
+    if event_results.empty:
+        raise ValueError("event_results is empty.")
+    if depth not in {1, 2, 3}:
+        raise ValueError("depth must be 1, 2, or 3")
+
+    strip = str(strip).strip()
+    positions = tuple(str(position).strip() for position in logger_positions)
+    work = event_results[
+        (event_results["strip"].astype(str).str.strip() == strip)
+        & _event_id_mask(event_results["event_id"], event_id)
+        & event_results["logger_position"].astype(str).str.strip().isin(positions)
+        & pd.to_numeric(event_results["depth_index"], errors="coerce").eq(depth)
+    ].copy()
+
+    if work.empty:
+        raise ValueError(
+            f"No event_results rows found for strip={strip}, "
+            f"event_id={event_id}, depth={depth}"
+        )
+
+    first_row = work.iloc[0]
+    irrigation_start = coerce_optional_timestamp(first_row.get("irrigation_start"))
+    irrigation_end = coerce_optional_timestamp(first_row.get("irrigation_end"))
+    if irrigation_start is None:
+        raise ValueError("Selected event has no valid irrigation_start.")
+
+    year_float = _as_float_or_none(first_row.get("year"))
+    year = int(year_float) if year_float is not None else None
+    gallons_strip, duration_hours, avg_flow_gph_strip = _get_strip_volume_and_flow(first_row)
+    gallons_strip_f = _as_float_or_none(gallons_strip)
+    duration_hours_f = _as_float_or_none(duration_hours)
+    avg_flow_gph_strip_f = _as_float_or_none(avg_flow_gph_strip)
+
+    if all(
+        value is not None
+        for value in (gallons_strip_f, duration_hours_f, avg_flow_gph_strip_f)
+    ):
+        title_prefix = (
+            f"Depth: {SENSOR_DEPTH_INDEX_TO_INCHES[str(depth)]} in | "
+            f"Duration: {duration_hours_f:.2f} hr | "
+            f"Strip volume: {gallons_strip_f:,.0f} gal | "
+            f"Strip flow: {avg_flow_gph_strip_f:,.0f} gal/hr"
+        )
+    else:
+        title_prefix = (
+            f"Depth: {SENSOR_DEPTH_INDEX_TO_INCHES[str(depth)]} in | "
+            "Multi-location irrigation response"
+        )
+
+    baselines: dict[str, pd.Timestamp] = {}
+    peaks: dict[str, pd.Timestamp] = {}
+    plateaus: dict[str, pd.Timestamp] = {}
+    arrivals: dict[str, pd.Timestamp] = {}
+    alt_arrivals: dict[str, pd.Timestamp] = {}
+    for _, row in work.iterrows():
+        sensor_col = str(row["sensor_col"])
+        for source, target in (
+            ("baseline_time", baselines),
+            ("peak_time", peaks),
+            ("plateau_time", plateaus),
+            ("arrival_time", arrivals),
+            ("alt_arrival_time", alt_arrivals),
+        ):
+            timestamp = coerce_optional_timestamp(row.get(source))
+            if timestamp is not None:
+                target[sensor_col] = timestamp
+
+    cols = _collect_multilocation_cols(strip, depth, positions)
+    colors = {
+        sensor_col: LOCATION_COLORS[position]
+        for (sensor_col, _), position in zip(cols, positions)
+    }
+    labels = {
+        sensor_col: LOGGER_LOCATION_MAPPING.get(position, position)
+        for (sensor_col, _), position in zip(cols, positions)
+    }
+
+    arrival_by_position = {
+        position: arrivals.get(f"VWC_{depth}_raw_{strip}_{position}")
+        for position in positions
+    }
+    extra_footer: list[str] = []
+    if all(arrival_by_position.get(position) is not None for position in ("T", "M", "B")):
+        top = cast(pd.Timestamp, arrival_by_position["T"])
+        middle = cast(pd.Timestamp, arrival_by_position["M"])
+        bottom = cast(pd.Timestamp, arrival_by_position["B"])
+        top_to_middle = (middle - top).total_seconds() / 60.0
+        middle_to_bottom = (bottom - middle).total_seconds() / 60.0
+        top_to_bottom = (bottom - top).total_seconds() / 60.0
+        extra_footer.append(
+            "Travel intervals: "
+            f"Top→Middle={top_to_middle:,.0f} min, "
+            f"Middle→Bottom={middle_to_bottom:,.0f} min, "
+            f"Top→Bottom={top_to_bottom:,.0f} min"
+        )
+        if not top <= middle <= bottom:
+            extra_footer.append(
+                "WARNING: standard arrivals are not in expected "
+                "Top→Middle→Bottom order."
+            )
+    else:
+        missing = [
+            LOGGER_LOCATION_MAPPING.get(position, position)
+            for position in ("T", "M", "B")
+            if arrival_by_position.get(position) is None
+        ]
+        extra_footer.append(
+            "Arrival-order check unavailable; missing standard arrival: "
+            + ", ".join(missing)
+        )
+
+    plot_event_multidepth(
+        df=df,
+        cols=cols,
+        start=irrigation_start - pd.Timedelta(hours=hours_before),
+        end=irrigation_start + pd.Timedelta(hours=hours_after),
+        event_id=event_id,
+        strip=strip,
+        year=year,
+        irrigation_start=irrigation_start,
+        irrigation_end=irrigation_end,
+        peaks=peaks,
+        baselines=baselines,
+        plateaus=plateaus,
+        arrivals=arrivals,
+        alt_arrivals=alt_arrivals,
+        output_path=output_path,
+        show=show,
+        precip_col=precip_col,
+        y_limits=y_limits,
+        title_prefix=title_prefix,
+        workbook_start_flow_gpm=_as_float_or_none(first_row.get("start_flow_gpm")),
+        workbook_end_flow_gpm=_as_float_or_none(first_row.get("end_flow_gpm")),
+        calculated_avg_flow_gpm_group=_as_float_or_none(first_row.get("avg_flow_gpm_group")),
+        flow_rate_comparison_status=(
+            None
+            if _is_missing(first_row.get("flow_rate_comparison_status"))
+            else str(first_row.get("flow_rate_comparison_status"))
+        ),
+        line_colors=colors,
+        arrival_labels=labels,
+        extra_footer_lines=extra_footer,
+    )
+
+
+def save_irrigation_event_multilocation_plots(
+    df: pd.DataFrame,
+    event_results: pd.DataFrame,
+    output_dir: str | Path,
+    strip_filter: Optional[Sequence[str]] = None,
+    event_ids: Optional[Sequence[object]] = None,
+    depth: int = 1,
+    logger_positions: Sequence[str] = ("T", "M", "B"),
+    hours_before: float = 12.0,
+    hours_after: float = 30.0,
+    max_plots: Optional[int] = None,
+    precip_col: Optional[str] = "precip_in",
+    use_common_y_axis: bool = True,
+) -> pd.DataFrame:
+    """Write one constant-depth, multi-location plot per strip event."""
+    log_columns = [
+        "event_id", "strip", "depth_index", "depth_inches",
+        "irrigation_start", "irrigation_end", "plot_start", "plot_end",
+        "event_duration_hours", "gallons_strip", "avg_flow_gph_strip",
+        "output_file", "status",
+    ]
+    if event_results.empty:
+        return pd.DataFrame(columns=log_columns)
+
+    positions = tuple(str(position).strip() for position in logger_positions)
+    work = event_results.copy()
+    if strip_filter is not None:
+        work = work[work["strip"].isin(strip_filter)].copy()
+    if event_ids is not None:
+        work = work[work["event_id"].isin(event_ids)].copy()
+    work = work[
+        work["logger_position"].astype(str).str.strip().isin(positions)
+        & pd.to_numeric(work["depth_index"], errors="coerce").eq(depth)
+    ].copy()
+    if work.empty:
+        return pd.DataFrame(columns=log_columns)
+
+    unique_events = (
+        work[["strip", "event_id"]]
+        .drop_duplicates()
+        .sort_values(["strip", "event_id"])
+        .reset_index(drop=True)
+    )
+    if max_plots is not None:
+        unique_events = unique_events.head(max_plots).copy()
+
+    y_limits = None
+    if use_common_y_axis:
+        sensor_filter = [
+            f"VWC_{depth}_raw_{strip}_{position}"
+            for strip in work["strip"].dropna().astype(str).unique()
+            for position in positions
+        ]
+        y_limits = compute_event_plot_ylim(
+            df, work, hours_before, hours_after,
+            strip_filter=strip_filter, sensor_filter=sensor_filter,
+        )
+
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, object]] = []
+    for _, key in unique_events.iterrows():
+        strip = str(key["strip"])
+        event_id = key["event_id"]
+        sub = work[
+            (work["strip"].astype(str) == strip)
+            & _event_id_mask(work["event_id"], event_id)
+        ]
+        first = sub.iloc[0]
+        irrigation_start = coerce_optional_timestamp(first.get("irrigation_start"))
+        irrigation_end = coerce_optional_timestamp(first.get("irrigation_end"))
+        if irrigation_start is None:
+            continue
+        gallons, duration, flow = _get_strip_volume_and_flow(first)
+        event_label = _event_label_for_filename(event_id, irrigation_start, strip)
+        depth_inches = SENSOR_DEPTH_INDEX_TO_INCHES[str(depth)]
+        output_file = out_dir / _safe_filename(
+            f"{irrigation_start:%Y-%m-%d_%H%M}_{strip}_{depth_inches}in_locations_event_{event_label}.png"
+        )
+        try:
+            plot_event_multilocation_from_results(
+                df=df, event_results=work, strip=strip, event_id=event_id,
+                depth=depth, logger_positions=positions,
+                hours_before=hours_before, hours_after=hours_after,
+                output_path=output_file, show=False, precip_col=precip_col,
+                y_limits=y_limits,
+            )
+            status = "written"
+        except Exception as exc:
+            status = f"failed: {exc}"
+        rows.append({
+            "event_id": event_id, "strip": strip, "depth_index": depth,
+            "depth_inches": depth_inches, "irrigation_start": irrigation_start,
+            "irrigation_end": irrigation_end,
+            "plot_start": irrigation_start - pd.Timedelta(hours=hours_before),
+            "plot_end": irrigation_start + pd.Timedelta(hours=hours_after),
+            "event_duration_hours": _as_float_or_none(duration),
+            "gallons_strip": _as_float_or_none(gallons),
+            "avg_flow_gph_strip": _as_float_or_none(flow),
+            "output_file": str(output_file), "status": status,
+        })
+    return pd.DataFrame(rows, columns=log_columns)
 
 
 def save_failed_event_pair_qc_plots(

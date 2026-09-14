@@ -106,6 +106,7 @@ from biochar_app.scripts.management.irrigation_analysis.irrigation_response_anal
 
 from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_irrigation_event_multidepth_plots,
+    save_irrigation_event_multilocation_plots,
     save_failed_event_pair_qc_plots,
     plot_mean_storage_depth_by_zone_by_year,
     plot_mean_storage_by_zone,
@@ -1012,6 +1013,16 @@ def write_year_outputs(
         exist_ok=True,
     )
 
+    multilocation_plot_dir = (
+        figures_dir
+        / "event_multilocation"
+    )
+
+    multilocation_plot_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     # ------------------------------------------------------------------
     # Bottom-logger holding-capacity workflow
     # ------------------------------------------------------------------
@@ -1576,6 +1587,56 @@ def write_year_outputs(
         f"Year {year}: removed "
         f"{len(stale_plot_paths)} stale "
         "multidepth event plot(s)."
+    )
+
+    multilocation_plot_logs: list[pd.DataFrame] = []
+
+    for depth_code in SENSOR_DEPTH_CODES:
+        depth = int(depth_code)
+        depth_inches = SENSOR_DEPTH_INDEX_TO_INCHES[str(depth)]
+        depth_plot_dir = multilocation_plot_dir / f"{depth_inches}in"
+
+        plot_log = save_irrigation_event_multilocation_plots(
+            df=df_15min,
+            event_results=plot_results,
+            output_dir=depth_plot_dir,
+            strip_filter=STRIPS,
+            event_ids=None,
+            depth=depth,
+            logger_positions=tuple(str(value).strip() for value in LOGGER_LOCATIONS),
+            hours_before=EVENT_PLOT_HOURS_BEFORE,
+            hours_after=EVENT_PLOT_HOURS_AFTER,
+            max_plots=None,
+            precip_col="precip_in",
+            use_common_y_axis=True,
+        )
+
+        if not plot_log.empty:
+            multilocation_plot_logs.append(plot_log)
+
+        print(
+            f"Depth {depth_inches} in: {len(plot_log)} "
+            "multi-location plot-log rows returned"
+        )
+
+    multilocation_plot_log = (
+        pd.concat(multilocation_plot_logs, ignore_index=True)
+        if multilocation_plot_logs
+        else pd.DataFrame()
+    )
+    multilocation_plot_log.to_csv(
+        figures_dir / f"irrigation_event_multilocation_plot_log_{year}.csv",
+        index=False,
+    )
+
+    stale_multilocation_paths = prune_stale_multidepth_figures(
+        year=year,
+        plot_log=multilocation_plot_log,
+        multidepth_plot_dir=multilocation_plot_dir,
+    )
+    print(
+        f"Year {year}: removed {len(stale_multilocation_paths)} stale "
+        "multi-location event plot(s)."
     )
 
     # ------------------------------------------------------------------

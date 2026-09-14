@@ -23,6 +23,8 @@ scripts/management/estimate_irrigation_holding_capacity.py
         +--> event response and holding-capacity tables
         +--> event_multidepth/<position>/*.png
         +--> irrigation_event_multidepth_plot_log_<year>.csv
+        +--> event_multilocation/<depth>in/*.png
+        +--> irrigation_event_multilocation_plot_log_<year>.csv
         |
         v
 scripts/management/irrigation_analysis/reporting.py
@@ -67,6 +69,49 @@ before export, but the displayed clock value remains Denver civil time.
 Clock-correction evidence and explanations belong in
 `LOGGER_CLOCK_CORRECTION_METADATA`. The generated
 `logger_clock_corrections_audit.csv` makes those operational states reviewable.
+
+Most historical correction boundaries were inferred from discontinuities in
+the raw 15-minute logger sequence. A 75-minute forward gap or a 45-minute
+backward step identifies an approximately one-hour clock change and supports
+the inverse offset needed to make that logger internally continuous. It does
+**not**, by itself, prove that the logger's initial segment was aligned to MST
+or to the other field loggers. Absolute alignment must be checked against an
+independent time reference such as a documented PC400 comparison, irrigation
+start observations, meter-photo times, or a shared environmental response.
+
+Accordingly, distinguish two claims when interpreting the correction audit:
+
+- **continuity verified**: the transition and inverse stitching adjustment are
+  supported by the raw timestamp sequence;
+- **absolute time verified**: the resulting wall-clock time is independently
+  anchored. Do not infer this status from a discontinuity alone.
+
+S3T has two paired 2024 transitions: a backward change on February 23 and a
+forward change on March 21. Its absolute correction changes from `-60` to zero
+between those boundaries and then returns to `-60`.
+
+The operational correction selector uses timestamp values rather than source
+file row order. Around a backward clock reset, the repeated clock-hour can
+therefore contain indistinguishable pre-reset and post-reset timestamps. Treat
+that overlapping interval as ambiguous; analyses well outside the repeated
+hour use the intended piecewise state.
+
+The February and August 2026 PC400 screenshot sets provide an absolute MST
+anchor for all 12 stations. The operational table propagates that anchor
+backward through each verified raw timestamp discontinuity. Consequently, its
+initial `1900-01-01` rows are sentinel states for all available earlier data,
+not observed logger dates. This absolute anchoring changes the former
+continuity-only offsets substantially. In particular, S3M's pre-reset states
+are positive (`+450`, `+390`, `+330`, and `+270` minutes), ending at zero with
+the exact 270-minute raw jump at the February 2026 reset. That sign and scale
+agree with the screenshot showing S3M 4 hours 23 minutes slow immediately
+before it was corrected.
+
+The screenshot calendar date is not used as a correction boundary because the
+Windows/Parallels date may have been stale. Boundaries always come from the
+first post-reset Table1 record in original file order. The evidence inventory,
+transcribed comparisons, caveats, and SHA-256 hashes are stored under
+`data-raw/logger_clock_evidence/`.
 
 ### Irrigation and meter-photo timestamps
 
@@ -292,6 +337,23 @@ event, strip, logger position, output path, and write status for each figure.
 Reporting should use this log rather than reconstructing filenames.
 Confirm that plotting completed by checking the plot log for `written` statuses
 and inspecting representative PNG files under `event_multidepth/`.
+
+The same run also writes complementary constant-depth plots across the Top,
+Middle, and Bottom logger positions. These use location colors and report the
+Top-to-Middle, Middle-to-Bottom, and Top-to-Bottom arrival intervals. A warning
+is printed in the figure footer when standard arrivals do not follow the
+expected Top-to-Middle-to-Bottom order.
+
+```text
+data-processed/management/irrigation/analysis/figures/event_multilocation/
+    6in/
+    12in/
+    18in/
+```
+
+The corresponding
+`irrigation_event_multilocation_plot_log_<year>.csv` records the event, strip,
+depth, output path, and write status.
 
 ### 6. DOCX reports
 

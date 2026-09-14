@@ -385,26 +385,69 @@ def collect_dataset_metadata_from_processed_outputs(
 # than second-level oscillator drift.
 
 LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
-    "S1B": [("2024-02-23 15:30:00", 60)],
-    "S1M": [("2024-02-23 15:15:00", 60)],
-    "S1T": [("2024-02-23 10:45:00", 60)],
-    "S2B": [("2024-02-23 15:45:00", 60)],
-    "S2M": [("2026-02-23 08:45:00", 60)],
+    "S1B": [
+        ("1900-01-01 00:00:00", -60),
+        ("2024-02-23 15:30:00", 0),
+    ],
+    "S1M": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 15:15:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S1T": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 10:45:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S2B": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 15:45:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S2M": [
+        ("1900-01-01 00:00:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
     "S2T": [
-        ("2024-04-02 16:00:00", -60),
+        ("1900-01-01 00:00:00", 60),
+        ("2024-04-02 16:00:00", 0),
         ("2026-02-18 08:45:00", 0),
     ],
-    "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
+    "S3B": [
+        ("1900-01-01 00:00:00", 60),
+        ("2023-04-28 10:45:00", 0),
+        ("2024-03-28 17:15:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
     "S3M": [
-        ("2023-09-04 10:30:00", -60),
-        ("2024-07-07 06:30:00", -120),
-        ("2025-01-16 23:45:00", -180),
+        ("1900-01-01 00:00:00", 450),
+        ("2023-09-04 10:30:00", 390),
+        ("2024-07-07 06:30:00", 330),
+        ("2025-01-16 23:45:00", 270),
         ("2026-02-19 15:00:00", 0),
     ],
-    "S3T": [("2024-02-23 11:30:00", 60)],
-    "S4B": [("2023-09-04 10:30:00", -60), ("2023-09-20 18:30:00", -120), ("2026-02-23 09:00:00", -60)],
-    "S4M": [("2024-02-23 14:30:00", 60)],
-    "S4T": [("2024-02-23 11:45:00", 60)],
+    "S3T": [
+        ("1900-01-01 00:00:00", -60),
+        ("2024-02-23 11:30:00", 0),
+        ("2024-03-21 16:00:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S4B": [
+        ("1900-01-01 00:00:00", 60),
+        ("2023-09-04 10:30:00", 0),
+        ("2023-09-20 18:30:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
+    "S4M": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 14:30:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
+    "S4T": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 11:45:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
 }
 
 # Fixed Mountain Standard Time base used before converting to civil Denver time.
@@ -654,6 +697,25 @@ LOGGER_CLOCK_CORRECTION_METADATA = {
         "confidence": "high",
     },
 
+    ("S3T", "2024-03-21 16:00:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. The inverse stitching "
+            "correction returns to zero after the preceding February backward "
+            "clock change."
+        ),
+        "evidence": (
+            "The deduplicated clock-state timeline and raw-file clock-event "
+            "scan both detect the forward transition."
+        ),
+        "details": (
+            "Detected transition: 2024-03-21 14:45:00 -> "
+            "2024-03-21 16:00:00 (+75.0 min). This transition was present in "
+            "clock_state_timeline_2026-03-03.csv but was omitted from the "
+            "operational correction map."
+        ),
+        "confidence": "high",
+    },
+
     ("S4B", "2023-09-04 10:30:00"): {
         "reason": (
             "Logger clock moved forward by 75 minutes. "
@@ -727,6 +789,15 @@ LOGGER_CLOCK_CORRECTION_METADATA = {
         ),
         "confidence": "high",
     },
+}
+
+# The February and August 2026 PC400 screenshots independently anchor every
+# logger to MST. Propagating those anchors backward through the raw, verified
+# clock discontinuities establishes the absolute state for every interval.
+LOGGER_ABSOLUTE_TIME_VERIFIED_STATES: set[tuple[str, str]] = {
+    (logger, start_s)
+    for logger, corrections in LOGGER_CLOCK_CORRECTIONS.items()
+    for start_s, _offset_min in corrections
 }
 
 # ---------------------------------------------------------------------------
@@ -806,6 +877,42 @@ def build_logger_clock_corrections_audit() -> pd.DataFrame:
                 (logger, start_s),
                 {},
             )
+            if start_s == "1900-01-01 00:00:00":
+                metadata = {
+                    "reason": (
+                        "Initial absolute clock state for the available raw "
+                        "record."
+                    ),
+                    "evidence": (
+                        "Derived by propagating the February 2026 PC400 "
+                        "absolute-time anchor backward through verified raw "
+                        "timestamp discontinuities."
+                    ),
+                    "details": (
+                        "The 1900 boundary is a sentinel that makes the state "
+                        "apply to all available records; it is not an observed "
+                        "logger date."
+                    ),
+                    "confidence": "high",
+                }
+            elif not metadata:
+                metadata = {
+                    "reason": "Logger clock was returned to fixed MST.",
+                    "evidence": (
+                        "Raw Table1 record continuity identifies the reset "
+                        "boundary; August 2026 PC400 screenshots verify the "
+                        "resulting fixed-MST state."
+                    ),
+                    "details": (
+                        "The boundary is the first post-reset 15-minute raw "
+                        "record, not the screenshot display date."
+                    ),
+                    "confidence": "high",
+                }
+            absolute_time_verified = (
+                logger,
+                start_s,
+            ) in LOGGER_ABSOLUTE_TIME_VERIFIED_STATES
 
             rows.append(
                 {
@@ -829,6 +936,12 @@ def build_logger_clock_corrections_audit() -> pd.DataFrame:
                         "confidence",
                         "unknown",
                     ),
+                    "evidence_scope": (
+                        "continuity_and_absolute_time"
+                        if absolute_time_verified
+                        else "continuity_only"
+                    ),
+                    "absolute_time_verified": absolute_time_verified,
                 }
             )
 

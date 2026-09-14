@@ -26,6 +26,7 @@ from biochar_app.scripts.management.irrigation_analysis.holding_capacity import 
 )
 from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_failed_event_pair_qc_plots,
+    save_irrigation_event_multilocation_plots,
 )
 from biochar_app.scripts.management.irrigation_analysis.utils import (
     add_flow_rate_comparison_fields,
@@ -63,6 +64,56 @@ class FlowRateComparisonTests(unittest.TestCase):
             row["flow_rate_comparison_status"],
             "within_review_threshold",
         )
+
+
+class MultiLocationEventPlotTests(unittest.TestCase):
+    def test_writes_constant_depth_plot_across_logger_positions(self) -> None:
+        index = pd.date_range("2024-04-19 12:00", periods=8, freq="15min")
+        logger_data = pd.DataFrame(
+            {
+                "VWC_1_raw_S3_T": [10, 10, 10, 11, 13, 15, 16, 16],
+                "VWC_1_raw_S3_M": [20, 20, 20, 20, 21, 23, 25, 25],
+                "VWC_1_raw_S3_B": [30, 30, 31, 33, 35, 36, 36, 36],
+            },
+            index=index,
+        )
+        event_rows = []
+        for position, arrival_offset in (("T", 4), ("M", 3), ("B", 2)):
+            event_rows.append(
+                {
+                    "year": 2024,
+                    "strip": "S3",
+                    "event_id": "2024-04-19_S3_S4_test",
+                    "logger_position": position,
+                    "depth_index": 1,
+                    "sensor_col": f"VWC_1_raw_S3_{position}",
+                    "irrigation_start": index[1],
+                    "irrigation_end": index[6],
+                    "event_duration_hours": 1.25,
+                    "gallons_strip": 1000.0,
+                    "avg_flow_gph_strip": 800.0,
+                    "arrival_time": index[arrival_offset],
+                    "baseline_time": index[1],
+                    "peak_time": index[6],
+                    "plateau_time": index[7],
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            log = save_irrigation_event_multilocation_plots(
+                df=logger_data,
+                event_results=pd.DataFrame(event_rows),
+                output_dir=directory,
+                strip_filter=["S3"],
+                depth=1,
+                hours_before=0.25,
+                hours_after=1.5,
+            )
+
+            self.assertEqual(len(log), 1)
+            self.assertEqual(log.iloc[0]["status"], "written")
+            self.assertEqual(log.iloc[0]["depth_inches"], 6)
+            self.assertTrue(Path(log.iloc[0]["output_file"]).exists())
 
 
 class UnretainedWaterTests(unittest.TestCase):
