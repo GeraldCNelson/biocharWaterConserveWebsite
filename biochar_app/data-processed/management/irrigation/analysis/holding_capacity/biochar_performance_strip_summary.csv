@@ -1,5 +1,5 @@
 strip,treatment,pair,regime,n_events,n_storage,storage_available_pct,n_unretained,applied_gal,storage_gal,storage_pct,unretained_gal,unretained_pct,arrival_hr
-S1,biochar,S1_S2,monthly,26,18,69.23,16,65235.00,26999.00,47.97,36059.00,50.67,7.81
-S2,control,S1_S2,monthly,26,23,88.46,23,61981.00,33919.00,62.51,28156.00,37.93,4.59
-S3,biochar,S3_S4,biweekly,46,21,45.65,21,52948.00,21948.00,47.88,31098.00,52.72,1.35
-S4,control,S3_S4,biweekly,34,23,67.65,18,62777.00,19774.00,33.97,41947.00,66.02,5.43
+S1,biochar,S1_S2,monthly,26,18,69.23,16,65235.00,23036.00,40.92,39913.00,57.91,7.81
+S2,control,S1_S2,monthly,26,23,88.46,23,61981.00,34452.00,63.49,27639.00,37.03,4.59
+S3,biochar,S3_S4,biweekly,46,21,45.65,21,52948.00,25070.00,54.70,28104.00,46.68,1.35
+S4,control,S3_S4,biweekly,34,23,67.65,18,62777.00,19766.00,33.98,41942.00,65.99,5.43
