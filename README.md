@@ -221,6 +221,16 @@ mode does not download weather or rebuild workbook, irrigation, or laboratory
 outputs. Parquet files are written to temporary files and replaced only after
 each write succeeds.
 
+For the routine server-side publication update, rebuild the logger products
+and refresh the CoAgMet weather products while still skipping the Mac-only
+workbook, irrigation, laboratory, and raw-backup stages:
+
+```bash
+python -m biochar_app.scripts.etl --year 2026 --operational-update
+```
+
+This is the ETL mode intended to follow an accepted nightly PakBus download.
+
 The 2023-2025 Parquet datasets are frozen. ETL refuses to rebuild any of those
 years unless the deliberate override `--rebuild-frozen-years` is supplied.
 That override is intended only for a documented historical correction.

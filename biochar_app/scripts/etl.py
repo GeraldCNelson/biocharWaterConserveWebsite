@@ -2345,13 +2345,23 @@ def main() -> None:
     parser.add_argument("--all-years", action="store_true")
     parser.add_argument("--no-backup-raw", action="store_true")
     parser.add_argument("--force-backup-raw", action="store_true")
-    parser.add_argument(
+    update_mode = parser.add_mutually_exclusive_group()
+    update_mode.add_argument(
         "--logger-only",
         action="store_true",
         help=(
             "Rebuild logger Parquet outputs from PC400 files plus the accepted "
             "PakBus archive; skip workbook, irrigation, laboratory, weather, "
             "and legacy raw-data backup work."
+        ),
+    )
+    update_mode.add_argument(
+        "--operational-update",
+        action="store_true",
+        help=(
+            "Rebuild logger products from PC400 files plus the accepted "
+            "PakBus archive and refresh CoAgMet weather products; skip "
+            "workbook, irrigation, laboratory, and legacy raw-data backup work."
         ),
     )
     parser.add_argument(
@@ -2396,7 +2406,15 @@ def main() -> None:
     os.makedirs(PARQUET_DIR, exist_ok=True)
     write_logger_clock_corrections_audit(audit_path)
 
-    if args.logger_only:
+    operational_subset = args.logger_only or args.operational_update
+
+    if args.operational_update:
+        logger.info(
+            "Operational update: refreshing logger and weather products; "
+            "skipping master workbook, irrigation, laboratory, and legacy "
+            "raw-data backup stages."
+        )
+    elif args.logger_only:
         logger.info(
             "Logger-only update: skipping master workbook, irrigation, "
             "laboratory, weather, and legacy raw-data backup stages."
@@ -2409,7 +2427,7 @@ def main() -> None:
     else:
         refresh_master_workbook_snapshot()
 
-    if args.logger_only:
+    if operational_subset:
         pass
     elif args.skip_irrigation_build:
         logger.warning(
@@ -2426,7 +2444,7 @@ def main() -> None:
             irrigation_audit["invalid_group_events"],
         )
 
-    if args.logger_only:
+    if operational_subset:
         pass
     elif args.skip_lab_build:
         logger.warning(
@@ -2447,7 +2465,7 @@ def main() -> None:
     for year in years:
         validate_datfiles_for_year(year)
 
-    if not args.logger_only and not args.no_backup_raw:
+    if not operational_subset and not args.no_backup_raw:
         maybe_backup_raw_data(force=args.force_backup_raw)
 
     generate_summaries(years, include_weather=not args.logger_only)
