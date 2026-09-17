@@ -111,6 +111,21 @@ def test_freeze_flag_is_sensor_level_and_blocks_eligibility() -> None:
     assert results["eligibility_reason"].str.contains("local_temperature_near_freezing").all()
 
 
+def test_remote_gauge_event_without_field_corroboration_is_excluded() -> None:
+    event = _event_frame().assign(
+        event_id="precip_20260729_1615_20260729_1615"
+    )
+    results = analyze_precipitation_sensor_responses(_logger_frame(), event)
+
+    assert results["material_response"].all()
+    assert results["field_event_excluded"].all()
+    assert not results["retention_eligible"].any()
+    assert not results["empirical_max_eligible"].any()
+    assert results["eligibility_reason"].str.contains(
+        "remote_weather_station_precipitation_not_corroborated_at_field"
+    ).all()
+
+
 def test_cold_nonfreezing_events_are_corroborating_not_empirical_maxima() -> None:
     results = analyze_precipitation_sensor_responses(
         _logger_frame(minimum_temperature=35.0), _event_frame(),

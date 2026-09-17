@@ -43,6 +43,17 @@ VWC_RE = re.compile(
 PAIR_STRIPS = {"S1_S2": ("S1", "S2"), "S3_S4": ("S3", "S4")}
 DEPTH_COLORS = {"1": "#1f77b4", "2": "#e69f00", "3": "#009e73"}
 
+# The weather station is at least one-half mile from the experiment. Localized
+# precipitation recorded there is not assumed to have reached the field when
+# the field logger network provides contrary evidence. These exclusions are
+# deliberately event-specific and auditable; they must not be generalized to
+# other small storms without reviewing the field response plots.
+FIELD_PRECIPITATION_EVENT_EXCLUSIONS = {
+    "precip_20260729_1615_20260729_1615": (
+        "remote_weather_station_precipitation_not_corroborated_at_field"
+    ),
+}
+
 
 @dataclass(frozen=True)
 class PrecipitationRetentionConfig:
@@ -164,6 +175,10 @@ def analyze_precipitation_sensor_responses(
     rows: list[dict[str, object]] = []
     for event in events.itertuples(index=False):
         start, end = pd.Timestamp(event.event_start), pd.Timestamp(event.event_end)
+        field_exclusion_reason = FIELD_PRECIPITATION_EVENT_EXCLUSIONS.get(
+            str(event.event_id), ""
+        )
+        field_event_excluded = bool(field_exclusion_reason)
         baseline_start = start - pd.Timedelta(hours=config.baseline_hours)
         peak_end = end + pd.Timedelta(hours=config.peak_followup_hours)
         qc_end = end + pd.Timedelta(hours=72) + half_window
@@ -207,7 +222,9 @@ def analyze_precipitation_sensor_responses(
             responded = bool(np.isfinite(gain) and gain >= config.response_threshold_vwc)
             qc_pass = not (missing_vwc or missing_temp or freeze or out_of_range or discontinuity)
             independent = bool(event.independent_event)
-            retention_eligible = independent and qc_pass and responded
+            retention_eligible = (
+                independent and qc_pass and responded and not field_event_excluded
+            )
             if missing_temp:
                 temperature_class = "missing"
             elif freeze:
@@ -225,12 +242,15 @@ def analyze_precipitation_sensor_responses(
             if out_of_range: reasons.append("vwc_out_of_range")
             if discontinuity: reasons.append("vwc_discontinuity")
             if not responded: reasons.append("no_material_response")
+            if field_event_excluded: reasons.append(field_exclusion_reason)
 
             rows.append({
                 "event_id": event.event_id, "year": event.year,
                 "event_start": start, "event_end": end,
                 "precip_total_in": event.precip_total_in,
                 "independent_event": independent,
+                "field_event_excluded": field_event_excluded,
+                "field_event_exclusion_reason": field_exclusion_reason,
                 "sensor_col": sensor, "temperature_col": temp_col,
                 "temperature_source": "co_located_cs650_logger",
                 "strip": strip, "treatment": STRIP_TREATMENT[strip],

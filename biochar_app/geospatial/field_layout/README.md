@@ -55,9 +55,15 @@ The GeoPackage currently contains:
 ### logger_influence_zone_areas.csv
 
 Audit table for the 12 logger influence zones. The cells are projected
-Voronoi polygons built from the measured logger coordinates and clipped to the
-photographed four-corner field boundary. Their areas exactly partition the
-field and are the active areas used by irrigation storage calculations.
+Voronoi polygons built from the photo-GPS logger coordinates and clipped to the
+photographed four-corner field boundary. Their areas exactly partition that
+approximate mapped boundary and are useful for spatial diagnostics. They are
+not used for irrigation water-volume calculations.
+
+The source photographs report horizontal positioning errors of approximately
+2.2--5.3 m at the four field corners. Water-volume calculations therefore use
+the nominal 47-foot experimental strip width and along-furrow zone lengths from
+`config/field_management_metadata.py`.
 - irrigation head line
 - furrow direction
 - DEM clipping polygons

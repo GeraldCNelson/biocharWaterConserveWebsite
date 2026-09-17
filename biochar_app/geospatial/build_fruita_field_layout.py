@@ -324,7 +324,54 @@ def render_field_layout(
     fig, ax = plt.subplots(figsize=(7.5, 12))
     field_boundary.boundary.plot(ax=ax, color="black", linewidth=1.4, zorder=1)
     strip_polygons.boundary.plot(ax=ax, color="0.55", linewidth=1.0, zorder=1)
-    strip_centerlines.plot(
+
+    # Draw the dashed guides through the measured logger locations. The
+    # geometric strip centerlines can be noticeably offset from the installed
+    # logger transects, especially in S2, and are misleading on a location map.
+    boundary_geometry = field_boundary.iloc[0].geometry
+
+    def extend_to_margin(origin: Point, adjacent: Point) -> Point:
+        """Continue a logger segment from origin to the field boundary."""
+        dx = origin.x - adjacent.x
+        dy = origin.y - adjacent.y
+        distance = (dx * dx + dy * dy) ** 0.5
+        if distance == 0:
+            return origin
+        far_point = Point(
+            origin.x + 1000.0 * dx / distance,
+            origin.y + 1000.0 * dy / distance,
+        )
+        hits = LineString([origin, far_point]).intersection(
+            boundary_geometry.boundary
+        )
+        if hits.is_empty:
+            return origin
+        candidates = list(hits.geoms) if hasattr(hits, "geoms") else [hits]
+        points = [geometry for geometry in candidates if isinstance(geometry, Point)]
+        return max(points, key=origin.distance) if points else origin
+
+    logger_transects = []
+    for strip in ("S1", "S2", "S3", "S4"):
+        installed = logger_points.loc[
+            logger_points["feature_id"].isin(
+                [f"{strip}T", f"{strip}M", f"{strip}B"]
+            )
+        ].set_index("feature_id")
+        top = installed.loc[f"{strip}T"].geometry
+        middle = installed.loc[f"{strip}M"].geometry
+        bottom = installed.loc[f"{strip}B"].geometry
+        logger_transects.append(
+            LineString(
+                [
+                    extend_to_margin(top, middle),
+                    top,
+                    middle,
+                    bottom,
+                    extend_to_margin(bottom, middle),
+                ]
+            )
+        )
+    gpd.GeoSeries(logger_transects, crs=control_points.crs).plot(
         ax=ax, color="0.25", linewidth=1.0, linestyle="--", zorder=1
     )
 
@@ -358,12 +405,11 @@ def render_field_layout(
             fontsize=10,
             fontweight="bold",
             color=color,
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5},
         )
         for row in subset.itertuples():
-            pakbus_id = str(row.pakbus_id or "").strip()
-            label = f"{row.feature_id}, {pakbus_id}" if pakbus_id else row.feature_id
             ax.annotate(
-                label,
+                row.feature_id,
                 (row.geometry.x, row.geometry.y),
                 xytext=(0, 11),
                 textcoords="offset points",
@@ -371,6 +417,7 @@ def render_field_layout(
                 fontsize=8,
                 fontweight="bold",
                 zorder=5,
+                bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.8},
             )
 
         line = centerline.iloc[0].geometry
@@ -378,7 +425,7 @@ def render_field_layout(
         south_endpoint = Point(line.coords[-1])
         bottom_to_end_ft = bottom_logger.geometry.distance(south_endpoint) * 3.280839895
         ax.text(
-            center_x,
+            center_x - 0.045 * field_width,
             y_min + 0.085 * field_height,
             f"{bottom_to_end_ft:.0f} ft",
             ha="center",
@@ -396,13 +443,13 @@ def render_field_layout(
         zorder=6,
     )
     corner_offsets = {
-        "field_nw": (7, 0, "left"),
-        "field_ne": (-7, 0, "right"),
-        "field_sw": (7, 0, "left"),
-        "field_se": (-7, 0, "right"),
+        "field_nw": (7, -7, "left", "top"),
+        "field_ne": (-7, -7, "right", "top"),
+        "field_sw": (7, 7, "left", "bottom"),
+        "field_se": (-7, 7, "right", "bottom"),
     }
     for row in corners.itertuples():
-        dx, dy, align = corner_offsets[row.feature_id]
+        dx, dy, align, vertical_align = corner_offsets[row.feature_id]
         label = str(row.description or row.feature_id).replace("\\n", "\n")
         ax.annotate(
             label,
@@ -410,8 +457,9 @@ def render_field_layout(
             xytext=(dx, dy),
             textcoords="offset points",
             ha=align,
-            va="center",
+            va=vertical_align,
             fontsize=8,
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.0},
         )
 
     if not infrastructure.empty:
@@ -427,10 +475,10 @@ def render_field_layout(
             ax.annotate(
                 str(row.description).replace("\\n", "\n"),
                 (row.geometry.x, row.geometry.y),
-                xytext=(8, 0),
+                xytext=(8, 8),
                 textcoords="offset points",
                 ha="left",
-                va="center",
+                va="bottom",
                 fontsize=8,
             )
 
@@ -448,23 +496,25 @@ def render_field_layout(
     )
     ax.text(
         (x_min + x_max) / 2,
-        y_max - 0.012 * field_height,
+        y_max - 0.025 * field_height,
         "Start of furrows",
         ha="center",
         va="top",
         fontsize=10,
         style="italic",
         color="0.25",
+        bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5},
     )
     ax.text(
         (x_min + x_max) / 2,
-        y_min + 0.012 * field_height,
+        y_min + 0.035 * field_height,
         f"End of furrows\n{south_width_ft:.0f} ft",
         ha="center",
         va="bottom",
         fontsize=10,
         style="italic",
         color="0.25",
+        bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5},
     )
     ax.text(
         x_max + 0.015 * field_width,
