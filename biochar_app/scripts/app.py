@@ -7,7 +7,6 @@ import subprocess
 import logging
 from pathlib import Path
 
-import pandas as pd
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -25,7 +24,7 @@ from biochar_app.scripts.config import (
 
 from biochar_app.config.core import MONTH_ABBR
 from biochar_app.config.paths import PARQUET_DIR
-from biochar_app.scripts.data_loading import load_logger_data as _orig_load_logger_data
+from biochar_app.scripts.data_loading import load_logger_data
 from biochar_app.scripts.routes import main_router, api_router
 from biochar_app.scripts.date_ranges import build_date_ranges
 from biochar_app.scripts import state
@@ -35,23 +34,6 @@ from biochar_app.scripts.management.management_routes import management_router
 # ─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-# ─── Global caches ─────────────────────────────────────────────────────────────
-_cache: dict[tuple[int, str], pd.DataFrame] = {}  # (year, granularity) -> df
-
-# ============================= Caching hook ============================= #
-
-def _cached_load_logger_data(year: int, granularity: str) -> pd.DataFrame:
-    """
-    Thin wrapper around routes_utils.load_logger_year to cache (year, granularity)
-    in memory so all routes benefit.
-    """
-    key = (int(year), str(granularity))
-    if key not in _cache:
-        df = _orig_load_logger_data(int(year), str(granularity))
-        _cache[key] = df
-        logger.info("📥 Cached slice %s×%s (rows=%d)", key[0], key[1], len(df))
-    return _cache[key]
 
 # ============================= App setup ============================= #
 
@@ -114,11 +96,7 @@ if not has_any_parquet:
     except subprocess.CalledProcessError as exc:
         logger.error("❌ ETL failed: %s", exc)
 
-# 5) Monkey-patch loader so all routes use caching “for free”
-import biochar_app.scripts.routes_utils as _ru
-_ru.load_logger_year = _cached_load_logger_data  # type: ignore[attr-defined]
-
-# 6) Build DATE_RANGES once at import time
+# 5) Build DATE_RANGES once at import time
 logger.info("⏳ Preloading parquet date ranges...")
 try:
     state.DATE_RANGES = build_date_ranges(
@@ -148,9 +126,9 @@ except Exception as exc:
 
 logger.info("✅ Date range preload complete")
 
-# 7) Preload only the default slice at boot
+# 6) Preload only the default slice at boot
 try:
-    df0 = _cached_load_logger_data(DEFAULT_YEAR, DEFAULT_GRANULARITY)
+    df0 = load_logger_data(DEFAULT_YEAR, DEFAULT_GRANULARITY)
     logger.info(
         "✅ Preloaded default slice (%s, %s) rows=%d",
         DEFAULT_YEAR,
@@ -162,7 +140,7 @@ except FileNotFoundError:
 except Exception as exc:
     logger.exception("❌ Failed to preload default slice: %s", exc)
 
-# 8) Run with Uvicorn when invoked directly
+# 7) Run with Uvicorn when invoked directly
 if __name__ == "__main__":
     uvicorn.run(
         "biochar_app.scripts.app:app",
