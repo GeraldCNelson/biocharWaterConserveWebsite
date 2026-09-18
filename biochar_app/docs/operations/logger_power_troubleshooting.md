@@ -127,7 +127,9 @@ python -m biochar_app.pakbus.core.daily_download
 
 Normal runs suppress packet-by-packet PyLink and PyCampbell messages while retaining concise station progress, retries, warnings, and errors. For a communications investigation, run the underlying client with `--log-level DEBUG` to restore the complete protocol trace.
 
-The command first checks the PakBus TCP endpoint and downloads 24 hours from all 12 stations using isolated station processes and retries. If the first pass misses any stations, it waits two minutes and performs a second, more persistent pass for only those stations. It merges recovered rows without duplicates and then validates the complete result. Each run is retained under `biochar_app/data-raw/pakbus_daily/YYYY/MM/DD/`. The JSON report states `accepted`, `accepted_with_warnings`, or `rejected`. A rejected run exits non-zero and must not be passed to ETL.
+The command first checks the PakBus TCP endpoint and downloads 24 hours from all 12 stations using isolated station processes and retries. If the first pass misses any stations, it waits and performs a more persistent pass for only those stations. It merges recovered rows without duplicates and then validates the complete result. Each run is retained under `biochar_app/data-raw/pakbus_daily/YYYY/MM/DD/`. Accepted data are archived, followed by the operational logger-and-weather ETL, output verification, and a restart of the website service. A rejected download never reaches ETL. A publication or restart failure exits nonzero and leaves a detailed diagnostic report.
+
+The report also derives a rolling communication history from the most recent 30 diagnostic reports. A station is flagged when it fails initially in at least two of the last seven runs, at least three of the last 30, on consecutive nights, or remains unresolved in any retained run. Successful nights send one concise line unless a recurring communication warning exists; failures and warnings retain the detailed report email.
 
 When SES SMTP credentials are present, a rejected run sends one consolidated email to the addresses in `biochar_app/config/pipeline_alerts.json`. Recipient addresses and the sender are ordinary configuration; SMTP credentials must remain outside Git in `/etc/biochar/pipeline.env`:
 
@@ -159,6 +161,14 @@ Test one scheduled-style execution before relying on the timer:
 sudo systemctl start biochar-pakbus-daily.service
 sudo systemctl status biochar-pakbus-daily.service
 sudo journalctl -u biochar-pakbus-daily.service -n 200 --no-pager
+```
+
+The service invokes `sudo -n systemctl restart biochar` after verified ETL.
+Install a narrowly scoped sudoers rule with `sudo visudo -f
+/etc/sudoers.d/biochar-pipeline`:
+
+```text
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl restart biochar
 ```
 
 ## Slow or intermittent radio communication

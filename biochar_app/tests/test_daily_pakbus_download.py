@@ -6,6 +6,8 @@ import pandas as pd
 
 from biochar_app.pakbus.core.daily_download import (
     _build_report_email_body,
+    _build_success_email_body,
+    build_communication_reliability,
     diagnose_download,
     merge_download_frames,
     missing_stations,
@@ -188,3 +190,50 @@ def test_report_marks_missing_station_gap_coverage_unavailable() -> None:
 
     assert "none detected in responding stations" in body
     assert "not assessable for S4T because no records were returned" in body
+
+
+def test_communication_history_flags_repeated_initial_failures(tmp_path) -> None:
+    reports = [
+        {
+            "started_at": f"2026-09-{day:02d}T00:15:00-06:00",
+            "recovery": {
+                "requested_stations": ["S1M"] if day in {16, 17} else [],
+                "still_missing": [],
+            },
+        }
+        for day in range(12, 18)
+    ]
+    for index, report in enumerate(reports):
+        path = tmp_path / str(index) / "diagnostic_report.json"
+        path.parent.mkdir()
+        path.write_text(__import__("json").dumps(report), encoding="utf-8")
+
+    current = {
+        "started_at": "2026-09-18T00:15:00-06:00",
+        "recovery": {"requested_stations": [], "still_missing": []},
+    }
+    summary = build_communication_reliability(
+        tmp_path, current, stations=["S1M", "S1B"]
+    )
+
+    assert summary["S1M"]["initial_failures_last_7"] == 2
+    assert summary["S1M"]["recurrent_problem"] is True
+    assert summary["S1M"]["consecutive_initial_failures"] == 0
+    assert summary["S1B"]["recurrent_problem"] is False
+
+
+def test_success_email_is_one_line_and_mentions_recovery() -> None:
+    body = _build_success_email_body(
+        {
+            "publication": {"logger_latest_timestamp": "2026-09-18T00:00:00"},
+            "recovery": {
+                "requested_stations": ["S1B", "S1M"],
+                "still_missing": [],
+            },
+            "communication_reliability": {},
+        }
+    )
+
+    assert body.count("\n") == 0
+    assert "completed successfully through 2026-09-18T00:00:00" in body
+    assert "S1B, S1M" in body

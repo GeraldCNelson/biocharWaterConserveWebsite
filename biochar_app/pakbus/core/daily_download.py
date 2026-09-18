@@ -38,6 +38,9 @@ DEFAULT_ALERT_CONFIG = REPO_ROOT / "biochar_app" / "config" / "pipeline_alerts.j
 DEFAULT_TIMEZONE = str(DOWNLOAD_SETTINGS["timezone"])
 CSV_FLOAT_FORMAT = f"%.{int(DOWNLOAD_SETTINGS['csv_decimal_places'])}f"
 EXPECTED_STATIONS = tuple(name for name in ID_BY_STATION if name != "CR800")
+PARQUET_SUMMARY_ROOT = REPO_ROOT / "biochar_app/data-processed/parquet/summary"
+LOGGER_PARQUET = PARQUET_SUMMARY_ROOT / "15min"
+WEATHER_PARQUET = PARQUET_SUMMARY_ROOT / "weather/15min"
 
 
 @dataclass(frozen=True)
@@ -165,12 +168,47 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- not promoted")
 
+    publication = report.get("publication", {})
+    lines.extend(["", "Website publication:"])
+    if publication.get("status") == "published":
+        lines.append(
+            f"- logger through {publication.get('logger_latest_timestamp')}"
+        )
+        lines.append(
+            f"- weather through {publication.get('weather_latest_timestamp')}"
+        )
+        lines.append(
+            f"- website service: {publication.get('website_service')}"
+        )
+    elif publication:
+        lines.append(
+            f"- {publication.get('status')}: {publication.get('detail', 'no details available')}"
+        )
+    else:
+        lines.append("- not attempted")
+
     critical = [item for item in findings if item.get("severity") == "critical"]
     lines.extend(["", "Critical findings:"])
     if critical:
         for item in critical:
             station = f" [{item['station']}]" if item.get("station") else ""
             lines.append(f"- {item.get('code')}{station}: {item.get('message')}")
+    else:
+        lines.append("- none")
+
+    recurrent = {
+        station: summary
+        for station, summary in report.get("communication_reliability", {}).items()
+        if summary.get("recurrent_problem")
+    }
+    lines.extend(["", "Recurring communication warnings:"])
+    if recurrent:
+        for station, summary in sorted(recurrent.items()):
+            lines.append(
+                f"- {station}: {summary.get('initial_failures_last_7', 0)} initial failures "
+                f"in the last 7 runs; {summary.get('initial_failures_last_30', 0)} in the "
+                f"last 30; {summary.get('unresolved_failures_last_30', 0)} unresolved"
+            )
     else:
         lines.append("- none")
 
@@ -199,6 +237,156 @@ def _build_report_email_body(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _initial_failure_stations(report: dict) -> list[str]:
+    return sorted(set(report.get("recovery", {}).get("requested_stations", [])))
+
+
+def build_communication_reliability(
+    run_root: Path,
+    current_report: dict,
+    *,
+    stations: Iterable[str] = EXPECTED_STATIONS,
+) -> dict[str, dict]:
+    """Summarize initial and unresolved failures from the most recent 30 runs."""
+    reports: list[dict] = []
+    for path in run_root.rglob("diagnostic_report.json"):
+        try:
+            item = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if item.get("started_at") != current_report.get("started_at"):
+            reports.append(item)
+    reports.append(current_report)
+    reports.sort(key=lambda item: str(item.get("started_at", "")))
+    reports = reports[-30:]
+
+    result: dict[str, dict] = {}
+    for station in stations:
+        initial_flags = [station in _initial_failure_stations(item) for item in reports]
+        unresolved_flags = [
+            station in set(item.get("recovery", {}).get("still_missing", []))
+            for item in reports
+        ]
+        consecutive = 0
+        for failed in reversed(initial_flags):
+            if not failed:
+                break
+            consecutive += 1
+        last_failure = next(
+            (
+                item.get("started_at")
+                for item, failed in zip(reversed(reports), reversed(initial_flags))
+                if failed
+            ),
+            None,
+        )
+        failures_7 = sum(initial_flags[-7:])
+        failures_30 = sum(initial_flags)
+        recurrent = bool(
+            failures_7 >= 2
+            or failures_30 >= 3
+            or consecutive >= 2
+            or any(unresolved_flags)
+        )
+        result[station] = {
+            "runs_observed": len(reports),
+            "initial_failures_last_7": failures_7,
+            "initial_failures_last_30": failures_30,
+            "initial_success_percent": round(
+                100.0 * (len(reports) - failures_30) / len(reports), 1
+            ) if reports else None,
+            "recovered_failures_last_30": sum(
+                failed and not unresolved
+                for failed, unresolved in zip(initial_flags, unresolved_flags)
+            ),
+            "unresolved_failures_last_30": sum(unresolved_flags),
+            "consecutive_initial_failures": consecutive,
+            "most_recent_initial_failure": last_failure,
+            "recurrent_problem": recurrent,
+        }
+    return result
+
+
+def _build_success_email_body(report: dict) -> str:
+    publication = report.get("publication", {})
+    latest = publication.get("logger_latest_timestamp", "unknown")
+    recovered = sorted(
+        set(_initial_failure_stations(report)).difference(
+            report.get("recovery", {}).get("still_missing", [])
+        )
+    )
+    message = f"Nightly logger and weather update completed successfully through {latest}."
+    if recovered:
+        message += f" Recovered after initial communication failures: {_station_names(recovered)}."
+    recurrent = sorted(
+        station
+        for station, summary in report.get("communication_reliability", {}).items()
+        if summary.get("recurrent_problem")
+    )
+    if recurrent:
+        message += f" Recurrent communication warning: {_station_names(recurrent)}."
+    return message
+
+
+def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> dict:
+    """Run ETL, verify current outputs, and restart the website service."""
+    log_path = run_dir / "operational_update.log"
+    command = [
+        sys.executable, "-m", "biochar_app.scripts.etl",
+        "--year", str(year), "--operational-update",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    log_path.write_text(
+        (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or ""),
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"operational ETL exited with status {result.returncode}; see {log_path}")
+
+    logger_path = LOGGER_PARQUET / f"{year}_15min.parquet"
+    weather_path = WEATHER_PARQUET / f"{year}_15min.parquet"
+    logger_zip = REPO_ROOT / f"biochar_app/data-processed/downloads/loggers/Biochar_Loggers_15min_{year}_USunits.zip"
+    weather_zip = REPO_ROOT / f"biochar_app/data-processed/downloads/weather/Biochar_Weather_15min_{year}_USunits.zip"
+    for path in (logger_path, weather_path, logger_zip, weather_zip):
+        if not path.exists() or path.stat().st_size == 0:
+            raise RuntimeError(f"publication output missing or empty: {path}")
+
+    logger_frame = pd.read_parquet(logger_path, columns=["timestamp"])
+    weather_frame = pd.read_parquet(weather_path, columns=["timestamp"])
+    logger_latest = pd.to_datetime(logger_frame["timestamp"], errors="coerce").max()
+    weather_latest = pd.to_datetime(weather_frame["timestamp"], errors="coerce").max()
+    if pd.isna(logger_latest) or pd.isna(weather_latest):
+        raise RuntimeError("publication output has no valid latest timestamp")
+
+    restart_status = "skipped"
+    if restart:
+        service = os.getenv("BIOCHAR_WEBSITE_SERVICE", "biochar")
+        restart_result = subprocess.run(
+            ["sudo", "-n", "systemctl", "restart", service],
+            capture_output=True, text=True, check=False,
+        )
+        if restart_result.returncode != 0:
+            detail = (restart_result.stderr or restart_result.stdout).strip()
+            raise RuntimeError(f"website restart failed: {detail}")
+        active_result = subprocess.run(
+            ["systemctl", "is-active", service],
+            capture_output=True, text=True, check=False,
+        )
+        if active_result.returncode != 0 or active_result.stdout.strip() != "active":
+            raise RuntimeError(f"website service is not active: {active_result.stdout.strip()}")
+        restart_status = "active"
+
+    return {
+        "status": "published",
+        "operational_log": str(log_path),
+        "logger_latest_timestamp": logger_latest.isoformat(),
+        "weather_latest_timestamp": weather_latest.isoformat(),
+        "logger_rows": int(len(logger_frame)),
+        "weather_rows": int(len(weather_frame)),
+        "website_service": restart_status,
+    }
+
+
 def _send_report_email(report: dict, config_path: Path) -> str:
     """Send one nightly operational summary when SMTP is configured."""
     username = os.getenv("BIOCHAR_SMTP_USERNAME")
@@ -219,10 +407,23 @@ def _send_report_email(report: dict, config_path: Path) -> str:
         return "config_incomplete"
 
     message = EmailMessage()
-    message["Subject"] = f"Biochar logger download {report.get('status', 'failed')}"
+    success = report.get("status") == "accepted" and report.get("publication", {}).get("status") == "published"
+    recurrent = any(
+        item.get("recurrent_problem")
+        for item in report.get("communication_reliability", {}).values()
+    )
+    message["Subject"] = (
+        "Biochar nightly update successful"
+        if success and not recurrent
+        else f"Biochar logger update {report.get('status', 'failed')}"
+    )
     message["From"] = sender
     message["To"] = ", ".join(recipients)
-    message.set_content(_build_report_email_body(report))
+    message.set_content(
+        _build_success_email_body(report)
+        if success and not recurrent
+        else _build_report_email_body(report)
+    )
 
     host = os.getenv("BIOCHAR_SMTP_HOST", "email-smtp.us-east-2.amazonaws.com")
     port = int(os.getenv("BIOCHAR_SMTP_PORT", "587"))
@@ -446,6 +647,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--recovery-pause", type=float, default=float(DAILY_SETTINGS["recovery_pause_seconds"]))
     parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
     parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
+    parser.add_argument(
+        "--skip-publication",
+        action="store_true",
+        help="Accept and archive the download without running operational ETL.",
+    )
+    parser.add_argument(
+        "--skip-restart",
+        action="store_true",
+        help="Run and verify operational ETL without restarting the website.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -602,6 +813,33 @@ def main(argv: list[str] | None = None) -> int:
                 report["findings"] = [asdict(item) for item in findings]
                 report["status"] = "rejected"
                 report["archive"] = {"status": "failed", "detail": str(exc)}
+        if (
+            report["status"] in {"accepted", "accepted_with_warnings"}
+            and not args.skip_publication
+        ):
+            try:
+                report["publication"] = _publish_operational_update(
+                    started.year,
+                    run_dir,
+                    restart=not args.skip_restart,
+                )
+            except Exception as exc:
+                publication_finding = Finding(
+                    "critical",
+                    "publication_failed",
+                    f"Accepted data were archived but not published: {type(exc).__name__}: {exc}",
+                )
+                findings.append(publication_finding)
+                report["findings"] = [asdict(item) for item in findings]
+                report["status"] = "publication_failed"
+                report["publication"] = {"status": "failed", "detail": str(exc)}
+        elif args.skip_publication:
+            report["publication"] = {"status": "skipped"}
+
+        report["communication_reliability"] = build_communication_reliability(
+            args.run_root,
+            report,
+        )
         _finish_report(report, report_path, args.alert_config)
 
         print(f"Raw download: {raw_csv}")
@@ -610,7 +848,7 @@ def main(argv: list[str] | None = None) -> int:
         for item in findings:
             label = f" ({item.station})" if item.station else ""
             print(f"{item.severity.upper()}{label}: {item.message}")
-        return 1 if report["status"] == "rejected" else 0
+        return 1 if report["status"] in {"rejected", "publication_failed"} else 0
     finally:
         _release_lock(lock_fd)
 
