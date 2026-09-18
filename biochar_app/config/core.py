@@ -223,9 +223,10 @@ IRR_COLOR = "rgba(160, 82, 45, 0.55)"  # semi-transparent sienna
 
 ms_per_day = 24 * 3600 * 1000
 bar_width_map = {
-    # Slightly wider than one observation interval so low precipitation
-    # remains visible when several days of 15-minute data are displayed.
-    "15min": 30 * 60 * 1000,
+    # Use a one-hour display width so isolated 15-minute precipitation
+    # observations remain visible across multi-week plots. This affects only
+    # presentation; the timestamp and measured amount remain unchanged.
+    "15min": 60 * 60 * 1000,
     "hourly": 3600 * 1000,
     # Leave a visible gap between neighboring daily precipitation totals.
     "daily": ms_per_day * 0.5,

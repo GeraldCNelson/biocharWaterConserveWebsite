@@ -47,10 +47,10 @@ class PrecipitationBarWidthTests(unittest.TestCase):
         self.assertEqual(figure.layout.yaxis2.title.text, "")
         self.assertEqual(common_yaxis2_config("us")["title"]["text"], "")
 
-    def test_15min_bar_uses_visible_30_minute_display_width(self) -> None:
+    def test_15min_bar_uses_visible_one_hour_display_width(self) -> None:
         self.assertEqual(
             self.precipitation_width("15min"),
-            30 * 60 * 1000,
+            60 * 60 * 1000,
         )
 
     def test_15minute_alias_uses_15min_width(self) -> None:
