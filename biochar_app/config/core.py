@@ -80,9 +80,17 @@ TRACE_OPTION_MAP: dict[str, str] = {
 # Defaults
 # ---------------------------------------------------------------------
 
-DEFAULT_YEAR = 2025
-DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
-DEFAULT_END_DATE = datetime.date(DEFAULT_YEAR, 12, 31).isoformat()
+DEFAULT_YEAR = 2026
+_DEFAULT_YEAR_START = datetime.date(DEFAULT_YEAR, 1, 1)
+_DEFAULT_YEAR_END = datetime.date(DEFAULT_YEAR, 12, 31)
+_DEFAULT_LOCAL_TODAY = datetime.datetime.now(
+    ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
+).date()
+DEFAULT_START_DATE = _DEFAULT_YEAR_START.isoformat()
+DEFAULT_END_DATE = min(
+    max(_DEFAULT_LOCAL_TODAY, _DEFAULT_YEAR_START),
+    _DEFAULT_YEAR_END,
+).isoformat()
 
 DEFAULT_SENSOR_DEPTH_CODE = "1"
 DEFAULT_VARIABLE = "VWC"
