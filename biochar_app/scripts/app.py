@@ -126,19 +126,32 @@ except Exception as exc:
 
 logger.info("✅ Date range preload complete")
 
-# 6) Preload only the default slice at boot
-try:
-    df0 = load_logger_data(DEFAULT_YEAR, DEFAULT_GRANULARITY)
-    logger.info(
-        "✅ Preloaded default slice (%s, %s) rows=%d",
-        DEFAULT_YEAR,
-        DEFAULT_GRANULARITY,
-        len(df0),
-    )
-except FileNotFoundError:
-    logger.warning("⚠️ No parquet found for default slice %s/%s", DEFAULT_YEAR, DEFAULT_GRANULARITY)
-except Exception as exc:
-    logger.exception("❌ Failed to preload default slice: %s", exc)
+# 6) Warm the interactive-plot caches at boot. Daily is the initial view;
+# 15-minute is the largest commonly selected view and is expensive enough to
+# cause a noticeable delay when first loaded on demand.
+preload_granularities = dict.fromkeys((DEFAULT_GRANULARITY, "15min"))
+for granularity in preload_granularities:
+    try:
+        df0 = load_logger_data(DEFAULT_YEAR, granularity)
+        logger.info(
+            "✅ Preloaded logger data (%s, %s) rows=%d",
+            DEFAULT_YEAR,
+            granularity,
+            len(df0),
+        )
+    except FileNotFoundError:
+        logger.warning(
+            "⚠️ No parquet found for logger preload %s/%s",
+            DEFAULT_YEAR,
+            granularity,
+        )
+    except Exception as exc:
+        logger.exception(
+            "❌ Failed to preload logger data %s/%s: %s",
+            DEFAULT_YEAR,
+            granularity,
+            exc,
+        )
 
 # 7) Run with Uvicorn when invoked directly
 if __name__ == "__main__":
