@@ -46,7 +46,7 @@ from biochar_app.scripts.data_loading import load_logger_data
 
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
-    get_flat_gseason_summary,
+    compute_period_summary_rows,
 )
 from biochar_app.scripts.plot_builder import (
     make_raw_figure,
@@ -898,69 +898,16 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                 ].copy()
 
     if granularity == "gseason":
-        periods_raw = payload.get("periods") or []
+        periods_raw = payload.get("periods") or DEFAULT_GSEASON_PERIODS
         periods_list = periods_to_list_of_dicts(periods_raw)
-
-        _ = load_gseason_df(
+        flat = compute_period_summary_rows(
+            df_base,
             year=year,
-            periods=periods_list,
-            unit_system=unit_system,
-            use_ratios=False,
+            periods=periods_raw,
+            variable=variable,
+            strip=strip,
+            depth=depth_code,
         )
-
-        flat_df = get_flat_gseason_summary(year)
-
-        if flat_df is None or getattr(flat_df, "empty", True):
-            return JSONResponse(
-                {
-                    "year": year,
-                    "variable": variable,
-                    "strip": strip,
-                    "granularity": granularity,
-                    "depth": depth_code,
-                    "title": title,
-                    "gseason_stats": [],
-                }
-            )
-
-        flat_df = flat_df.copy()
-
-        for col in ["period_code", "variable", "strip", "depth", "logger_location"]:
-            if col in flat_df.columns:
-                flat_df[col] = flat_df[col].astype(str)
-
-        if "variable" in flat_df.columns:
-            flat_df = flat_df[flat_df["variable"] == variable].copy()
-
-        if periods_list and "period_code" in flat_df.columns:
-            requested_codes = {
-                str(p.get("period_code", "")).strip()
-                for p in periods_list
-                if p.get("period_code") is not None
-            }
-            if requested_codes:
-                flat_df = flat_df[flat_df["period_code"].isin(requested_codes)].copy()
-
-        ratio_strip_values = {"S1/S2", "S3/S4", "S1_S2", "S3_S4"}
-
-        raw_mask = pd.Series(False, index=flat_df.index)
-        if "strip" in flat_df.columns:
-            raw_mask = flat_df["strip"] == strip
-
-        if "depth" in flat_df.columns:
-            raw_mask = raw_mask & (flat_df["depth"] == depth_code)
-
-        ratio_mask = pd.Series(False, index=flat_df.index)
-        if "strip" in flat_df.columns:
-            ratio_mask = flat_df["strip"].isin(ratio_strip_values)
-
-        if "depth" in flat_df.columns:
-            ratio_depth_values = set(flat_df.loc[ratio_mask, "depth"].dropna().astype(str).unique().tolist())
-            if depth_code in ratio_depth_values:
-                ratio_mask = ratio_mask & (flat_df["depth"] == depth_code)
-
-        flat_df = flat_df.loc[raw_mask | ratio_mask].copy()
-        flat = flat_df.to_dict(orient="records")
 
         return JSONResponse(
             {
@@ -971,6 +918,7 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                 "depth": depth_code,
                 "title": title,
                 "gseason_stats": _clean(flat),
+                "periods": periods_list,
             }
         )
 
@@ -1063,7 +1011,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
         csv_bytes = raw_df.to_csv(index=False).encode("utf-8")
         filename = (
             f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-            f"depth{req.depth}_{req.year}_raw.csv"
+            f"depth_code_{req.depth}_{req.year}_raw.csv"
         )
 
         return Response(
@@ -1076,7 +1024,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
         csv_bytes = ratio_df.to_csv(index=False).encode("utf-8")
         filename = (
             f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-            f"depth{req.depth}_{req.year}_ratio.csv"
+            f"depth_code_{req.depth}_{req.year}_ratio.csv"
         )
 
         return Response(
@@ -1096,7 +1044,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
 
     filename = (
         f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-        f"depth{req.depth}_{req.year}.zip"
+        f"depth_code_{req.depth}_{req.year}.zip"
     )
     return Response(
         content=out.getvalue(),

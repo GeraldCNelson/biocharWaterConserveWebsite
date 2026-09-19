@@ -8,6 +8,7 @@
 
 import { fetchJson, generateSummaryTable, formatGseasonLabel } from "./api_requests.js";
 import { getDropdownValue } from "./ui_utils.js";
+import { getCustomSeasonPeriods } from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
 import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 /**
@@ -228,16 +229,72 @@ function prettifyStatsKeys(stats, variable, unitSystem) {
 }
 
 /**
+ * Return a user-facing notice when a configured seasonal period is not complete.
+ * Seasonal periods that wrap across New Year are anchored to the year in which
+ * they end, matching the Custom Seasons editor.
+ *
+ * @param {{start?: string, end?: string}} spec
+ * @param {number} anchorYear
+ * @param {Date} [today=new Date()]
+ * @returns {string}
+ */
+export function getIncompletePeriodNotice(spec, anchorYear, today = new Date()) {
+  const startText = String(spec?.start || "");
+  const endText = String(spec?.end || "");
+  const startMatch = startText.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})$/);
+  const endMatch = endText.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})$/);
+  if (!startMatch || !endMatch || !Number.isFinite(anchorYear)) return "";
+
+  const startMonth = Number(startMatch[2]);
+  const startDay = Number(startMatch[3]);
+  const endMonth = Number(endMatch[2]);
+  const endDay = Number(endMatch[3]);
+  const wrapsYear = startMonth > endMonth;
+  const startYear = startMatch[1] ? Number(startMatch[1]) : (wrapsYear ? anchorYear - 1 : anchorYear);
+  const endYear = endMatch[1] ? Number(endMatch[1]) : anchorYear;
+  const start = new Date(startYear, startMonth - 1, startDay);
+  const end = new Date(endYear, endMonth - 1, endDay);
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  if (
+    start.getFullYear() !== startYear ||
+    start.getMonth() !== startMonth - 1 ||
+    start.getDate() !== startDay ||
+    end.getFullYear() !== endYear ||
+    end.getMonth() !== endMonth - 1 ||
+    end.getDate() !== endDay ||
+    current > end
+  ) {
+    return "";
+  }
+
+  const endLabel = end.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  if (current < start) {
+    return `This seasonal period has not started. It is scheduled to end ${endLabel}; no result shown here is a complete-period summary.`;
+  }
+
+  return `This seasonal period is still in progress and ends ${endLabel}. Results shown here are partial-period statistics through the latest available data.`;
+}
+
+/**
  * @param {any} gseasonStats
  * @param {string} variable
  * @param {"us" | "metric"} unitSystem
+ * @param {number} anchorYear
  * @returns {string}
  */
-function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
-  const periods = summaryWindow.gseasonPeriods || {};
+function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYear, periodsRaw) {
+  const periods = periodsRaw || summaryWindow.gseasonPeriods || {};
   const idBase = "gseasonAccordion";
 
-  const seasonEntries = Object.entries(periods);
+  const seasonEntries = Array.isArray(periods)
+    ? periods.map((period) => [period.code, period])
+    : Object.entries(periods);
   if (!seasonEntries.length) {
     return `<p class="text-muted">No seasonal periods are defined.</p>`;
   }
@@ -370,6 +427,10 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
     const title = (typeof formatGseasonLabel === "function")
       ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
+    const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear);
+    const incompleteHTML = incompleteNotice
+      ? `<div class="alert alert-warning mb-4" role="alert"><strong>Incomplete seasonal period:</strong> ${incompleteNotice}</div>`
+      : "";
 
     const isFirst = idx === 0;
 
@@ -392,6 +453,7 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem) {
           aria-labelledby="${headingId}"
           data-bs-parent="#${idBase}">
           <div class="accordion-body">
+            ${incompleteHTML}
             <h6>Raw Summary</h6>
             ${rawHTML}
 
@@ -461,6 +523,27 @@ export async function updateSummaryStatistics() {
     const depthRaw = /** @type {string | null} */ (getDropdownValue("summary-depth"));
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
+    let periods = [];
+    if (granularity === "gseason") {
+      try {
+        periods = getCustomSeasonPeriods();
+      } catch (error) {
+        const warning = document.createElement("div");
+        warning.className = "alert alert-warning";
+        warning.textContent = error instanceof Error
+          ? error.message
+          : "The custom seasonal periods are invalid.";
+        container.appendChild(warning);
+        stopLoadingDots("summary-status", "Custom seasonal periods need attention.");
+        showSummaryStatus("Custom seasonal periods need attention.");
+        return;
+      }
+    }
+
+    const titleEl = document.getElementById("summary-title");
+    if (titleEl) {
+      titleEl.textContent = buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
+    }
 
     console.log("🔍 Selected Summary Filters:", {
       year,
@@ -485,7 +568,7 @@ export async function updateSummaryStatistics() {
 
     const data = await fetchJson("/api/get_summary_stats", {
       method: "POST",
-      body: JSON.stringify({ year, variable, strip, granularity, depth, unitSystem }),
+      body: JSON.stringify({ year, variable, strip, granularity, depth, unitSystem, periods }),
     });
 
     console.log("✅ Received summary stats response:", data);
@@ -499,7 +582,6 @@ export async function updateSummaryStatistics() {
 
     summaryWindow.__lastSummaryData = data;
 
-    const titleEl = document.getElementById("summary-title");
     if (titleEl) {
       titleEl.textContent =
         data?.title || buildSummaryTitle({ year, variable, strip, granularity, unitSystem });
@@ -508,7 +590,13 @@ export async function updateSummaryStatistics() {
     container.innerHTML = "";
 
     if (granularity === "gseason") {
-      container.innerHTML = buildGseasonAccordionHTML(data?.gseason_stats || {}, variable, unitSystem);
+      container.innerHTML = buildGseasonAccordionHTML(
+        data?.gseason_stats || {},
+        variable,
+        unitSystem,
+        year,
+        data?.periods || periods
+      );
       console.log("✅ Seasonal accordion rendered.");
 
       stopLoadingDots("summary-status", "");

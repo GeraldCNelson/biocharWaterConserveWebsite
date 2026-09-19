@@ -385,7 +385,28 @@ export function getSelectedFilters(tab) {
   }
 
   if (tab === "main" && filters.granularity === "gseason") {
-    const periods = Array.from(document.querySelectorAll(".period-row")).map((row) => {
+    try {
+      filters.periods = getCustomSeasonPeriods();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "The custom seasonal periods are invalid.");
+      return null;
+    }
+  }
+
+  if (tab === "main") {
+    filters.unitSystem = uiWindow.unitSystem || "us";
+  }
+
+  return filters;
+}
+
+/**
+ * Read the current Custom Seasons editor rows in display order.
+ *
+ * @returns {Array<{code?: string, label?: string, start?: string, end?: string}>}
+ */
+export function getCustomSeasonPeriods() {
+  const periods = Array.from(document.querySelectorAll(".period-row")).map((row, index) => {
       const rowEl = /** @type {HTMLElement} */ (row);
       const code = rowEl.dataset.code;
 
@@ -402,16 +423,58 @@ export function getSelectedFilters(tab) {
       const label = labelEl?.value;
       const start = startEl?.value;
       const end = endEl?.value;
-      return { code, label, start, end };
+      return { code, label, start, end, periodNumber: index + 1 };
     });
-    filters.periods = periods;
+
+  return validateCustomSeasonPeriods(periods);
+}
+
+/**
+ * @param {Array<{code?: string, label?: string, start?: string, end?: string, periodNumber?: number}>} periods
+ * @returns {Array<{code?: string, label?: string, start?: string, end?: string}>}
+ */
+export function validateCustomSeasonPeriods(periods) {
+  function parseIsoDateStrict(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+      ? date
+      : null;
   }
 
-  if (tab === "main") {
-    filters.unitSystem = uiWindow.unitSystem || "us";
-  }
+  const seenCodes = new Set();
+  periods.forEach((period, index) => {
+    const periodNumber = period.periodNumber || index + 1;
+    const name = String(period.label || "").trim() || `Period ${periodNumber}`;
+    if (!String(period.label || "").trim()) {
+      throw new Error(`Period ${periodNumber} needs a name.`);
+    }
+    if (!period.start) {
+      throw new Error(`${name} has an invalid or missing start date. Please enter a real calendar date.`);
+    }
+    if (!period.end) {
+      throw new Error(`${name} has an invalid or missing end date. Please enter a real calendar date.`);
+    }
 
-  return filters;
+    const start = parseIsoDateStrict(period.start);
+    const end = parseIsoDateStrict(period.end);
+    if (!start || !end) {
+      throw new Error(`${name} contains an invalid calendar date.`);
+    }
+    if (start > end) {
+      throw new Error(`${name} starts after it ends.`);
+    }
+    if (!period.code || seenCodes.has(period.code)) {
+      throw new Error(`${name} has a duplicate internal period code. Remove and add the period again.`);
+    }
+    seenCodes.add(period.code);
+  });
+
+  return periods.map(({ periodNumber: _periodNumber, ...period }) => period);
 }
 
 /**

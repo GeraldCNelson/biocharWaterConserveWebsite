@@ -188,7 +188,6 @@ export async function downloadSummaryData(mode = "all") {
   const stripEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-strip"));
   const granularityEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-granularity"));
   const depthEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("summary-depth"));
-  const traceOption = traceOptionEl.value;
 
   if (!yearEl || !variableEl || !stripEl || !granularityEl || !depthEl) {
     console.error("❌ downloadSummaryData: summary controls not found in DOM");
@@ -216,7 +215,6 @@ export async function downloadSummaryData(mode = "all") {
     strip,
     granularity,
     depth,
-    traceOption,
     unitSystem,
     mode,
     summaryStats,
@@ -228,7 +226,7 @@ export async function downloadSummaryData(mode = "all") {
     const wantZip = mode === "zip";
     const ext = wantZip ? "zip" : "csv";
 
-    let baseName = `summary_${granularity}_${variable}_${year}`;
+    let baseName = `summary_${granularity}_${variable}_${strip}_depth_code_${depth}_${year}`;
     if (!wantZip) baseName += `_${mode}`;
 
     const fallbackName = `${baseName}.${ext}`;

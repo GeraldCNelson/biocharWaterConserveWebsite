@@ -230,7 +230,17 @@ def load_or_generate_gseason_summary(year: int, overwrite: bool = False) -> dict
     if not summary_path.exists() or overwrite:
         generate_gseason_summary(year, overwrite=overwrite)
     with summary_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        summary = json.load(f)
+
+    # Normalize summaries generated before the growing-season period code was
+    # renamed. This keeps cached files and older deployments compatible while
+    # ensuring the legacy, misleading code never reaches the UI or downloads.
+    legacy_code = "Q2_Early_Growing"
+    current_code = "Q2_Growing"
+    if legacy_code in summary and current_code not in summary:
+        summary[current_code] = summary.pop(legacy_code)
+
+    return summary
 
 # ---------------------------------------------------------------------------
 # Stats helpers for UI
@@ -348,6 +358,96 @@ def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, dept
                     }
 
     return raw_stats, ratio_stats
+
+
+def compute_period_summary_rows(
+    df: pd.DataFrame,
+    *,
+    year: int,
+    periods: Any,
+    variable: str,
+    strip: str,
+    depth: str,
+) -> list[dict[str, Any]]:
+    """Compute summary-statistic rows for any number of named date periods."""
+    normalized_periods = periods_to_list_of_dicts(periods)
+    if df is None or df.empty or not normalized_periods or "timestamp" not in df.columns:
+        return []
+
+    source = df.copy()
+    source["timestamp"] = pd.to_datetime(source["timestamp"], errors="coerce")
+    source = source.dropna(subset=["timestamp"])
+    rows: list[dict[str, Any]] = []
+
+    def period_bounds(period: Mapping[str, Any]) -> tuple[pd.Timestamp, pd.Timestamp]:
+        start_text = str(period["start"])
+        end_text = str(period["end"])
+
+        if len(start_text) == 10:
+            start_ts = pd.Timestamp(start_text)
+        else:
+            start_month = int(start_text.split("-")[0])
+            end_month = int(end_text[-5:].split("-")[0])
+            start_year = year - 1 if start_month > end_month else year
+            start_ts = pd.Timestamp(f"{start_year}-{start_text[-5:]}")
+
+        if len(end_text) == 10:
+            end_day = pd.Timestamp(end_text)
+        else:
+            end_day = pd.Timestamp(f"{year}-{end_text[-5:]}")
+
+        return start_ts, end_day + pd.Timedelta(days=1)
+
+    def logger_location(column: str, *, swc_raw: bool = False) -> str:
+        parts = str(column).split("_")
+        if swc_raw and len(parts) >= 2:
+            return parts[-2]
+        return parts[-1]
+
+    for period in normalized_periods:
+        start_ts, end_exclusive = period_bounds(period)
+        period_df = source[
+            (source["timestamp"] >= start_ts)
+            & (source["timestamp"] < end_exclusive)
+        ]
+        raw_stats, ratio_stats = compute_summary_statistics(
+            period_df, variable, strip, str(depth)
+        )
+
+        for column, metrics in raw_stats.items():
+            rows.append(
+                {
+                    "period_code": period["code"],
+                    "period_label": period["label"],
+                    "strip": strip,
+                    "depth": str(depth),
+                    "logger_location": logger_location(
+                        column, swc_raw=str(column).startswith("SWC_vol_")
+                    ),
+                    "raw_min": metrics.get("min"),
+                    "raw_mean": metrics.get("mean"),
+                    "raw_max": metrics.get("max"),
+                    "raw_std": metrics.get("std"),
+                }
+            )
+
+        for column, metrics in ratio_stats.items():
+            pair = "S1/S2" if "S1_S2" in column else "S3/S4" if "S3_S4" in column else ""
+            rows.append(
+                {
+                    "period_code": period["code"],
+                    "period_label": period["label"],
+                    "ratio_group": pair,
+                    "depth": str(depth),
+                    "logger_location": logger_location(column),
+                    "ratio_min": metrics.get("min"),
+                    "ratio_mean": metrics.get("mean"),
+                    "ratio_max": metrics.get("max"),
+                    "ratio_std": metrics.get("std"),
+                }
+            )
+
+    return rows
 
 def get_flat_gseason_summary(year: int) -> pd.DataFrame:
     """
