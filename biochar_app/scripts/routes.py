@@ -47,6 +47,7 @@ from biochar_app.scripts.data_loading import load_logger_data
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
     compute_period_summary_rows,
+    rebase_periods_to_anchor_year,
 )
 from biochar_app.scripts.plot_builder import (
     make_raw_figure,
@@ -659,7 +660,7 @@ async def api_plot_raw(req: PlotRequest):
 
     if gran == "gseason":
         periods_raw = req.periods or []
-        periods_list = periods_to_list_of_dicts(periods_raw)
+        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
 
         df_gseason = load_gseason_df(
             year=year,
@@ -899,7 +900,7 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
 
     if granularity == "gseason":
         periods_raw = payload.get("periods") or DEFAULT_GSEASON_PERIODS
-        periods_list = periods_to_list_of_dicts(periods_raw)
+        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
         flat = compute_period_summary_rows(
             df_base,
             year=year,
@@ -908,6 +909,45 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
             strip=strip,
             depth=depth_code,
         )
+
+        multi_year_gseason: list[dict[str, Any]] = []
+        if payload.get("compareYears"):
+            for comparison_year in YEARS:
+                comparison_periods = rebase_periods_to_anchor_year(
+                    periods_raw,
+                    source_year=year,
+                    target_year=int(comparison_year),
+                )
+                comparison_key = (int(comparison_year), "15min")
+                comparison_df = _LOADED_LOGGER_CACHE.get(comparison_key)
+                if comparison_df is None:
+                    comparison_df = load_logger_data(int(comparison_year), "15min")
+                    if comparison_df is not None and not getattr(comparison_df, "empty", True):
+                        if "timestamp" in comparison_df.columns:
+                            comparison_df = comparison_df.copy()
+                            comparison_df["timestamp"] = pd.to_datetime(
+                                comparison_df["timestamp"], errors="coerce"
+                            )
+                        _LOADED_LOGGER_CACHE[comparison_key] = comparison_df
+
+                comparison_rows = []
+                if comparison_df is not None and not getattr(comparison_df, "empty", True):
+                    comparison_rows = compute_period_summary_rows(
+                        comparison_df,
+                        year=int(comparison_year),
+                        periods=comparison_periods,
+                        variable=variable,
+                        strip=strip,
+                        depth=depth_code,
+                    )
+
+                multi_year_gseason.append(
+                    {
+                        "year": int(comparison_year),
+                        "periods": comparison_periods,
+                        "gseason_stats": _clean(comparison_rows),
+                    }
+                )
 
         return JSONResponse(
             {
@@ -919,6 +959,7 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                 "title": title,
                 "gseason_stats": _clean(flat),
                 "periods": periods_list,
+                "multi_year_gseason": multi_year_gseason,
             }
         )
 

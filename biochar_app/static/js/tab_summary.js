@@ -288,9 +288,8 @@ export function getIncompletePeriodNotice(spec, anchorYear, today = new Date()) 
  * @param {number} anchorYear
  * @returns {string}
  */
-function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYear, periodsRaw) {
+function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchorYear, periodsRaw) {
   const periods = periodsRaw || summaryWindow.gseasonPeriods || {};
-  const idBase = "gseasonAccordion";
 
   const seasonEntries = Array.isArray(periods)
     ? periods.map((period) => [period.code, period])
@@ -345,6 +344,9 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYea
           mean: row.raw_mean,
           max: row.raw_max,
           std: row.raw_std,
+          n: row.raw_n,
+          expected_n: row.raw_expected_n,
+          coverage_pct: row.raw_coverage_pct,
         };
       }
 
@@ -372,6 +374,9 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYea
           mean: row.ratio_mean,
           max: row.ratio_max,
           std: row.ratio_std,
+          n: row.ratio_n,
+          expected_n: row.ratio_expected_n,
+          coverage_pct: row.ratio_coverage_pct,
         };
       }
     });
@@ -383,17 +388,70 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYea
     ? normalizeFlatGseasonStats(gseasonStats)
     : (gseasonStats && typeof gseasonStats === "object" ? gseasonStats : {});
 
-  let html = `<div class="accordion" id="${idBase}">`;
+  const escapeHTML = (value) => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
-  seasonEntries.forEach(([code, spec], idx) => {
-    const headingId = `${idBase}-heading-${code}`;
-    const collapseId = `${idBase}-collapse-${code}`;
+  const formatNumber = (value) => {
+    if (value == null || value === "" || !Number.isFinite(Number(value))) return "—";
+    return String(Math.round(Number(value) * 10000) / 10000);
+  };
 
+  const positionForKey = (key) => {
+    const suffix = String(key).split("_").pop()?.toUpperCase();
+    return suffix === "T" ? "Top" : suffix === "M" ? "Middle" : suffix === "B" ? "Bottom" : key;
+  };
+
+  const positionOrder = { Top: 0, Middle: 1, Bottom: 2 };
+
+  const renderRows = (stats) => Object.entries(stats)
+    .map(([key, metrics]) => ({ key, position: positionForKey(key), metrics }))
+    .sort((a, b) => (positionOrder[a.position] ?? 99) - (positionOrder[b.position] ?? 99))
+    .map(({ position, metrics }) => {
+      const count = metrics?.n == null ? "—" : Math.round(Number(metrics.n)).toLocaleString();
+      const expected = metrics?.expected_n == null ? null : Math.round(Number(metrics.expected_n));
+      const coverage = metrics?.coverage_pct == null ? "—" : `${formatNumber(metrics.coverage_pct)}%`;
+      const coverageTitle = expected == null
+        ? ""
+        : ` title="${escapeHTML(`${count} valid observations out of ${expected.toLocaleString()} expected`)}"`;
+      return `
+        <tr>
+          <th scope="row">${escapeHTML(position)}</th>
+          <td>${formatNumber(metrics?.min)}</td>
+          <td>${formatNumber(metrics?.mean)}</td>
+          <td>${formatNumber(metrics?.max)}</td>
+          <td>${formatNumber(metrics?.std)}</td>
+          <td>${count}</td>
+          <td${coverageTitle}>${coverage}</td>
+        </tr>`;
+    }).join("");
+
+  let html = `
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0">
+        <caption class="caption-top text-muted pt-0">
+          Coverage is the percentage of expected 15-minute observations with valid data, through the elapsed part of each period.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Position</th>
+            <th scope="col">Min</th>
+            <th scope="col">Mean</th>
+            <th scope="col">Max</th>
+            <th scope="col">SD</th>
+            <th scope="col">Valid n</th>
+            <th scope="col">Coverage</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  seasonEntries.forEach(([code, spec]) => {
     const block = groupedStats[code] || {};
     const rawStats = block.raw_statistics || {};
     const ratioStats = block.ratio_statistics || {};
-
-    const rawPretty = prettifyStatsKeys(rawStats, variable, unitSystem);
 
     /** @type {Record<string, any>} */
     const s1s2 = {};
@@ -409,67 +467,224 @@ function buildGseasonAccordionHTML(gseasonStats, variable, unitSystem, anchorYea
       }
     });
 
-    const s1s2Pretty = prettifyStatsKeys(s1s2, variable, unitSystem);
-    const s3s4Pretty = prettifyStatsKeys(s3s4, variable, unitSystem);
-
-    const rawHTML = Object.keys(rawPretty).length
-      ? generateSummaryTable(rawPretty, variable, { returnType: "html" })
-      : `<p class="text-muted mb-0">No raw data available for this period.</p>`;
-
-    const s1s2HTML = Object.keys(s1s2Pretty).length
-      ? generateSummaryTable(s1s2Pretty, variable, { returnType: "html" })
-      : `<p class="text-muted mb-0">No S1/S2 ratio summary available.</p>`;
-
-    const s3s4HTML = Object.keys(s3s4Pretty).length
-      ? generateSummaryTable(s3s4Pretty, variable, { returnType: "html" })
-      : `<p class="text-muted mb-0">No S3/S4 ratio summary available.</p>`;
-
     const title = (typeof formatGseasonLabel === "function")
       ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
     const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear);
-    const incompleteHTML = incompleteNotice
-      ? `<div class="alert alert-warning mb-4" role="alert"><strong>Incomplete seasonal period:</strong> ${incompleteNotice}</div>`
-      : "";
-
-    const isFirst = idx === 0;
 
     html += `
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="${headingId}">
-          <button
-            class="accordion-button${isFirst ? "" : " collapsed"}"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#${collapseId}"
-            aria-expanded="${isFirst ? "true" : "false"}"
-            aria-controls="${collapseId}">
-            ${title}
-          </button>
-        </h2>
-        <div
-          id="${collapseId}"
-          class="accordion-collapse collapse${isFirst ? " show" : ""}"
-          aria-labelledby="${headingId}"
-          data-bs-parent="#${idBase}">
-          <div class="accordion-body">
-            ${incompleteHTML}
-            <h6>Raw Summary</h6>
-            ${rawHTML}
+      <tr class="table-primary">
+        <th colspan="7" class="py-2">${escapeHTML(title)}</th>
+      </tr>`;
 
-            <h6 class="mt-4">S1/S2 Ratio Summary</h6>
-            ${s1s2HTML}
+    if (incompleteNotice) {
+      html += `
+        <tr class="table-warning">
+          <td colspan="7"><strong>Incomplete seasonal period:</strong> ${escapeHTML(incompleteNotice)}</td>
+        </tr>`;
+    }
 
-            <h6 class="mt-4">S3/S4 Ratio Summary</h6>
-            ${s3s4HTML}
-          </div>
-        </div>
-      </div>
-    `;
+    const sections = [
+      ["Raw summary", rawStats, "No raw data available for this period."],
+      ["S1/S2 ratio summary", s1s2, "No S1/S2 ratio summary available."],
+      ["S3/S4 ratio summary", s3s4, "No S3/S4 ratio summary available."],
+    ];
+
+    sections.forEach(([label, stats, emptyMessage]) => {
+      html += `<tr class="table-light"><th colspan="7">${label}</th></tr>`;
+      html += Object.keys(stats).length
+        ? renderRows(stats)
+        : `<tr><td colspan="7" class="text-muted">${emptyMessage}</td></tr>`;
+    });
   });
 
-  html += "</div>";
+  html += "</tbody></table></div>";
   return html;
+}
+
+function escapeSummaryHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function comparisonRowsForPeriod(yearEntries, periodCode) {
+  const positions = ["T", "M", "B"];
+  const positionLabels = { T: "Top", M: "Middle", B: "Bottom" };
+  const rows = [];
+
+  yearEntries.forEach((entry) => {
+    const year = Number(entry?.year);
+    const period = (entry?.periods || []).find((item) => item.code === periodCode);
+    if (!period || !Number.isFinite(year)) return;
+
+    const notice = getIncompletePeriodNotice(period, year);
+    const status = notice.includes("not started") ? "Not started" : (notice ? "Partial" : "Complete");
+    const periodRows = (entry?.gseason_stats || []).filter((row) => row?.period_code === periodCode);
+    if (!periodRows.length) return;
+
+    positions.forEach((position) => {
+      const raw = periodRows.find((row) => row?.logger_location === position && row?.raw_mean != null);
+      const s1s2 = periodRows.find((row) => row?.logger_location === position && row?.ratio_group === "S1/S2");
+      const s3s4 = periodRows.find((row) => row?.logger_location === position && row?.ratio_group === "S3/S4");
+      rows.push({
+        year,
+        status,
+        position: positionLabels[position],
+        rawMean: raw?.raw_mean ?? null,
+        rawCoverage: raw?.raw_coverage_pct ?? null,
+        s1s2Mean: s1s2?.ratio_mean ?? null,
+        s1s2Coverage: s1s2?.ratio_coverage_pct ?? null,
+        s3s4Mean: s3s4?.ratio_mean ?? null,
+        s3s4Coverage: s3s4?.ratio_coverage_pct ?? null,
+      });
+    });
+  });
+
+  return rows;
+}
+
+function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode) {
+  const selectedPeriod = periods.find((period) => period.code === selectedCode) || periods[0];
+  if (!selectedPeriod) return;
+
+  const rows = comparisonRowsForPeriod(yearEntries, selectedPeriod.code);
+  const numberText = (value) => value == null || !Number.isFinite(Number(value))
+    ? "—"
+    : String(Math.round(Number(value) * 10000) / 10000);
+  const coverageText = (value) => value == null || !Number.isFinite(Number(value))
+    ? "—"
+    : `${numberText(value)}%`;
+  const statusClass = { Complete: "text-bg-success", Partial: "text-bg-warning", "Not started": "text-bg-secondary" };
+
+  const tableRows = rows.map((row, index) => `
+    <tr>
+      ${index % 3 === 0 ? `<th scope="row" rowspan="3" class="align-middle">${row.year}</th>` : ""}
+      ${index % 3 === 0 ? `<td rowspan="3" class="align-middle"><span class="badge ${statusClass[row.status] || "text-bg-secondary"}">${row.status}</span></td>` : ""}
+      <th scope="row">${row.position}</th>
+      <td>${numberText(row.rawMean)}</td>
+      <td>${coverageText(row.rawCoverage)}</td>
+      <td>${numberText(row.s1s2Mean)}</td>
+      <td>${coverageText(row.s1s2Coverage)}</td>
+      <td>${numberText(row.s3s4Mean)}</td>
+      <td>${coverageText(row.s3s4Coverage)}</td>
+    </tr>`).join("");
+
+  section.querySelector(".multi-year-content").innerHTML = `
+    <div class="table-responsive mb-4">
+      <table class="table table-sm table-bordered align-middle">
+        <thead>
+          <tr>
+            <th rowspan="2">Year</th><th rowspan="2">Status</th><th rowspan="2">Position</th>
+            <th colspan="2">Raw summary</th><th colspan="2">S1/S2 ratio</th><th colspan="2">S3/S4 ratio</th>
+          </tr>
+          <tr>
+            <th>Mean</th><th>Coverage</th><th>Mean</th><th>Coverage</th><th>Mean</th><th>Coverage</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows || `<tr><td colspan="9" class="text-muted">No comparison data are available.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div id="multi-year-raw-chart" class="multi-year-chart"></div>
+    <div id="multi-year-ratio-chart" class="multi-year-chart"></div>`;
+
+  const plotly = window.Plotly;
+  if (!plotly || !rows.length) return;
+
+  const years = [...new Set(rows.map((row) => row.year))];
+  const yearLabel = (year) => {
+    const yearRows = rows.filter((row) => row.year === year);
+    return yearRows.some((row) => row.status === "Partial") ? `${year}*` : String(year);
+  };
+  const positions = ["Top", "Middle", "Bottom"];
+  const colors = { Top: "#3f8fc1", Middle: "#efb23f", Bottom: "#36aa8a" };
+  const rawTraces = positions.map((position) => ({
+    type: "bar",
+    name: position,
+    x: years.map(yearLabel),
+    y: years.map((year) => rows.find((row) => row.year === year && row.position === position)?.rawMean ?? null),
+    marker: { color: colors[position] },
+    hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
+  }));
+
+  let prettyVariable = variable;
+  try {
+    prettyVariable = resolveUnitLabelStrict(summaryWindow.labelNameMapping?.[variable], unitSystem, variable);
+  } catch (_) {
+    prettyVariable = variable;
+  }
+  const commonLayout = {
+    autosize: true,
+    height: 340,
+    margin: { l: 70, r: 25, t: 55, b: 60 },
+    paper_bgcolor: "white",
+    plot_bgcolor: "white",
+    barmode: "group",
+    legend: { orientation: "h", y: 1.12 },
+    xaxis: { title: "Anchor year" },
+  };
+  plotly.react("multi-year-raw-chart", rawTraces, {
+    ...commonLayout,
+    title: { text: `${selectedPeriod.label}: raw means by year`, font: { size: 18 } },
+    yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
+    annotations: rows.some((row) => row.status === "Partial")
+      ? [{ text: "* partial period", xref: "paper", yref: "paper", x: 1, y: -0.22, showarrow: false }]
+      : [],
+  }, { responsive: true, displaylogo: false });
+
+  const ratioX = years.flatMap((year) => positions.map((position) => `${yearLabel(year)} · ${position}`));
+  const ratioTrace = (group, field, color) => ({
+    type: "bar",
+    name: group,
+    x: ratioX,
+    y: years.flatMap((year) => positions.map((position) => rows.find(
+      (row) => row.year === year && row.position === position
+    )?.[field] ?? null)),
+    marker: { color },
+    hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
+  });
+  plotly.react("multi-year-ratio-chart", [
+    ratioTrace("S1/S2", "s1s2Mean", "#3f8fc1"),
+    ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
+  ], {
+    ...commonLayout,
+    title: { text: `${selectedPeriod.label}: treatment ratios by year`, font: { size: 18 } },
+    yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
+    xaxis: { title: "Anchor year and logger position", tickangle: -25 },
+  }, { responsive: true, displaylogo: false });
+}
+
+function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem) {
+  if (!Array.isArray(yearEntries) || !yearEntries.length || !Array.isArray(periods) || !periods.length) return;
+
+  const defaultPeriod = periods.find((period) => /growing/i.test(period.label || "")) || periods[0];
+  const section = document.createElement("section");
+  section.className = "multi-year-summary mt-4";
+  section.innerHTML = `
+    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
+      <div>
+        <h5 class="mb-1">Comparison across all years</h5>
+        <p class="text-muted mb-0">Means use the same seasonal definitions and filters as the detailed summary above.</p>
+      </div>
+      <div>
+        <label for="multi-year-period" class="form-label mb-1">Seasonal period</label>
+        <select id="multi-year-period" class="form-select form-select-sm">
+          ${periods.map((period) => `<option value="${escapeSummaryHTML(period.code)}"${period.code === defaultPeriod.code ? " selected" : ""}>${escapeSummaryHTML(period.label)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div class="multi-year-content"></div>`;
+  container.appendChild(section);
+
+  const select = section.querySelector("#multi-year-period");
+  const render = () => renderMultiYearComparison(
+    section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code
+  );
+  select?.addEventListener("change", render);
+  render();
 }
 
 /**
@@ -568,7 +783,16 @@ export async function updateSummaryStatistics() {
 
     const data = await fetchJson("/api/get_summary_stats", {
       method: "POST",
-      body: JSON.stringify({ year, variable, strip, granularity, depth, unitSystem, periods }),
+      body: JSON.stringify({
+        year,
+        variable,
+        strip,
+        granularity,
+        depth,
+        unitSystem,
+        periods,
+        compareYears: granularity === "gseason",
+      }),
     });
 
     console.log("✅ Received summary stats response:", data);
@@ -590,14 +814,21 @@ export async function updateSummaryStatistics() {
     container.innerHTML = "";
 
     if (granularity === "gseason") {
-      container.innerHTML = buildGseasonAccordionHTML(
+      container.innerHTML = buildGseasonSummaryTableHTML(
         data?.gseason_stats || {},
         variable,
         unitSystem,
         year,
         data?.periods || periods
       );
-      console.log("✅ Seasonal accordion rendered.");
+      appendMultiYearComparison(
+        container,
+        data?.multi_year_gseason || [],
+        data?.periods || periods,
+        variable,
+        unitSystem
+      );
+      console.log("✅ Seasonal summaries and multi-year comparisons rendered.");
 
       stopLoadingDots("summary-status", "");
       hideSummaryStatus();

@@ -370,7 +370,7 @@ def compute_period_summary_rows(
     depth: str,
 ) -> list[dict[str, Any]]:
     """Compute summary-statistic rows for any number of named date periods."""
-    normalized_periods = periods_to_list_of_dicts(periods)
+    normalized_periods = periods_to_list_of_dicts(periods, preserve_year=True)
     if df is None or df.empty or not normalized_periods or "timestamp" not in df.columns:
         return []
 
@@ -378,6 +378,8 @@ def compute_period_summary_rows(
     source["timestamp"] = pd.to_datetime(source["timestamp"], errors="coerce")
     source = source.dropna(subset=["timestamp"])
     rows: list[dict[str, Any]] = []
+    interval = pd.Timedelta(minutes=15)
+    now = pd.Timestamp.now().tz_localize(None)
 
     def period_bounds(period: Mapping[str, Any]) -> tuple[pd.Timestamp, pd.Timestamp]:
         start_text = str(period["start"])
@@ -404,6 +406,42 @@ def compute_period_summary_rows(
             return parts[-2]
         return parts[-1]
 
+    def observation_count(column: str, period_df: pd.DataFrame) -> int:
+        if column in period_df.columns:
+            return int(pd.to_numeric(period_df[column], errors="coerce").notna().sum())
+
+        if column.startswith("SWC_") and "_ratio_" in column:
+            parts = column.split("_")
+            pair_start = parts.index("ratio") + 1
+            numerator_strip = parts[pair_start]
+            denominator_strip = parts[pair_start + 1]
+            location = parts[-1]
+            family = "SWC_vol_gal" if any(
+                name.startswith("SWC_vol_gal_") for name in period_df.columns
+            ) else "SWC_vol_L"
+            numerator = f"{family}_{numerator_strip}_{location}_{depth}"
+            denominator = f"{family}_{denominator_strip}_{location}_{depth}"
+            if numerator in period_df.columns and denominator in period_df.columns:
+                num = pd.to_numeric(period_df[numerator], errors="coerce")
+                den = pd.to_numeric(period_df[denominator], errors="coerce")
+                ratio = (num / den).replace([np.inf, -np.inf], np.nan)
+                return int(ratio.notna().sum())
+        return 0
+
+    def coverage_fields(count: int, start_ts: pd.Timestamp, end_exclusive: pd.Timestamp) -> dict[str, Any]:
+        elapsed_end = min(end_exclusive, now)
+        expected = (
+            0
+            if elapsed_end <= start_ts
+            else int(np.ceil((elapsed_end - start_ts) / interval))
+        )
+        coverage = None if expected <= 0 else round(min(100.0, count / expected * 100.0), 1)
+        return {
+            "n": count,
+            "expected_n": expected,
+            "coverage_pct": coverage,
+        }
+
     for period in normalized_periods:
         start_ts, end_exclusive = period_bounds(period)
         period_df = source[
@@ -415,6 +453,9 @@ def compute_period_summary_rows(
         )
 
         for column, metrics in raw_stats.items():
+            coverage = coverage_fields(
+                observation_count(column, period_df), start_ts, end_exclusive
+            )
             rows.append(
                 {
                     "period_code": period["code"],
@@ -428,10 +469,16 @@ def compute_period_summary_rows(
                     "raw_mean": metrics.get("mean"),
                     "raw_max": metrics.get("max"),
                     "raw_std": metrics.get("std"),
+                    "raw_n": coverage["n"],
+                    "raw_expected_n": coverage["expected_n"],
+                    "raw_coverage_pct": coverage["coverage_pct"],
                 }
             )
 
         for column, metrics in ratio_stats.items():
+            coverage = coverage_fields(
+                observation_count(column, period_df), start_ts, end_exclusive
+            )
             pair = "S1/S2" if "S1_S2" in column else "S3/S4" if "S3_S4" in column else ""
             rows.append(
                 {
@@ -444,6 +491,9 @@ def compute_period_summary_rows(
                     "ratio_mean": metrics.get("mean"),
                     "ratio_max": metrics.get("max"),
                     "ratio_std": metrics.get("std"),
+                    "ratio_n": coverage["n"],
+                    "ratio_expected_n": coverage["expected_n"],
+                    "ratio_coverage_pct": coverage["coverage_pct"],
                 }
             )
 
@@ -661,7 +711,11 @@ def add_gseason_precip_from_daily(
     return df_gs
 
 # Normalize PeriodSpec / mappings → list of simple dicts for seasons
-def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
+def periods_to_list_of_dicts(
+    periods: Any,
+    *,
+    preserve_year: bool = False,
+) -> list[dict[str, str]]:
     """
     Normalize various PeriodSpec shapes to a list of dicts:
       [{"code":..., "label":..., "start":"MM-DD", "end":"MM-DD"}, ...]
@@ -684,10 +738,10 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
                 "code": code,
                 "label": spec.get("label", code.replace("_", " ")),
                 "start": spec["start"][-5:]
-                if isinstance(spec.get("start"), str)
+                if not preserve_year and isinstance(spec.get("start"), str)
                 else spec["start"],
                 "end": spec["end"][-5:]
-                if isinstance(spec.get("end"), str)
+                if not preserve_year and isinstance(spec.get("end"), str)
                 else spec["end"],
             }
             for code, spec in periods.items()
@@ -719,13 +773,42 @@ def periods_to_list_of_dicts(periods: Any) -> list[dict[str, str]]:
             end = d["end"]
 
         # Normalize YYYY-MM-DD → MM-DD for strings
-        if isinstance(start, str) and len(start) >= 5 and "-" in start:
+        if not preserve_year and isinstance(start, str) and len(start) >= 5 and "-" in start:
             start = start[-5:]
-        if isinstance(end, str) and len(end) >= 5 and "-" in end:
+        if not preserve_year and isinstance(end, str) and len(end) >= 5 and "-" in end:
             end = end[-5:]
 
         out.append({"code": code, "label": label, "start": start, "end": end})
     return out
+
+
+def rebase_periods_to_anchor_year(
+    periods: Any,
+    *,
+    source_year: int,
+    target_year: int,
+) -> list[dict[str, str]]:
+    """Shift fully dated custom periods to another anchor year.
+
+    Month-day period definitions already apply to any anchor year and are left
+    unchanged. Full ISO dates are shifted by the difference between the source
+    and target anchor years, preserving cross-year windows.
+    """
+    normalized = periods_to_list_of_dicts(periods, preserve_year=True)
+    year_delta = int(target_year) - int(source_year)
+    rebased: list[dict[str, str]] = []
+
+    for period in normalized:
+        item = dict(period)
+        for bound in ("start", "end"):
+            value = str(item[bound])
+            if len(value) == 10:
+                item[bound] = (
+                    pd.Timestamp(value) + pd.DateOffset(years=year_delta)
+                ).strftime("%Y-%m-%d")
+        rebased.append(item)
+
+    return rebased
 
 def add_gseason_irrigation_from_events(
     df_gs: pd.DataFrame,
