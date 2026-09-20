@@ -6,7 +6,7 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20260919-multiyear-summary-5";
+import { initSummaryTab } from "./tab_summary.js?v=20260919-summary-loading-fix-6";
 import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)

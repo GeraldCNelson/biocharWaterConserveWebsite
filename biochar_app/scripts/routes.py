@@ -5,6 +5,7 @@ routes.py — API Endpoints & Orchestration for Biochar Dashboard
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import math
 import logging
@@ -899,7 +900,13 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                 ].copy()
 
     if granularity == "gseason":
-        periods_raw = payload.get("periods") or DEFAULT_GSEASON_PERIODS
+        periods_input = payload.get("periods") or DEFAULT_GSEASON_PERIODS
+        periods_anchor_year = int(payload.get("periodsAnchorYear") or year)
+        periods_raw = rebase_periods_to_anchor_year(
+            periods_input,
+            source_year=periods_anchor_year,
+            target_year=year,
+        )
         periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
         flat = compute_period_summary_rows(
             df_base,
@@ -912,42 +919,47 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
 
         multi_year_gseason: list[dict[str, Any]] = []
         if payload.get("compareYears"):
-            for comparison_year in YEARS:
-                comparison_periods = rebase_periods_to_anchor_year(
-                    periods_raw,
-                    source_year=year,
-                    target_year=int(comparison_year),
-                )
-                comparison_key = (int(comparison_year), "15min")
-                comparison_df = _LOADED_LOGGER_CACHE.get(comparison_key)
-                if comparison_df is None:
-                    comparison_df = load_logger_data(int(comparison_year), "15min")
-                    if comparison_df is not None and not getattr(comparison_df, "empty", True):
-                        if "timestamp" in comparison_df.columns:
-                            comparison_df = comparison_df.copy()
-                            comparison_df["timestamp"] = pd.to_datetime(
-                                comparison_df["timestamp"], errors="coerce"
-                            )
-                        _LOADED_LOGGER_CACHE[comparison_key] = comparison_df
-
-                comparison_rows = []
-                if comparison_df is not None and not getattr(comparison_df, "empty", True):
-                    comparison_rows = compute_period_summary_rows(
-                        comparison_df,
-                        year=int(comparison_year),
-                        periods=comparison_periods,
-                        variable=variable,
-                        strip=strip,
-                        depth=depth_code,
+            def build_multi_year_comparison() -> list[dict[str, Any]]:
+                comparison_results: list[dict[str, Any]] = []
+                for comparison_year in YEARS:
+                    comparison_periods = rebase_periods_to_anchor_year(
+                        periods_raw,
+                        source_year=year,
+                        target_year=int(comparison_year),
                     )
+                    comparison_key = (int(comparison_year), "15min")
+                    comparison_df = _LOADED_LOGGER_CACHE.get(comparison_key)
+                    if comparison_df is None:
+                        comparison_df = load_logger_data(int(comparison_year), "15min")
+                        if comparison_df is not None and not getattr(comparison_df, "empty", True):
+                            if "timestamp" in comparison_df.columns:
+                                comparison_df = comparison_df.copy()
+                                comparison_df["timestamp"] = pd.to_datetime(
+                                    comparison_df["timestamp"], errors="coerce"
+                                )
+                            _LOADED_LOGGER_CACHE[comparison_key] = comparison_df
 
-                multi_year_gseason.append(
-                    {
-                        "year": int(comparison_year),
-                        "periods": comparison_periods,
-                        "gseason_stats": _clean(comparison_rows),
-                    }
-                )
+                    comparison_rows = []
+                    if comparison_df is not None and not getattr(comparison_df, "empty", True):
+                        comparison_rows = compute_period_summary_rows(
+                            comparison_df,
+                            year=int(comparison_year),
+                            periods=comparison_periods,
+                            variable=variable,
+                            strip=strip,
+                            depth=depth_code,
+                        )
+
+                    comparison_results.append(
+                        {
+                            "year": int(comparison_year),
+                            "periods": comparison_periods,
+                            "gseason_stats": _clean(comparison_rows),
+                        }
+                    )
+                return comparison_results
+
+            multi_year_gseason = await asyncio.to_thread(build_multi_year_comparison)
 
         return JSONResponse(
             {

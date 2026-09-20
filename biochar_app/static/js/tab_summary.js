@@ -16,12 +16,16 @@ import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDo
  *   labelNameMapping?: Record<string, any>,
  *   gseasonPeriods?: Record<string, any>,
  *   latestSummaryStats?: any,
- *   __lastSummaryData?: any
+ *   __lastSummaryData?: any,
+ *   multiYearSummaryCache?: Map<string, any>,
+ *   multiYearSummaryRequests?: Map<string, Promise<any>>
  * }} SummaryWindow
  */
 
 /** @type {SummaryWindow} */
 const summaryWindow = /** @type {SummaryWindow} */ (window);
+summaryWindow.multiYearSummaryCache ||= new Map();
+summaryWindow.multiYearSummaryRequests ||= new Map();
 
 /**
  * @param {string} str
@@ -708,6 +712,31 @@ function hideSummaryStatus() {
   el.style.display = "none";
 }
 
+function getCustomPeriodsAnchorYear(fallbackYear) {
+  const value = /** @type {HTMLSelectElement | null} */ (
+    document.getElementById("anchor-year")
+  )?.value;
+  const year = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(year) ? year : fallbackYear;
+}
+
+function multiYearComparisonCacheKey({ periods, periodsAnchorYear, variable, strip, depth, unitSystem }) {
+  const relativePeriods = periods.map((period) => {
+    const relativeDate = (value) => {
+      const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return String(value || "");
+      return `${Number(match[1]) - periodsAnchorYear}:${match[2]}-${match[3]}`;
+    };
+    return {
+      code: period.code,
+      label: period.label,
+      start: relativeDate(period.start),
+      end: relativeDate(period.end),
+    };
+  });
+  return JSON.stringify({ variable, strip, depth, unitSystem, periods: relativePeriods });
+}
+
 /**
  * @returns {Promise<void>}
  */
@@ -739,9 +768,11 @@ export async function updateSummaryStatistics() {
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
     let periods = [];
+    let periodsAnchorYear = year;
     if (granularity === "gseason") {
       try {
         periods = getCustomSeasonPeriods();
+        periodsAnchorYear = getCustomPeriodsAnchorYear(year);
       } catch (error) {
         const warning = document.createElement("div");
         warning.className = "alert alert-warning";
@@ -791,7 +822,8 @@ export async function updateSummaryStatistics() {
         depth,
         unitSystem,
         periods,
-        compareYears: granularity === "gseason",
+        periodsAnchorYear,
+        compareYears: false,
       }),
     });
 
@@ -814,21 +846,82 @@ export async function updateSummaryStatistics() {
     container.innerHTML = "";
 
     if (granularity === "gseason") {
+      const displayPeriods = data?.periods || periods;
       container.innerHTML = buildGseasonSummaryTableHTML(
         data?.gseason_stats || {},
         variable,
         unitSystem,
         year,
-        data?.periods || periods
+        displayPeriods
       );
-      appendMultiYearComparison(
-        container,
-        data?.multi_year_gseason || [],
-        data?.periods || periods,
+
+      const comparisonKey = multiYearComparisonCacheKey({
+        periods,
+        periodsAnchorYear,
         variable,
-        unitSystem
-      );
-      console.log("✅ Seasonal summaries and multi-year comparisons rendered.");
+        strip,
+        depth,
+        unitSystem,
+      });
+      const cachedComparison = summaryWindow.multiYearSummaryCache?.get(comparisonKey);
+      if (cachedComparison) {
+        appendMultiYearComparison(
+          container,
+          cachedComparison,
+          displayPeriods,
+          variable,
+          unitSystem
+        );
+      } else {
+        const comparisonHost = document.createElement("div");
+        comparisonHost.className = "multi-year-summary mt-4 text-muted";
+        comparisonHost.textContent = "Loading comparison across all years…";
+        container.appendChild(comparisonHost);
+
+        let comparisonRequest = summaryWindow.multiYearSummaryRequests?.get(comparisonKey);
+        if (!comparisonRequest) {
+          comparisonRequest = fetchJson("/api/get_summary_stats", {
+            method: "POST",
+            body: JSON.stringify({
+              year,
+              variable,
+              strip,
+              granularity,
+              depth,
+              unitSystem,
+              periods,
+              periodsAnchorYear,
+              compareYears: true,
+            }),
+          }).then((comparisonData) => {
+            const entries = comparisonData?.multi_year_gseason || [];
+            summaryWindow.multiYearSummaryCache?.set(comparisonKey, entries);
+            return entries;
+          }).finally(() => {
+            summaryWindow.multiYearSummaryRequests?.delete(comparisonKey);
+          });
+          summaryWindow.multiYearSummaryRequests?.set(comparisonKey, comparisonRequest);
+        }
+
+        void comparisonRequest.then((entries) => {
+          if (!comparisonHost.isConnected) return;
+          comparisonHost.className = "";
+          comparisonHost.textContent = "";
+          appendMultiYearComparison(
+            comparisonHost,
+            entries,
+            displayPeriods,
+            variable,
+            unitSystem
+          );
+        }).catch((error) => {
+          console.error("❌ Failed to load multi-year comparison:", error);
+          if (!comparisonHost.isConnected) return;
+          comparisonHost.className = "alert alert-warning mt-4";
+          comparisonHost.textContent = "The selected-year summary loaded, but the comparison across all years did not.";
+        });
+      }
+      console.log("✅ Selected-year seasonal summary rendered.");
 
       stopLoadingDots("summary-status", "");
       hideSummaryStatus();
