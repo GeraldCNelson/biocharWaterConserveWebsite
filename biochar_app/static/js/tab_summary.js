@@ -812,20 +812,54 @@ export async function updateSummaryStatistics() {
       return;
     }
 
-    const data = await fetchJson("/api/get_summary_stats", {
-      method: "POST",
-      body: JSON.stringify({
-        year,
-        variable,
-        strip,
-        granularity,
-        depth,
-        unitSystem,
-        periods,
-        periodsAnchorYear,
-        compareYears: false,
-      }),
-    });
+    const comparisonKey = granularity === "gseason"
+      ? multiYearComparisonCacheKey({
+          periods,
+          periodsAnchorYear,
+          variable,
+          strip,
+          depth,
+          unitSystem,
+        })
+      : null;
+
+    let cachedComparison = comparisonKey
+      ? summaryWindow.multiYearSummaryCache?.get(comparisonKey)
+      : null;
+    if (!cachedComparison && comparisonKey) {
+      const pendingComparison = summaryWindow.multiYearSummaryRequests?.get(comparisonKey);
+      if (pendingComparison) cachedComparison = await pendingComparison;
+    }
+
+    const cachedYearEntry = Array.isArray(cachedComparison)
+      ? cachedComparison.find((entry) => Number(entry?.year) === year)
+      : null;
+
+    const data = cachedYearEntry
+      ? {
+          year,
+          variable,
+          strip,
+          granularity,
+          depth,
+          gseason_stats: cachedYearEntry.gseason_stats || [],
+          periods: cachedYearEntry.periods || [],
+          multi_year_gseason: cachedComparison,
+        }
+      : await fetchJson("/api/get_summary_stats", {
+          method: "POST",
+          body: JSON.stringify({
+            year,
+            variable,
+            strip,
+            granularity,
+            depth,
+            unitSystem,
+            periods,
+            periodsAnchorYear,
+            compareYears: false,
+          }),
+        });
 
     console.log("✅ Received summary stats response:", data);
 
@@ -855,15 +889,9 @@ export async function updateSummaryStatistics() {
         displayPeriods
       );
 
-      const comparisonKey = multiYearComparisonCacheKey({
-        periods,
-        periodsAnchorYear,
-        variable,
-        strip,
-        depth,
-        unitSystem,
-      });
-      const cachedComparison = summaryWindow.multiYearSummaryCache?.get(comparisonKey);
+      cachedComparison = comparisonKey
+        ? summaryWindow.multiYearSummaryCache?.get(comparisonKey)
+        : null;
       if (cachedComparison) {
         appendMultiYearComparison(
           container,
@@ -878,7 +906,9 @@ export async function updateSummaryStatistics() {
         comparisonHost.textContent = "Loading comparison across all years…";
         container.appendChild(comparisonHost);
 
-        let comparisonRequest = summaryWindow.multiYearSummaryRequests?.get(comparisonKey);
+        let comparisonRequest = comparisonKey
+          ? summaryWindow.multiYearSummaryRequests?.get(comparisonKey)
+          : null;
         if (!comparisonRequest) {
           comparisonRequest = fetchJson("/api/get_summary_stats", {
             method: "POST",
@@ -895,12 +925,14 @@ export async function updateSummaryStatistics() {
             }),
           }).then((comparisonData) => {
             const entries = comparisonData?.multi_year_gseason || [];
-            summaryWindow.multiYearSummaryCache?.set(comparisonKey, entries);
+            if (comparisonKey) summaryWindow.multiYearSummaryCache?.set(comparisonKey, entries);
             return entries;
           }).finally(() => {
-            summaryWindow.multiYearSummaryRequests?.delete(comparisonKey);
+            if (comparisonKey) summaryWindow.multiYearSummaryRequests?.delete(comparisonKey);
           });
-          summaryWindow.multiYearSummaryRequests?.set(comparisonKey, comparisonRequest);
+          if (comparisonKey) {
+            summaryWindow.multiYearSummaryRequests?.set(comparisonKey, comparisonRequest);
+          }
         }
 
         void comparisonRequest.then((entries) => {
