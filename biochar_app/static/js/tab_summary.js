@@ -120,23 +120,8 @@ function getDepthDisplayLabel(unitSystem) {
   );
   if (!depthEl) return "";
 
-  const rawVal = depthEl.value;
   const fallbackText = depthEl.selectedOptions?.[0]?.textContent?.trim() || "";
-
-  const inches = parseFloat(rawVal);
-  if (!Number.isFinite(inches)) {
-    return fallbackText;
-  }
-
-  if (unitSystem === "metric") {
-    const cm = inches * 2.54;
-    const cmText = Math.abs(cm - Math.round(cm)) < 1e-9
-      ? String(Math.round(cm))
-      : cm.toFixed(1);
-    return `${cmText} cm`;
-  }
-
-  return `${inches} inches`;
+  return fallbackText;
 }
 
 /**
@@ -163,7 +148,9 @@ function buildSummaryTitle({ year, variable, strip, granularity, unitSystem }) {
   const depthLabel = getDepthDisplayLabel(unitSystem);
   const stripPart = strip ? `, Strip ${strip}` : "";
 
-  const granLabel = capitalizeFirst(granularity);
+  const granLabel = granularity === "gseason"
+    ? "Seasonal Periods"
+    : capitalizeFirst(granularity);
   return `${granLabel} Summary for ${prettyVar}${stripPart}, ${depthLabel}, ${year}`;
 }
 
