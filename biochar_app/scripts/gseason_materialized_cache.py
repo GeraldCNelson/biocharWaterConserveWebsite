@@ -17,7 +17,7 @@ from biochar_app.config.paths import (
 )
 
 
-CACHE_FORMAT_VERSION = 1
+CACHE_FORMAT_VERSION = 2
 DEFAULT_CACHE_DIR = DATA_PROCESSED_DIR / "seasonal-summary-cache"
 
 

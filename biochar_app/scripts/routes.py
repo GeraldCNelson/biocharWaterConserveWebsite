@@ -879,17 +879,19 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
             summary_year: int,
             summary_periods: list[dict[str, Any]],
         ) -> list[dict[str, Any]]:
-            cached_rows = load_materialized_gseason_summary(
-                year=summary_year,
-                variable=variable,
-                strip=strip,
-                depth=depth_code,
-                unit_system=unit_system,
-                periods=summary_periods,
-            )
-            if cached_rows is not None:
-                logger.info("Materialized seasonal summary cache hit: year=%s", summary_year)
-                return cached_rows
+            completed_year = summary_year < pd.Timestamp.now().year
+            if completed_year:
+                cached_rows = load_materialized_gseason_summary(
+                    year=summary_year,
+                    variable=variable,
+                    strip=strip,
+                    depth=depth_code,
+                    unit_system=unit_system,
+                    periods=summary_periods,
+                )
+                if cached_rows is not None:
+                    logger.info("Materialized seasonal summary cache hit: year=%s", summary_year)
+                    return cached_rows
 
             logger_cache_key = (summary_year, "15min")
             summary_df = _LOADED_LOGGER_CACHE.get(logger_cache_key)
@@ -917,21 +919,22 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                     depth=depth_code,
                 ))
 
-            try:
-                save_materialized_gseason_summary(
-                    year=summary_year,
-                    variable=variable,
-                    strip=strip,
-                    depth=depth_code,
-                    unit_system=unit_system,
-                    periods=summary_periods,
-                    rows=rows,
-                )
-            except OSError:
-                logger.exception(
-                    "Could not persist materialized seasonal summary: year=%s",
-                    summary_year,
-                )
+            if completed_year:
+                try:
+                    save_materialized_gseason_summary(
+                        year=summary_year,
+                        variable=variable,
+                        strip=strip,
+                        depth=depth_code,
+                        unit_system=unit_system,
+                        periods=summary_periods,
+                        rows=rows,
+                    )
+                except OSError:
+                    logger.exception(
+                        "Could not persist materialized seasonal summary: year=%s",
+                        summary_year,
+                    )
             return rows
 
         flat = await asyncio.to_thread(load_or_compute_year, year, periods_list)

@@ -641,32 +641,26 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   const yearRange = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : "available years";
   const rawContext = `Strip ${String(metadata.strip || "").replace(/^S/i, "")}, ${depthLabel}, anchor years ${yearRange}`;
   const ratioContext = `Strip ratios S1/S2 and S3/S4, ${depthLabel}, anchor years ${yearRange}`;
+  const partialYears = years.filter((year) => rows.some(
+    (row) => row.year === year && row.status === "Partial"
+  ));
+  const partialTitleNote = partialYears.length
+    ? `<br><sup>* ${partialYears.join(", ")} partial: seasonal period is still in progress</sup>`
+    : "";
   const commonLayout = {
     autosize: true,
-    height: 370,
-    margin: { l: 70, r: 25, t: 80, b: 60 },
+    height: 395,
+    margin: { l: 70, r: 25, t: 105, b: 70 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     barmode: "group",
     legend: { orientation: "h", y: 1.12 },
     xaxis: { title: "Anchor year" },
   };
-  const hasPartialPeriod = rows.some((row) => row.status === "Partial");
-  const partialAnnotations = hasPartialPeriod
-    ? [{
-        text: "* partial period (season is still in progress)",
-        xref: "paper",
-        yref: "paper",
-        x: 1,
-        y: -0.16,
-        xanchor: "right",
-        showarrow: false,
-      }]
-    : [];
   const rawRender = plotly.react("multi-year-raw-chart", rawTraces, {
     ...commonLayout,
     title: {
-      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}</sup>`,
+      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}</sup>${partialTitleNote}`,
       font: { size: 18 },
     },
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
@@ -675,7 +669,6 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
       categoryorder: "array",
       categoryarray: years.map(yearLabel),
     },
-    annotations: partialAnnotations,
   }, { responsive: true, displaylogo: false });
 
   const ratioX = years.flatMap((year) => positions.map((position) => `${yearLabel(year)} · ${position}`));
@@ -695,7 +688,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   ], {
     ...commonLayout,
     title: {
-      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}</sup>`,
+      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}</sup>${partialTitleNote}`,
       font: { size: 18 },
     },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
@@ -705,7 +698,6 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
       categoryorder: "array",
       categoryarray: ratioX,
     },
-    annotations: partialAnnotations,
   }, { responsive: true, displaylogo: false });
 
   await Promise.all([Promise.resolve(rawRender), Promise.resolve(ratioRender)]);
