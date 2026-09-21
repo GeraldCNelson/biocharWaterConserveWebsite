@@ -548,7 +548,7 @@ function setComparisonDownloadsAvailable(available, visible = true) {
   });
 }
 
-function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode, metadata = {}) {
+async function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode, metadata = {}) {
   const selectedPeriod = periods.find((period) => period.code === selectedCode) || periods[0];
   if (!selectedPeriod) return;
 
@@ -609,8 +609,11 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     depth: metadata.depth,
     years,
   };
-  setComparisonDownloadsAvailable(true);
-  if (!plotly) return;
+  setComparisonDownloadsAvailable(false, true);
+  if (!plotly) {
+    setComparisonDownloadsAvailable(true);
+    return;
+  }
 
   const yearLabel = (year) => {
     const yearRows = rows.filter((row) => row.year === year);
@@ -648,16 +651,31 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     legend: { orientation: "h", y: 1.12 },
     xaxis: { title: "Anchor year" },
   };
-  plotly.react("multi-year-raw-chart", rawTraces, {
+  const hasPartialPeriod = rows.some((row) => row.status === "Partial");
+  const partialAnnotations = hasPartialPeriod
+    ? [{
+        text: "* partial period (season is still in progress)",
+        xref: "paper",
+        yref: "paper",
+        x: 1,
+        y: -0.16,
+        xanchor: "right",
+        showarrow: false,
+      }]
+    : [];
+  const rawRender = plotly.react("multi-year-raw-chart", rawTraces, {
     ...commonLayout,
     title: {
       text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}</sup>`,
       font: { size: 18 },
     },
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
-    annotations: rows.some((row) => row.status === "Partial")
-      ? [{ text: "* partial period", xref: "paper", yref: "paper", x: 1, y: -0.22, showarrow: false }]
-      : [],
+    xaxis: {
+      title: "Anchor year",
+      categoryorder: "array",
+      categoryarray: years.map(yearLabel),
+    },
+    annotations: partialAnnotations,
   }, { responsive: true, displaylogo: false });
 
   const ratioX = years.flatMap((year) => positions.map((position) => `${yearLabel(year)} · ${position}`));
@@ -671,7 +689,7 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     marker: { color },
     hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
   });
-  plotly.react("multi-year-ratio-chart", [
+  const ratioRender = plotly.react("multi-year-ratio-chart", [
     ratioTrace("S1/S2", "s1s2Mean", "#3f8fc1"),
     ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
   ], {
@@ -681,8 +699,17 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
       font: { size: 18 },
     },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
-    xaxis: { title: "Anchor year and logger position", tickangle: -25 },
+    xaxis: {
+      title: "Anchor year and logger position",
+      tickangle: -25,
+      categoryorder: "array",
+      categoryarray: ratioX,
+    },
+    annotations: partialAnnotations,
   }, { responsive: true, displaylogo: false });
+
+  await Promise.all([Promise.resolve(rawRender), Promise.resolve(ratioRender)]);
+  setComparisonDownloadsAvailable(true);
 
 }
 
@@ -709,9 +736,14 @@ function appendMultiYearComparison(container, yearEntries, periods, variable, un
   container.appendChild(section);
 
   const select = section.querySelector("#multi-year-period");
-  const render = () => renderMultiYearComparison(
-    section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code, metadata
-  );
+  const render = () => {
+    void renderMultiYearComparison(
+      section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code, metadata
+    ).catch((error) => {
+      console.error("Failed to render seasonal comparison plots:", error);
+      setComparisonDownloadsAvailable(false, true);
+    });
+  };
   select?.addEventListener("change", render);
   render();
 }
