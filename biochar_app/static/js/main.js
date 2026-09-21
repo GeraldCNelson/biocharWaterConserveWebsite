@@ -6,7 +6,7 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20260919-summary-handler-fix-8";
+import { initSummaryTab } from "./tab_summary.js?v=20260921-seasonal-downloads-9";
 import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
@@ -31,7 +31,7 @@ import {
   setupUnitToggleHandlers,
   getAllDropdownIds,
   initializeTraceOptionControls,
-} from "./control_panel.js?v=20260919-summary-handler-fix-8";
+} from "./control_panel.js?v=20260921-seasonal-downloads-9";
 
 import {
   fetchDefaultsAndOptions,

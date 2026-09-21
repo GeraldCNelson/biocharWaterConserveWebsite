@@ -538,7 +538,14 @@ function comparisonRowsForPeriod(yearEntries, periodCode) {
   return rows;
 }
 
-function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode) {
+function summaryFilenamePart(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unknown";
+}
+
+function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode, metadata = {}) {
   const selectedPeriod = periods.find((period) => period.code === selectedCode) || periods[0];
   if (!selectedPeriod) return;
 
@@ -579,11 +586,23 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
         <tbody>${tableRows || `<tr><td colspan="9" class="text-muted">No comparison data are available.</td></tr>`}</tbody>
       </table>
     </div>
+    <div class="d-flex flex-wrap gap-2 mb-2">
+      <button type="button" class="btn btn-outline-primary btn-sm" data-download-chart="raw">
+        Download raw comparison plot
+      </button>
+      <button type="button" class="btn btn-outline-primary btn-sm" data-download-chart="ratio">
+        Download ratio comparison plot
+      </button>
+    </div>
     <div id="multi-year-raw-chart" class="multi-year-chart"></div>
     <div id="multi-year-ratio-chart" class="multi-year-chart"></div>`;
 
   const plotly = window.Plotly;
-  if (!plotly || !rows.length) return;
+  const downloadButtons = section.querySelectorAll("[data-download-chart]");
+  if (!plotly || !rows.length) {
+    downloadButtons.forEach((button) => { button.disabled = true; });
+    return;
+  }
 
   const years = [...new Set(rows.map((row) => row.year))];
   const yearLabel = (year) => {
@@ -646,9 +665,33 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
     xaxis: { title: "Anchor year and logger position", tickangle: -25 },
   }, { responsive: true, displaylogo: false });
+
+  const yearRange = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : "years";
+  const filenameBase = [
+    "seasonal-comparison",
+    selectedPeriod.label,
+    variable,
+    metadata.strip,
+    `depth-code-${metadata.depth}`,
+    yearRange,
+  ].map(summaryFilenamePart).join("_");
+  downloadButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const chartType = button.dataset.downloadChart;
+      const chart = document.getElementById(`multi-year-${chartType}-chart`);
+      if (!chart) return;
+      void plotly.downloadImage(chart, {
+        format: "png",
+        filename: `${filenameBase}_${chartType}`,
+        width: 1600,
+        height: 900,
+        scale: 2,
+      });
+    });
+  });
 }
 
-function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem) {
+function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
   if (!Array.isArray(yearEntries) || !yearEntries.length || !Array.isArray(periods) || !periods.length) return;
 
   const defaultPeriod = periods.find((period) => /growing/i.test(period.label || "")) || periods[0];
@@ -672,7 +715,7 @@ function appendMultiYearComparison(container, yearEntries, periods, variable, un
 
   const select = section.querySelector("#multi-year-period");
   const render = () => renderMultiYearComparison(
-    section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code
+    section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code, metadata
   );
   select?.addEventListener("change", render);
   render();
@@ -885,7 +928,8 @@ export async function updateSummaryStatistics() {
           cachedComparison,
           displayPeriods,
           variable,
-          unitSystem
+          unitSystem,
+          { strip, depth }
         );
       } else {
         const comparisonHost = document.createElement("div");
@@ -931,7 +975,8 @@ export async function updateSummaryStatistics() {
             entries,
             displayPeriods,
             variable,
-            unitSystem
+            unitSystem,
+            { strip, depth }
           );
         }).catch((error) => {
           console.error("❌ Failed to load multi-year comparison:", error);
