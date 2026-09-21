@@ -14,6 +14,7 @@ import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDo
 /**
  * @typedef {Window & {
  *   labelNameMapping?: Record<string, any>,
+ *   depthMapping?: Record<string, Record<string, string>>,
  *   gseasonPeriods?: Record<string, any>,
  *   latestSummaryStats?: any,
  *   __lastSummaryData?: any,
@@ -517,8 +518,6 @@ function comparisonRowsForPeriod(yearEntries, periodCode) {
     const notice = getIncompletePeriodNotice(period, year);
     const status = notice.includes("not started") ? "Not started" : (notice ? "Partial" : "Complete");
     const periodRows = (entry?.gseason_stats || []).filter((row) => row?.period_code === periodCode);
-    if (!periodRows.length) return;
-
     positions.forEach((position) => {
       const raw = periodRows.find((row) => row?.logger_location === position && row?.raw_mean != null);
       const s1s2 = periodRows.find((row) => row?.logger_location === position && row?.ratio_group === "S1/S2");
@@ -634,10 +633,15 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
   } catch (_) {
     prettyVariable = variable;
   }
+  const depthLabel = summaryWindow.depthMapping?.[String(metadata.depth)]?.[unitSystem]
+    || `depth code ${metadata.depth}`;
+  const yearRange = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : "available years";
+  const rawContext = `Strip ${String(metadata.strip || "").replace(/^S/i, "")}, ${depthLabel}, anchor years ${yearRange}`;
+  const ratioContext = `Strip ratios S1/S2 and S3/S4, ${depthLabel}, anchor years ${yearRange}`;
   const commonLayout = {
     autosize: true,
-    height: 340,
-    margin: { l: 70, r: 25, t: 55, b: 60 },
+    height: 370,
+    margin: { l: 70, r: 25, t: 80, b: 60 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     barmode: "group",
@@ -646,7 +650,10 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
   };
   plotly.react("multi-year-raw-chart", rawTraces, {
     ...commonLayout,
-    title: { text: `${selectedPeriod.label}: raw means by year`, font: { size: 18 } },
+    title: {
+      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}</sup>`,
+      font: { size: 18 },
+    },
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
     annotations: rows.some((row) => row.status === "Partial")
       ? [{ text: "* partial period", xref: "paper", yref: "paper", x: 1, y: -0.22, showarrow: false }]
@@ -669,7 +676,10 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
   ], {
     ...commonLayout,
-    title: { text: `${selectedPeriod.label}: treatment ratios by year`, font: { size: 18 } },
+    title: {
+      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}</sup>`,
+      font: { size: 18 },
+    },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
     xaxis: { title: "Anchor year and logger position", tickangle: -25 },
   }, { responsive: true, displaylogo: false });

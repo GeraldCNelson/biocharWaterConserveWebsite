@@ -280,11 +280,15 @@ export function downloadSeasonalComparisonData() {
   }
   const columns = [
     ["seasonal_period", () => comparison.periodLabel],
+    ["variable", () => comparison.variable],
     ["year", (row) => row.year],
     ["status", (row) => row.status],
     ["logger_position", (row) => row.position],
+    ["raw_strip", () => comparison.strip],
+    ["raw_depth_code", () => comparison.depth],
     ["raw_mean", (row) => row.rawMean],
     ["raw_coverage_pct", (row) => row.rawCoverage],
+    ["ratio_depth_code", () => comparison.depth],
     ["s1_s2_ratio_mean", (row) => row.s1s2Mean],
     ["s1_s2_coverage_pct", (row) => row.s1s2Coverage],
     ["s3_s4_ratio_mean", (row) => row.s3s4Mean],
