@@ -17,6 +17,7 @@ import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDo
  *   gseasonPeriods?: Record<string, any>,
  *   latestSummaryStats?: any,
  *   __lastSummaryData?: any,
+ *   __seasonalComparisonDownload?: any,
  *   multiYearSummaryCache?: Map<string, any>,
  *   multiYearSummaryRequests?: Map<string, Promise<any>>
  * }} SummaryWindow
@@ -425,6 +426,7 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       <table class="table table-sm table-bordered align-middle mb-0">
         <caption class="caption-top text-muted pt-0">
           Coverage is the percentage of expected 15-minute observations with valid data, through the elapsed part of each period.
+          Raw statistics summarize all valid 15-minute observations for the selected strip, depth, and logger position.
         </caption>
         <thead>
           <tr>
@@ -538,11 +540,10 @@ function comparisonRowsForPeriod(yearEntries, periodCode) {
   return rows;
 }
 
-function summaryFilenamePart(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/[^A-Za-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "unknown";
+function setComparisonDownloadsAvailable(available) {
+  document.querySelectorAll(".seasonal-comparison-download-item").forEach((item) => {
+    item.classList.toggle("d-none", !available);
+  });
 }
 
 function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode, metadata = {}) {
@@ -586,21 +587,13 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
         <tbody>${tableRows || `<tr><td colspan="9" class="text-muted">No comparison data are available.</td></tr>`}</tbody>
       </table>
     </div>
-    <div class="d-flex flex-wrap gap-2 mb-2">
-      <button type="button" class="btn btn-outline-primary btn-sm" data-download-chart="raw">
-        Download raw comparison plot
-      </button>
-      <button type="button" class="btn btn-outline-primary btn-sm" data-download-chart="ratio">
-        Download ratio comparison plot
-      </button>
-    </div>
     <div id="multi-year-raw-chart" class="multi-year-chart"></div>
     <div id="multi-year-ratio-chart" class="multi-year-chart"></div>`;
 
   const plotly = window.Plotly;
-  const downloadButtons = section.querySelectorAll("[data-download-chart]");
   if (!plotly || !rows.length) {
-    downloadButtons.forEach((button) => { button.disabled = true; });
+    summaryWindow.__seasonalComparisonDownload = null;
+    setComparisonDownloadsAvailable(false);
     return;
   }
 
@@ -666,29 +659,16 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     xaxis: { title: "Anchor year and logger position", tickangle: -25 },
   }, { responsive: true, displaylogo: false });
 
-  const yearRange = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : "years";
-  const filenameBase = [
-    "seasonal-comparison",
-    selectedPeriod.label,
+  summaryWindow.__seasonalComparisonDownload = {
+    rows,
+    periodCode: selectedPeriod.code,
+    periodLabel: selectedPeriod.label,
     variable,
-    metadata.strip,
-    `depth-code-${metadata.depth}`,
-    yearRange,
-  ].map(summaryFilenamePart).join("_");
-  downloadButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const chartType = button.dataset.downloadChart;
-      const chart = document.getElementById(`multi-year-${chartType}-chart`);
-      if (!chart) return;
-      void plotly.downloadImage(chart, {
-        format: "png",
-        filename: `${filenameBase}_${chartType}`,
-        width: 1600,
-        height: 900,
-        scale: 2,
-      });
-    });
-  });
+    strip: metadata.strip,
+    depth: metadata.depth,
+    years,
+  };
+  setComparisonDownloadsAvailable(true);
 }
 
 function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
@@ -797,6 +777,8 @@ export async function updateSummaryStatistics() {
     const depthRaw = /** @type {string | null} */ (getDropdownValue("summary-depth"));
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
+    summaryWindow.__seasonalComparisonDownload = null;
+    setComparisonDownloadsAvailable(false);
     let periods = [];
     let periodsAnchorYear = year;
     if (granularity === "gseason") {

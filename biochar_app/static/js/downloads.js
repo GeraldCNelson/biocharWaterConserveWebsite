@@ -6,6 +6,7 @@
  *   unitSystem?: string,
  *   depthMapping?: Record<string, Record<string, string>>,
  *   __lastSummaryData?: any,
+ *   __seasonalComparisonDownload?: any,
  *   __bulkDownloadManifest?: any,
  *   Plotly?: any
  * }} DownloadsWindow
@@ -13,6 +14,17 @@
 
 /** @type {DownloadsWindow} */
 const downloadsWindow = /** @type {DownloadsWindow} */ (window);
+
+function downloadBrowserBlob(blob, filename) {
+  const objUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objUrl);
+}
 
 /**
  * @param {Array<string | number | null | undefined | false>} parts
@@ -237,6 +249,74 @@ export async function downloadSummaryData(mode = "all") {
   }
 }
 
+function seasonalComparisonFilename(suffix, extension) {
+  const comparison = downloadsWindow.__seasonalComparisonDownload;
+  const years = Array.isArray(comparison?.years)
+    ? comparison.years.map(Number).filter(Number.isFinite)
+    : [];
+  const yearRange = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : "years";
+  return `${buildFilename([
+    "seasonal-comparison",
+    comparison?.periodLabel,
+    comparison?.variable,
+    comparison?.strip,
+    `depth-code-${comparison?.depth || "unknown"}`,
+    yearRange,
+    suffix,
+  ])}.${extension}`;
+}
+
+function csvCell(value) {
+  if (value == null) return "";
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+export function downloadSeasonalComparisonData() {
+  const comparison = downloadsWindow.__seasonalComparisonDownload;
+  if (!comparison?.rows?.length) {
+    alert("Load a Seasonal Periods comparison before downloading its data.");
+    return;
+  }
+  const columns = [
+    ["seasonal_period", () => comparison.periodLabel],
+    ["year", (row) => row.year],
+    ["status", (row) => row.status],
+    ["logger_position", (row) => row.position],
+    ["raw_mean", (row) => row.rawMean],
+    ["raw_coverage_pct", (row) => row.rawCoverage],
+    ["s1_s2_ratio_mean", (row) => row.s1s2Mean],
+    ["s1_s2_coverage_pct", (row) => row.s1s2Coverage],
+    ["s3_s4_ratio_mean", (row) => row.s3s4Mean],
+    ["s3_s4_coverage_pct", (row) => row.s3s4Coverage],
+  ];
+  const csv = [
+    columns.map(([name]) => name).join(","),
+    ...comparison.rows.map((row) => columns.map(([, getter]) => csvCell(getter(row))).join(",")),
+  ].join("\n");
+  downloadBrowserBlob(
+    new Blob([`${csv}\n`], { type: "text/csv;charset=utf-8" }),
+    seasonalComparisonFilename("data", "csv")
+  );
+}
+
+export async function downloadSeasonalComparisonPlot(chartType) {
+  const comparison = downloadsWindow.__seasonalComparisonDownload;
+  const plotly = downloadsWindow.Plotly;
+  const chart = document.getElementById(`multi-year-${chartType}-chart`);
+  if (!comparison?.rows?.length || !plotly || !chart) {
+    alert("Load a Seasonal Periods comparison before downloading its plot.");
+    return;
+  }
+  await plotly.downloadImage(chart, {
+    format: "png",
+    filename: seasonalComparisonFilename(chartType, "png").replace(/\.png$/, ""),
+    width: 1600,
+    height: 900,
+    scale: 2,
+  });
+}
+
 /**
  * @returns {void}
  */
@@ -245,6 +325,9 @@ export function initSummaryDownloadMenu() {
   const ratioBtn = document.getElementById("download-summary-ratio");
   const allBtn = document.getElementById("download-summary-all");
   const zipBtn = document.getElementById("download-summary-zip");
+  const comparisonDataBtn = document.getElementById("download-seasonal-comparison-data");
+  const comparisonRawPlotBtn = document.getElementById("download-seasonal-comparison-raw-plot");
+  const comparisonRatioPlotBtn = document.getElementById("download-seasonal-comparison-ratio-plot");
 
   if (!rawBtn && !ratioBtn && !allBtn && !zipBtn) {
     console.warn("⚠️ Summary download menu not found in DOM.");
@@ -278,6 +361,19 @@ export function initSummaryDownloadMenu() {
       void downloadSummaryData("zip");
     });
   }
+
+  comparisonDataBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    downloadSeasonalComparisonData();
+  });
+  comparisonRawPlotBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    void downloadSeasonalComparisonPlot("raw");
+  });
+  comparisonRatioPlotBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    void downloadSeasonalComparisonPlot("ratio");
+  });
 
   console.log("✅ Summary download menu initialized.");
 }
