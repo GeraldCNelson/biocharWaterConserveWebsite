@@ -307,7 +307,7 @@ export function downloadSeasonalComparisonData() {
 export async function downloadSeasonalComparisonPlot(chartType) {
   const comparison = downloadsWindow.__seasonalComparisonDownload;
   const plotly = downloadsWindow.Plotly;
-  const chart = document.getElementById(`multi-year-${chartType}-chart`);
+  const chart = chartType === "raw" ? comparison?.rawChart : comparison?.ratioChart;
   if (!comparison?.rows?.length || !plotly || !chart) {
     alert("Load a Seasonal Periods comparison before downloading its plot.");
     return;

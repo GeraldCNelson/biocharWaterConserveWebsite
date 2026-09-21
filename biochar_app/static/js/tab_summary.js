@@ -574,7 +574,8 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
       <td>${coverageText(row.s3s4Coverage)}</td>
     </tr>`).join("");
 
-  section.querySelector(".multi-year-content").innerHTML = `
+  const comparisonContent = section.querySelector(".multi-year-content");
+  comparisonContent.innerHTML = `
     <div class="table-responsive mb-4">
       <table class="table table-sm table-bordered align-middle">
         <thead>
@@ -591,6 +592,8 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     </div>
     <div id="multi-year-raw-chart" class="multi-year-chart"></div>
     <div id="multi-year-ratio-chart" class="multi-year-chart"></div>`;
+  const rawChart = comparisonContent.querySelector("#multi-year-raw-chart");
+  const ratioChart = comparisonContent.querySelector("#multi-year-ratio-chart");
 
   const plotly = window.Plotly;
   if (!rows.length) {
@@ -608,6 +611,8 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     strip: metadata.strip,
     depth: metadata.depth,
     years,
+    rawChart,
+    ratioChart,
   };
   setComparisonDownloadsAvailable(false, true);
   if (!plotly) {
@@ -645,7 +650,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     (row) => row.year === year && row.status === "Partial"
   ));
   const partialTitleNote = partialYears.length
-    ? `<br><sup>* ${partialYears.join(", ")} partial: seasonal period is still in progress</sup>`
+    ? `; * ${partialYears.join(", ")} partial (seasonal period still in progress)`
     : "";
   const commonLayout = {
     autosize: true,
@@ -657,10 +662,10 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     legend: { orientation: "h", y: 1.12 },
     xaxis: { title: "Anchor year" },
   };
-  const rawRender = plotly.react("multi-year-raw-chart", rawTraces, {
+  const rawRender = plotly.react(rawChart, rawTraces, {
     ...commonLayout,
     title: {
-      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}</sup>${partialTitleNote}`,
+      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}${partialTitleNote}</sup>`,
       font: { size: 18 },
     },
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
@@ -682,13 +687,13 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     marker: { color },
     hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
   });
-  const ratioRender = plotly.react("multi-year-ratio-chart", [
+  const ratioRender = plotly.react(ratioChart, [
     ratioTrace("S1/S2", "s1s2Mean", "#3f8fc1"),
     ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
   ], {
     ...commonLayout,
     title: {
-      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}</sup>${partialTitleNote}`,
+      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}${partialTitleNote}</sup>`,
       font: { size: 18 },
     },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
