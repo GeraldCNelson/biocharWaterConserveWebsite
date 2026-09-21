@@ -179,6 +179,7 @@ templates = Jinja2Templates(
 # WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
+_MULTIYEAR_GSEASON_CACHE: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -919,47 +920,84 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
 
         multi_year_gseason: list[dict[str, Any]] = []
         if payload.get("compareYears"):
-            def build_multi_year_comparison() -> list[dict[str, Any]]:
-                comparison_results: list[dict[str, Any]] = []
-                for comparison_year in YEARS:
+            def relative_bound(value: Any) -> tuple[int, str]:
+                text = str(value)
+                if len(text) == 10:
+                    timestamp = pd.Timestamp(text)
+                    return timestamp.year - year, timestamp.strftime("%m-%d")
+                return 0, text[-5:]
+
+            period_signature = tuple(
+                (
+                    str(period.get("code", "")),
+                    str(period.get("label", "")),
+                    relative_bound(period.get("start")),
+                    relative_bound(period.get("end")),
+                )
+                for period in periods_list
+            )
+            summary_cache_key = (
+                variable,
+                strip,
+                depth_code,
+                unit_system,
+                period_signature,
+            )
+            cached_multi_year = _MULTIYEAR_GSEASON_CACHE.get(summary_cache_key)
+
+            if cached_multi_year is not None:
+                multi_year_gseason = cached_multi_year
+                logger.info("Seasonal multi-year comparison cache hit: %s", summary_cache_key[:4])
+            else:
+                comparison_started = perf_counter()
+
+                def build_comparison_year(comparison_year: int) -> dict[str, Any]:
                     comparison_periods = rebase_periods_to_anchor_year(
                         periods_raw,
                         source_year=year,
-                        target_year=int(comparison_year),
+                        target_year=comparison_year,
                     )
-                    comparison_key = (int(comparison_year), "15min")
-                    comparison_df = _LOADED_LOGGER_CACHE.get(comparison_key)
+                    logger_cache_key = (comparison_year, "15min")
+                    comparison_df = _LOADED_LOGGER_CACHE.get(logger_cache_key)
                     if comparison_df is None:
-                        comparison_df = load_logger_data(int(comparison_year), "15min")
+                        comparison_df = load_logger_data(comparison_year, "15min")
                         if comparison_df is not None and not getattr(comparison_df, "empty", True):
                             if "timestamp" in comparison_df.columns:
                                 comparison_df = comparison_df.copy()
                                 comparison_df["timestamp"] = pd.to_datetime(
                                     comparison_df["timestamp"], errors="coerce"
                                 )
-                            _LOADED_LOGGER_CACHE[comparison_key] = comparison_df
+                            _LOADED_LOGGER_CACHE[logger_cache_key] = comparison_df
 
                     comparison_rows = []
                     if comparison_df is not None and not getattr(comparison_df, "empty", True):
                         comparison_rows = compute_period_summary_rows(
                             comparison_df,
-                            year=int(comparison_year),
+                            year=comparison_year,
                             periods=comparison_periods,
                             variable=variable,
                             strip=strip,
                             depth=depth_code,
                         )
 
-                    comparison_results.append(
-                        {
-                            "year": int(comparison_year),
-                            "periods": comparison_periods,
-                            "gseason_stats": _clean(comparison_rows),
-                        }
-                    )
-                return comparison_results
+                    return {
+                        "year": comparison_year,
+                        "periods": comparison_periods,
+                        "gseason_stats": _clean(comparison_rows),
+                    }
 
-            multi_year_gseason = await asyncio.to_thread(build_multi_year_comparison)
+                multi_year_gseason = list(await asyncio.gather(*(
+                    asyncio.to_thread(build_comparison_year, int(comparison_year))
+                    for comparison_year in YEARS
+                )))
+                if len(_MULTIYEAR_GSEASON_CACHE) >= 128:
+                    _MULTIYEAR_GSEASON_CACHE.pop(next(iter(_MULTIYEAR_GSEASON_CACHE)))
+                _MULTIYEAR_GSEASON_CACHE[summary_cache_key] = multi_year_gseason
+                logger.info(
+                    "Seasonal multi-year comparison built in %.2f seconds for %s",
+                    perf_counter() - comparison_started,
+                    summary_cache_key[:4],
+                )
 
         return JSONResponse(
             {
