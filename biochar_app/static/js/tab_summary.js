@@ -540,9 +540,12 @@ function comparisonRowsForPeriod(yearEntries, periodCode) {
   return rows;
 }
 
-function setComparisonDownloadsAvailable(available) {
+function setComparisonDownloadsAvailable(available, visible = true) {
   document.querySelectorAll(".seasonal-comparison-download-item").forEach((item) => {
-    item.classList.toggle("d-none", !available);
+    item.classList.toggle("d-none", !visible);
+    item.querySelectorAll("button").forEach((button) => {
+      button.disabled = !available;
+    });
   });
 }
 
@@ -591,13 +594,25 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     <div id="multi-year-ratio-chart" class="multi-year-chart"></div>`;
 
   const plotly = window.Plotly;
-  if (!plotly || !rows.length) {
+  if (!rows.length) {
     summaryWindow.__seasonalComparisonDownload = null;
-    setComparisonDownloadsAvailable(false);
+    setComparisonDownloadsAvailable(false, true);
     return;
   }
 
   const years = [...new Set(rows.map((row) => row.year))];
+  summaryWindow.__seasonalComparisonDownload = {
+    rows,
+    periodCode: selectedPeriod.code,
+    periodLabel: selectedPeriod.label,
+    variable,
+    strip: metadata.strip,
+    depth: metadata.depth,
+    years,
+  };
+  setComparisonDownloadsAvailable(true);
+  if (!plotly) return;
+
   const yearLabel = (year) => {
     const yearRows = rows.filter((row) => row.year === year);
     return yearRows.some((row) => row.status === "Partial") ? `${year}*` : String(year);
@@ -659,16 +674,6 @@ function renderMultiYearComparison(section, yearEntries, periods, variable, unit
     xaxis: { title: "Anchor year and logger position", tickangle: -25 },
   }, { responsive: true, displaylogo: false });
 
-  summaryWindow.__seasonalComparisonDownload = {
-    rows,
-    periodCode: selectedPeriod.code,
-    periodLabel: selectedPeriod.label,
-    variable,
-    strip: metadata.strip,
-    depth: metadata.depth,
-    years,
-  };
-  setComparisonDownloadsAvailable(true);
 }
 
 function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
@@ -778,7 +783,7 @@ export async function updateSummaryStatistics() {
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
     summaryWindow.__seasonalComparisonDownload = null;
-    setComparisonDownloadsAvailable(false);
+    setComparisonDownloadsAvailable(false, granularity === "gseason");
     let periods = [];
     let periodsAnchorYear = year;
     if (granularity === "gseason") {
