@@ -671,6 +671,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
     xaxis: {
       title: "Anchor year",
+      autorange: true,
       categoryorder: "array",
       categoryarray: years.map(yearLabel),
     },
@@ -699,6 +700,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
     xaxis: {
       title: "Anchor year and logger position",
+      autorange: true,
       tickangle: -25,
       categoryorder: "array",
       categoryarray: ratioX,
