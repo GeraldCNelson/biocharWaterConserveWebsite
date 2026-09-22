@@ -629,8 +629,11 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   const rawTraces = positions.map((position) => ({
     type: "bar",
     name: position,
-    x: years.map(yearLabel),
-    y: years.map((year) => rows.find((row) => row.year === year && row.position === position)?.rawMean ?? null),
+    x: years,
+    y: years.map((year) => {
+      const value = rows.find((row) => row.year === year && row.position === position)?.rawMean;
+      return value == null || !Number.isFinite(Number(value)) ? null : Number(value);
+    }),
     marker: { color: colors[position] },
     hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
   }));
@@ -671,9 +674,11 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
     xaxis: {
       title: "Anchor year",
-      autorange: true,
-      categoryorder: "array",
-      categoryarray: years.map(yearLabel),
+      type: "linear",
+      tickmode: "array",
+      tickvals: years,
+      ticktext: years.map(yearLabel),
+      range: years.length ? [Math.min(...years) - 0.5, Math.max(...years) + 0.5] : undefined,
     },
   }, { responsive: true, displaylogo: false });
 
