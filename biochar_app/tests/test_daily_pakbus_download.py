@@ -39,6 +39,54 @@ def test_healthy_download_is_accepted() -> None:
     assert summary["S1T"]["maximum_gap_minutes"] == 15.0
 
 
+def test_routine_report_email_uses_compact_summary() -> None:
+    report = {
+        "status": "accepted",
+        "started_at": "2026-09-22T00:15:50-06:00",
+        "completed_at": "2026-09-22T00:37:49-06:00",
+        "diagnostic_report": "/tmp/diagnostic_report.json",
+        "recovery": {"requested_stations": [], "still_missing": [], "station_timings": []},
+        "station_timings": [
+            {
+                "station": "S1T",
+                "duration_seconds": 95.1,
+                "exit_code": 0,
+                "rows": 96,
+            }
+        ],
+        "stations": {"S1T": {"missing_time_ranges": []}},
+        "findings": [],
+        "archive": {
+            "status": "promoted",
+            "rows_received": 96,
+            "rows_added": 96,
+        },
+        "publication": {
+            "status": "published",
+            "logger_latest_timestamp": "2026-09-22T00:00:00",
+            "weather_latest_timestamp": "2026-09-22T00:15:00",
+            "website_service": "active",
+        },
+        "communication_reliability": {
+            "S3B": {
+                "recurrent_problem": True,
+                "initial_failures_last_7": 1,
+                "initial_failures_last_30": 6,
+                "unresolved_failures_last_30": 2,
+            }
+        },
+    }
+
+    body = _build_report_email_body(report)
+
+    assert "Stations: 1 healthy; 0 initial failures; 0 unresolved" in body
+    assert "Historical communication warnings:" in body
+    assert "2 unresolved failures in the last 30 runs" in body
+    assert "Action required: none" in body
+    assert "Station download timing:" not in body
+    assert "Battery warnings:" not in body
+
+
 def test_missing_station_gap_and_low_battery_are_critical() -> None:
     frame = _station_rows("S1T", 2, periods=95, battery=9.5).drop(index=[40, 41])
     findings, _summary = diagnose_download(

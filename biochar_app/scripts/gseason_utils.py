@@ -257,7 +257,6 @@ def compute_summary_statistics(df: pd.DataFrame, variable: str, strip: str, dept
     if not variable or not strip or not depth or df is None or df.empty:
         return {}, {}
 
-    df = df.copy()
     raw_stats: dict[str, dict] = {}
     ratio_stats: dict[str, dict] = {}
 
@@ -374,8 +373,38 @@ def compute_period_summary_rows(
     if df is None or df.empty or not normalized_periods or "timestamp" not in df.columns:
         return []
 
-    source = df.copy()
-    source["timestamp"] = pd.to_datetime(source["timestamp"], errors="coerce")
+    depth = str(depth)
+    if variable == "SWC":
+        required_columns = [
+            column for column in df.columns
+            if column == "timestamp"
+            or (
+                (column.startswith(f"SWC_vol_gal_{strip}_")
+                 or column.startswith(f"SWC_vol_L_{strip}_"))
+                and column.endswith(f"_{depth}")
+            )
+            or (
+                (column.startswith("SWC_vol_gal_") or column.startswith("SWC_vol_L_"))
+                and any(f"_{pair_strip}_" in column for pair_strip in ("S1", "S2", "S3", "S4"))
+                and column.endswith(f"_{depth}")
+            )
+        ]
+    else:
+        raw_prefix = f"{variable}_{depth}_raw_{strip}_"
+        ratio_prefixes = (
+            f"{variable}_{depth}_ratio_S1_S2_",
+            f"{variable}_{depth}_ratio_S3_S4_",
+        )
+        required_columns = [
+            column for column in df.columns
+            if column == "timestamp"
+            or column.startswith(raw_prefix)
+            or column.startswith(ratio_prefixes)
+        ]
+
+    source = df.loc[:, required_columns].copy()
+    if not pd.api.types.is_datetime64_any_dtype(source["timestamp"]):
+        source["timestamp"] = pd.to_datetime(source["timestamp"], errors="coerce")
     source = source.dropna(subset=["timestamp"])
     rows: list[dict[str, Any]] = []
     interval = pd.Timedelta(minutes=15)

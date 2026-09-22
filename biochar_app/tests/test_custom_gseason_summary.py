@@ -122,3 +122,38 @@ def test_custom_periods_are_rebased_for_cross_year_comparisons() -> None:
             "end": "2024-10-31",
         },
     ]
+
+
+def test_period_summary_ignores_unrelated_measurement_columns() -> None:
+    timestamps = pd.date_range("2026-04-01", periods=4, freq="15min")
+    frame = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "VWC_1_raw_S2_T": [20.0, 21.0, 22.0, 23.0],
+            "VWC_1_ratio_S1_S2_T": [1.0, 1.1, 1.2, 1.3],
+            "VWC_1_ratio_S3_S4_T": [0.8, 0.9, 1.0, 1.1],
+            "VWC_1_raw_S1_T": [99.0, 99.0, 99.0, 99.0],
+            "Temperature_3_raw_S4_B": [500.0, 500.0, 500.0, 500.0],
+        }
+    )
+
+    rows = compute_period_summary_rows(
+        frame,
+        year=2026,
+        periods=[
+            {
+                "code": "GROWING",
+                "label": "Growing Season",
+                "start": "2026-04-01",
+                "end": "2026-04-01",
+            }
+        ],
+        variable="VWC",
+        strip="S2",
+        depth="1",
+    )
+
+    raw_rows = [row for row in rows if row.get("raw_mean") is not None]
+    ratio_rows = [row for row in rows if row.get("ratio_mean") is not None]
+    assert [row["raw_mean"] for row in raw_rows] == [21.5]
+    assert sorted(row["ratio_mean"] for row in ratio_rows) == [0.95, 1.15]

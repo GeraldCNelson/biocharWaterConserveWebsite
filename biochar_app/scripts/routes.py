@@ -879,8 +879,8 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
             summary_year: int,
             summary_periods: list[dict[str, Any]],
         ) -> list[dict[str, Any]]:
-            completed_year = summary_year < pd.Timestamp.now().year
-            if completed_year:
+            materialized_cache_allowed = summary_year <= pd.Timestamp.now().year
+            if materialized_cache_allowed:
                 cached_rows = load_materialized_gseason_summary(
                     year=summary_year,
                     variable=variable,
@@ -919,7 +919,7 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                     depth=depth_code,
                 ))
 
-            if completed_year:
+            if materialized_cache_allowed:
                 try:
                     save_materialized_gseason_summary(
                         year=summary_year,
@@ -989,8 +989,10 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                     return {
                         "year": comparison_year,
                         "periods": comparison_periods,
-                        "gseason_stats": load_or_compute_year(
-                            comparison_year, comparison_periods
+                        "gseason_stats": (
+                            flat
+                            if comparison_year == year
+                            else load_or_compute_year(comparison_year, comparison_periods)
                         ),
                     }
 

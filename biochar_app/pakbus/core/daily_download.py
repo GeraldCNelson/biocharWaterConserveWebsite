@@ -29,6 +29,7 @@ import pandas as pd
 from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
 from biochar_app.pakbus.core.archive import DEFAULT_ARCHIVE_ROOT, promote_accepted_frame
+from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_cache
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -96,6 +97,82 @@ def _build_report_email_body(report: dict) -> str:
         item for item in findings if item.get("code") in {"battery_warning", "battery_critical", "battery_missing"}
     ]
 
+    all_timings = [
+        ("initial", item) for item in report.get("station_timings", [])
+    ] + [
+        ("recovery", item) for item in recovery.get("station_timings", [])
+    ]
+    gaps_found = any(
+        summary.get("missing_time_ranges", [])
+        for summary in station_summaries.values()
+    )
+    critical = [item for item in findings if item.get("severity") == "critical"]
+    recurrent = {
+        station: summary
+        for station, summary in report.get("communication_reliability", {}).items()
+        if summary.get("recurrent_problem")
+    }
+    archive = report.get("archive", {})
+    publication = report.get("publication", {})
+    unusually_slow = any(
+        float(item.get("duration_seconds") or 0) >= 120
+        for _, item in all_timings
+    )
+    routine_run = (
+        report.get("status") == "accepted"
+        and not attempted
+        and not still_missing
+        and not gaps_found
+        and not battery_findings
+        and not critical
+        and not unusually_slow
+        and archive.get("status") == "promoted"
+        and publication.get("status") == "published"
+        and publication.get("website_service") == "active"
+    )
+
+    if routine_run:
+        lines = [
+            f"Daily logger run status: {report.get('status')}",
+            f"Started: {report.get('started_at')}",
+            f"Completed: {report.get('completed_at', 'not completed')}",
+            f"Stations: {len(healthy)} healthy; 0 initial failures; 0 unresolved",
+            (
+                f"Archive: {archive.get('rows_received', 0)} validated rows promoted "
+                f"({archive.get('rows_added', 0)} new)"
+            ),
+            (
+                f"Published: logger through {publication.get('logger_latest_timestamp')}; "
+                f"weather through {publication.get('weather_latest_timestamp')}"
+            ),
+            f"Website service: {publication.get('website_service')}",
+        ]
+        seasonal_cache = publication.get("seasonal_cache", {})
+        if seasonal_cache:
+            lines.append(
+                "Seasonal summaries: "
+                f"{seasonal_cache.get('status')} "
+                f"({seasonal_cache.get('cache_entries', 0)} cache entries in "
+                f"{seasonal_cache.get('duration_seconds', 0)} seconds)"
+            )
+        if recurrent:
+            lines.extend(["", "Historical communication warnings:"])
+            for station, summary in sorted(recurrent.items()):
+                lines.append(
+                    f"- {station}: {summary.get('initial_failures_last_7', 0)} initial failures "
+                    f"in the last 7 runs; {summary.get('initial_failures_last_30', 0)} in the "
+                    f"last 30; {summary.get('unresolved_failures_last_30', 0)} unresolved "
+                    "failures in the last 30 runs"
+                )
+        else:
+            lines.extend(["", "Historical communication warnings: none"])
+        lines.extend([
+            "",
+            "Action required: none",
+            f"Full diagnostic report: {report.get('diagnostic_report')}",
+        ])
+        return "\n".join(lines)
+
     lines = [
         f"Daily logger run status: {report.get('status')}",
         f"Started: {report.get('started_at')}",
@@ -108,11 +185,6 @@ def _build_report_email_body(report: dict) -> str:
         f"Unresolved stations ({len(still_missing)}): {_station_names(still_missing)}",
         "",
         "Station download timing:",
-    ]
-    all_timings = [
-        ("initial", item) for item in report.get("station_timings", [])
-    ] + [
-        ("recovery", item) for item in recovery.get("station_timings", [])
     ]
     if all_timings:
         for pass_name, item in all_timings:
@@ -154,7 +226,6 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- none")
 
-    archive = report.get("archive", {})
     lines.extend(["", "Accepted-data archive:"])
     if archive.get("status") == "promoted":
         lines.append(
@@ -168,7 +239,6 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- not promoted")
 
-    publication = report.get("publication", {})
     lines.extend(["", "Website publication:"])
     if publication.get("status") == "published":
         lines.append(
@@ -180,6 +250,13 @@ def _build_report_email_body(report: dict) -> str:
         lines.append(
             f"- website service: {publication.get('website_service')}"
         )
+        seasonal_cache = publication.get("seasonal_cache", {})
+        if seasonal_cache:
+            cache_detail = seasonal_cache.get("detail")
+            lines.append(
+                f"- seasonal summaries: {seasonal_cache.get('status')}"
+                + (f" ({cache_detail})" if cache_detail else "")
+            )
     elif publication:
         lines.append(
             f"- {publication.get('status')}: {publication.get('detail', 'no details available')}"
@@ -187,7 +264,6 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- not attempted")
 
-    critical = [item for item in findings if item.get("severity") == "critical"]
     lines.extend(["", "Critical findings:"])
     if critical:
         for item in critical:
@@ -196,18 +272,14 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- none")
 
-    recurrent = {
-        station: summary
-        for station, summary in report.get("communication_reliability", {}).items()
-        if summary.get("recurrent_problem")
-    }
     lines.extend(["", "Recurring communication warnings:"])
     if recurrent:
         for station, summary in sorted(recurrent.items()):
             lines.append(
                 f"- {station}: {summary.get('initial_failures_last_7', 0)} initial failures "
                 f"in the last 7 runs; {summary.get('initial_failures_last_30', 0)} in the "
-                f"last 30; {summary.get('unresolved_failures_last_30', 0)} unresolved"
+                f"last 30; {summary.get('unresolved_failures_last_30', 0)} unresolved "
+                "failures in the last 30 runs"
             )
     else:
         lines.append("- none")
@@ -358,6 +430,15 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
     if pd.isna(logger_latest) or pd.isna(weather_latest):
         raise RuntimeError("publication output has no valid latest timestamp")
 
+    try:
+        seasonal_cache = warm_standard_gseason_cache(year)
+    except Exception as exc:
+        seasonal_cache = {
+            "status": "failed",
+            "year": int(year),
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+
     restart_status = "skipped"
     if restart:
         service = os.getenv("BIOCHAR_WEBSITE_SERVICE", "biochar")
@@ -384,6 +465,7 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
         "logger_rows": int(len(logger_frame)),
         "weather_rows": int(len(weather_frame)),
         "website_service": restart_status,
+        "seasonal_cache": seasonal_cache,
     }
 
 
@@ -823,6 +905,16 @@ def main(argv: list[str] | None = None) -> int:
                     run_dir,
                     restart=not args.skip_restart,
                 )
+                seasonal_cache = report["publication"].get("seasonal_cache", {})
+                if seasonal_cache.get("status") != "warmed":
+                    findings.append(Finding(
+                        "warning",
+                        "seasonal_cache_warm_failed",
+                        "Website data were published, but standard seasonal summaries "
+                        f"were not precomputed: {seasonal_cache.get('detail', 'unknown error')}",
+                    ))
+                    report["findings"] = [asdict(item) for item in findings]
+                    report["status"] = "accepted_with_warnings"
             except Exception as exc:
                 publication_finding = Finding(
                     "critical",
