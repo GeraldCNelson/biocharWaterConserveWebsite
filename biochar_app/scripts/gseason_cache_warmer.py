@@ -22,6 +22,24 @@ from biochar_app.scripts.gseason_materialized_cache import (
 from biochar_app.scripts.gseason_utils import compute_period_summary_rows, periods_to_list_of_dicts
 
 
+def _dated_default_periods(year: int) -> list[dict[str, str]]:
+    """Expand standard month-day periods exactly as the browser editor does."""
+    periods = periods_to_list_of_dicts(DEFAULT_GSEASON_PERIODS, preserve_year=True)
+    dated: list[dict[str, str]] = []
+    for period in periods:
+        start = str(period["start"])[-5:]
+        end = str(period["end"])[-5:]
+        start_month = int(start[:2])
+        end_month = int(end[:2])
+        start_year = int(year) - 1 if start_month > end_month else int(year)
+        dated.append({
+            **period,
+            "start": f"{start_year}-{start}",
+            "end": f"{int(year)}-{end}",
+        })
+    return dated
+
+
 def warm_standard_gseason_cache(
     year: int,
     *,
@@ -36,7 +54,7 @@ def warm_standard_gseason_cache(
     results safe to reuse until the next publication changes the source files.
     """
     started = perf_counter()
-    periods = periods_to_list_of_dicts(DEFAULT_GSEASON_PERIODS, preserve_year=True)
+    periods = _dated_default_periods(int(year))
     variable_values = tuple(str(value) for value in variables)
     strip_values = tuple(str(value) for value in strips)
     depth_values = tuple(str(value) for value in depths)

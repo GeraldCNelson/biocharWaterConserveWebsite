@@ -45,6 +45,23 @@ def test_warmer_materializes_each_requested_filter_and_unit(monkeypatch) -> None
     assert {item["unit_system"] for item in saved} == {"us", "metric"}
     assert all(item["year"] == 2026 for item in saved)
     assert all(item["rows"] for item in saved)
+    assert all(
+        item["periods"] == [
+            {
+                "code": "Q1_Winter",
+                "label": "Winter",
+                "start": "2025-11-01",
+                "end": "2026-03-31",
+            },
+            {
+                "code": "Q2_Growing",
+                "label": "Growing Season",
+                "start": "2026-04-01",
+                "end": "2026-10-31",
+            },
+        ]
+        for item in saved
+    )
 
 
 def test_warmer_reuses_valid_entries_without_loading_source(monkeypatch) -> None:
