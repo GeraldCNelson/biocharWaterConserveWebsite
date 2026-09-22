@@ -29,7 +29,7 @@ import pandas as pd
 from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
 from biochar_app.pakbus.core.archive import DEFAULT_ARCHIVE_ROOT, promote_accepted_frame
-from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_cache
+from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_caches
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -431,7 +431,7 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
         raise RuntimeError("publication output has no valid latest timestamp")
 
     try:
-        seasonal_cache = warm_standard_gseason_cache(year)
+        seasonal_cache = warm_standard_gseason_caches()
     except Exception as exc:
         seasonal_cache = {
             "status": "failed",
