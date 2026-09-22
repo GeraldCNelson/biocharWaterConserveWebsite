@@ -7,7 +7,7 @@ Regenerate both the Markdown and JSON catalogs with:
 python biochar_app/scripts/dev-tools/build_function_catalog.py
 ```
 
-- Python functions and methods: **1603**
+- Python functions and methods: **1650**
 - JavaScript functions: **326**
 - Files with Python parse errors: **4**
 
@@ -63,8 +63,8 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/config/paths.py`
 
-- **`irrigation_analysis_paths(variant: str \| None=None) -> dict[str, Path]`** — line 123; function; public/exported. Return output paths for one irrigation-analysis variant.
-- **`ensure_analysis_output_directories(paths: dict[str, Path]) -> None`** — line 143; function; public/exported. Create an irrigation-analysis output directory tree if it does not exist.
+- **`irrigation_analysis_paths(variant: str \| None=None) -> dict[str, Path]`** — line 124; function; public/exported. Return output paths for one irrigation-analysis variant.
+- **`ensure_analysis_output_directories(paths: dict[str, Path]) -> None`** — line 144; function; public/exported. Create an irrigation-analysis output directory tree if it does not exist.
 
 ### `biochar_app/config/thresholds.py`
 
@@ -1250,6 +1250,11 @@ and some class/object method syntaxes may require manual review.
 - **`_read_toa5_table1_dat(datfile: Path) -> pd.DataFrame`** — line 79; function; internal. Read a Campbell Scientific TOA5 Table1 .dat file and return a DataFrame with column names derived from the TOA5 header row.
 - **`read_dat_timestamps(datfile: Path) -> pd.Series`** — line 108; function; public/exported. Convenience helper: - reads TOA5 Table1 .dat - normalizes TIMESTAMP -> 'timestamp' if needed - parses timestamps using normalize_logger_timestamp_series() - drops NaT - returns Series[datetime64[ns]] suitable for diff/gap analysis
 
+### `biochar_app/scripts/management/analyze_precipitation_retention.py`
+
+- **`parse_args() -> argparse.Namespace`** — line 48; function; public/exported. No docstring.
+- **`main() -> None`** — line 61; function; public/exported. No docstring.
+
 ### `biochar_app/scripts/management/apply_duplicate_actions.py`
 
 - **`parse_args() -> argparse.Namespace`** — line 75; function; public/exported. No docstring.
@@ -1272,17 +1277,17 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/management/build_irrigation_from_master.py`
 
-- **`stable_event_id(date_value: object, start_value: object, strip_group: str) -> str`** — line 135; function; public/exported. Create a deterministic ID for a newly encountered workbook event.
-- **`existing_event_ids(path: Path) -> dict[tuple[str, str, str], str]`** — line 148; function; public/exported. Read prior event IDs so unchanged events retain stable identifiers.
-- **`concurrent_group_counts(events: pd.DataFrame) -> pd.Series`** — line 185; function; public/exported. Count strip groups sharing one physical meter interval.
-- **`build_candidate_from_events(events: pd.DataFrame, *, prior_event_ids: dict[tuple[str, str, str], str] \| None=None, source_workbook_name: str='biochar-data-master.xlsx') -> tuple[pd.DataFrame, pd.DataFrame]`** — line 196; function; public/exported. Expand valid group-level workbook events into canonical strip-level rows.
-- **`build_qc_candidate(candidate: pd.DataFrame) -> pd.DataFrame`** — line 394; function; public/exported. Apply established photo-supported corrections and validate them.
-- **`validate_production(production: pd.DataFrame, *, previous_production: pd.DataFrame \| None=None) -> None`** — line 423; function; public/exported. Validate schema, uniqueness, volumes, and accidental row loss.
-- **`atomic_write_csv(path: Path, dataframe: pd.DataFrame) -> None`** — line 464; function; public/exported. Write one CSV through a temporary file and atomically replace it.
-- **`atomic_write_json(path: Path, payload: dict[str, Any]) -> None`** — line 488; function; public/exported. Write one JSON audit through a temporary file.
-- **`build_and_install_irrigation(*, workbook_path: Path=BIOCHAR_MASTER_WORKBOOK, candidate_path: Path=DEFAULT_CANDIDATE_CSV, qc_candidate_path: Path=IRRIGATION_QC_CSV, production_path: Path=IRRIGATION_PRODUCTION_CSV, invalid_rows_path: Path=DEFAULT_INVALID_ROWS_CSV, audit_path: Path=DEFAULT_AUDIT_JSON, dry_run: bool=False) -> dict[str, Any]`** — line 509; function; public/exported. Build, validate, and optionally install all irrigation products.
-- **`parse_args() -> argparse.Namespace`** — line 568; function; public/exported. No docstring.
-- **`main() -> None`** — line 588; function; public/exported. No docstring.
+- **`stable_event_id(date_value: object, start_value: object, strip_group: str) -> str`** — line 142; function; public/exported. Create a deterministic ID for a newly encountered workbook event.
+- **`existing_event_ids(path: Path) -> dict[tuple[str, str, str], str]`** — line 155; function; public/exported. Read prior event IDs so unchanged events retain stable identifiers.
+- **`concurrent_group_counts(events: pd.DataFrame) -> pd.Series`** — line 192; function; public/exported. Count strip groups sharing one physical meter interval.
+- **`build_candidate_from_events(events: pd.DataFrame, *, prior_event_ids: dict[tuple[str, str, str], str] \| None=None, source_workbook_name: str='biochar-data-master.xlsx') -> tuple[pd.DataFrame, pd.DataFrame]`** — line 203; function; public/exported. Expand valid group-level workbook events into canonical strip-level rows.
+- **`build_qc_candidate(candidate: pd.DataFrame) -> pd.DataFrame`** — line 401; function; public/exported. Apply established photo-supported corrections and validate them.
+- **`validate_production(production: pd.DataFrame, *, previous_production: pd.DataFrame \| None=None) -> None`** — line 430; function; public/exported. Validate schema, uniqueness, volumes, and accidental row loss.
+- **`atomic_write_csv(path: Path, dataframe: pd.DataFrame) -> None`** — line 471; function; public/exported. Write one CSV through a temporary file and atomically replace it.
+- **`atomic_write_json(path: Path, payload: dict[str, Any]) -> None`** — line 495; function; public/exported. Write one JSON audit through a temporary file.
+- **`build_and_install_irrigation(*, workbook_path: Path=BIOCHAR_MASTER_WORKBOOK, candidate_path: Path=DEFAULT_CANDIDATE_CSV, qc_candidate_path: Path=IRRIGATION_QC_CSV, production_path: Path=IRRIGATION_PRODUCTION_CSV, invalid_rows_path: Path=DEFAULT_INVALID_ROWS_CSV, audit_path: Path=DEFAULT_AUDIT_JSON, dry_run: bool=False) -> dict[str, Any]`** — line 516; function; public/exported. Build, validate, and optionally install all irrigation products.
+- **`parse_args() -> argparse.Namespace`** — line 575; function; public/exported. No docstring.
+- **`main() -> None`** — line 595; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/management/build_irrigation_qc_candidate.py`
 
@@ -1396,19 +1401,19 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/management/estimate_irrigation_holding_capacity.py`
 
-- **`prune_stale_multidepth_figures(*, year: int, plot_log: pd.DataFrame, multidepth_plot_dir: Path) -> list[Path]`** — line 201; function; public/exported. Remove obsolete generated event plots for one successfully built year.
-- **`concat_nonempty_informative_frames(frames: list[pd.DataFrame]) -> pd.DataFrame`** — line 247; function; public/exported. Concatenate nonempty frames without pandas' all-NA dtype warning.
-- **`logger_order_flag_summary(arrival_order_table: pd.DataFrame) -> pd.DataFrame`** — line 271; function; public/exported. Return one console-summary row per flagged event and strip.
-- **`build_irrigation_event_response_summary(arrival_times: pd.DataFrame, event_results: pd.DataFrame) -> pd.DataFrame`** — line 305; function; public/exported. Build one summary row per logger position for each irrigation event.
-- **`analyze_loggers_all_depths(df_15min: pd.DataFrame, irrigation_events: pd.DataFrame, strips: list[str], year: int, logger_positions: list[str] \| None=None) -> pd.DataFrame`** — line 635; function; public/exported. Analyze irrigation responses for all available depths and selected loggers.
-- **`build_enhanced_event_debug_table(event_results: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 798; function; public/exported. No docstring.
-- **`build_enhanced_runtime_table(event_results: pd.DataFrame, min_events: int=3) -> pd.DataFrame`** — line 861; function; public/exported. No docstring.
-- **`write_year_outputs(year: int, df_15min: pd.DataFrame, results: pd.DataFrame, zone_storage_table: pd.DataFrame, plot_results: pd.DataFrame \| None=None, *, diagnostics_dir: Path=IRRIGATION_DIAGNOSTICS_DIR, holding_capacity_dir: Path=HOLDING_CAPACITY_DIR, figures_dir: Path=IRRIGATION_FIGURES_DIR) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 941; function; public/exported. Write yearly irrigation-analysis outputs.
-- **`_append_if_not_empty(collection: list[pd.DataFrame], df: pd.DataFrame) -> None`** — line 1676; function; internal. No docstring.
-- **`_write_zone_storage_outputs(all_event_storage_zone_tables: list[pd.DataFrame], *, holding_capacity_dir: Path) -> pd.DataFrame`** — line 1680; function; internal. No docstring.
-- **`write_all_logger_debug_table(*, year: int, all_logger_results: pd.DataFrame, holding_capacity_dir: Path) -> pd.DataFrame`** — line 1771; function; public/exported. Write depth-level irrigation diagnostics for all logger positions.
-- **`_write_combined_year_outputs(all_pre_start_flags: list[pd.DataFrame], all_trustworthy_tables: list[pd.DataFrame], all_holding_capacity_tables: list[pd.DataFrame], all_water_balance_tables: list[pd.DataFrame], combined_zone_storage: pd.DataFrame, *, diagnostics_dir: Path, holding_capacity_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 1837; function; internal. No docstring.
-- **`main() -> None`** — line 1985; function; public/exported. No docstring.
+- **`prune_stale_multidepth_figures(*, year: int, plot_log: pd.DataFrame, multidepth_plot_dir: Path) -> list[Path]`** — line 205; function; public/exported. Remove obsolete generated event plots for one successfully built year.
+- **`concat_nonempty_informative_frames(frames: list[pd.DataFrame]) -> pd.DataFrame`** — line 251; function; public/exported. Concatenate nonempty frames without pandas' all-NA dtype warning.
+- **`logger_order_flag_summary(arrival_order_table: pd.DataFrame) -> pd.DataFrame`** — line 275; function; public/exported. Return one console-summary row per flagged event and strip.
+- **`build_irrigation_event_response_summary(arrival_times: pd.DataFrame, event_results: pd.DataFrame) -> pd.DataFrame`** — line 309; function; public/exported. Build one summary row per logger position for each irrigation event.
+- **`analyze_loggers_all_depths(df_15min: pd.DataFrame, irrigation_events: pd.DataFrame, strips: list[str], year: int, logger_positions: list[str] \| None=None) -> pd.DataFrame`** — line 639; function; public/exported. Analyze irrigation responses for all available depths and selected loggers.
+- **`build_enhanced_event_debug_table(event_results: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 802; function; public/exported. No docstring.
+- **`build_enhanced_runtime_table(event_results: pd.DataFrame, min_events: int=3) -> pd.DataFrame`** — line 865; function; public/exported. No docstring.
+- **`write_year_outputs(year: int, df_15min: pd.DataFrame, results: pd.DataFrame, zone_storage_table: pd.DataFrame, plot_results: pd.DataFrame \| None=None, *, diagnostics_dir: Path=IRRIGATION_DIAGNOSTICS_DIR, holding_capacity_dir: Path=HOLDING_CAPACITY_DIR, figures_dir: Path=IRRIGATION_FIGURES_DIR) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 945; function; public/exported. Write yearly irrigation-analysis outputs.
+- **`_append_if_not_empty(collection: list[pd.DataFrame], df: pd.DataFrame) -> None`** — line 1734; function; internal. No docstring.
+- **`_write_zone_storage_outputs(all_event_storage_zone_tables: list[pd.DataFrame], *, holding_capacity_dir: Path) -> pd.DataFrame`** — line 1738; function; internal. No docstring.
+- **`write_all_logger_debug_table(*, year: int, all_logger_results: pd.DataFrame, holding_capacity_dir: Path) -> pd.DataFrame`** — line 1829; function; public/exported. Write depth-level irrigation diagnostics for all logger positions.
+- **`_write_combined_year_outputs(all_pre_start_flags: list[pd.DataFrame], all_trustworthy_tables: list[pd.DataFrame], all_position_pre_start_flags: list[pd.DataFrame], all_position_trustworthy_tables: list[pd.DataFrame], all_holding_capacity_tables: list[pd.DataFrame], all_water_balance_tables: list[pd.DataFrame], all_matched_sensor_event_tables: list[pd.DataFrame], combined_zone_storage: pd.DataFrame, *, diagnostics_dir: Path, holding_capacity_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 1895; function; internal. No docstring.
+- **`main() -> None`** — line 2071; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/management/extract_irrigation_photo_events.py`
 
@@ -1494,12 +1499,12 @@ and some class/object method syntaxes may require manual review.
 - **`battery_col_for_sensor(sensor_col: str) -> str \| None`** — line 597; function; public/exported. No docstring.
 - **`battery_window_summary(df_15min: pd.DataFrame, battery_col: str \| None, start: pd.Timestamp, end: pd.Timestamp, vmin_ok: float=BATTERY_MIN_OK, vmax_ok: float=BATTERY_MAX_OK) -> dict[str, object]`** — line 603; function; public/exported. No docstring.
 - **`detect_pre_start_response(df_15min: pd.DataFrame, event_results: pd.DataFrame, lookback_hours: float=6.0, min_increase: float=0.5, precip_col: str='precip_in', min_precip_in: float=MIN_PRECIP_IN) -> pd.DataFrame`** — line 648; function; public/exported. No docstring.
-- **`classify_trustworthy_irrigation_events(pre_start_table: pd.DataFrame, min_bottom_response_delay_hr: float=MIN_BOTTOM_RESPONSE_DELAY_HR) -> pd.DataFrame`** — line 860; function; public/exported. No docstring.
-- **`build_arrival_order_diagnostics(arrival_times: pd.DataFrame) -> pd.DataFrame`** — line 950; function; public/exported. No docstring.
-- **`build_arrival_order_diagnostics._as_float_or_none(value: object) -> float \| None`** — line 956; nested function; internal. No docstring.
-- **`build_arrival_order_diagnostics._as_bool(value: object) -> bool`** — line 960; nested function; internal. No docstring.
-- **`build_arrival_order_diagnostics._depth_order_class(v6: float \| None, v12: float \| None, v18: float \| None) -> str`** — line 972; nested function; internal. No docstring.
-- **`build_arrival_order_diagnostics._logger_order_class(top: float \| None, middle: float \| None, bottom: float \| None) -> str`** — line 989; nested function; internal. No docstring.
+- **`classify_trustworthy_irrigation_events(pre_start_table: pd.DataFrame, min_bottom_response_delay_hr: float=MIN_BOTTOM_RESPONSE_DELAY_HR) -> pd.DataFrame`** — line 862; function; public/exported. No docstring.
+- **`build_arrival_order_diagnostics(arrival_times: pd.DataFrame) -> pd.DataFrame`** — line 953; function; public/exported. No docstring.
+- **`build_arrival_order_diagnostics._as_float_or_none(value: object) -> float \| None`** — line 959; nested function; internal. No docstring.
+- **`build_arrival_order_diagnostics._as_bool(value: object) -> bool`** — line 963; nested function; internal. No docstring.
+- **`build_arrival_order_diagnostics._depth_order_class(v6: float \| None, v12: float \| None, v18: float \| None) -> str`** — line 975; nested function; internal. No docstring.
+- **`build_arrival_order_diagnostics._logger_order_class(top: float \| None, middle: float \| None, bottom: float \| None) -> str`** — line 992; nested function; internal. No docstring.
 
 ### `biochar_app/scripts/management/irrigation_analysis/diagnostics/analyze_post_irrigation_retention_statistics.py`
 
@@ -1563,31 +1568,35 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/scripts/management/irrigation_analysis/holding_capacity.py`
 
-- **`build_event_storage_by_event(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 72; function; public/exported. Build one whole-strip storage row per irrigation event.
-- **`build_zone_storage_summary(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 341; function; public/exported. Summarize event storage by year, strip, and logger influence zone.
-- **`build_flow_storage_correlation_summary(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 453; function; public/exported. Summarize the relationship between average irrigation flow rate and estimated 0-18 inch zone storage.
-- **`build_zone_ordering_frequency(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 538; function; public/exported. Summarize the frequency of relative top/middle/bottom zone-storage ordering across complete events.
-- **`build_zone_ordering_frequency.ordering(row: pd.Series) -> str`** — line 586; nested function; public/exported. No docstring.
-- **`build_zone_anomaly_diagnostics(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 635; function; public/exported. Identify selected historical zone-storage patterns that were previously flagged for closer review.
-- **`build_event_storage_by_zone(event_results: pd.DataFrame) -> pd.DataFrame`** — line 752; function; public/exported. Estimate 0-18 inch irrigation-induced soil-water storage by logger zone.
-- **`add_response_delta_fields(df: pd.DataFrame) -> pd.DataFrame`** — line 1405; function; public/exported. Add simple response (peak - baseline) fields.
-- **`build_first_pass_water_balance_table(trustworthy_table: pd.DataFrame, zone_storage_table: pd.DataFrame, arrival_times: pd.DataFrame) -> pd.DataFrame`** — line 1432; function; public/exported. Build a first-pass whole-strip irrigation water balance.
-- **`build_first_pass_water_balance_table.combine_qc_reasons(values: pd.Series) -> str`** — line 1534; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary(water_balance: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 1923; function; public/exported. Build compact biochar irrigation-performance summaries.
-- **`build_biochar_performance_summary.numeric_values(frame: pd.DataFrame, column: str) -> pd.Series`** — line 2184; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.mean_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 2201; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.median_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 2217; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.pct_true(values: pd.Series) -> float \| object`** — line 2233; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.compact_round(frame: pd.DataFrame) -> pd.DataFrame`** — line 2248; nested function; public/exported. Apply reporting-specific rounding.
-- **`build_biochar_performance_summary.numeric_values(frame: pd.DataFrame, column: str) -> pd.Series`** — line 3423; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.mean_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 3440; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.median_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 3456; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.pct_true(values: pd.Series) -> float \| object`** — line 3472; nested function; public/exported. No docstring.
-- **`build_biochar_performance_summary.compact_round(frame: pd.DataFrame) -> pd.DataFrame`** — line 3487; nested function; public/exported. Apply reporting-specific rounding.
-- **`summarize_holding_capacity_from_trustworthy_events(trustworthy_table: pd.DataFrame) -> pd.DataFrame`** — line 4411; function; public/exported. Estimate logger-location holding capacity from trustworthy irrigation events.
-- **`summarize_holding_capacity_from_trustworthy_events.capacity_confidence(row: pd.Series) -> str`** — line 4551; nested function; public/exported. No docstring.
-- **`build_trustworthy_holding_capacity_summary(trustworthy_table: pd.DataFrame, event_results: pd.DataFrame) -> pd.DataFrame`** — line 4597; function; public/exported. Summarize trustworthy bottom-logger irrigation responses by sensor depth.
-- **`add_scaled_storage_fields(results: pd.DataFrame) -> pd.DataFrame`** — line 4900; function; public/exported. Add explicit layer-scale storage fields to irrigation event results.
+- **`build_event_storage_by_event(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 74; function; public/exported. Build one whole-strip storage row per irrigation event.
+- **`build_zone_storage_summary(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 343; function; public/exported. Summarize event storage by year, strip, and logger influence zone.
+- **`build_flow_storage_correlation_summary(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 455; function; public/exported. Summarize the relationship between average irrigation flow rate and estimated 0-18 inch zone storage.
+- **`build_zone_ordering_frequency(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 540; function; public/exported. Summarize the frequency of relative top/middle/bottom zone-storage ordering across complete events.
+- **`build_zone_ordering_frequency.ordering(row: pd.Series) -> str`** — line 588; nested function; public/exported. No docstring.
+- **`build_zone_anomaly_diagnostics(zone_df: pd.DataFrame) -> pd.DataFrame`** — line 637; function; public/exported. Identify selected historical zone-storage patterns that were previously flagged for closer review.
+- **`build_event_storage_by_zone(event_results: pd.DataFrame) -> pd.DataFrame`** — line 754; function; public/exported. Estimate 0-18 inch irrigation-induced soil-water storage by logger zone.
+- **`add_response_delta_fields(df: pd.DataFrame) -> pd.DataFrame`** — line 1407; function; public/exported. Add simple response (peak - baseline) fields.
+- **`build_first_pass_water_balance_table(trustworthy_table: pd.DataFrame, zone_storage_table: pd.DataFrame, arrival_times: pd.DataFrame) -> pd.DataFrame`** — line 1434; function; public/exported. Build a first-pass whole-strip irrigation water balance.
+- **`build_first_pass_water_balance_table.combine_qc_reasons(values: pd.Series) -> str`** — line 1536; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary(water_balance: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]`** — line 1970; function; public/exported. Build compact biochar irrigation-performance summaries.
+- **`build_biochar_performance_summary.numeric_values(frame: pd.DataFrame, column: str) -> pd.Series`** — line 2231; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.mean_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 2248; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.median_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 2264; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.pct_true(values: pd.Series) -> float \| object`** — line 2280; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.compact_round(frame: pd.DataFrame) -> pd.DataFrame`** — line 2295; nested function; public/exported. Apply reporting-specific rounding.
+- **`build_biochar_performance_summary.numeric_values(frame: pd.DataFrame, column: str) -> pd.Series`** — line 3470; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.mean_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 3487; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.median_value(frame: pd.DataFrame, column: str) -> float \| object`** — line 3503; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.pct_true(values: pd.Series) -> float \| object`** — line 3519; nested function; public/exported. No docstring.
+- **`build_biochar_performance_summary.compact_round(frame: pd.DataFrame) -> pd.DataFrame`** — line 3534; nested function; public/exported. Apply reporting-specific rounding.
+- **`summarize_holding_capacity_from_trustworthy_events(trustworthy_table: pd.DataFrame) -> pd.DataFrame`** — line 4458; function; public/exported. Estimate logger-location holding capacity from trustworthy irrigation events.
+- **`summarize_holding_capacity_from_trustworthy_events.capacity_confidence(row: pd.Series) -> str`** — line 4600; nested function; public/exported. No docstring.
+- **`build_trustworthy_holding_capacity_summary(trustworthy_table: pd.DataFrame, event_results: pd.DataFrame) -> pd.DataFrame`** — line 4646; function; public/exported. Summarize trustworthy bottom-logger irrigation responses by sensor depth.
+- **`build_holding_capacity_year_stability_summary(annual_summary: pd.DataFrame) -> pd.DataFrame`** — line 4951; function; public/exported. Compare annual holding-capacity estimates before years are pooled.
+- **`build_holding_capacity_annual_comparison(annual_summary: pd.DataFrame, stability_summary: pd.DataFrame) -> pd.DataFrame`** — line 5041; function; public/exported. Build a compact annual-versus-pooled holding-capacity comparison.
+- **`build_matched_sensor_treatment_events(event_results: pd.DataFrame, trustworthy_table: pd.DataFrame) -> pd.DataFrame`** — line 5125; function; public/exported. Pair biochar and control sensor responses within irrigation events.
+- **`summarize_matched_sensor_treatment_events(matched_events: pd.DataFrame) -> pd.DataFrame`** — line 5229; function; public/exported. Summarize paired biochar-minus-control responses and variability.
+- **`add_scaled_storage_fields(results: pd.DataFrame) -> pd.DataFrame`** — line 5309; function; public/exported. Add explicit layer-scale storage fields to irrigation event results.
 
 ### `biochar_app/scripts/management/irrigation_analysis/irrigation_response_analysis.py`
 
@@ -1609,21 +1618,21 @@ and some class/object method syntaxes may require manual review.
 - **`_group_iter(df: pd.DataFrame, group_cols: Sequence[str]) -> Iterable[tuple[Any, pd.DataFrame]]`** — line 247; function; internal. No docstring.
 - **`_safe_value_at_timestamp(df: pd.DataFrame, timestamp: Optional[pd.Timestamp], column: str) -> Optional[float]`** — line 258; function; internal. No docstring.
 - **`build_variable_definitions_table() -> pd.DataFrame`** — line 272; function; public/exported. No docstring.
-- **`compute_event_storage_metrics(df: pd.DataFrame, sensor_meta: SensorMeta, baseline_time: Optional[pd.Timestamp], plateau_time: Optional[pd.Timestamp], gallons_strip: Optional[float]) -> dict[str, object]`** — line 465; function; public/exported. Build local sensor-volume diagnostics for an event.
-- **`compute_event_storage_metrics.values_at(columns: Sequence[str], timestamp: Optional[pd.Timestamp]) -> list[float]`** — line 508; nested function; public/exported. No docstring.
-- **`find_event_baseline(series: pd.Series, irrigation_start: pd.Timestamp, baseline_lookback_hours: float=2.0) -> tuple[Optional[float], Optional[pd.Timestamp]]`** — line 593; function; public/exported. No docstring.
-- **`find_event_peak(series: pd.Series, irrigation_start: pd.Timestamp, peak_search_hours_after_start: float=24.0, min_peak_increase: float=0.5, baseline_vwc: Optional[float]=None) -> dict[str, object]`** — line 607; function; public/exported. No docstring.
-- **`find_post_peak_plateau(series: pd.Series, peak_time: pd.Timestamp, config: PlateauConfig) -> dict[str, object]`** — line 638; function; public/exported. No docstring.
-- **`analyze_single_event_sensor(df: pd.DataFrame, sensor_col: str, irrigation_start: pd.Timestamp, irrigation_end: Optional[pd.Timestamp]=None, gallons_strip: Optional[float]=None, gallons_group: Optional[float]=None, strip: Optional[str]=None, year: Optional[int]=None, event_id: Optional[object]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None) -> dict[str, object]`** — line 713; function; public/exported. No docstring.
-- **`analyze_irrigation_events(df: pd.DataFrame, events: pd.DataFrame, sensor_cols: Sequence[str], start_col: str='start', end_col: str='end', gallons_strip_col: str='gallons_strip', gallons_group_col: Optional[str]='gallons_group', strip: Optional[str]=None, year: Optional[int]=None, event_id_col: Optional[str]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None, layer_thickness_inches: float=6.0) -> pd.DataFrame`** — line 855; function; public/exported. Analyze irrigation events for selected VWC sensors.
-- **`analyze_irrigation_events.count_numeric_values(s: pd.Series) -> int`** — line 1024; nested function; public/exported. No docstring.
-- **`analyze_bottom_logger_controls(df_15min: pd.DataFrame, strips: Sequence[str], year: int, strip_to_bottom_sensor: Optional[dict[str, str]]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None) -> pd.DataFrame`** — line 1117; function; public/exported. No docstring.
-- **`add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame`** — line 1198; function; public/exported. No docstring.
-- **`build_event_debug_table(event_results: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 1244; function; public/exported. No docstring.
-- **`estimate_statistical_target(event_results: pd.DataFrame, value_col: str='plateau_vwc', group_cols: Optional[Sequence[str]]=None, target_config: Optional[TargetConfig]=None) -> pd.DataFrame`** — line 1293; function; public/exported. No docstring.
-- **`recommend_runtime_from_history(event_results: pd.DataFrame, target_time_col: str='time_to_plateau_hours', group_cols: Optional[Sequence[str]]=None, min_events: int=3, summary_stat: str='median') -> pd.DataFrame`** — line 1344; function; public/exported. No docstring.
-- **`summarize_targets_and_runtimes(event_results: pd.DataFrame, group_cols: Sequence[str]=('strip', 'sensor_col'), min_events: int=3, k_std: float=0.5, runtime_summary_stat: str='median') -> tuple[pd.DataFrame, pd.DataFrame]`** — line 1395; function; public/exported. No docstring.
-- **`build_depth_target_runtime_summary(event_results: pd.DataFrame, min_events: int=3, k_std: float=0.5) -> pd.DataFrame`** — line 1419; function; public/exported. No docstring.
+- **`compute_event_storage_metrics(df: pd.DataFrame, sensor_meta: SensorMeta, baseline_time: Optional[pd.Timestamp], plateau_time: Optional[pd.Timestamp], gallons_strip: Optional[float]) -> dict[str, object]`** — line 522; function; public/exported. Build local sensor-volume diagnostics for an event.
+- **`compute_event_storage_metrics.values_at(columns: Sequence[str], timestamp: Optional[pd.Timestamp]) -> list[float]`** — line 565; nested function; public/exported. No docstring.
+- **`find_event_baseline(series: pd.Series, irrigation_start: pd.Timestamp, baseline_lookback_hours: float=2.0) -> tuple[Optional[float], Optional[pd.Timestamp]]`** — line 650; function; public/exported. No docstring.
+- **`find_event_peak(series: pd.Series, irrigation_start: pd.Timestamp, peak_search_hours_after_start: float=24.0, min_peak_increase: float=0.5, baseline_vwc: Optional[float]=None) -> dict[str, object]`** — line 664; function; public/exported. No docstring.
+- **`find_post_peak_plateau(series: pd.Series, peak_time: pd.Timestamp, config: PlateauConfig) -> dict[str, object]`** — line 695; function; public/exported. No docstring.
+- **`analyze_single_event_sensor(df: pd.DataFrame, sensor_col: str, irrigation_start: pd.Timestamp, irrigation_end: Optional[pd.Timestamp]=None, gallons_strip: Optional[float]=None, gallons_group: Optional[float]=None, strip: Optional[str]=None, year: Optional[int]=None, event_id: Optional[object]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None) -> dict[str, object]`** — line 770; function; public/exported. No docstring.
+- **`analyze_irrigation_events(df: pd.DataFrame, events: pd.DataFrame, sensor_cols: Sequence[str], start_col: str='start', end_col: str='end', gallons_strip_col: str='gallons_strip', gallons_group_col: Optional[str]='gallons_group', strip: Optional[str]=None, year: Optional[int]=None, event_id_col: Optional[str]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None, layer_thickness_inches: float=6.0) -> pd.DataFrame`** — line 912; function; public/exported. Analyze irrigation events for selected VWC sensors.
+- **`analyze_irrigation_events.count_numeric_values(s: pd.Series) -> int`** — line 1081; nested function; public/exported. No docstring.
+- **`analyze_bottom_logger_controls(df_15min: pd.DataFrame, strips: Sequence[str], year: int, strip_to_bottom_sensor: Optional[dict[str, str]]=None, search_config: Optional[EventSearchConfig]=None, plateau_config: Optional[PlateauConfig]=None) -> pd.DataFrame`** — line 1174; function; public/exported. No docstring.
+- **`add_derived_event_fields(event_results: pd.DataFrame) -> pd.DataFrame`** — line 1255; function; public/exported. No docstring.
+- **`build_event_debug_table(event_results: pd.DataFrame, decimals: int=2) -> pd.DataFrame`** — line 1301; function; public/exported. No docstring.
+- **`estimate_statistical_target(event_results: pd.DataFrame, value_col: str='plateau_vwc', group_cols: Optional[Sequence[str]]=None, target_config: Optional[TargetConfig]=None) -> pd.DataFrame`** — line 1350; function; public/exported. No docstring.
+- **`recommend_runtime_from_history(event_results: pd.DataFrame, target_time_col: str='time_to_plateau_hours', group_cols: Optional[Sequence[str]]=None, min_events: int=3, summary_stat: str='median') -> pd.DataFrame`** — line 1401; function; public/exported. No docstring.
+- **`summarize_targets_and_runtimes(event_results: pd.DataFrame, group_cols: Sequence[str]=('strip', 'sensor_col'), min_events: int=3, k_std: float=0.5, runtime_summary_stat: str='median') -> tuple[pd.DataFrame, pd.DataFrame]`** — line 1452; function; public/exported. No docstring.
+- **`build_depth_target_runtime_summary(event_results: pd.DataFrame, min_events: int=3, k_std: float=0.5) -> pd.DataFrame`** — line 1476; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/management/irrigation_analysis/plotting.py`
 
@@ -1653,6 +1662,30 @@ and some class/object method syntaxes may require manual review.
 - **`plot_mean_storage_depth_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None`** — line 1344; function; public/exported. No docstring.
 - **`plot_mean_storage_by_zone(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None`** — line 1387; function; public/exported. No docstring.
 - **`plot_mean_storage_by_zone_by_year(zone_df: pd.DataFrame, HOLDING_CAPACITY_DIR: Path) -> None`** — line 1449; function; public/exported. No docstring.
+
+### `biochar_app/scripts/management/irrigation_analysis/precipitation_retention.py`
+
+- **`_with_datetime_index(frame: pd.DataFrame) -> pd.DataFrame`** — line 67; function; internal. No docstring.
+- **`identify_precipitation_events(weather: pd.DataFrame, *, config: PrecipitationRetentionConfig=PrecipitationRetentionConfig()) -> pd.DataFrame`** — line 78; function; public/exported. Group wet days, allowing configured dry days inside one event.
+- **`flag_irrigation_overlap(events: pd.DataFrame, irrigation: pd.DataFrame, *, config: PrecipitationRetentionConfig=PrecipitationRetentionConfig()) -> pd.DataFrame`** — line 121; function; public/exported. Flag events whose baseline-to-72-hour window includes irrigation.
+- **`_window_stats(series: pd.Series, start: pd.Timestamp, end: pd.Timestamp) -> tuple[float, float]`** — line 143; function; internal. No docstring.
+- **`analyze_precipitation_sensor_responses(logger: pd.DataFrame, events: pd.DataFrame, *, config: PrecipitationRetentionConfig=PrecipitationRetentionConfig()) -> pd.DataFrame`** — line 152; function; public/exported. Calculate VWC response, local temperature and QC for every sensor/event.
+- **`build_profile_retention(sensor_results: pd.DataFrame) -> pd.DataFrame`** — line 269; function; public/exported. Combine complete eligible 6/12/18-inch profiles into water inches.
+- **`build_paired_treatment_summary(sensor_results: pd.DataFrame) -> pd.DataFrame`** — line 291; function; public/exported. Create matched biochar-minus-control sensor comparisons by event.
+- **`summarize_empirical_maxima(sensor_results: pd.DataFrame) -> pd.DataFrame`** — line 312; function; public/exported. Summarize repeated upper retained VWC observations by physical sensor.
+- **`_add_adoption_fields(summary: pd.DataFrame) -> pd.DataFrame`** — line 346; function; internal. Add common support and maximum-versus-P90 review fields.
+- **`_add_adoption_fields.classify(row: pd.Series) -> str`** — line 355; nested function; public/exported. No docstring.
+- **`build_irrigation_capacity_observations(event_results: pd.DataFrame, trustworthy_events: pd.DataFrame) -> pd.DataFrame`** — line 372; function; public/exported. Return trustworthy, physically plausible irrigation plateau observations.
+- **`build_combined_empirical_capacity(precipitation_sensor_results: pd.DataFrame, irrigation_observations: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]`** — line 410; function; public/exported. Combine eligible precipitation and irrigation capacity evidence by sensor.
+- **`build_combined_empirical_capacity.summarize(group: pd.DataFrame) -> pd.Series`** — line 439; nested function; public/exported. No docstring.
+- **`build_zone_upper_retained_water(combined_capacity: pd.DataFrame) -> pd.DataFrame`** — line 512; function; public/exported. Convert three-depth P90 VWC profiles to water volume by logger zone.
+- **`build_matched_complete_profiles(capacity_observations: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]`** — line 658; function; public/exported. Build complete three-depth profiles and matched treatment differences.
+- **`bootstrap_matched_profile_differences(matched_profiles: pd.DataFrame, *, iterations: int=10000, random_seed: int=20260830, minimum_directional_events: int=4) -> pd.DataFrame`** — line 715; function; public/exported. Bootstrap paired event-level profile differences with replacement.
+- **`bootstrap_unmatched_profile_differences(complete_profiles: pd.DataFrame, *, iterations: int=10000, random_seed: int=20260830, minimum_directional_events: int=4) -> pd.DataFrame`** — line 782; function; public/exported. Independently bootstrap all complete biochar and control profiles.
+- **`compare_matched_and_unmatched_bootstraps(matched_summary: pd.DataFrame, unmatched_summary: pd.DataFrame) -> pd.DataFrame`** — line 873; function; public/exported. Place pooled matched and unmatched profile results side by side.
+- **`build_profile_best_results(bootstrap_comparison: pd.DataFrame) -> pd.DataFrame`** — line 907; function; public/exported. Create a concise result table with statistical and causal confidence.
+- **`save_empirical_maxima_map(maxima: pd.DataFrame, output_path: Path, *, title: str='Empirical upper retained VWC from warm precipitation events', event_label: str='eligible warm events', include_profile: bool=False) -> None`** — line 1006; function; public/exported. Plot depth P90s and, optionally, equivalent three-depth profile water.
+- **`save_event_pair_plots(logger: pd.DataFrame, events: pd.DataFrame, sensor_results: pd.DataFrame, output_dir: Path) -> pd.DataFrame`** — line 1141; function; public/exported. Write 3-position by 2-strip review plots for each event and pair.
 
 ### `biochar_app/scripts/management/irrigation_analysis/reporting.py`
 
@@ -2048,9 +2081,10 @@ and some class/object method syntaxes may require manual review.
 - **`event(*, strip_group: str, reported_gallons: float \| None, source_row: int) -> dict[str, object]`** — line 37; function; public/exported. No docstring.
 - **`BuildIrrigationFromMasterTests.test_shared_meter_event_expands_to_four_strip_rows(self) -> None`** — line 76; method; public/exported. No docstring.
 - **`BuildIrrigationFromMasterTests.test_single_group_event_uses_full_meter_volume(self) -> None`** — line 121; method; public/exported. No docstring.
-- **`BuildIrrigationFromMasterTests.test_missing_totalizer_uses_allocated_group_fallback(self) -> None`** — line 143; method; public/exported. No docstring.
-- **`BuildIrrigationFromMasterTests.test_missing_volume_event_is_excluded_for_review(self) -> None`** — line 169; method; public/exported. No docstring.
-- **`BuildIrrigationFromMasterTests.test_event_id_is_deterministic(self) -> None`** — line 191; method; public/exported. No docstring.
+- **`BuildIrrigationFromMasterTests.test_field_design_corrects_mistyped_workbook_location(self) -> None`** — line 143; method; public/exported. No docstring.
+- **`BuildIrrigationFromMasterTests.test_missing_totalizer_uses_allocated_group_fallback(self) -> None`** — line 158; method; public/exported. No docstring.
+- **`BuildIrrigationFromMasterTests.test_missing_volume_event_is_excluded_for_review(self) -> None`** — line 184; method; public/exported. No docstring.
+- **`BuildIrrigationFromMasterTests.test_event_id_is_deterministic(self) -> None`** — line 206; method; public/exported. No docstring.
 
 ### `biochar_app/tests/test_build_meter_review_workbook.py`
 
@@ -2099,18 +2133,26 @@ and some class/object method syntaxes may require manual review.
 
 ### `biochar_app/tests/test_irrigation_figure_cleanup_and_depth_context.py`
 
-- **`FlowRateComparisonTests.test_large_boundary_difference_is_flagged(self) -> None`** — line 32; method; public/exported. No docstring.
-- **`FlowRateComparisonTests.test_normal_boundary_variation_is_not_flagged(self) -> None`** — line 48; method; public/exported. No docstring.
-- **`UnretainedWaterTests.test_complete_profile_reports_short_unretained_fields(self) -> None`** — line 65; method; public/exported. No docstring.
-- **`UnretainedWaterTests.test_incomplete_profile_does_not_inflate_unretained_water(self) -> None`** — line 85; method; public/exported. No docstring.
-- **`UnretainedWaterTests.test_unretained_water_does_not_require_bottom_arrival(self) -> None`** — line 101; method; public/exported. No docstring.
-- **`IrrigationFigureCleanupTests.test_failed_event_plot_compares_both_strips_and_three_loggers(self) -> None`** — line 135; method; public/exported. No docstring.
-- **`IrrigationFigureCleanupTests.test_successful_build_removes_only_stale_year_figures(self) -> None`** — line 161; method; public/exported. No docstring.
-- **`IrrigationFigureCleanupTests.test_failed_build_does_not_remove_stale_figures(self) -> None`** — line 188; method; public/exported. No docstring.
-- **`ElevatedDepthContextTests.test_elevated_18in_baseline_is_context_not_order_override(self) -> None`** — line 211; method; public/exported. No docstring.
-- **`ElevatedDepthContextTests.test_logger_position_order_classes_are_canonical(self) -> None`** — line 239; method; public/exported. No docstring.
-- **`CombinedOutputTests.test_concat_drops_per_frame_all_na_columns_but_keeps_real_values(self) -> None`** — line 284; method; public/exported. No docstring.
-- **`CombinedOutputTests.test_logger_order_summary_has_one_row_per_event(self) -> None`** — line 301; method; public/exported. No docstring.
+- **`FlowRateComparisonTests.test_large_boundary_difference_is_flagged(self) -> None`** — line 36; method; public/exported. No docstring.
+- **`FlowRateComparisonTests.test_normal_boundary_variation_is_not_flagged(self) -> None`** — line 52; method; public/exported. No docstring.
+- **`UnretainedWaterTests.test_complete_profile_reports_short_unretained_fields(self) -> None`** — line 69; method; public/exported. No docstring.
+- **`UnretainedWaterTests.test_incomplete_profile_does_not_inflate_unretained_water(self) -> None`** — line 89; method; public/exported. No docstring.
+- **`UnretainedWaterTests.test_unretained_water_does_not_require_bottom_arrival(self) -> None`** — line 105; method; public/exported. No docstring.
+- **`UnretainedWaterTests.test_credible_bottom_arrival_enables_end_of_field_proxy(self) -> None`** — line 145; method; public/exported. No docstring.
+- **`UnretainedWaterTests.test_pre_start_bottom_response_does_not_enable_proxy(self) -> None`** — line 187; method; public/exported. No docstring.
+- **`HoldingCapacityYearStabilityTests.test_logger_positions_are_summarized_independently(self) -> None`** — line 229; method; public/exported. No docstring.
+- **`HoldingCapacityYearStabilityTests.test_summary_includes_2023_and_quantifies_annual_variation(self) -> None`** — line 251; method; public/exported. No docstring.
+- **`HoldingCapacityYearStabilityTests.test_annual_comparison_shows_difference_from_pooled_estimate(self) -> None`** — line 279; method; public/exported. No docstring.
+- **`IrrigationFigureCleanupTests.test_failed_event_plot_compares_both_strips_and_three_loggers(self) -> None`** — line 306; method; public/exported. No docstring.
+- **`IrrigationFigureCleanupTests.test_successful_build_removes_only_stale_year_figures(self) -> None`** — line 332; method; public/exported. No docstring.
+- **`IrrigationFigureCleanupTests.test_failed_build_does_not_remove_stale_figures(self) -> None`** — line 359; method; public/exported. No docstring.
+- **`ElevatedDepthContextTests.test_elevated_18in_baseline_is_context_not_order_override(self) -> None`** — line 382; method; public/exported. No docstring.
+- **`ElevatedDepthContextTests.test_logger_position_order_classes_are_canonical(self) -> None`** — line 410; method; public/exported. No docstring.
+- **`CombinedOutputTests.test_concat_drops_per_frame_all_na_columns_but_keeps_real_values(self) -> None`** — line 455; method; public/exported. No docstring.
+- **`CombinedOutputTests.test_logger_order_summary_has_one_row_per_event(self) -> None`** — line 472; method; public/exported. No docstring.
+- **`MatchedSensorTreatmentTests._event_results() -> pd.DataFrame`** — line 502; method; internal. No docstring.
+- **`MatchedSensorTreatmentTests.test_matches_same_event_position_and_depth(self) -> None`** — line 537; method; public/exported. No docstring.
+- **`MatchedSensorTreatmentTests.test_summary_reports_paired_effect_and_variability(self) -> None`** — line 549; method; public/exported. No docstring.
 
 ### `biochar_app/tests/test_lab_etl_builders.py`
 
@@ -2128,6 +2170,20 @@ and some class/object method syntaxes may require manual review.
 - **`PrecipitationBarWidthTests.test_15minute_alias_uses_15min_width(self) -> None`** — line 56; method; public/exported. No docstring.
 - **`PrecipitationBarWidthTests.test_hourly_bar_uses_one_hour_width(self) -> None`** — line 62; method; public/exported. No docstring.
 - **`PrecipitationBarWidthTests.test_daily_bar_uses_half_day_width(self) -> None`** — line 68; method; public/exported. No docstring.
+
+### `biochar_app/tests/test_precipitation_retention.py`
+
+- **`test_identifies_events_and_allows_one_dry_day() -> None`** — line 27; function; public/exported. No docstring.
+- **`test_irrigation_overlap_uses_full_analysis_window() -> None`** — line 39; function; public/exported. No docstring.
+- **`_logger_frame(*, minimum_temperature: float=40.0) -> pd.DataFrame`** — line 57; function; internal. No docstring.
+- **`_event_frame() -> pd.DataFrame`** — line 71; function; internal. No docstring.
+- **`test_uses_matching_logger_temperature_and_builds_profiles_and_pairs() -> None`** — line 80; function; public/exported. No docstring.
+- **`test_freeze_flag_is_sensor_level_and_blocks_eligibility() -> None`** — line 96; function; public/exported. No docstring.
+- **`test_cold_nonfreezing_events_are_corroborating_not_empirical_maxima() -> None`** — line 107; function; public/exported. No docstring.
+- **`test_empirical_maxima_are_rounded_and_classified() -> None`** — line 117; function; public/exported. No docstring.
+- **`test_combines_trustworthy_irrigation_and_precipitation_capacity() -> None`** — line 136; function; public/exported. No docstring.
+- **`test_converts_three_depth_p90_profile_to_zone_water_volume() -> None`** — line 174; function; public/exported. No docstring.
+- **`test_bootstraps_only_matched_complete_three_depth_profiles() -> None`** — line 201; function; public/exported. No docstring.
 
 ### `biochar_app/tests/test_project_inventories.py`
 
@@ -2435,15 +2491,15 @@ and some class/object method syntaxes may require manual review.
 - **`measurePlotWidth(el)`** — line 183; function; internal. No JSDoc summary.
 - **`getSharedPlotWidth(targetId, container)`** — line 200; function; internal. No JSDoc summary.
 - **`computeRightGutterPx(containerOrGd, plotType, plotLayout = null, plotData = null)`** — line 233; function; public/exported. No JSDoc summary.
-- **`chooseSharedLegendMode(targetId, rightGutterPx)`** — line 272; function; internal. Choose a single legend mode for the pair. plot-1 decides, plot-2 follows.
-- **`applyResponsiveLegend(layout, rightGutterPx, targetId)`** — line 300; function; internal. Update legend placement based on gutter choice and shared pair mode.
-- **`computeResponsivePlotGeometry(rightGutterPx,   legendResponse,   baseHeight = FALLBACK_PLOT_HEIGHT,   baseBottomMargin = DEFAULT_BOTTOM_MARGIN)`** — line 338; function; internal. Calculate the responsive dimensions used by every plot layout path. Keeping this in one helper prevents initial render and resize behavior from drifting apart.
-- **`syncPairGeometryFromRaw()`** — line 364; async function; internal. No JSDoc summary.
-- **`fetchAndRenderPlot(plotType, plotDivId)`** — line 416; async function; public/exported. No JSDoc summary.
-- **`refineGutter()`** — line 551; async function; internal. No JSDoc summary.
-- **`relayoutOne(el, kind, targetIdForLegend, forceGutter = null, forceWidth = null)`** — line 621; async function; internal. No JSDoc summary.
-- **`renderMainPlots()`** — line 709; async function; public/exported. No JSDoc summary.
-- **`wireMainPlotZoomSync()`** — line 745; function; public/exported. Optional explicit hook for existing callers. The handlers are also attached automatically after both plots render.
+- **`chooseSharedLegendMode(targetId, rightGutterPx)`** — line 263; function; internal. Choose a single legend mode for the pair. plot-1 decides, plot-2 follows.
+- **`applyResponsiveLegend(layout, rightGutterPx, targetId)`** — line 291; function; internal. Update legend placement based on gutter choice and shared pair mode.
+- **`computeResponsivePlotGeometry(rightGutterPx,   legendResponse,   baseHeight = FALLBACK_PLOT_HEIGHT,   baseBottomMargin = DEFAULT_BOTTOM_MARGIN)`** — line 329; function; internal. Calculate the responsive dimensions used by every plot layout path. Keeping this in one helper prevents initial render and resize behavior from drifting apart.
+- **`syncPairGeometryFromRaw()`** — line 355; async function; internal. No JSDoc summary.
+- **`fetchAndRenderPlot(plotType, plotDivId)`** — line 407; async function; public/exported. No JSDoc summary.
+- **`refineGutter()`** — line 542; async function; internal. No JSDoc summary.
+- **`relayoutOne(el, kind, targetIdForLegend, forceGutter = null, forceWidth = null)`** — line 612; async function; internal. No JSDoc summary.
+- **`renderMainPlots()`** — line 700; async function; public/exported. No JSDoc summary.
+- **`wireMainPlotZoomSync()`** — line 736; function; public/exported. Optional explicit hook for existing callers. The handlers are also attached automatically after both plots render.
 
 ### `biochar_app/static/js/plots.js`
 

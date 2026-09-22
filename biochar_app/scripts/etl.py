@@ -77,7 +77,8 @@ import textwrap
 import argparse
 import json
 import shutil
-from datetime import datetime, timedelta
+import tempfile
+from datetime import datetime
 
 import pandas as pd
 from pandas import Series
@@ -112,6 +113,7 @@ from biochar_app.config.paths import (
     DATA_PROCESSED_DIR,
     LOGGER_DOWNLOADS_DIR,
     PARQUET_DIR,
+    PAKBUS_ARCHIVE_DIR,
     WEATHER_DOWNLOADS_DIR,
     DATASET_METADATA_PY,
 )
@@ -136,11 +138,6 @@ from biochar_app.scripts.lab.build_field_biomass_from_master import (
 )
 from biochar_app.scripts.lab.update_ward_master_nir import update_ward_master_nir
 from biochar_app.scripts.type_utils import NAN, NEG_INF, POS_INF, df_agg
-
-from biochar_app.config.dataset_metadata import (
-    DAILY_PRECIPITATION_MAX_IN,
-    VWC_MAX_PERCENT,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -171,6 +168,32 @@ METADATA_CONSTANT_NAMES = {
         "DAILY_PRECIPITATION_MAX_IN",
     ),
 }
+FROZEN_YEARS = frozenset({2023, 2024, 2025})
+
+
+def write_parquet_atomic(frame: pd.DataFrame, destination: Path) -> None:
+    """Write Parquet beside its destination and replace only after success."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".parquet", dir=destination.parent
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        frame.to_parquet(temporary, index=False, compression="snappy")
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def require_frozen_year_permission(years: list[int], allow: bool) -> None:
+    frozen = sorted(set(years).intersection(FROZEN_YEARS))
+    if frozen and not allow:
+        rendered = ", ".join(map(str, frozen))
+        raise ValueError(
+            f"Historical Parquet years are frozen: {rendered}. "
+            "Use --rebuild-frozen-years only for a deliberate historical rebuild."
+        )
 # ---------------------------------------------------------------------------
 # Logger clock corrections
 # ---------------------------------------------------------------------------
@@ -248,6 +271,99 @@ def write_dataset_metadata(
 
     logger.info(f"✅ Wrote dataset metadata: {output_path}")
 
+
+def collect_dataset_metadata_from_processed_outputs(
+    years: list[int],
+    parquet_dir: Path = Path(PARQUET_DIR),
+) -> DatasetMetadata:
+    """Calculate site-wide metadata from canonical outputs for every year.
+
+    A targeted ETL run may rebuild only one year, but the constants consumed by
+    the website describe the complete published dataset. Reading the finished
+    parquet products here keeps those two concerns independent and also allows
+    corrected historical extrema to decrease as well as increase.
+    """
+    metadata: DatasetMetadata = {}
+    missing: list[Path] = []
+
+    for year in sorted(set(years)):
+        logger_path = parquet_dir / str(year) / f"{year}_raw_logger.parquet"
+        weather_path = (
+            parquet_dir
+            / "summary"
+            / "weather"
+            / "15min"
+            / f"{year}_15min.parquet"
+        )
+
+        for path in (logger_path, weather_path):
+            if not path.exists():
+                missing.append(path)
+
+        if not logger_path.exists() or not weather_path.exists():
+            continue
+
+        logger_df = pd.read_parquet(logger_path)
+        column_groups = {
+            "vwc_percent": [
+                column
+                for column in logger_df.columns
+                if column.startswith("VWC_") and "_raw_" in column
+            ],
+            "soil_temperature_f": [
+                column
+                for column in logger_df.columns
+                if column.startswith("T_") and "_raw_" in column
+            ],
+            "soil_ec_ds_per_m": [
+                column
+                for column in logger_df.columns
+                if column.startswith("EC_") and "_raw_" in column
+            ],
+        }
+        for key, columns in column_groups.items():
+            if columns:
+                update_dataset_metadata(
+                    metadata,
+                    key,
+                    cast(pd.Series, logger_df[columns].stack(future_stack=True)),
+                )
+
+        weather_df = pd.read_parquet(weather_path)
+        required_weather_columns = {"timestamp", "temp_air_degF", "precip_in"}
+        absent = required_weather_columns - set(weather_df.columns)
+        if absent:
+            raise ValueError(
+                f"{weather_path} is missing metadata columns: {sorted(absent)}"
+            )
+
+        update_dataset_metadata(
+            metadata,
+            "air_temperature_f",
+            weather_df["temp_air_degF"],
+        )
+        weather_timestamps = pd.to_datetime(weather_df["timestamp"], errors="coerce")
+        daily_precip = (
+            pd.to_numeric(weather_df["precip_in"], errors="coerce")
+            .set_axis(weather_timestamps)
+            .resample("D")
+            .sum(min_count=1)
+        )
+        update_dataset_metadata(
+            metadata,
+            "daily_precipitation_in",
+            daily_precip,
+        )
+
+    if missing:
+        missing_text = "\n".join(f"  - {path}" for path in missing)
+        raise FileNotFoundError(
+            "Cannot generate complete dataset metadata; processed outputs are "
+            f"missing:\n{missing_text}"
+        )
+
+    return metadata
+
 # Logger timestamps are 15-minute aggregation labels generated from each
 # logger's internal wall clock. PC400 clock synchronization copied the
 # laptop's current wall time into the logger, which could be either MST or
@@ -269,26 +385,69 @@ def write_dataset_metadata(
 # than second-level oscillator drift.
 
 LOGGER_CLOCK_CORRECTIONS: dict[str, list[tuple[str, int]]] = {
-    "S1B": [("2024-02-23 15:30:00", 60)],
-    "S1M": [("2024-02-23 15:15:00", 60)],
-    "S1T": [("2024-02-23 10:45:00", 60)],
-    "S2B": [("2024-02-23 15:45:00", 60)],
-    "S2M": [("2026-02-23 08:45:00", 60)],
+    "S1B": [
+        ("1900-01-01 00:00:00", -60),
+        ("2024-02-23 15:30:00", 0),
+    ],
+    "S1M": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 15:15:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S1T": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 10:45:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S2B": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 15:45:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S2M": [
+        ("1900-01-01 00:00:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
     "S2T": [
-        ("2024-04-02 16:00:00", -60),
+        ("1900-01-01 00:00:00", 60),
+        ("2024-04-02 16:00:00", 0),
         ("2026-02-18 08:45:00", 0),
     ],
-    "S3B": [("2023-04-28 10:45:00", -60), ("2024-03-28 17:15:00", -120), ("2026-02-23 08:45:00", -60)],
+    "S3B": [
+        ("1900-01-01 00:00:00", 60),
+        ("2023-04-28 10:45:00", 0),
+        ("2024-03-28 17:15:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
     "S3M": [
-        ("2023-09-04 10:30:00", -60),
-        ("2024-07-07 06:30:00", -120),
-        ("2025-01-16 23:45:00", -180),
+        ("1900-01-01 00:00:00", 450),
+        ("2023-09-04 10:30:00", 390),
+        ("2024-07-07 06:30:00", 330),
+        ("2025-01-16 23:45:00", 270),
         ("2026-02-19 15:00:00", 0),
     ],
-    "S3T": [("2024-02-23 11:30:00", 60)],
-    "S4B": [("2023-09-04 10:30:00", -60), ("2023-09-20 18:30:00", -120), ("2026-02-23 09:00:00", -60)],
-    "S4M": [("2024-02-23 14:30:00", 60)],
-    "S4T": [("2024-02-23 11:45:00", 60)],
+    "S3T": [
+        ("1900-01-01 00:00:00", -60),
+        ("2024-02-23 11:30:00", 0),
+        ("2024-03-21 16:00:00", -60),
+        ("2026-02-23 08:45:00", 0),
+    ],
+    "S4B": [
+        ("1900-01-01 00:00:00", 60),
+        ("2023-09-04 10:30:00", 0),
+        ("2023-09-20 18:30:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
+    "S4M": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 14:30:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
+    "S4T": [
+        ("1900-01-01 00:00:00", -120),
+        ("2024-02-23 11:45:00", -60),
+        ("2026-02-23 09:00:00", 0),
+    ],
 }
 
 # Fixed Mountain Standard Time base used before converting to civil Denver time.
@@ -538,6 +697,25 @@ LOGGER_CLOCK_CORRECTION_METADATA = {
         "confidence": "high",
     },
 
+    ("S3T", "2024-03-21 16:00:00"): {
+        "reason": (
+            "Logger clock moved forward by 75 minutes. The inverse stitching "
+            "correction returns to zero after the preceding February backward "
+            "clock change."
+        ),
+        "evidence": (
+            "The deduplicated clock-state timeline and raw-file clock-event "
+            "scan both detect the forward transition."
+        ),
+        "details": (
+            "Detected transition: 2024-03-21 14:45:00 -> "
+            "2024-03-21 16:00:00 (+75.0 min). This transition was present in "
+            "clock_state_timeline_2026-03-03.csv but was omitted from the "
+            "operational correction map."
+        ),
+        "confidence": "high",
+    },
+
     ("S4B", "2023-09-04 10:30:00"): {
         "reason": (
             "Logger clock moved forward by 75 minutes. "
@@ -611,6 +789,15 @@ LOGGER_CLOCK_CORRECTION_METADATA = {
         ),
         "confidence": "high",
     },
+}
+
+# The February and August 2026 PC400 screenshots independently anchor every
+# logger to MST. Propagating those anchors backward through the raw, verified
+# clock discontinuities establishes the absolute state for every interval.
+LOGGER_ABSOLUTE_TIME_VERIFIED_STATES: set[tuple[str, str]] = {
+    (logger, start_s)
+    for logger, corrections in LOGGER_CLOCK_CORRECTIONS.items()
+    for start_s, _offset_min in corrections
 }
 
 # ---------------------------------------------------------------------------
@@ -690,6 +877,42 @@ def build_logger_clock_corrections_audit() -> pd.DataFrame:
                 (logger, start_s),
                 {},
             )
+            if start_s == "1900-01-01 00:00:00":
+                metadata = {
+                    "reason": (
+                        "Initial absolute clock state for the available raw "
+                        "record."
+                    ),
+                    "evidence": (
+                        "Derived by propagating the February 2026 PC400 "
+                        "absolute-time anchor backward through verified raw "
+                        "timestamp discontinuities."
+                    ),
+                    "details": (
+                        "The 1900 boundary is a sentinel that makes the state "
+                        "apply to all available records; it is not an observed "
+                        "logger date."
+                    ),
+                    "confidence": "high",
+                }
+            elif not metadata:
+                metadata = {
+                    "reason": "Logger clock was returned to fixed MST.",
+                    "evidence": (
+                        "Raw Table1 record continuity identifies the reset "
+                        "boundary; August 2026 PC400 screenshots verify the "
+                        "resulting fixed-MST state."
+                    ),
+                    "details": (
+                        "The boundary is the first post-reset 15-minute raw "
+                        "record, not the screenshot display date."
+                    ),
+                    "confidence": "high",
+                }
+            absolute_time_verified = (
+                logger,
+                start_s,
+            ) in LOGGER_ABSOLUTE_TIME_VERIFIED_STATES
 
             rows.append(
                 {
@@ -713,6 +936,12 @@ def build_logger_clock_corrections_audit() -> pd.DataFrame:
                         "confidence",
                         "unknown",
                     ),
+                    "evidence_scope": (
+                        "continuity_and_absolute_time"
+                        if absolute_time_verified
+                        else "continuity_only"
+                    ),
+                    "absolute_time_verified": absolute_time_verified,
                 }
             )
 
@@ -953,7 +1182,11 @@ def _read_toa5_table1_dat(datfile: Path) -> pd.DataFrame:
         engine="python",
     )
 
-def _candidate_logger_files(tag: str, year: int) -> list[Path]:
+def _candidate_logger_files(
+    tag: str,
+    year: int,
+    data_raw_dir: Path = Path(DATA_RAW_DIR),
+) -> list[Path]:
     """
     Resolve which .dat files should contribute to a (tag,year).
 
@@ -963,7 +1196,7 @@ def _candidate_logger_files(tag: str, year: int) -> list[Path]:
       - ALSO read datfiles_2023/{tag}_Table1_late2023_withBattV.dat (if present)
     """
     files: list[Path] = []
-    base = Path(DATA_RAW_DIR)
+    base = data_raw_dir
 
     p_main = base / f"datfiles_{year}" / f"{tag}_Table1.dat"
     if p_main.exists():
@@ -980,14 +1213,75 @@ def _candidate_logger_files(tag: str, year: int) -> list[Path]:
 
     return files
 
-def read_logger_data(tag: str, year: int) -> Optional[pd.DataFrame]:
-    files = _candidate_logger_files(tag, year)
-    if not files:
+
+def _read_pakbus_archive(
+    tag: str,
+    year: int,
+    archive_root: Path = Path(PAKBUS_ARCHIVE_DIR),
+) -> Optional[pd.DataFrame]:
+    """Read one station from the accepted annual PakBus archive.
+
+    Archive timestamps are stored as UTC instants. Convert them back to the
+    fixed-MST logger clock before applying the same correction pipeline used
+    for PC400 TOA5 files.
+    """
+    archive_path = archive_root / str(year) / "logger_data.csv"
+    if not archive_path.exists():
+        return None
+
+    data = pd.read_csv(archive_path, low_memory=False)
+    required = {"station", "Datetime", "RecNbr"}
+    missing = sorted(required.difference(data.columns))
+    if missing:
+        raise ValueError(
+            f"{archive_path}: missing PakBus archive columns: {', '.join(missing)}"
+        )
+
+    data["station"] = data["station"].astype(str).str.upper()
+    data = data.loc[data["station"] == tag.upper()].copy()
+    if data.empty:
+        return None
+
+    timestamps = pd.to_datetime(data["Datetime"], errors="coerce", utc=True)
+    invalid = int(timestamps.isna().sum())
+    if invalid:
+        raise ValueError(
+            f"{archive_path}: {invalid} invalid PakBus timestamps for {tag}"
+        )
+    data["timestamp"] = (
+        timestamps.dt.tz_convert(LOGGER_FIXED_STANDARD_TZ).dt.tz_localize(None)
+    )
+    data = data.rename(columns={"RecNbr": "RECORD"})
+    return data.drop(columns=["station", "logger_id", "Datetime"], errors="ignore")
+
+def read_logger_data(
+    tag: str,
+    year: int,
+    *,
+    data_raw_dir: Path = Path(DATA_RAW_DIR),
+    archive_root: Path = Path(PAKBUS_ARCHIVE_DIR),
+) -> Optional[pd.DataFrame]:
+    files = _candidate_logger_files(tag, year, data_raw_dir)
+    pakbus_frame = _read_pakbus_archive(tag, year, archive_root)
+    if not files and pakbus_frame is None:
         logger.warning(f"⚠️ Not found: datfiles_{year}/{tag}_Table1.dat (and no backfill sources)")
         return None
 
     frames: list[pd.DataFrame] = []
     raw_ts_examples: list[str] = []
+
+    # Put PakBus first so a higher-precision PC400 record wins when the two
+    # sources overlap at the same corrected timestamp.
+    if pakbus_frame is not None:
+        pakbus_frame["timestamp"] = apply_logger_clock_corrections(
+            pakbus_frame["timestamp"], tag
+        )
+        pakbus_frame["timestamp"] = pd.to_datetime(
+            pakbus_frame["timestamp"], errors="coerce"
+        ).astype("datetime64[ns]")
+        pakbus_frame = pakbus_frame.dropna(subset=["timestamp"])
+        if not pakbus_frame.empty:
+            frames.append(pakbus_frame.drop(columns=["RECORD"], errors="ignore"))
 
     for datfile in files:
         try:
@@ -1344,7 +1638,7 @@ def write_gseason_summary(year: int, df_daily: pd.DataFrame) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = out_dir / f"{year}_gseason.parquet"
-    out_df.to_parquet(out_path, index=False, compression="snappy")
+    write_parquet_atomic(out_df, out_path)
     logger.info(f"✅ Summary gseason (DEFAULT periods): {out_path.name}")
 
 # ============================= Bulk-download helpers ============================= #
@@ -1476,8 +1770,8 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
     raw_path = year_dir / f"{year}_raw_logger.parquet"
     ratio_path = year_dir / f"{year}_raw_logger_ratios.parquet"
 
-    df_write.reset_index().to_parquet(raw_path, index=False, compression="snappy")
-    calculate_ratios(df_write).reset_index().to_parquet(ratio_path, index=False, compression="snappy")
+    write_parquet_atomic(df_write.reset_index(), raw_path)
+    write_parquet_atomic(calculate_ratios(df_write).reset_index(), ratio_path)
     logger.info(f"✅ Wrote raw & ratio: {raw_path.name}, {ratio_path.name}")
 
     sensor_prefixes = ("VWC_", "T_", "EC_", "SWC_", "Tdiff_", "SWCdiff_")
@@ -1497,7 +1791,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
         df_s = make_timestamp_column_naive(df_s, col="timestamp")
 
         fn_raw = f"{year}_{freq}.parquet"
-        df_s.to_parquet(out_dir / fn_raw, index=False, compression="snappy")
+        write_parquet_atomic(df_s, out_dir / fn_raw)
         logger.info(f"✅ Summary {freq}: {fn_raw}")
 
         if freq == "daily":
@@ -1508,7 +1802,7 @@ def aggregate_and_write(year: int, df: pd.DataFrame) -> None:
 
         df_s_ratio = calculate_ratios(df_s.set_index("timestamp"))
         fn_ratio = f"{year}_{freq}_ratios.parquet"
-        df_s_ratio.reset_index().to_parquet(out_dir / fn_ratio, index=False, compression="snappy")
+        write_parquet_atomic(df_s_ratio.reset_index(), out_dir / fn_ratio)
         logger.info(f"✅ Summary {freq} ratios: {fn_ratio}")
 
 # ============================= Weather (CoAgMet) ============================= #
@@ -1630,7 +1924,7 @@ def maybe_backup_raw_data(force: bool = False) -> Path | None:
     return zip_path
 # ============================= Orchestration ============================= #
 
-def generate_summaries(years: list[int]) -> None:
+def generate_summaries(years: list[int], *, include_weather: bool = True) -> None:
     dataset_metadata: DatasetMetadata = {}
     for year in years:
         logger.info(f"🌱 Starting ETL for {year}")
@@ -1729,6 +2023,9 @@ def generate_summaries(years: list[int]) -> None:
                 )
             aggregate_and_write(year, df)
 
+        if not include_weather:
+            continue
+
         # ---------------- Weather ----------------
         try:
             dfw = fetch_weather_data(year)
@@ -1783,7 +2080,7 @@ def generate_summaries(years: list[int]) -> None:
             dfr = dfw_clean.resample(code).agg(cast(Any, agg_map)).round(3).reset_index()
             dfr = make_timestamp_column_naive(dfr, col="timestamp")
             fn = f"{year}_{freq}.parquet"
-            dfr.to_parquet(out_dir / fn, index=False, compression="snappy")
+            write_parquet_atomic(dfr, out_dir / fn)
             logger.info(f"✅ Weather {freq} for {year}")
 
             if freq == "15min":
@@ -1814,7 +2111,8 @@ def generate_summaries(years: list[int]) -> None:
                 download_url=coag_download_url,
                 builder_url=builder_url,
             )
-    write_dataset_metadata(dataset_metadata, years)
+    global_metadata = collect_dataset_metadata_from_processed_outputs(list(YEARS))
+    write_dataset_metadata(global_metadata, list(YEARS))
     logger.info("🎉 ETL complete.")
 
 def resolve_target_year(cli_year: Optional[int] = None) -> int:
@@ -2047,6 +2345,32 @@ def main() -> None:
     parser.add_argument("--all-years", action="store_true")
     parser.add_argument("--no-backup-raw", action="store_true")
     parser.add_argument("--force-backup-raw", action="store_true")
+    update_mode = parser.add_mutually_exclusive_group()
+    update_mode.add_argument(
+        "--logger-only",
+        action="store_true",
+        help=(
+            "Rebuild logger Parquet outputs from PC400 files plus the accepted "
+            "PakBus archive; skip workbook, irrigation, laboratory, weather, "
+            "and legacy raw-data backup work."
+        ),
+    )
+    update_mode.add_argument(
+        "--operational-update",
+        action="store_true",
+        help=(
+            "Rebuild logger products from PC400 files plus the accepted "
+            "PakBus archive and refresh CoAgMet weather products; skip "
+            "workbook, irrigation, laboratory, and legacy raw-data backup work."
+        ),
+    )
+    parser.add_argument(
+        "--rebuild-frozen-years",
+        action="store_true",
+        help=(
+            "Allow a deliberate rebuild of frozen 2023-2025 Parquet outputs."
+        ),
+    )
     parser.add_argument(
         "--skip-master-workbook-refresh",
         action="store_true",
@@ -2073,10 +2397,29 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
+    try:
+        require_frozen_year_permission(years, args.rebuild_frozen_years)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     os.makedirs(PARQUET_DIR, exist_ok=True)
     write_logger_clock_corrections_audit(audit_path)
 
-    if args.skip_master_workbook_refresh:
+    operational_subset = args.logger_only or args.operational_update
+
+    if args.operational_update:
+        logger.info(
+            "Operational update: refreshing logger and weather products; "
+            "skipping master workbook, irrigation, laboratory, and legacy "
+            "raw-data backup stages."
+        )
+    elif args.logger_only:
+        logger.info(
+            "Logger-only update: skipping master workbook, irrigation, "
+            "laboratory, weather, and legacy raw-data backup stages."
+        )
+    elif args.skip_master_workbook_refresh:
         logger.warning(
             "Master-workbook refresh was skipped. Management data may be "
             "based on an older repository snapshot."
@@ -2084,7 +2427,9 @@ def main() -> None:
     else:
         refresh_master_workbook_snapshot()
 
-    if args.skip_irrigation_build:
+    if operational_subset:
+        pass
+    elif args.skip_irrigation_build:
         logger.warning(
             "Irrigation build was skipped. Plot annotations and irrigation "
             "analysis may be stale."
@@ -2099,7 +2444,9 @@ def main() -> None:
             irrigation_audit["invalid_group_events"],
         )
 
-    if args.skip_lab_build:
+    if operational_subset:
+        pass
+    elif args.skip_lab_build:
         logger.warning(
             "Laboratory-data builds were skipped. Biomass and NIR dashboard "
             "data may be stale."
@@ -2115,15 +2462,13 @@ def main() -> None:
         update_ward_master_nir()
         logger.info("Ward NIR clean master rebuilt with supplemental files.")
 
-    years = list(YEARS) if args.all_years else [resolve_target_year(args.year)]
-
     for year in years:
         validate_datfiles_for_year(year)
 
-    if not args.no_backup_raw:
+    if not operational_subset and not args.no_backup_raw:
         maybe_backup_raw_data(force=args.force_backup_raw)
 
-    generate_summaries(years)
+    generate_summaries(years, include_weather=not args.logger_only)
 
 if __name__ == "__main__":
     main()

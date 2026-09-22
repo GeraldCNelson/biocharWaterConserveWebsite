@@ -5,6 +5,7 @@ routes.py — API Endpoints & Orchestration for Biochar Dashboard
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import math
 import logging
@@ -46,7 +47,14 @@ from biochar_app.scripts.data_loading import load_logger_data
 
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
-    get_flat_gseason_summary,
+    compute_period_summary_rows,
+    rebase_periods_to_anchor_year,
+)
+from biochar_app.scripts.gseason_materialized_cache import (
+    gseason_source_paths,
+    load_materialized_gseason_summary,
+    save_materialized_gseason_summary,
+    source_fingerprint,
 )
 from biochar_app.scripts.plot_builder import (
     make_raw_figure,
@@ -177,6 +185,7 @@ templates = Jinja2Templates(
 # WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
 _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
+_MULTIYEAR_GSEASON_CACHE: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -659,7 +668,7 @@ async def api_plot_raw(req: PlotRequest):
 
     if gran == "gseason":
         periods_raw = req.periods or []
-        periods_list = periods_to_list_of_dicts(periods_raw)
+        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
 
         df_gseason = load_gseason_df(
             year=year,
@@ -856,7 +865,165 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
         f"{year}"
     )
 
-    source_granularity = "15min" if granularity == "gseason" else "hourly"
+    if granularity == "gseason":
+        periods_input = payload.get("periods") or DEFAULT_GSEASON_PERIODS
+        periods_anchor_year = int(payload.get("periodsAnchorYear") or year)
+        periods_raw = rebase_periods_to_anchor_year(
+            periods_input,
+            source_year=periods_anchor_year,
+            target_year=year,
+        )
+        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
+
+        def load_or_compute_year(
+            summary_year: int,
+            summary_periods: list[dict[str, Any]],
+        ) -> list[dict[str, Any]]:
+            materialized_cache_allowed = summary_year <= pd.Timestamp.now().year
+            if materialized_cache_allowed:
+                cached_rows = load_materialized_gseason_summary(
+                    year=summary_year,
+                    variable=variable,
+                    strip=strip,
+                    depth=depth_code,
+                    unit_system=unit_system,
+                    periods=summary_periods,
+                )
+                if cached_rows is not None:
+                    logger.info("Materialized seasonal summary cache hit: year=%s", summary_year)
+                    return cached_rows
+
+            logger_cache_key = (summary_year, "15min")
+            summary_df = _LOADED_LOGGER_CACHE.get(logger_cache_key)
+            if summary_df is None:
+                try:
+                    summary_df = load_logger_data(summary_year, "15min")
+                except FileNotFoundError:
+                    summary_df = None
+                if summary_df is not None and not getattr(summary_df, "empty", True):
+                    if "timestamp" in summary_df.columns:
+                        summary_df = summary_df.copy()
+                        summary_df["timestamp"] = pd.to_datetime(
+                            summary_df["timestamp"], errors="coerce"
+                        )
+                    _LOADED_LOGGER_CACHE[logger_cache_key] = summary_df
+
+            rows: list[dict[str, Any]] = []
+            if summary_df is not None and not getattr(summary_df, "empty", True):
+                rows = _clean(compute_period_summary_rows(
+                    summary_df,
+                    year=summary_year,
+                    periods=summary_periods,
+                    variable=variable,
+                    strip=strip,
+                    depth=depth_code,
+                ))
+
+            if materialized_cache_allowed:
+                try:
+                    save_materialized_gseason_summary(
+                        year=summary_year,
+                        variable=variable,
+                        strip=strip,
+                        depth=depth_code,
+                        unit_system=unit_system,
+                        periods=summary_periods,
+                        rows=rows,
+                    )
+                except OSError:
+                    logger.exception(
+                        "Could not persist materialized seasonal summary: year=%s",
+                        summary_year,
+                    )
+            return rows
+
+        flat = await asyncio.to_thread(load_or_compute_year, year, periods_list)
+
+        multi_year_gseason: list[dict[str, Any]] = []
+        if payload.get("compareYears"):
+            def relative_bound(value: Any) -> tuple[int, str]:
+                text = str(value)
+                if len(text) == 10:
+                    timestamp = pd.Timestamp(text)
+                    return timestamp.year - year, timestamp.strftime("%m-%d")
+                return 0, text[-5:]
+
+            period_signature = tuple(
+                (
+                    str(period.get("code", "")),
+                    str(period.get("label", "")),
+                    relative_bound(period.get("start")),
+                    relative_bound(period.get("end")),
+                )
+                for period in periods_list
+            )
+            source_signatures = tuple(
+                (
+                    int(comparison_year),
+                    source_fingerprint(gseason_source_paths(int(comparison_year))),
+                )
+                for comparison_year in YEARS
+            )
+            summary_cache_key = (
+                variable,
+                strip,
+                depth_code,
+                unit_system,
+                period_signature,
+                source_signatures,
+            )
+            cached_multi_year = _MULTIYEAR_GSEASON_CACHE.get(summary_cache_key)
+
+            if cached_multi_year is not None:
+                multi_year_gseason = cached_multi_year
+                logger.info("Seasonal multi-year comparison cache hit: %s", summary_cache_key[:4])
+            else:
+                comparison_started = perf_counter()
+
+                def build_comparison_year(comparison_year: int) -> dict[str, Any]:
+                    comparison_periods = rebase_periods_to_anchor_year(
+                        periods_raw,
+                        source_year=year,
+                        target_year=comparison_year,
+                    )
+                    return {
+                        "year": comparison_year,
+                        "periods": comparison_periods,
+                        "gseason_stats": (
+                            flat
+                            if comparison_year == year
+                            else load_or_compute_year(comparison_year, comparison_periods)
+                        ),
+                    }
+
+                multi_year_gseason = list(await asyncio.gather(*(
+                    asyncio.to_thread(build_comparison_year, int(comparison_year))
+                    for comparison_year in YEARS
+                )))
+                if len(_MULTIYEAR_GSEASON_CACHE) >= 128:
+                    _MULTIYEAR_GSEASON_CACHE.pop(next(iter(_MULTIYEAR_GSEASON_CACHE)))
+                _MULTIYEAR_GSEASON_CACHE[summary_cache_key] = multi_year_gseason
+                logger.info(
+                    "Seasonal multi-year comparison built in %.2f seconds for %s",
+                    perf_counter() - comparison_started,
+                    summary_cache_key[:4],
+                )
+
+        return JSONResponse(
+            {
+                "year": year,
+                "variable": variable,
+                "strip": strip,
+                "granularity": granularity,
+                "depth": depth_code,
+                "title": title,
+                "gseason_stats": flat,
+                "periods": periods_list,
+                "multi_year_gseason": multi_year_gseason,
+            }
+        )
+
+    source_granularity = "hourly"
     cache_key = (year, source_granularity)
 
     df_base = _LOADED_LOGGER_CACHE.get(cache_key)
@@ -896,83 +1063,6 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                 (df_req["timestamp"] >= start_dt)
                 & (df_req["timestamp"] < end_dt_exclusive)
                 ].copy()
-
-    if granularity == "gseason":
-        periods_raw = payload.get("periods") or []
-        periods_list = periods_to_list_of_dicts(periods_raw)
-
-        _ = load_gseason_df(
-            year=year,
-            periods=periods_list,
-            unit_system=unit_system,
-            use_ratios=False,
-        )
-
-        flat_df = get_flat_gseason_summary(year)
-
-        if flat_df is None or getattr(flat_df, "empty", True):
-            return JSONResponse(
-                {
-                    "year": year,
-                    "variable": variable,
-                    "strip": strip,
-                    "granularity": granularity,
-                    "depth": depth_code,
-                    "title": title,
-                    "gseason_stats": [],
-                }
-            )
-
-        flat_df = flat_df.copy()
-
-        for col in ["period_code", "variable", "strip", "depth", "logger_location"]:
-            if col in flat_df.columns:
-                flat_df[col] = flat_df[col].astype(str)
-
-        if "variable" in flat_df.columns:
-            flat_df = flat_df[flat_df["variable"] == variable].copy()
-
-        if periods_list and "period_code" in flat_df.columns:
-            requested_codes = {
-                str(p.get("period_code", "")).strip()
-                for p in periods_list
-                if p.get("period_code") is not None
-            }
-            if requested_codes:
-                flat_df = flat_df[flat_df["period_code"].isin(requested_codes)].copy()
-
-        ratio_strip_values = {"S1/S2", "S3/S4", "S1_S2", "S3_S4"}
-
-        raw_mask = pd.Series(False, index=flat_df.index)
-        if "strip" in flat_df.columns:
-            raw_mask = flat_df["strip"] == strip
-
-        if "depth" in flat_df.columns:
-            raw_mask = raw_mask & (flat_df["depth"] == depth_code)
-
-        ratio_mask = pd.Series(False, index=flat_df.index)
-        if "strip" in flat_df.columns:
-            ratio_mask = flat_df["strip"].isin(ratio_strip_values)
-
-        if "depth" in flat_df.columns:
-            ratio_depth_values = set(flat_df.loc[ratio_mask, "depth"].dropna().astype(str).unique().tolist())
-            if depth_code in ratio_depth_values:
-                ratio_mask = ratio_mask & (flat_df["depth"] == depth_code)
-
-        flat_df = flat_df.loc[raw_mask | ratio_mask].copy()
-        flat = flat_df.to_dict(orient="records")
-
-        return JSONResponse(
-            {
-                "year": year,
-                "variable": variable,
-                "strip": strip,
-                "granularity": granularity,
-                "depth": depth_code,
-                "title": title,
-                "gseason_stats": _clean(flat),
-            }
-        )
 
     stats_raw, stats_ratio = compute_summary_statistics(df_req, variable, strip, depth_code)
 
@@ -1022,8 +1112,29 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
         return pd.DataFrame(rows)
 
     if req.granularity.lower() == "gseason":
-        raw_df = pd.DataFrame(gseason_stats)
-        ratio_df = pd.DataFrame()
+        seasonal_df = pd.DataFrame(gseason_stats)
+        raw_columns = [
+            "period_code", "period_label", "strip", "depth", "logger_location",
+            "raw_min", "raw_mean", "raw_max", "raw_std",
+            "raw_n", "raw_expected_n", "raw_coverage_pct",
+        ]
+        ratio_columns = [
+            "period_code", "period_label", "ratio_group", "depth", "logger_location",
+            "ratio_min", "ratio_mean", "ratio_max", "ratio_std",
+            "ratio_n", "ratio_expected_n", "ratio_coverage_pct",
+        ]
+        if seasonal_df.empty:
+            raw_df = pd.DataFrame(columns=raw_columns)
+            ratio_df = pd.DataFrame(columns=ratio_columns)
+        else:
+            raw_mask = seasonal_df.get("raw_mean", pd.Series(index=seasonal_df.index, dtype=float)).notna()
+            ratio_mask = seasonal_df.get("ratio_mean", pd.Series(index=seasonal_df.index, dtype=float)).notna()
+            raw_df = seasonal_df.loc[
+                raw_mask, [column for column in raw_columns if column in seasonal_df.columns]
+            ].copy()
+            ratio_df = seasonal_df.loc[
+                ratio_mask, [column for column in ratio_columns if column in seasonal_df.columns]
+            ].copy()
     else:
         raw_df = _stats_dict_to_df(raw_stats)
         ratio_df = _stats_dict_to_df(ratio_stats)
@@ -1059,12 +1170,14 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
          + build_experiment_lookup_section(req.unitSystem)
          + "\n"
     )
+    download_base = (
+        f"summary_{req.granularity}_{req.variable}_{req.strip}_"
+        f"depth_code_{req.depth}_{req.year}"
+    )
+
     if mode == "raw":
         csv_bytes = raw_df.to_csv(index=False).encode("utf-8")
-        filename = (
-            f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-            f"depth{req.depth}_{req.year}_raw.csv"
-        )
+        filename = f"{download_base}_raw.csv"
 
         return Response(
             content=csv_bytes,
@@ -1074,10 +1187,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
 
     if mode == "ratio":
         csv_bytes = ratio_df.to_csv(index=False).encode("utf-8")
-        filename = (
-            f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-            f"depth{req.depth}_{req.year}_ratio.csv"
-        )
+        filename = f"{download_base}_ratio.csv"
 
         return Response(
             content=csv_bytes,
@@ -1088,16 +1198,13 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
     out = BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         if mode in ("all", "zip"):
-            zf.writestr("raw_summary.csv", raw_df.to_csv(index=False))
-            zf.writestr("ratio_summary.csv", ratio_df.to_csv(index=False))
-            zf.writestr("README.txt", readme)
+            zf.writestr(f"{download_base}_raw.csv", raw_df.to_csv(index=False))
+            zf.writestr(f"{download_base}_ratio.csv", ratio_df.to_csv(index=False))
+            zf.writestr(f"{download_base}_README.txt", readme)
 
     out.seek(0)
 
-    filename = (
-        f"summary_{req.granularity}_{req.variable}_{req.strip}_"
-        f"depth{req.depth}_{req.year}.zip"
-    )
+    filename = f"{download_base}.zip"
     return Response(
         content=out.getvalue(),
         media_type="application/zip",

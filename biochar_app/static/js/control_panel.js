@@ -2,8 +2,8 @@
 // control_panel.js – Shared logic for control panel setup (Main & Summary)
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
-import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js";
-import { updateSummaryStatistics } from "./tab_summary.js";
+import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
+import { updateSummaryStatistics } from "./tab_summary.js?v=20260921-seasonal-downloads-17";
 import { renderMainPlots } from "./plots.js?v=20260822-plot-layout-1";
 
 /**
@@ -107,7 +107,8 @@ export function initializeTraceOptionControls() {
 }
 
 /**
- * Wire the "Update Plots" and "Update Summary" buttons.
+ * Wire the "Update Plots" button. The Summary tab owns its update button so
+ * the expensive seasonal request cannot be registered twice.
  *
  * @returns {void}
  */
@@ -135,12 +136,6 @@ export function initializeUpdateButtons() {
       await renderMainPlots();
     });
 
-  document
-    .getElementById("update-summary")
-    ?.addEventListener("click", () => {
-      console.log("📊 Update summary button clicked");
-      updateSummaryStatistics();
-    });
 }
 
 /**

@@ -1,5 +1,5 @@
-strip,treatment,pair,regime,n_events,n_storage,storage_available_pct,n_runoff,applied_gal,storage_gal,storage_pct,pot_runoff_gal,pot_runoff_pct,arrival_hr
-S1,biochar,S1_S2,monthly,26,18,69.23,18,65235.00,26999.00,47.97,38236.00,52.03,7.81
-S2,control,S1_S2,monthly,26,23,88.46,23,61981.00,33919.00,62.51,28156.00,37.93,4.59
-S3,biochar,S3_S4,biweekly,44,21,47.73,21,52948.00,21948.00,47.88,31098.00,52.72,1.33
-S4,control,S3_S4,biweekly,33,23,69.70,21,62777.00,19774.00,33.97,42839.00,66.12,5.43
+strip,treatment,pair,regime,n_events,n_storage,storage_available_pct,n_unretained,applied_gal,storage_gal,storage_pct,unretained_gal,unretained_pct,arrival_hr
+S1,biochar,S1_S2,monthly,26,18,69.23,15,65235.00,29893.00,53.20,29963.00,43.34,6.75
+S2,control,S1_S2,monthly,26,23,88.46,20,61981.00,37526.00,69.25,22070.00,30.26,2.81
+S3,biochar,S3_S4,biweekly,46,28,60.87,25,58141.00,24387.00,47.96,35220.00,53.71,2.36
+S4,control,S3_S4,biweekly,34,23,67.65,18,62777.00,21851.00,37.67,39997.00,62.27,6.44

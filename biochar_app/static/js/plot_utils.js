@@ -236,22 +236,13 @@ export function computeRightGutterPx(containerOrGd, plotType, plotLayout = null,
   const el = /** @type {PlotlyGraphDiv | null} */ (containerOrGd);
   const w = el?.clientWidth || 1200;
 
-  const fullLayout = el?._fullLayout || null;
-  const fullData = el?._fullData || el?.data || null;
+  // Legend placement is driven by the available container width, not by
+  // whether the figure happens to use a secondary y-axis.  Temperature
+  // figures, for example, have a normal legend but no y2 axis and still need
+  // a right-side gutter on wide screens.
+  void plotLayout;
+  void plotData;
 
-  const layout = fullLayout || plotLayout || {};
-  const data = Array.isArray(fullData)
-    ? fullData
-    : (Array.isArray(plotData) ? plotData : []);
-
-  const layoutAny = /** @type {any} */ (layout);
-  const dataAny = /** @type {any[]} */ (data);
-
-  const layoutHasY2 = !!layoutAny?.yaxis2;
-  const dataUsesY2 = dataAny.some((t) => (t?.yaxis || "") === "y2");
-  const hasY2 = layoutHasY2 || dataUsesY2;
-
-  if (!hasY2) return 20;
   if (isMobileDevice()) return 20;
 
   if (w >= 1400) return 160;

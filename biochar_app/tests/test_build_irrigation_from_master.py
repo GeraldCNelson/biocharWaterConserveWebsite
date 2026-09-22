@@ -140,6 +140,21 @@ class BuildIrrigationFromMasterTests(unittest.TestCase):
         self.assertTrue(candidate["gallons_group"].eq(136500.0).all())
         self.assertTrue(candidate["gallons_strip"].eq(68250.0).all())
 
+    def test_field_design_corrects_mistyped_workbook_location(self) -> None:
+        mistyped = event(
+            strip_group="S3_S4",
+            reported_gallons=136500.0,
+            source_row=13,
+        )
+        mistyped["location"] = "west"
+
+        candidate, invalid = build_candidate_from_events(
+            pd.DataFrame([mistyped])
+        )
+
+        self.assertTrue(invalid.empty)
+        self.assertTrue(candidate["location"].eq("east").all())
+
     def test_missing_totalizer_uses_allocated_group_fallback(self) -> None:
         first = event(
             strip_group="S1_S2",

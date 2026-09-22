@@ -25,6 +25,50 @@ pipeline for the Biochar Fruita CSU experiment.
 
 More specialized README files are located near the workflows they document.
 
+## Local PakBus command
+
+Use `tools/pakbus-download station S3B` for a targeted logger download. It
+writes the records and a JSON timing report under
+`biochar_app/data-raw/pakbus_manual/`. Use `tools/pakbus-download daily` to run
+the complete nightly acquisition and strict acceptance checks locally;
+incomplete downloads remain rejected.
+
+The daily strategy makes one attempt per station, completes the full initial
+pass, then waits five minutes before each of up to two recovery passes over
+only the stations still missing. This avoids repeatedly hammering one stale
+radio route while preserving the all-station acceptance requirement.
+
+When Starlink changes the delegated IPv6 prefix, run
+`tools/pakbus-download discover S3B`. The command signs into the ASUS router,
+finds the Campbell client by its stable IPv6 suffix, validates port 6785,
+updates the shared configuration, and tests S3B. It prompts for credentials;
+they are never written to the repository.
+
+Operational defaults are in
+`biochar_app/config/pakbus_settings.json`. CLI arguments override those defaults
+for one run. Set `BIOCHAR_PAKBUS_CONFIG` to use a different JSON configuration
+file without changing the repository copy.
+
+Accepted daily downloads beginning in 2026 are atomically merged into
+`biochar_app/data-raw/pakbus_archive/<year>/logger_data.csv`. Rejected runs
+remain in their dated diagnostic directory and are never promoted. The archive
+is raw operational data, is excluded from Git, and must be backed up separately.
+
+To compare a downloaded PakBus CSV with overlapping PC400 files on the Mac:
+
+```bash
+tools/pakbus-download compare /path/to/logger_data.csv \
+  --dat-dir biochar_app/data-raw/datfiles_2026 \
+  --output pakbus_comparison.json
+```
+
+To promote an older run after its diagnostic report has been verified as
+`accepted` or `accepted_with_warnings`:
+
+```bash
+tools/pakbus-download promote /path/to/pakbus_daily/YYYY/MM/DD/RUN_DIRECTORY
+```
+
 ## Local development
 
 Create and activate a Python virtual environment, install the requirements, and
@@ -163,6 +207,33 @@ Run ETL for a particular year from the repository root:
 ```bash
 python biochar_app/scripts/etl.py --year 2026
 ```
+
+For the routine 2026 logger update, merge the existing PC400 files with the
+accepted PakBus archive and rebuild only the logger-derived Parquet outputs:
+
+```bash
+python biochar_app/scripts/etl.py --year 2026 --logger-only
+```
+
+For overlapping timestamps, the PC400 value is retained because it has more
+decimal precision; newer PakBus timestamps extend the same 2026 dataset. This
+mode does not download weather or rebuild workbook, irrigation, or laboratory
+outputs. Parquet files are written to temporary files and replaced only after
+each write succeeds.
+
+For the routine server-side publication update, rebuild the logger products
+and refresh the CoAgMet weather products while still skipping the Mac-only
+workbook, irrigation, laboratory, and raw-backup stages:
+
+```bash
+python -m biochar_app.scripts.etl --year 2026 --operational-update
+```
+
+This is the ETL mode intended to follow an accepted nightly PakBus download.
+
+The 2023-2025 Parquet datasets are frozen. ETL refuses to rebuild any of those
+years unless the deliberate override `--rebuild-frozen-years` is supplied.
+That override is intended only for a documented historical correction.
 
 The initial ETL messages should identify:
 

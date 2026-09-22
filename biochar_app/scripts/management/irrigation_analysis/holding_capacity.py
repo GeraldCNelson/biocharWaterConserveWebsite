@@ -50,6 +50,8 @@ from biochar_app.config.core import SENSOR_DEPTH_CODES
 from biochar_app.config.experiment_config import (
     LOGGER_LOCATION_MAPPING,
     REPRESENTED_LAYER_THICKNESS_IN_BY_DEPTH_INDEX,
+    STRIP_TREATMENT,
+    STRIP_TREATMENT_PAIR,
     ZONE_LABELS,
 )
 
@@ -57,6 +59,7 @@ from biochar_app.config.field_management_metadata import (
     INCHES_WATER_TO_GALLONS_PER_SQFT,
     PROFILE_AREA_SQFT,
     PROFILE_GALLONS_PER_INCH,
+    ZONE_AREA_SOURCE_BY_STRIP,
     ZONE_AREAS_SQFT_BY_STRIP,
     ZONE_GALLONS_PER_INCH_BY_STRIP,
     ZONE_LENGTHS_FT_BY_STRIP,
@@ -1258,6 +1261,10 @@ def build_event_storage_by_zone(
                     ]
                 ),
 
+                "zone_area_method": (
+                    ZONE_AREA_SOURCE_BY_STRIP[strip][zone]
+                ),
+
                 "zone_gallons_per_inch": (
                     zone_gallons_per_inch
                 ),
@@ -1847,31 +1854,76 @@ def build_first_pass_water_balance_table(
     )
 
     # ------------------------------------------------------------------
-    # Unretained-water eligibility.
-    #
-    # The residual was calculated above for complete three-zone storage
-    # estimates. Bottom arrival remains diagnostic and is not an eligibility
-    # condition because the residual is not interpreted as measured runoff.
+    # Outcome-specific eligibility. Holding capacity can be estimated without
+    # an applied-water total. The irrigation-specific unretained-water residual
+    # additionally requires applied gallons. An end-of-field interpretation is
+    # stricter still and requires a credible bottom response at or after the
+    # irrigation start. No year is excluded categorically.
     # ------------------------------------------------------------------
-    out[
-        "unretained_available"
-    ] = (
+    storage = pd.to_numeric(
+        out["estimated_storage_gal_strip_0_18in"],
+        errors="coerce",
+    )
+    out["holding_capacity_eligible"] = (
         out["event_qc_eligible"].fillna(False)
         & out["complete_three_zone_coverage"].fillna(False)
-        & applied.gt(0)
-        & out["unretained_gal_strip"].notna()
+        & storage.notna()
     )
-    out["holding_capacity_eligible"] = out[
-        "unretained_available"
-    ]
-    profile_failure = "incomplete_three_zone_storage_or_missing_applied_water"
+    profile_failure = "incomplete_three_zone_storage"
     out["holding_capacity_reason"] = np.where(
         ~out["event_qc_eligible"].fillna(False),
         out["event_qc_reason"].fillna("event_qc_failed"),
         np.where(out["holding_capacity_eligible"], "ok", profile_failure),
     )
-    out["unretained_eligible"] = out["unretained_available"]
-    out["unretained_reason"] = out["holding_capacity_reason"]
+    out["unretained_eligible"] = (
+        out["holding_capacity_eligible"]
+        & applied.gt(0)
+        & out["unretained_gal_strip"].notna()
+    )
+    out["unretained_reason"] = np.where(
+        ~out["holding_capacity_eligible"],
+        out["holding_capacity_reason"],
+        np.where(
+            ~applied.gt(0),
+            "missing_or_nonpositive_applied_water",
+            np.where(
+                out["unretained_eligible"],
+                "ok",
+                "unretained_water_not_calculable",
+            ),
+        ),
+    )
+    # Backward-compatible availability field used by existing summaries.
+    out["unretained_available"] = out["unretained_eligible"]
+
+    credible_bottom_arrival = bottom_delay.notna() & bottom_delay.ge(0)
+    out["end_of_field_unretained_eligible"] = (
+        out["unretained_eligible"]
+        & credible_bottom_arrival
+    )
+    out["end_of_field_unretained_reason"] = np.where(
+        ~out["unretained_eligible"],
+        out["unretained_reason"],
+        np.where(
+            ~bottom_delay.notna(),
+            "missing_bottom_6in_response",
+            np.where(
+                bottom_delay.lt(0),
+                "bottom_6in_response_before_irrigation_start",
+                "ok",
+            ),
+        ),
+    )
+    out["estimated_end_of_field_unretained_gal_strip"] = np.where(
+        out["end_of_field_unretained_eligible"],
+        out["unretained_gal_strip"],
+        np.nan,
+    )
+    out["estimated_end_of_field_unretained_fraction"] = np.where(
+        out["end_of_field_unretained_eligible"],
+        out["unretained_fraction"],
+        np.nan,
+    )
 
     # ------------------------------------------------------------------
     # Reporting conveniences.
@@ -4449,9 +4501,11 @@ def summarize_holding_capacity_from_trustworthy_events(
             )
 
     group_cols = [
+        "year",
         "strip_group",
         "location",
         "strip",
+        "logger_position",
         "sensor_col",
         "depth_index",
         "depth_inches",
@@ -4687,9 +4741,11 @@ def build_trustworthy_holding_capacity_summary(
             )
 
     group_cols = [
+        "year",
         "strip_group",
         "location",
         "strip",
+        "logger_position",
         "sensor_col",
         "depth_index",
         "depth_inches",
@@ -4895,6 +4951,364 @@ def build_trustworthy_holding_capacity_summary(
     ].round(4)
 
     return summary
+
+
+def build_holding_capacity_year_stability_summary(
+    annual_summary: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compare annual holding-capacity estimates before years are pooled.
+
+    The input contains one row per year, strip, logger location, and sensor
+    depth. Every year remains subject to the same event-level QC rules; this
+    summary quantifies annual variation rather than excluding a year by name.
+    """
+    if annual_summary.empty or "year" not in annual_summary.columns:
+        return pd.DataFrame()
+
+    value_columns = {
+        "plateau_vwc": "mean_plateau_vwc",
+        "event_layer_storage_in": "mean_event_layer_storage_in",
+    }
+    available_values = {
+        label: column
+        for label, column in value_columns.items()
+        if column in annual_summary.columns
+    }
+    if not available_values:
+        return pd.DataFrame()
+
+    df = annual_summary.copy()
+    df["year"] = pd.to_numeric(df["year"], errors="coerce")
+    count_column = "n_trustworthy_events"
+    if count_column not in df.columns:
+        df[count_column] = 1
+    df[count_column] = pd.to_numeric(df[count_column], errors="coerce")
+    for column in available_values.values():
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    group_columns = [
+        "strip_group",
+        "location",
+        "strip",
+        "logger_position",
+        "sensor_col",
+        "depth_index",
+        "depth_inches",
+    ]
+    group_columns = [column for column in group_columns if column in df.columns]
+    rows: list[dict[str, Any]] = []
+    for keys, group in df.groupby(group_columns, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row = dict(zip(group_columns, keys))
+        years = group["year"].dropna()
+        row.update(
+            {
+                "n_years_observed": int(years.nunique()),
+                "first_year": int(years.min()) if not years.empty else np.nan,
+                "last_year": int(years.max()) if not years.empty else np.nan,
+                "total_eligible_events": float(group[count_column].fillna(0).sum()),
+            }
+        )
+        for label, column in available_values.items():
+            valid = group[[column, count_column]].dropna(subset=[column])
+            values = valid[column]
+            weights = valid[count_column].fillna(0).clip(lower=0)
+            row[f"annual_mean_{label}_mean"] = values.mean()
+            row[f"annual_mean_{label}_sd"] = values.std()
+            row[f"annual_mean_{label}_min"] = values.min()
+            row[f"annual_mean_{label}_max"] = values.max()
+            row[f"annual_mean_{label}_range"] = values.max() - values.min()
+            mean_value = values.mean()
+            row[f"annual_mean_{label}_cv"] = (
+                values.std() / mean_value
+                if pd.notna(mean_value) and mean_value != 0
+                else np.nan
+            )
+            row[f"event_weighted_mean_{label}"] = (
+                np.average(values, weights=weights)
+                if not values.empty and weights.sum() > 0
+                else np.nan
+            )
+        row["stability_evidence"] = (
+            "year_comparison_available"
+            if row["n_years_observed"] >= 2
+            else "insufficient_years"
+        )
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+    numeric_columns = result.select_dtypes(include=["number"]).columns
+    result[numeric_columns] = result[numeric_columns].round(4)
+    return result
+
+
+def build_holding_capacity_annual_comparison(
+    annual_summary: pd.DataFrame,
+    stability_summary: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build a compact annual-versus-pooled holding-capacity comparison."""
+    if annual_summary.empty or stability_summary.empty:
+        return pd.DataFrame()
+
+    group_columns = [
+        "strip_group",
+        "location",
+        "strip",
+        "logger_position",
+        "sensor_col",
+        "depth_index",
+        "depth_inches",
+    ]
+    group_columns = [
+        column
+        for column in group_columns
+        if column in annual_summary.columns
+        and column in stability_summary.columns
+    ]
+    annual_columns = group_columns + [
+        column
+        for column in (
+            "year",
+            "n_trustworthy_events",
+            "mean_plateau_vwc",
+            "mean_event_layer_storage_in",
+        )
+        if column in annual_summary.columns
+    ]
+    stability_columns = group_columns + [
+        column
+        for column in (
+            "n_years_observed",
+            "total_eligible_events",
+            "annual_mean_plateau_vwc_sd",
+            "annual_mean_plateau_vwc_range",
+            "annual_mean_plateau_vwc_cv",
+            "event_weighted_mean_plateau_vwc",
+            "annual_mean_event_layer_storage_in_sd",
+            "annual_mean_event_layer_storage_in_range",
+            "annual_mean_event_layer_storage_in_cv",
+            "event_weighted_mean_event_layer_storage_in",
+            "stability_evidence",
+        )
+        if column in stability_summary.columns
+    ]
+    result = annual_summary[annual_columns].merge(
+        stability_summary[stability_columns],
+        on=group_columns,
+        how="left",
+        validate="many_to_one",
+    )
+    if {
+        "mean_plateau_vwc",
+        "event_weighted_mean_plateau_vwc",
+    }.issubset(result.columns):
+        result["plateau_vwc_difference_from_pooled"] = (
+            result["mean_plateau_vwc"]
+            - result["event_weighted_mean_plateau_vwc"]
+        )
+    if {
+        "mean_event_layer_storage_in",
+        "event_weighted_mean_event_layer_storage_in",
+    }.issubset(result.columns):
+        result["layer_storage_in_difference_from_pooled"] = (
+            result["mean_event_layer_storage_in"]
+            - result["event_weighted_mean_event_layer_storage_in"]
+        )
+
+    sort_columns = [
+        column
+        for column in ("strip_group", "location", "strip", "depth_inches", "year")
+        if column in result.columns
+    ]
+    result = result.sort_values(sort_columns).reset_index(drop=True)
+    numeric_columns = result.select_dtypes(include=["number"]).columns
+    result[numeric_columns] = result[numeric_columns].round(4)
+    return result
+
+
+def build_matched_sensor_treatment_events(
+    event_results: pd.DataFrame,
+    trustworthy_table: pd.DataFrame,
+) -> pd.DataFrame:
+    """Pair biochar and control sensor responses within irrigation events."""
+    if event_results.empty or trustworthy_table.empty:
+        return pd.DataFrame()
+
+    trusted = trustworthy_table.loc[
+        trustworthy_table["trustworthy_event"].fillna(False)
+    ].copy()
+    merge_columns = [
+        column
+        for column in ("year", "strip", "event_id", "sensor_col")
+        if column in event_results.columns and column in trusted.columns
+    ]
+    if len(merge_columns) < 4:
+        return pd.DataFrame()
+
+    data = event_results.merge(
+        trusted[merge_columns].drop_duplicates(),
+        on=merge_columns,
+        how="inner",
+        validate="many_to_one",
+    )
+    data["treatment"] = data["strip"].map(STRIP_TREATMENT)
+    data["pair"] = data["strip"].map(STRIP_TREATMENT_PAIR)
+    data = data.loc[data["treatment"].isin(["biochar", "control"])].copy()
+    if data.empty:
+        return pd.DataFrame()
+
+    identifiers = [
+        column
+        for column in (
+            "year",
+            "pair",
+            "event_id",
+            "logger_position",
+            "depth_index",
+            "depth_inches",
+            "irrigation_start",
+            "irrigation_end",
+        )
+        if column in data.columns
+    ]
+    metrics = [
+        column
+        for column in (
+            "strip",
+            "baseline_vwc",
+            "plateau_vwc",
+            "peak_vwc",
+            "peak_increase",
+            "event_layer_storage_in",
+            "gallons_strip",
+            "event_duration_hours",
+            "time_to_peak_hours",
+            "time_to_plateau_hours",
+        )
+        if column in data.columns
+    ]
+    biochar = data.loc[data["treatment"].eq("biochar"), identifiers + metrics]
+    control = data.loc[data["treatment"].eq("control"), identifiers + metrics]
+    matched = biochar.merge(
+        control,
+        on=identifiers,
+        how="inner",
+        suffixes=("_biochar", "_control"),
+        validate="one_to_one",
+    )
+    if matched.empty:
+        return matched
+
+    difference_metrics = [
+        "baseline_vwc",
+        "plateau_vwc",
+        "peak_vwc",
+        "peak_increase",
+        "event_layer_storage_in",
+        "gallons_strip",
+        "event_duration_hours",
+        "time_to_peak_hours",
+        "time_to_plateau_hours",
+    ]
+    for metric in difference_metrics:
+        biochar_column = f"{metric}_biochar"
+        control_column = f"{metric}_control"
+        if biochar_column in matched.columns and control_column in matched.columns:
+            matched[f"{metric}_difference"] = (
+                pd.to_numeric(matched[biochar_column], errors="coerce")
+                - pd.to_numeric(matched[control_column], errors="coerce")
+            )
+
+    sort_columns = [
+        column
+        for column in ("year", "pair", "event_id", "logger_position", "depth_inches")
+        if column in matched.columns
+    ]
+    matched = matched.sort_values(sort_columns).reset_index(drop=True)
+    numeric_columns = matched.select_dtypes(include=["number"]).columns
+    matched[numeric_columns] = matched[numeric_columns].round(4)
+    return matched
+
+
+def summarize_matched_sensor_treatment_events(
+    matched_events: pd.DataFrame,
+) -> pd.DataFrame:
+    """Summarize paired biochar-minus-control responses and variability."""
+    if matched_events.empty:
+        return pd.DataFrame()
+
+    group_columns = [
+        column
+        for column in ("pair", "logger_position", "depth_index", "depth_inches")
+        if column in matched_events.columns
+    ]
+    metrics = [
+        metric
+        for metric in ("baseline_vwc", "plateau_vwc", "event_layer_storage_in")
+        if f"{metric}_biochar" in matched_events.columns
+        and f"{metric}_control" in matched_events.columns
+        and f"{metric}_difference" in matched_events.columns
+    ]
+    rows: list[dict[str, Any]] = []
+    for keys, group in matched_events.groupby(group_columns, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        row: dict[str, Any] = dict(zip(group_columns, keys))
+        row["n_matched_events"] = int(group["event_id"].nunique())
+        row["first_year"] = pd.to_numeric(group["year"], errors="coerce").min()
+        row["last_year"] = pd.to_numeric(group["year"], errors="coerce").max()
+
+        for metric in metrics:
+            biochar = pd.to_numeric(group[f"{metric}_biochar"], errors="coerce")
+            control = pd.to_numeric(group[f"{metric}_control"], errors="coerce")
+            differences = pd.to_numeric(
+                group[f"{metric}_difference"], errors="coerce"
+            ).dropna()
+            n = int(len(differences))
+            mean_difference = differences.mean()
+            sd_difference = differences.std()
+            standard_error = sd_difference / np.sqrt(n) if n > 1 else np.nan
+            row.update(
+                {
+                    f"n_{metric}": n,
+                    f"mean_{metric}_biochar": biochar.mean(),
+                    f"mean_{metric}_control": control.mean(),
+                    f"mean_{metric}_difference": mean_difference,
+                    f"median_{metric}_difference": differences.median(),
+                    f"sd_{metric}_difference": sd_difference,
+                    f"approx_95ci_low_{metric}_difference": (
+                        mean_difference - 1.96 * standard_error
+                        if pd.notna(standard_error) else np.nan
+                    ),
+                    f"approx_95ci_high_{metric}_difference": (
+                        mean_difference + 1.96 * standard_error
+                        if pd.notna(standard_error) else np.nan
+                    ),
+                    f"biochar_{metric}_sd": biochar.std(),
+                    f"control_{metric}_sd": control.std(),
+                    f"biochar_lower_variability_{metric}": (
+                        biochar.std() < control.std()
+                        if biochar.notna().sum() > 1 and control.notna().sum() > 1
+                        else pd.NA
+                    ),
+                    f"biochar_higher_{metric}_fraction": (
+                        float((differences > 0).mean()) if n else np.nan
+                    ),
+                }
+            )
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+    sort_columns = [
+        column
+        for column in ("pair", "logger_position", "depth_inches")
+        if column in result.columns
+    ]
+    result = result.sort_values(sort_columns).reset_index(drop=True)
+    numeric_columns = result.select_dtypes(include=["number"]).columns
+    result[numeric_columns] = result[numeric_columns].round(4)
+    return result
 
 
 def add_scaled_storage_fields(

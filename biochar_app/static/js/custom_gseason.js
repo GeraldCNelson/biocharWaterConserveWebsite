@@ -11,6 +11,13 @@
  *   monthAbbr?: Record<string, string>
  * }} cfg
  */
+export function nextCustomPeriodCode(periods) {
+  const used = new Set(periods.map((period) => String(period?.code || "")));
+  let candidate = 1;
+  while (used.has(`CUSTOM_${candidate}`)) candidate += 1;
+  return `CUSTOM_${candidate}`;
+}
+
 export function initCustomGseason(cfg) {
   const {
     defaultYear,
@@ -222,10 +229,10 @@ export function initCustomGseason(cfg) {
   // 4) “+ Add Period” button
   addPeriodBtnEl.onclick = () => {
     const anchor = parseInt(yearSelectEl.value, 10);
-    const newIdx = periodsData.length + 1;
+    const code = nextCustomPeriodCode(periodsData);
 
     periodsData.push({
-      code: `CUSTOM_${newIdx}`,
+      code,
       isDefault: false,
       label: "",
       start: `${anchor}-01-01`,

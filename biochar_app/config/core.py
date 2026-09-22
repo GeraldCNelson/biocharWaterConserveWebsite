@@ -80,9 +80,17 @@ TRACE_OPTION_MAP: dict[str, str] = {
 # Defaults
 # ---------------------------------------------------------------------
 
-DEFAULT_YEAR = 2025
-DEFAULT_START_DATE = datetime.date(DEFAULT_YEAR, 1, 1).isoformat()
-DEFAULT_END_DATE = datetime.date(DEFAULT_YEAR, 12, 31).isoformat()
+DEFAULT_YEAR = 2026
+_DEFAULT_YEAR_START = datetime.date(DEFAULT_YEAR, 1, 1)
+_DEFAULT_YEAR_END = datetime.date(DEFAULT_YEAR, 12, 31)
+_DEFAULT_LOCAL_TODAY = datetime.datetime.now(
+    ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
+).date()
+DEFAULT_START_DATE = _DEFAULT_YEAR_START.isoformat()
+DEFAULT_END_DATE = min(
+    max(_DEFAULT_LOCAL_TODAY, _DEFAULT_YEAR_START),
+    _DEFAULT_YEAR_END,
+).isoformat()
 
 DEFAULT_SENSOR_DEPTH_CODE = "1"
 DEFAULT_VARIABLE = "VWC"
@@ -110,7 +118,7 @@ DEFAULT_GSEASON_PERIODS = {
         "start": "11-01",
         "end": "03-31",
     },
-    "Q2_Early_Growing": {
+    "Q2_Growing": {
         "label": "Growing Season",
         "start": "04-01",
         "end": "10-31",
@@ -215,9 +223,10 @@ IRR_COLOR = "rgba(160, 82, 45, 0.55)"  # semi-transparent sienna
 
 ms_per_day = 24 * 3600 * 1000
 bar_width_map = {
-    # Slightly wider than one observation interval so low precipitation
-    # remains visible when several days of 15-minute data are displayed.
-    "15min": 30 * 60 * 1000,
+    # Use a three-hour display width so isolated 15-minute precipitation
+    # observations remain visible across multi-week plots. This affects only
+    # presentation; the timestamp and measured amount remain unchanged.
+    "15min": 3 * 60 * 60 * 1000,
     "hourly": 3600 * 1000,
     # Leave a visible gap between neighboring daily precipitation totals.
     "daily": ms_per_day * 0.5,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 import numpy as np
@@ -19,7 +20,9 @@ from biochar_app.config.paths import (
 
 from biochar_app.config.irrigation_config import get_irrigation_analysis_options
 
-def load_logger_data(year: int, granularity: Optional[str] = None) -> pd.DataFrame:
+def _load_logger_data_uncached(
+    year: int, granularity: Optional[str] = None
+) -> pd.DataFrame:
     """
     Canonical loader for logger summary parquet data.
 
@@ -113,6 +116,30 @@ def load_logger_data(year: int, granularity: Optional[str] = None) -> pd.DataFra
         df = df.merge(weather_df, on="timestamp", how="left")
 
     return df.sort_values("timestamp").reset_index(drop=True)
+
+
+@lru_cache(maxsize=32)
+def _load_logger_data_cached(year: int, granularity: str) -> pd.DataFrame:
+    """Load and merge one immutable runtime dataset per year/granularity."""
+    return _load_logger_data_uncached(year, granularity)
+
+
+def load_logger_data(
+    year: int, granularity: Optional[str] = None
+) -> pd.DataFrame:
+    """Return a process-cached logger, ratio, and weather dataset.
+
+    Dashboard routes filter a copy of this frame and do not mutate the cached
+    source. The production service restart after an operational ETL update
+    creates a fresh process and therefore a fresh cache.
+    """
+    gran = (granularity or "15min").lower()
+    return _load_logger_data_cached(int(year), gran)
+
+
+def clear_logger_data_cache() -> None:
+    """Clear runtime data after an in-process data refresh or in tests."""
+    _load_logger_data_cached.cache_clear()
 
 def _weather_base_dir(granularity: str) -> Path:
     gran = granularity.lower()

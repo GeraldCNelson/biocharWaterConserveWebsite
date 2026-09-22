@@ -47,10 +47,10 @@ class PrecipitationBarWidthTests(unittest.TestCase):
         self.assertEqual(figure.layout.yaxis2.title.text, "")
         self.assertEqual(common_yaxis2_config("us")["title"]["text"], "")
 
-    def test_15min_bar_uses_visible_30_minute_display_width(self) -> None:
+    def test_15min_bar_uses_visible_three_hour_display_width(self) -> None:
         self.assertEqual(
             self.precipitation_width("15min"),
-            30 * 60 * 1000,
+            3 * 60 * 60 * 1000,
         )
 
     def test_15minute_alias_uses_15min_width(self) -> None:
@@ -70,3 +70,24 @@ class PrecipitationBarWidthTests(unittest.TestCase):
             self.precipitation_width("daily"),
             int(0.5 * 24 * 60 * 60 * 1000),
         )
+
+    def test_zero_precipitation_rows_are_omitted_from_trace(self) -> None:
+        data = pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime(
+                    ["2025-05-17 00:00", "2025-05-17 00:15", "2025-05-17 00:30"]
+                ),
+                "precip_in": [0.0, 0.02, 0.0],
+            }
+        )
+        figure = go.Figure()
+
+        add_precipitation_bars(
+            figure,
+            data,
+            unit_system="us",
+            granularity="15min",
+        )
+
+        self.assertEqual(list(figure.data[0].x), [data.loc[1, "timestamp"]])
+        self.assertEqual(list(figure.data[0].y), [0.02])

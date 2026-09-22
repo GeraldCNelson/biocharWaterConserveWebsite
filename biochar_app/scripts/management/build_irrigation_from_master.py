@@ -83,6 +83,13 @@ STRIPS_BY_GROUP: Final[dict[str, tuple[str, str]]] = {
     "S3_S4": ("S3", "S4"),
 }
 
+# Fixed field-design fact. Workbook location cells are retained as source
+# evidence, but cannot override the physical side occupied by each strip pair.
+LOCATION_BY_STRIP_GROUP: Final[dict[str, str]] = {
+    "S1_S2": "west",
+    "S3_S4": "east",
+}
+
 PRODUCTION_COLUMNS: Final[list[str]] = [
     "year",
     "date",
@@ -277,7 +284,7 @@ def build_candidate_from_events(
                     "start_timestamp": start,
                     "end_timestamp": end,
                     "strip_group": strip_group,
-                    "location": event["location"],
+                    "location": LOCATION_BY_STRIP_GROUP[strip_group],
                     "strip": strip,
                     "total_meter_gallons": total_meter_gallons,
                     "flow_allocation_fraction": (

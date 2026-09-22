@@ -25,4 +25,3 @@ SQLAlchemy==2.0.44
 pydantic==2.13.4
 
 pyserial==3.5
-pylink-square==2.0.0

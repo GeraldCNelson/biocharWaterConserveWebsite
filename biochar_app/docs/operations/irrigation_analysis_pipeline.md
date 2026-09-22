@@ -23,6 +23,8 @@ scripts/management/estimate_irrigation_holding_capacity.py
         +--> event response and holding-capacity tables
         +--> event_multidepth/<position>/*.png
         +--> irrigation_event_multidepth_plot_log_<year>.csv
+        +--> event_multilocation/<depth>in/*.png
+        +--> irrigation_event_multilocation_plot_log_<year>.csv
         |
         v
 scripts/management/irrigation_analysis/reporting.py
@@ -67,6 +69,49 @@ before export, but the displayed clock value remains Denver civil time.
 Clock-correction evidence and explanations belong in
 `LOGGER_CLOCK_CORRECTION_METADATA`. The generated
 `logger_clock_corrections_audit.csv` makes those operational states reviewable.
+
+Most historical correction boundaries were inferred from discontinuities in
+the raw 15-minute logger sequence. A 75-minute forward gap or a 45-minute
+backward step identifies an approximately one-hour clock change and supports
+the inverse offset needed to make that logger internally continuous. It does
+**not**, by itself, prove that the logger's initial segment was aligned to MST
+or to the other field loggers. Absolute alignment must be checked against an
+independent time reference such as a documented PC400 comparison, irrigation
+start observations, meter-photo times, or a shared environmental response.
+
+Accordingly, distinguish two claims when interpreting the correction audit:
+
+- **continuity verified**: the transition and inverse stitching adjustment are
+  supported by the raw timestamp sequence;
+- **absolute time verified**: the resulting wall-clock time is independently
+  anchored. Do not infer this status from a discontinuity alone.
+
+S3T has two paired 2024 transitions: a backward change on February 23 and a
+forward change on March 21. Its absolute correction changes from `-60` to zero
+between those boundaries and then returns to `-60`.
+
+The operational correction selector uses timestamp values rather than source
+file row order. Around a backward clock reset, the repeated clock-hour can
+therefore contain indistinguishable pre-reset and post-reset timestamps. Treat
+that overlapping interval as ambiguous; analyses well outside the repeated
+hour use the intended piecewise state.
+
+The February and August 2026 PC400 screenshot sets provide an absolute MST
+anchor for all 12 stations. The operational table propagates that anchor
+backward through each verified raw timestamp discontinuity. Consequently, its
+initial `1900-01-01` rows are sentinel states for all available earlier data,
+not observed logger dates. This absolute anchoring changes the former
+continuity-only offsets substantially. In particular, S3M's pre-reset states
+are positive (`+450`, `+390`, `+330`, and `+270` minutes), ending at zero with
+the exact 270-minute raw jump at the February 2026 reset. That sign and scale
+agree with the screenshot showing S3M 4 hours 23 minutes slow immediately
+before it was corrected.
+
+The screenshot calendar date is not used as a correction boundary because the
+Windows/Parallels date may have been stale. Boundaries always come from the
+first post-reset Table1 record in original file order. The evidence inventory,
+transcribed comparisons, caveats, and SHA-256 hashes are stored under
+`data-raw/logger_clock_evidence/`.
 
 ### Irrigation and meter-photo timestamps
 
@@ -159,6 +204,76 @@ Important canonical outputs include:
 - `irrigation_horizontal_advance_summary_<year>.csv`;
 - pre-start-response and trustworthy-event diagnostics.
 
+#### Analysis eligibility and comparisons across years
+
+No calendar year is excluded categorically. Records from 2023 through 2026
+are evaluated with the same event-level quality-control rules, and one event
+may be eligible for one outcome but not another:
+
+- `holding_capacity_eligible` requires a trustworthy event and a complete
+  top/middle/bottom storage profile; it does not require applied gallons;
+- `unretained_eligible` additionally requires a positive applied-water total;
+- `end_of_field_unretained_eligible` additionally requires a credible
+  bottom-position 6-inch response at or after irrigation starts.
+
+Holding-capacity QC is calculated independently for the top, middle, and
+bottom logger positions. The position is retained in `logger_position` (`T`,
+`M`, or `B`). The separate `location` field records the fixed field side
+(`west` for S1/S2 and `east` for S3/S4); it is not a logger-position field.
+Bottom-only trustworthy-event outputs remain available because bottom arrival
+is specifically required for downstream/end-of-field interpretation.
+
+The end-of-field quantity is an upper-bound unretained-water proxy, not
+measured runoff. Failed rows remain in the output with a reason field rather
+than disappearing from the analysis.
+
+Before pooling eligible holding-capacity observations across years, review:
+
+```text
+analysis/holding_capacity/holding_capacity_year_stability_summary.csv
+```
+
+This table reports the number and range of represented years, eligible-event
+counts, annual means, annual standard deviations and coefficients of
+variation, annual ranges, and event-count-weighted pooled means for each
+strip, logger position, and depth. It deliberately does not impose an
+automatic stable/unstable cutoff. Use those diagnostics to decide whether a
+pooled estimate adequately represents the annual results.
+
+For a compact row-by-row review of each annual estimate against its pooled
+reference, use:
+
+```text
+analysis/holding_capacity/holding_capacity_annual_comparison.csv
+```
+
+It includes the annual eligible-event count, annual plateau VWC and layer
+storage estimates, the corresponding event-weighted pooled estimates, each
+annual value's difference from the pooled value, and the across-year
+variability measures.
+
+#### Matched biochar/control sensor comparison
+
+The same run also writes `matched_sensor_treatment_events_<year>.csv` and
+`matched_sensor_treatment_events_all_years.csv`. Each row compares the biochar
+and control strip within the same irrigation event, logger position, and sensor
+depth. S1 is paired with S2, and S3 is paired with S4. Both sensor records must
+pass the all-position trustworthy-event QC; unmatched or failed records are
+retained in the QC tables but do not enter this paired comparison.
+
+The detail files report each value for the biochar and control strip plus an
+explicit `*_difference` field calculated as biochar minus control. They retain
+baseline VWC, applied gallons, and event duration so apparent treatment
+differences can be reviewed against starting conditions and event exposure.
+
+`matched_sensor_treatment_summary_<year>.csv` summarizes each year's matched
+events. `matched_sensor_treatment_summary.csv` pools the eligible matched events
+across years by strip pair, logger position, and depth. It reports means,
+paired differences, approximate 95% confidence intervals, the fraction of
+events in which biochar was higher, and separate event-to-event standard
+deviations for biochar and control. These are exploratory repeated-event
+comparisons, not independent randomized replicates or causal estimates.
+
 ### 4. Arrival diagnostics
 
 Owner: `biochar_app/scripts/management/irrigation_analysis/diagnostics.py`
@@ -223,6 +338,23 @@ Reporting should use this log rather than reconstructing filenames.
 Confirm that plotting completed by checking the plot log for `written` statuses
 and inspecting representative PNG files under `event_multidepth/`.
 
+The same run also writes complementary constant-depth plots across the Top,
+Middle, and Bottom logger positions. These use location colors and report the
+Top-to-Middle, Middle-to-Bottom, and Top-to-Bottom arrival intervals. A warning
+is printed in the figure footer when standard arrivals do not follow the
+expected Top-to-Middle-to-Bottom order.
+
+```text
+data-processed/management/irrigation/analysis/figures/event_multilocation/
+    6in/
+    12in/
+    18in/
+```
+
+The corresponding
+`irrigation_event_multilocation_plot_log_<year>.csv` records the event, strip,
+depth, output path, and write status.
+
 ### 6. DOCX reports
 
 Owner: `biochar_app/scripts/management/irrigation_analysis/reporting.py`
@@ -284,6 +416,185 @@ python biochar_app/scripts/management/irrigation_analysis/reporting.py
 The modification time of `irrigation_arrival_times_<year>.csv` is a useful
 check when a regenerated report appears to contain old timestamps. Rebuilding a
 downstream report never refreshes an upstream diagnostic CSV.
+
+## Independent precipitation retention
+
+Owner: `biochar_app/scripts/management/analyze_precipitation_retention.py`
+
+This complementary workflow estimates retained VWC after precipitation events
+that are independent of irrigation. It must remain analytically distinct from
+the irrigation-event plateau workflow: precipitation results help establish
+repeated empirical upper retained VWC, while irrigation results describe the
+managed application events.
+
+Run from the repository root:
+
+```bash
+python biochar_app/scripts/management/analyze_precipitation_retention.py
+```
+
+Use `--years 2024 2025` to select years or `--no-plots` for a quick table-only
+run. Precipitation defaults to 2024–2026. The combined capacity table also
+uses trustworthy irrigation evidence from 2023–2026 by default; override that
+window with `--irrigation-years`. Precipitation outputs are written under:
+
+```text
+analysis/holding_capacity/precipitation_events/
+```
+
+The outputs are:
+
+- `precipitation_event_catalog.csv`: weather-station precipitation events and
+  irrigation-overlap status;
+- `precipitation_sensor_responses.csv`: one row per event and physical CS650
+  VWC sensor, including baseline, peak, 24/48/72-hour retention, decline,
+  local-temperature screening, QC and eligibility;
+- `precipitation_profile_retention.csv`: complete eligible three-depth profiles
+  spanning approximately 3--21 inches (18 represented inches), expressed as
+  equivalent inches of water;
+- `precipitation_paired_treatment_events.csv`: matched biochar-minus-control
+  comparisons within S1/S2 and S3/S4;
+- `precipitation_empirical_maxima.csv`: repeated upper retained VWC summaries
+  by strip, logger position and depth, including the P90-based recommended
+  upper retained VWC and its adoption classification;
+- `precipitation_empirical_maxima_map.png`: schematic field map of P90 retained
+  VWC by strip, top/middle/bottom position and sensor depth;
+- `precipitation_plot_log.csv` and `figures/<year>/`: compact paired review
+  plots with top, middle and bottom logger panels.
+
+The same run writes two cross-source files one directory above
+`precipitation_events/`:
+
+- `combined_empirical_capacity_observations.csv`: the event-level precipitation
+  and irrigation observations entering the combined calculation;
+- `combined_empirical_capacity.csv`: one row per physical sensor with pooled
+  maximum, P90, median and standard deviation, source-specific counts and
+  summaries, source agreement, the event/date of the highest observation, and
+  the adoption classification;
+- `combined_empirical_capacity_map.png`: the pooled P90 values in the same
+  strip-by-position, three-depth field layout as the precipitation-only map,
+  plus a fourth panel containing equivalent profile-water inches calculated
+  as the sum of the three represented depth layers;
+- `combined_empirical_complete_profiles.csv`: event-level profile water for
+  strips having all three eligible depths for one source, event and position;
+- `combined_empirical_matched_profiles.csv`: complete profiles retained only
+  where both biochar and control strips are present for the same source, event,
+  treatment pair and position, with the paired difference;
+- `combined_empirical_profile_bootstrap.csv`: 10,000-resample paired bootstrap
+  summaries for precipitation, irrigation and pooled evidence, including mean
+  and median differences, 95 percent intervals and direction classifications.
+  A source/position result requires at least four matched events before it can
+  receive a directional classification; smaller samples are labeled
+  `insufficient_events` even when their resampled interval lies on one side of
+  zero;
+- `combined_empirical_profile_unmatched_bootstrap.csv`: independent-sample
+  bootstrap comparisons using every complete profile available to each strip,
+  without requiring the paired strip to be complete in the same event;
+- `combined_empirical_profile_bootstrap_comparison.csv`: pooled matched and
+  unmatched results side by side, including the change in estimated mean
+  difference and whether their direction classifications agree;
+- `combined_empirical_profile_best_results.csv`: concise decision table using
+  the matched mean and confidence interval as the primary estimate and the
+  unmatched bootstrap as a sensitivity check. `statistical_repeatability` is
+  `strong` when both methods have the same directional 95-percent result,
+  `moderate` when their signs agree and one method is directional, and `low`
+  when both are inconclusive. `causal_confidence` remains limited because each
+  irrigation regime has only one biochar and one control strip. Known S1B and
+  S4 site-context concerns are retained explicitly rather than folded into the
+  statistical interval.
+- `combined_empirical_zone_upper_retained_water.csv`: one row per strip and
+  top/middle/bottom logger influence zone. It combines the recommended P90 VWC
+  at 6, 12 and 18 inches with nominal strip-specific zone geometry to
+  estimate gallons of water in the represented soil profile. The three
+  sensor-centered layers span approximately 3--21 inches and total 18 inches
+  of represented soil; the result is therefore not a literal 0--18-inch or
+  complete 0--21-inch estimate. The table includes all geometry, component
+  VWC values, event support and review flags needed to audit the calculation.
+- `irrigation_available_storage_comparison.csv`: one row per irrigation event
+  and strip. It subtracts the trustworthy pre-event baseline from the combined
+  P90 upper retained-water estimate in every 6-inch layer and logger influence
+  zone, then compares the applied strip volume with the remaining available
+  storage. A comparison is eligible only with all nine strip sensors. Positive
+  `estimated_water_not_retained_gal_strip` is water not retained in the
+  represented 3--21-inch profile; it is not measured runoff and may include
+  deep percolation, lateral movement, or surface outflow.
+- `irrigation_operational_alert_diagnostics.csv`: augments the available-storage
+  table with workbook duration and flow fields, sustained VWC arrival times at
+  top/middle/bottom loggers, modeled 50/80/90/100-percent storage timestamps,
+  and a retrospective candidate inspection alert. The candidate is the later
+  of the earliest sustained bottom response and the modeled 80-percent storage
+  time. It also reports runtime and gallons after the candidate alert, the
+  modeled full-storage stop time, and the lower average flow that would fit the
+  available storage if the actual duration were retained. Modeled times use
+  event-average strip flow; start/end meter readings are retained as context
+  and must not be interpreted as a continuous flow record. This is an
+  alert-development table, not an automated stop command.
+
+The logger-zone areas use the nominal 47-foot experimental strip width and
+along-furrow zone lengths in `config/field_management_metadata.py`. The width
+is supported by the report and the irrigation-pipe configuration: three
+30-foot pipes plus the center tee/connection serve each two-strip pair. The
+photo-GPS Voronoi polygons in `geospatial/field_layout/` remain useful for
+mapping diagnostics, but their source photographs have meter-scale horizontal
+positioning errors and they do not control modeled water volumes.
+
+An irrigation observation enters the combined table only when it passes the
+established trustworthy-event QC, has finite baseline and plateau VWC between
+0 and 80 percent, has a plateau at or above baseline, and was not classified
+as `no_peak`. The combined recommended upper retained VWC is the P90 of all
+eligible event-level values, not an average of the precipitation and irrigation
+P90 values. The source-specific columns must therefore be reviewed whenever
+one source contributes substantially more events than the other.
+
+The matched bootstrap resamples whole paired wetting events with replacement;
+it never separates the biochar observation from its same-event control. It is
+an event-repeatability analysis, not treatment replication: each irrigation
+regime still contains only one biochar and one control strip, so stable paired
+differences can also reflect persistent strip-specific soil or topographic
+conditions.
+
+The unmatched bootstrap is intentionally complementary, not a replacement for
+the matched analysis. It gains observations but permits the biochar and control
+samples to contain different events, years, water inputs and missing-data
+patterns. Large matched-versus-unmatched changes are therefore diagnostic of
+event selection, uneven data availability or strip-specific exposure rather
+than independent confirmation of a treatment effect.
+
+The weather station is about one-half mile from the experiment. Its
+precipitation identifies candidate events, but its soil-temperature channels
+do **not** determine sensor eligibility. Every VWC row is screened using the
+matching local `T_<depth>_raw_<strip>_<position>` CS650 channel. A near-freezing
+temperature therefore excludes only the corresponding sensor/event row, not
+the entire precipitation event. Missing local temperature, incomplete VWC,
+implausible VWC range, abrupt discontinuity, irrigation overlap and absence of
+a material wetting response are reported as separate reasons.
+
+Candidate precipitation events may also be excluded at the field-event level
+when field evidence shows that precipitation measured at the remote weather
+station did not reach the experiment. The 2026-07-29 16:15 weather-station
+event is excluded for this reason: none of the other Top loggers corroborated
+rainfall at the field, and the small S3T fluctuations are not treated as a
+localized rainfall response. Event-specific exclusions are recorded in
+`FIELD_PRECIPITATION_EVENT_EXCLUSIONS` and propagated into the sensor-level
+output as `field_event_excluded` and `field_event_exclusion_reason`. They must
+be based on a documented field review rather than applied automatically to all
+small storms.
+
+The empirical maximum is operational rather than saturation: it is the upper
+retained VWC observed 48–72 hours after repeated eligible **warm** wetting
+events (minimum local sensor temperature at least 40 degrees F). Eligible
+cold-but-unfrozen events remain in the retention and paired-treatment tables as
+corroborating evidence, but do not define the empirical maximum. Near-freezing
+events (minimum local temperature at or below 32.5 degrees F) are excluded.
+Review event counts, the 90th percentile, the observed maximum and diagnostic
+plots together before adopting a value for water-balance calculations.
+The adoption classifications are `supported` for at least four warm events,
+`provisional` for two or three events, `insufficient` for one event, and
+`review_max_p90_gap` when an otherwise-supported observed maximum is at least
+10 percent above its P90 value. A two- or three-event result with that gap is
+`provisional_review_max_p90_gap`. The separate `max_p90_gap_review` flag makes
+all such gaps easy to filter regardless of event count. The percentage gap
+uses the observed maximum as its denominator.
 
 ## Verification
 

@@ -1,0 +1,359 @@
+{
+  "counts": {
+    "event_rows": 146,
+    "complete_arrival_rows": 117,
+    "top_to_bottom_ordered_rows": 102,
+    "strict_ordered_arrival_rows": 62,
+    "arrival_model_eligible_rows": 87,
+    "arrival_model_event_clusters": 59,
+    "unretained_residual_rows": 78,
+    "eof_proxy_rows": 77,
+    "arrival_model_eligible_by_strip": {
+      "S1": 16,
+      "S2": 18,
+      "S3": 31,
+      "S4": 22
+    },
+    "arrival_model_eligible_by_irrigation_regime": {
+      "biweekly": 53,
+      "monthly": 34
+    },
+    "unretained_by_strip": {
+      "S1": 15,
+      "S2": 20,
+      "S3": 25,
+      "S4": 18
+    },
+    "s3_complete_arrival_rows": 40,
+    "s3_top_to_bottom_ordered_rows": 32,
+    "s3_arrival_model_eligible_rows": 31,
+    "s3_strict_ordered_rows": 0
+  },
+  "correlations": {
+    "flow_vs_top_arrival": {
+      "n": 87,
+      "pearson_r": -0.3270423611731507,
+      "pearson_p_permutation": 0.007598480303939212,
+      "spearman_rho": -0.27281314155592384,
+      "spearman_p_permutation": 0.008198360327934412
+    },
+    "flow_vs_top_to_middle": {
+      "n": 71,
+      "pearson_r": -0.06136987903417712,
+      "pearson_p_permutation": 0.620875824835033,
+      "spearman_rho": -0.07730718772795976,
+      "spearman_p_permutation": 0.5182963407318536
+    },
+    "flow_vs_middle_to_bottom": {
+      "n": 61,
+      "pearson_r": -0.053675624788154574,
+      "pearson_p_permutation": 0.6764647070585883,
+      "spearman_rho": -0.044252075116680334,
+      "spearman_p_permutation": 0.7466506698660268
+    },
+    "flow_vs_top_to_bottom": {
+      "n": 87,
+      "pearson_r": -0.120603607568226,
+      "pearson_p_permutation": 0.26034793041391724,
+      "spearman_rho": -0.08968500767905876,
+      "spearman_p_permutation": 0.40491901619676063
+    },
+    "flow_vs_unretained_fraction": {
+      "n": 78,
+      "pearson_r": 0.4460739482859815,
+      "pearson_p_permutation": 0.0005998800239952009,
+      "spearman_rho": 0.33423615791231337,
+      "spearman_p_permutation": 0.002999400119976005
+    },
+    "flow_vs_storage_fraction": {
+      "n": 78,
+      "pearson_r": -0.43541351288996094,
+      "pearson_p_permutation": 0.0001999600079984003,
+      "spearman_rho": -0.33445960910042283,
+      "spearman_p_permutation": 0.0023995200959808036
+    }
+  },
+  "models": {
+    "log_top_arrival": {
+      "outcome": "log_top_arrival",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 87,
+      "n_event_clusters": 59,
+      "r2": 0.3666992038736425,
+      "log_flow_coef": -0.8248734917965501,
+      "log_flow_se": 0.2280554138288425,
+      "log_flow_p_normal_approx": 0.00029805214233218335,
+      "log_flow_ci_low": -1.2718621029010815,
+      "log_flow_ci_high": -0.3778848806920188
+    },
+    "log_top_to_middle": {
+      "outcome": "log_top_to_middle",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 71,
+      "n_event_clusters": 53,
+      "r2": 0.8712069324036448,
+      "log_flow_coef": -0.6565032410752116,
+      "log_flow_se": 0.20128829649473,
+      "log_flow_p_normal_approx": 0.0011082159331857048,
+      "log_flow_ci_low": -1.0510283022048825,
+      "log_flow_ci_high": -0.2619781799455408
+    },
+    "log_middle_to_bottom": {
+      "outcome": "log_middle_to_bottom",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 61,
+      "n_event_clusters": 40,
+      "r2": 0.1821624326175333,
+      "log_flow_coef": -0.23057162137141085,
+      "log_flow_se": 0.3475882931756446,
+      "log_flow_p_normal_approx": 0.5071083971588145,
+      "log_flow_ci_low": -0.9118446759956743,
+      "log_flow_ci_high": 0.4507014332528526
+    },
+    "log_top_to_bottom": {
+      "outcome": "log_top_to_bottom",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 87,
+      "n_event_clusters": 59,
+      "r2": 0.7761631562112608,
+      "log_flow_coef": -0.28167360653856466,
+      "log_flow_se": 0.24433132764260654,
+      "log_flow_p_normal_approx": 0.24897828284355797,
+      "log_flow_ci_low": -0.7605630087180735,
+      "log_flow_ci_high": 0.19721579564094416
+    },
+    "log_top_to_bottom_strict": {
+      "outcome": "log_top_to_bottom",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 51,
+      "n_event_clusters": 38,
+      "r2": 0.4869268164163427,
+      "log_flow_coef": -0.6347595770831203,
+      "log_flow_se": 0.2046536268401955,
+      "log_flow_p_normal_approx": 0.0019245914523603933,
+      "log_flow_ci_low": -1.0358806856899034,
+      "log_flow_ci_high": -0.23363846847633707
+    },
+    "log_top_to_bottom_biweekly": {
+      "outcome": "log_top_to_bottom",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 53,
+      "n_event_clusters": 41,
+      "r2": 0.7707238519602582,
+      "log_flow_coef": -0.09927535873351773,
+      "log_flow_se": 0.3926126937949271,
+      "log_flow_p_normal_approx": 0.8003777527908946,
+      "log_flow_ci_low": -0.8687962385715748,
+      "log_flow_ci_high": 0.6702455211045393
+    },
+    "log_top_to_bottom_monthly": {
+      "outcome": "log_top_to_bottom",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 34,
+      "n_event_clusters": 18,
+      "r2": 0.7525606809763612,
+      "log_flow_coef": -0.5958925830234109,
+      "log_flow_se": 0.08839460964803145,
+      "log_flow_p_normal_approx": 1.57000144656376e-11,
+      "log_flow_ci_low": -0.7691460179335525,
+      "log_flow_ci_high": -0.4226391481132692
+    },
+    "unretained_fraction_raw": {
+      "outcome": "unretained_fraction",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 78,
+      "n_event_clusters": 53,
+      "r2": 0.6214398535952645,
+      "log_flow_coef": 0.40925877660286386,
+      "log_flow_se": 0.08244642551228455,
+      "log_flow_p_normal_approx": 6.907872822856532e-07,
+      "log_flow_ci_low": 0.24766378259878613,
+      "log_flow_ci_high": 0.5708537706069416
+    },
+    "storage_fraction_raw": {
+      "outcome": "estimated_storage_fraction_0_18in",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow"
+      ],
+      "n": 78,
+      "n_event_clusters": 53,
+      "r2": 0.5794862723854,
+      "log_flow_coef": -0.4374421022473026,
+      "log_flow_se": 0.09482925640177722,
+      "log_flow_p_normal_approx": 3.9700422626120096e-06,
+      "log_flow_ci_low": -0.623307444794786,
+      "log_flow_ci_high": -0.2515767596998193
+    },
+    "unretained_fraction_volume_adjusted": {
+      "outcome": "unretained_fraction",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow",
+        "log_gallons"
+      ],
+      "n": 78,
+      "n_event_clusters": 53,
+      "r2": 0.8200940799841513,
+      "log_flow_coef": 0.1773184994044277,
+      "log_flow_se": 0.04961412672473672,
+      "log_flow_p_normal_approx": 0.0003516336355669255,
+      "log_flow_ci_low": 0.08007481102394375,
+      "log_flow_ci_high": 0.27456218778491165
+    },
+    "storage_fraction_volume_adjusted": {
+      "outcome": "estimated_storage_fraction_0_18in",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow",
+        "log_gallons"
+      ],
+      "n": 78,
+      "n_event_clusters": 53,
+      "r2": 0.8079627617731683,
+      "log_flow_coef": -0.16684675098177373,
+      "log_flow_se": 0.05547682811985796,
+      "log_flow_p_normal_approx": 0.0026340315019309666,
+      "log_flow_ci_low": -0.27558133409669533,
+      "log_flow_ci_high": -0.058112167866852124
+    },
+    "absolute_storage_volume_adjusted": {
+      "outcome": "log_storage_gallons",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow",
+        "log_gallons"
+      ],
+      "n": 78,
+      "n_event_clusters": 53,
+      "r2": 0.6898639674536602,
+      "log_flow_coef": -0.3543024215641067,
+      "log_flow_se": 0.08347442961183478,
+      "log_flow_p_normal_approx": 2.191374911040555e-05,
+      "log_flow_ci_low": -0.5179123036033029,
+      "log_flow_ci_high": -0.19069253952491053
+    },
+    "storage_fraction_volume_adjusted_biweekly": {
+      "outcome": "estimated_storage_fraction_0_18in",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow",
+        "log_gallons"
+      ],
+      "n": 43,
+      "n_event_clusters": 32,
+      "r2": 0.8005244896029599,
+      "log_flow_coef": -0.14675508906498916,
+      "log_flow_se": 0.07104868562305773,
+      "log_flow_p_normal_approx": 0.038870355928223944,
+      "log_flow_ci_low": -0.2860105128861823,
+      "log_flow_ci_high": -0.007499665243796
+    },
+    "storage_fraction_volume_adjusted_monthly": {
+      "outcome": "estimated_storage_fraction_0_18in",
+      "controls": "strip and year fixed effects",
+      "predictors": [
+        "log_flow",
+        "log_gallons"
+      ],
+      "n": 35,
+      "n_event_clusters": 21,
+      "r2": 0.7796833259529148,
+      "log_flow_coef": -0.15970551404438402,
+      "log_flow_se": 0.07167008354244754,
+      "log_flow_p_normal_approx": 0.025857664847794493,
+      "log_flow_ci_low": -0.30017887778758123,
+      "log_flow_ci_high": -0.01923215030118683
+    }
+  },
+  "paired_stats": {
+    "S1_S2": {
+      "diff_top_to_bottom_min": {
+        "n": 16,
+        "mean": 216.5625,
+        "median": 217.5,
+        "bootstrap_ci_low": 161.25,
+        "bootstrap_ci_high": 270.9375,
+        "sign_flip_p": 4.999750012499375e-05
+      },
+      "diff_unretained_fraction": {
+        "n": 14,
+        "mean": 0.09999999999999999,
+        "median": 0.1,
+        "bootstrap_ci_low": 0.05285714285714286,
+        "bootstrap_ci_high": 0.14857142857142858,
+        "sign_flip_p": 0.0022998850057497125
+      },
+      "diff_unretained_gal_strip": {
+        "n": 14,
+        "mean": 6153.447142857141,
+        "median": 5257.424999999999,
+        "bootstrap_ci_low": 2923.869464285715,
+        "bootstrap_ci_high": 9405.880928571429,
+        "sign_flip_p": 0.0018999050047497626
+      }
+    },
+    "S3_S4": {
+      "diff_top_to_bottom_min": {
+        "n": 12,
+        "mean": -283.75,
+        "median": -247.5,
+        "bootstrap_ci_low": -371.25,
+        "bootstrap_ci_high": -211.25,
+        "sign_flip_p": 0.0004999750012499375
+      },
+      "diff_unretained_fraction": {
+        "n": 11,
+        "mean": -0.04363636363636365,
+        "median": -0.04999999999999993,
+        "bootstrap_ci_low": -0.06818181818181819,
+        "bootstrap_ci_high": -0.023636363636363626,
+        "sign_flip_p": 0.00359982000899955
+      },
+      "diff_unretained_gal_strip": {
+        "n": 11,
+        "mean": -2374.561818181819,
+        "median": -2203.840000000004,
+        "bootstrap_ci_low": -3756.675568181818,
+        "bootstrap_ci_high": -1215.304477272728,
+        "sign_flip_p": 0.00439978001099945
+      }
+    }
+  },
+  "flow_modifies_pair_difference": {
+    "S1_S2": {
+      "n": 14,
+      "coef": 0.009164666551612443,
+      "r2": 0.0009149025144692402
+    },
+    "S3_S4": {
+      "n": 11,
+      "coef": 0.016220247126566244,
+      "r2": 0.01198198047016441
+    }
+  }
+}

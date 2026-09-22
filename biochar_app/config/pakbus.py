@@ -7,14 +7,26 @@ All PakBus-related configuration in one place.
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List
 from zoneinfo import ZoneInfo
 
-DEFAULT_TABLE = "Table1"
-DEFAULT_HOURS = 1
-DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", "America/Denver"))
-DEFAULT_LAG_MINUTES = 30  # delay before "now" to ensure data availability
+DEFAULT_SETTINGS_PATH = Path(__file__).with_name("pakbus_settings.json")
+SETTINGS_PATH = Path(os.getenv("BIOCHAR_PAKBUS_CONFIG", DEFAULT_SETTINGS_PATH))
+SETTINGS = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+DOWNLOAD_SETTINGS = SETTINGS["download"]
+DAILY_SETTINGS = SETTINGS["daily"]
+ARCHIVE_SETTINGS = SETTINGS["archive"]
+
+DEFAULT_TABLE = str(DOWNLOAD_SETTINGS["table"])
+DEFAULT_HOURS = int(DOWNLOAD_SETTINGS["hours"])
+DEFAULT_TIMEZONE = ZoneInfo(os.getenv("DEFAULT_TIMEZONE", str(DOWNLOAD_SETTINGS["timezone"])))
+DEFAULT_LAG_MINUTES = int(DOWNLOAD_SETTINGS["lag_minutes"])
+DEFAULT_STATION_ATTEMPTS = int(DOWNLOAD_SETTINGS["attempts"])
+DEFAULT_RETRY_DELAY_SECONDS = float(DOWNLOAD_SETTINGS["retry_delay_seconds"])
+DEFAULT_STATION_PAUSE_SECONDS = float(DOWNLOAD_SETTINGS["station_pause_seconds"])
 
 # Map PakBus numeric IDs to station names and back
 STATION_BY_ID: Dict[int, str] = {
@@ -57,12 +69,21 @@ def parse_ids(s: str) -> List[int]:
 class PakbusConfig:
     host: str
     port: int
+    router_id: int
     base_id: int
     logger_ids: List[int]
+    response_timeout_seconds: float
 
+connection = SETTINGS["connection"]
 PAKBUS = PakbusConfig(
-    host=os.getenv("PAKBUS_HOST", "2605:59ca:2202:7700:2d0:2cff:fe02:1ddd"),
-    port=int(os.getenv("PAKBUS_PORT", 6785)),
-    base_id=int(os.getenv("PAKBUS_BASE_ID", 4094)),
-    logger_ids=list(range(2, 14)),
+    host=os.getenv("PAKBUS_HOST", str(connection["host"])),
+    port=int(os.getenv("PAKBUS_PORT", connection["port"])),
+    router_id=int(os.getenv("PAKBUS_ROUTER_ID", connection["router_id"])),
+    # PC400 captures from this installation use 0xFFD (4093) as the
+    # client/source PakBus address.
+    base_id=int(os.getenv("PAKBUS_BASE_ID", connection["base_id"])),
+    logger_ids=[int(value) for value in connection["logger_ids"]],
+    response_timeout_seconds=float(
+        os.getenv("PAKBUS_RESPONSE_TIMEOUT_SECONDS", connection["response_timeout_seconds"])
+    ),
 )

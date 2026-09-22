@@ -110,6 +110,21 @@ html {
     padding-bottom: 0.25rem;
 }
 
+#summary-table-container .multi-year-summary {
+    border-top: 2px solid #d7e6ff;
+    padding-top: 1rem;
+}
+
+#summary-table-container .multi-year-chart {
+    width: 100%;
+    min-height: 340px;
+    margin-top: 0.75rem;
+}
+
+#summary-table-container #multi-year-period {
+    min-width: 14rem;
+}
+
 /* =============================================================================
    Global table defaults (keep these lightweight)
    ============================================================================= */

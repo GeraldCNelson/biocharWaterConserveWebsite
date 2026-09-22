@@ -65,14 +65,14 @@ BASE_URL = "http://127.0.0.1:8000"
 # These values should represent a small, stable set of known-good selections.
 # They are intentionally not exhaustive; the goal is a fast regression check.
 
-SMOKE_YEARS = [2025]
+SMOKE_YEARS = [2026]
 SMOKE_VARIABLES = ["VWC", "SWC", "EC", "T"]
 SMOKE_GRANULARITIES = ["daily", "monthly"]
 SMOKE_STRIPS = ["S1", "S3"]
 SMOKE_DEPTHS = SENSOR_DEPTH_CODES
 SMOKE_LOGGER_LOCATIONS = LOGGER_LOCATIONS
 
-DEFAULT_YEAR = 2025
+DEFAULT_YEAR = 2026
 DEFAULT_VARIABLE = "VWC"
 DEFAULT_STRIP = "S1"
 DEFAULT_DEPTH = "1"

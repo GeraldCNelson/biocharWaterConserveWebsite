@@ -1,9 +1,20 @@
 """
 Field geometry assumptions used for irrigation water-holding estimates.
 
-Geometry is based on 2026-05-31 geotagged field photos. Values are approximate
-field estimates, not survey-grade measurements.
+Along-furrow distances are based on 2026-05-31 geotagged field photos and are
+approximate, not survey-grade measurements. Water-volume calculations use the
+nominal 47-foot experimental strip width documented in the project report and
+supported by the irrigation-pipe layout (three 30-foot pipes serving each
+two-strip pair, plus the center tee/connection allowance).
+
+Photo-GPS field and logger geometry is retained separately for maps and spatial
+diagnostics. It must not silently determine the modeled soil-water volume: the
+source photos report horizontal positioning errors of roughly 2.2--5.3 m at
+the four field corners, too large to distinguish a 42-foot from a 47-foot
+strip reliably.
 """
+
+from __future__ import annotations
 
 from biochar_app.config.experiment_config import STRIPS
 
@@ -16,12 +27,19 @@ from biochar_app.config.experiment_config import STRIPS
 # Field geometry
 # ---------------------------------------------------------------------
 
-# GPS/photo-derived width estimates.
+# GPS/photo-derived outer-boundary width estimates. These are mapping
+# diagnostics, not the calculation basis for water volumes.
 FIELD_WIDTH_NORTH_FT = 172.1
 FIELD_WIDTH_SOUTH_FT = 167.0
+PHOTO_GPS_EQUAL_QUARTER_WIDTH_FT = (
+    FIELD_WIDTH_NORTH_FT + FIELD_WIDTH_SOUTH_FT
+) / 2.0 / 4.0
 
-# Average strip width used for storage calculations.
-STRIP_WIDTH_FT = 42.4
+# Nominal experimental width used for storage calculations. Four nominal
+# strips span 188 ft; this is intentionally distinct from the uncertain
+# photo-GPS outer boundary.
+NOMINAL_STRIP_WIDTH_FT = 47.0
+STRIP_WIDTH_FT = NOMINAL_STRIP_WIDTH_FT
 
 # GPS/photo-derived strip-centerline lengths.
 STRIP_LENGTHS_FT = {
@@ -120,12 +138,21 @@ ZONE_LENGTHS_FT_BY_STRIP = {
     for strip in STRIPS
 }
 
-ZONE_AREAS_SQFT_BY_STRIP = {
+NOMINAL_ZONE_AREAS_SQFT_BY_STRIP = {
     strip: {
         zone: STRIP_WIDTH_FT * zone_length_ft
         for zone, zone_length_ft in zone_lengths.items()
     }
     for strip, zone_lengths in ZONE_LENGTHS_FT_BY_STRIP.items()
+}
+
+ZONE_AREAS_SQFT_BY_STRIP = NOMINAL_ZONE_AREAS_SQFT_BY_STRIP
+ZONE_AREA_SOURCE_BY_STRIP = {
+    strip: {
+        position: "nominal_47ft_strip_by_centerline_zone_length"
+        for position in "TMB"
+    }
+    for strip in STRIPS
 }
 
 ZONE_GALLONS_PER_INCH_BY_STRIP = {
@@ -158,10 +185,11 @@ STRIP_GEOMETRY = {
             ) / LOGGER_POSITIONS_PER_STRIP
         ) * INCHES_WATER_TO_GALLONS_PER_SQFT,
 
-        # New measured influence-zone values.
+        # Nominal rectangular influence zones used for water volumes.
         "logger_zone_segments_ft": LOGGER_ZONE_SEGMENTS_FT[strip],
         "zone_lengths_ft": ZONE_LENGTHS_FT_BY_STRIP[strip],
         "zone_areas_sqft": ZONE_AREAS_SQFT_BY_STRIP[strip],
+        "zone_area_source": ZONE_AREA_SOURCE_BY_STRIP[strip],
         "zone_gallons_per_inch": ZONE_GALLONS_PER_INCH_BY_STRIP[strip],
     }
     for strip in STRIPS

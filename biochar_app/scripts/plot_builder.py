@@ -79,6 +79,12 @@ PLOT_MARGINS = {
     "dual_axis_tall_metric": {"l": 60, "r": 165, "t": 70, "b": 70},
 }
 
+# SVG traces remain useful for small figures and static output, but become
+# noticeably slow in the browser for multi-week 15-minute views. Above this
+# threshold, Plotly's WebGL-backed scatter trace preserves every observation
+# while rendering the interactive figure much more efficiently.
+WEBGL_POINT_THRESHOLD = 1_500
+
 # ---------------------------------------------------------------------------
 # Small helpers worth keeping
 # ---------------------------------------------------------------------------
@@ -124,6 +130,11 @@ def _x_time_strings(df: pd.DataFrame) -> list[str]:
         return []
     ts = pd.to_datetime(df["timestamp"], errors="coerce")
     return ts.dt.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+
+
+def _time_series_trace(*, point_count: int, **kwargs: Any) -> go.BaseTraceType:
+    trace_class = go.Scattergl if point_count > WEBGL_POINT_THRESHOLD else go.Scatter
+    return trace_class(**kwargs)
 
 def prepare_plot_for_json(fig: go.Figure) -> dict[str, Any]:
     raw = json.dumps(fig, cls=PlotlyJSONEncoder)
@@ -298,14 +309,17 @@ def add_precipitation_bars(
             0.01 if usys == "us" else 0.25,
         )
 
+    # Plot only actual precipitation observations. A 15-minute view commonly
+    # contains thousands of zero-height bars; omitting them substantially
+    # reduces the payload and rendering work without changing the display.
+    precip_mask = vals.gt(0) & df["timestamp"].notna()
+    precip_timestamps = df.loc[precip_mask, "timestamp"]
+    precip_values = vals.loc[precip_mask]
+
     fig.add_trace(
         go.Bar(
-            x=safe_tolist(
-                df["timestamp"]
-            ),
-            y=safe_tolist(
-                vals
-            ),
+            x=safe_tolist(precip_timestamps),
+            y=safe_tolist(precip_values),
             yaxis="y2",
             name=f"Precip ({unit_suffix})",
             width=bw,
@@ -561,7 +575,8 @@ def make_raw_figure(
                 line_kwargs["color"] = depth_col
 
             fig.add_trace(
-                go.Scatter(
+                _time_series_trace(
+                    point_count=len(x_vals),
                     x=x_vals,
                     y=y_vals,
                     mode="lines",
@@ -583,7 +598,8 @@ def make_raw_figure(
             y_vals = safe_tolist(to_float_series(df_plot[base_col]))
 
             fig.add_trace(
-                go.Scatter(
+                _time_series_trace(
+                    point_count=len(x_vals),
                     x=x_vals,
                     y=y_vals,
                     mode="lines",
@@ -615,7 +631,8 @@ def make_raw_figure(
 
         if temp_col is not None:
             fig.add_trace(
-                go.Scatter(
+                _time_series_trace(
+                    point_count=len(x_vals),
                     x=x_vals,
                     y=safe_tolist(to_float_series(df_plot[temp_col])),
                     mode="lines",
@@ -751,7 +768,8 @@ def make_ratio_figure(
                 line_kwargs["color"] = pair_color
 
             fig.add_trace(
-                go.Scatter(
+                _time_series_trace(
+                    point_count=len(x),
                     x=x,
                     y=y,
                     mode="lines",
@@ -873,7 +891,8 @@ def make_temperature_delta_figure(
 
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(
+        _time_series_trace(
+            point_count=len(x_vals),
             x=x_vals,
             y=d12_vals,
             mode="lines",
@@ -882,7 +901,8 @@ def make_temperature_delta_figure(
         )
     )
     fig.add_trace(
-        go.Scatter(
+        _time_series_trace(
+            point_count=len(x_vals),
             x=x_vals,
             y=d34_vals,
             mode="lines",

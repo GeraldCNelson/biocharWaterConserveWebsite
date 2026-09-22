@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}"/>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}?v=20260919-multiyear-summary-5"/>
     <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}"/>
 
     <!-- Fonts -->
@@ -50,7 +50,7 @@
     </script>
 
     <!-- 🚨 SINGLE ES MODULE ENTRYPOINT -->
-    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20260822-plot-layout-1"></script>
+    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20260921-seasonal-downloads-17"></script>
 
     <!-- MathJax -->
     <script>
@@ -499,6 +499,19 @@
                                         <li><hr class="dropdown-divider"></li>
                                         <li><a class="dropdown-item" href="#" id="download-summary-zip">ZIP bundle (Summary CSV + README)</a></li>
                                     </ul>
+                                </div>
+
+                                <div class="seasonal-comparison-download-item d-none mt-2">
+                                    <div class="small fw-semibold mb-1">Comparison across all years</div>
+                                    <button type="button" class="btn btn-secondary w-100 mb-1" id="download-seasonal-comparison-data">
+                                        Download Comparison Data
+                                    </button>
+                                    <button type="button" class="btn btn-secondary w-100 mb-1" id="download-seasonal-comparison-raw-plot">
+                                        Download Raw Means Plot
+                                    </button>
+                                    <button type="button" class="btn btn-secondary w-100 mb-1" id="download-seasonal-comparison-ratio-plot">
+                                        Download Ratio Plot
+                                    </button>
                                 </div>
 
                                 <small class="text-muted">

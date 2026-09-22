@@ -19,9 +19,14 @@ from biochar_app.scripts.management.irrigation_analysis.diagnostics import (
 from biochar_app.scripts.management.irrigation_analysis.holding_capacity import (
     build_event_storage_by_event,
     build_first_pass_water_balance_table,
+    build_holding_capacity_annual_comparison,
+    build_holding_capacity_year_stability_summary,
+    build_matched_sensor_treatment_events,
+    summarize_matched_sensor_treatment_events,
 )
 from biochar_app.scripts.management.irrigation_analysis.plotting import (
     save_failed_event_pair_qc_plots,
+    save_irrigation_event_multilocation_plots,
 )
 from biochar_app.scripts.management.irrigation_analysis.utils import (
     add_flow_rate_comparison_fields,
@@ -59,6 +64,56 @@ class FlowRateComparisonTests(unittest.TestCase):
             row["flow_rate_comparison_status"],
             "within_review_threshold",
         )
+
+
+class MultiLocationEventPlotTests(unittest.TestCase):
+    def test_writes_constant_depth_plot_across_logger_positions(self) -> None:
+        index = pd.date_range("2024-04-19 12:00", periods=8, freq="15min")
+        logger_data = pd.DataFrame(
+            {
+                "VWC_1_raw_S3_T": [10, 10, 10, 11, 13, 15, 16, 16],
+                "VWC_1_raw_S3_M": [20, 20, 20, 20, 21, 23, 25, 25],
+                "VWC_1_raw_S3_B": [30, 30, 31, 33, 35, 36, 36, 36],
+            },
+            index=index,
+        )
+        event_rows = []
+        for position, arrival_offset in (("T", 4), ("M", 3), ("B", 2)):
+            event_rows.append(
+                {
+                    "year": 2024,
+                    "strip": "S3",
+                    "event_id": "2024-04-19_S3_S4_test",
+                    "logger_position": position,
+                    "depth_index": 1,
+                    "sensor_col": f"VWC_1_raw_S3_{position}",
+                    "irrigation_start": index[1],
+                    "irrigation_end": index[6],
+                    "event_duration_hours": 1.25,
+                    "gallons_strip": 1000.0,
+                    "avg_flow_gph_strip": 800.0,
+                    "arrival_time": index[arrival_offset],
+                    "baseline_time": index[1],
+                    "peak_time": index[6],
+                    "plateau_time": index[7],
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            log = save_irrigation_event_multilocation_plots(
+                df=logger_data,
+                event_results=pd.DataFrame(event_rows),
+                output_dir=directory,
+                strip_filter=["S3"],
+                depth=1,
+                hours_before=0.25,
+                hours_after=1.5,
+            )
+
+            self.assertEqual(len(log), 1)
+            self.assertEqual(log.iloc[0]["status"], "written")
+            self.assertEqual(log.iloc[0]["depth_inches"], 6)
+            self.assertTrue(Path(log.iloc[0]["output_file"]).exists())
 
 
 class UnretainedWaterTests(unittest.TestCase):
@@ -129,6 +184,173 @@ class UnretainedWaterTests(unittest.TestCase):
         self.assertTrue(row["holding_capacity_eligible"])
         self.assertTrue(row["unretained_eligible"])
         self.assertEqual(row["unretained_gal_strip"], 400.0)
+        self.assertFalse(row["end_of_field_unretained_eligible"])
+        self.assertEqual(
+            row["end_of_field_unretained_reason"],
+            "missing_bottom_6in_response",
+        )
+        self.assertTrue(
+            pd.isna(row["estimated_end_of_field_unretained_gal_strip"])
+        )
+
+    def test_credible_bottom_arrival_enables_end_of_field_proxy(self) -> None:
+        zones = pd.DataFrame(
+            {
+                "year": [2026] * 3,
+                "event_id": ["event"] * 3,
+                "strip": ["S1"] * 3,
+                "event_duration_hours": [2.0] * 3,
+                "avg_flow_gph_strip": [500.0] * 3,
+                "logger_position": ["T", "M", "B"],
+                "estimated_zone_storage_gal_0_18in": [100.0, 200.0, 300.0],
+                "gallons_strip": [1000.0] * 3,
+            }
+        )
+        trusted = pd.DataFrame([{
+            "year": 2026,
+            "event_id": "event",
+            "strip": "S1",
+            "trustworthy_event": True,
+            "trustworthy_reason": "ok",
+        }])
+        arrivals = pd.DataFrame([{
+            "year": 2026,
+            "event_id": "event",
+            "strip": "S1",
+            "logger_position": "B",
+            "depth_inches": 6,
+            "arrival_minutes_after_irrigation_start": 60.0,
+        }])
+
+        row = build_first_pass_water_balance_table(
+            trusted, zones, arrivals
+        ).iloc[0]
+
+        self.assertTrue(row["end_of_field_unretained_eligible"])
+        self.assertEqual(row["end_of_field_unretained_reason"], "ok")
+        self.assertEqual(
+            row["estimated_end_of_field_unretained_gal_strip"], 400.0
+        )
+        self.assertEqual(
+            row["estimated_end_of_field_unretained_fraction"], 0.4
+        )
+
+    def test_pre_start_bottom_response_does_not_enable_proxy(self) -> None:
+        zones = pd.DataFrame(
+            {
+                "year": [2026] * 3,
+                "event_id": ["event"] * 3,
+                "strip": ["S1"] * 3,
+                "event_duration_hours": [2.0] * 3,
+                "avg_flow_gph_strip": [500.0] * 3,
+                "logger_position": ["T", "M", "B"],
+                "estimated_zone_storage_gal_0_18in": [100.0, 200.0, 300.0],
+                "gallons_strip": [1000.0] * 3,
+            }
+        )
+        trusted = pd.DataFrame([{
+            "year": 2026,
+            "event_id": "event",
+            "strip": "S1",
+            "trustworthy_event": True,
+            "trustworthy_reason": "ok",
+        }])
+        arrivals = pd.DataFrame([{
+            "year": 2026,
+            "event_id": "event",
+            "strip": "S1",
+            "logger_position": "B",
+            "depth_inches": 6,
+            "arrival_minutes_after_irrigation_start": -15.0,
+        }])
+
+        row = build_first_pass_water_balance_table(
+            trusted, zones, arrivals
+        ).iloc[0]
+
+        self.assertTrue(row["unretained_eligible"])
+        self.assertFalse(row["end_of_field_unretained_eligible"])
+        self.assertEqual(
+            row["end_of_field_unretained_reason"],
+            "bottom_6in_response_before_irrigation_start",
+        )
+
+
+class HoldingCapacityYearStabilityTests(unittest.TestCase):
+    def test_logger_positions_are_summarized_independently(self) -> None:
+        annual = pd.DataFrame({
+            "year": [2023, 2024, 2023, 2024],
+            "strip": ["S1"] * 4,
+            "logger_position": ["T", "T", "B", "B"],
+            "depth_inches": [6] * 4,
+            "n_trustworthy_events": [2, 3, 4, 5],
+            "mean_plateau_vwc": [20.0, 22.0, 35.0, 37.0],
+        })
+
+        summary = build_holding_capacity_year_stability_summary(annual)
+
+        self.assertEqual(len(summary), 2)
+        top = summary.loc[summary["logger_position"].eq("T")].iloc[0]
+        bottom = summary.loc[summary["logger_position"].eq("B")].iloc[0]
+        self.assertEqual(top["total_eligible_events"], 5)
+        self.assertEqual(bottom["total_eligible_events"], 9)
+        self.assertNotEqual(
+            top["event_weighted_mean_plateau_vwc"],
+            bottom["event_weighted_mean_plateau_vwc"],
+        )
+
+    def test_summary_includes_2023_and_quantifies_annual_variation(self) -> None:
+        annual = pd.DataFrame({
+            "year": [2023, 2024, 2025],
+            "strip_group": ["S1_S2"] * 3,
+            "location": ["T"] * 3,
+            "strip": ["S1"] * 3,
+            "sensor_col": ["VWC_1_raw_S1_T"] * 3,
+            "depth_index": [1] * 3,
+            "depth_inches": [6] * 3,
+            "n_trustworthy_events": [2, 3, 1],
+            "mean_plateau_vwc": [40.0, 42.0, 41.0],
+            "mean_event_layer_storage_in": [0.8, 1.0, 0.9],
+        })
+
+        row = build_holding_capacity_year_stability_summary(annual).iloc[0]
+
+        self.assertEqual(row["first_year"], 2023)
+        self.assertEqual(row["last_year"], 2025)
+        self.assertEqual(row["n_years_observed"], 3)
+        self.assertEqual(row["total_eligible_events"], 6)
+        self.assertEqual(row["annual_mean_plateau_vwc_range"], 2.0)
+        self.assertAlmostEqual(
+            row["event_weighted_mean_plateau_vwc"], 41.1667, places=4
+        )
+        self.assertEqual(
+            row["stability_evidence"], "year_comparison_available"
+        )
+
+    def test_annual_comparison_shows_difference_from_pooled_estimate(self) -> None:
+        annual = pd.DataFrame({
+            "year": [2023, 2024],
+            "strip": ["S1", "S1"],
+            "depth_inches": [6, 6],
+            "n_trustworthy_events": [2, 3],
+            "mean_plateau_vwc": [40.0, 45.0],
+            "mean_event_layer_storage_in": [0.8, 1.0],
+        })
+        stability = build_holding_capacity_year_stability_summary(annual)
+
+        comparison = build_holding_capacity_annual_comparison(
+            annual, stability
+        )
+
+        self.assertEqual(comparison["year"].tolist(), [2023, 2024])
+        self.assertAlmostEqual(
+            comparison.iloc[0]["event_weighted_mean_plateau_vwc"],
+            43.0,
+        )
+        self.assertAlmostEqual(
+            comparison.iloc[0]["plateau_vwc_difference_from_pooled"],
+            -3.0,
+        )
 
 
 class IrrigationFigureCleanupTests(unittest.TestCase):
@@ -324,6 +546,68 @@ class CombinedOutputTests(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertNotIn("logger_position", result.columns)
+
+
+class MatchedSensorTreatmentTests(unittest.TestCase):
+    @staticmethod
+    def _event_results() -> pd.DataFrame:
+        rows = []
+        for event_number, biochar_plateau, control_plateau in (
+            (1, 30.0, 27.0),
+            (2, 32.0, 30.0),
+        ):
+            for strip, plateau in (
+                ("S1", biochar_plateau),
+                ("S2", control_plateau),
+            ):
+                baseline = 20.0 + event_number
+                rows.append(
+                    {
+                        "year": 2026,
+                        "event_id": f"event-{event_number}",
+                        "strip": strip,
+                        "sensor_col": f"VWC_1_raw_{strip}_T",
+                        "logger_position": "T",
+                        "depth_index": 1,
+                        "depth_inches": 6,
+                        "irrigation_start": pd.Timestamp("2026-05-01")
+                        + pd.Timedelta(days=event_number),
+                        "irrigation_end": pd.Timestamp("2026-05-01 06:00")
+                        + pd.Timedelta(days=event_number),
+                        "baseline_vwc": baseline,
+                        "plateau_vwc": plateau,
+                        "peak_vwc": plateau + 1.0,
+                        "peak_increase": plateau + 1.0 - baseline,
+                        "event_layer_storage_in": (plateau - baseline) * 0.06,
+                        "gallons_strip": 50000.0,
+                        "event_duration_hours": 6.0,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    def test_matches_same_event_position_and_depth(self) -> None:
+        events = self._event_results()
+        trusted = events[["year", "strip", "event_id", "sensor_col"]].copy()
+        trusted["trustworthy_event"] = True
+
+        matched = build_matched_sensor_treatment_events(events, trusted)
+
+        self.assertEqual(len(matched), 2)
+        self.assertEqual(matched["pair"].unique().tolist(), ["S1_S2"])
+        self.assertEqual(matched["plateau_vwc_difference"].tolist(), [3.0, 2.0])
+        self.assertTrue((matched["gallons_strip_difference"] == 0.0).all())
+
+    def test_summary_reports_paired_effect_and_variability(self) -> None:
+        events = self._event_results()
+        trusted = events[["year", "strip", "event_id", "sensor_col"]].copy()
+        trusted["trustworthy_event"] = True
+        matched = build_matched_sensor_treatment_events(events, trusted)
+
+        row = summarize_matched_sensor_treatment_events(matched).iloc[0]
+
+        self.assertEqual(row["n_matched_events"], 2)
+        self.assertEqual(row["mean_plateau_vwc_difference"], 2.5)
+        self.assertEqual(row["biochar_higher_plateau_vwc_fraction"], 1.0)
 
 
 if __name__ == "__main__":

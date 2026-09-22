@@ -1,6 +1,59 @@
 ASUS IPv6 Firewall Allow Rule for Remote Admin
 ==============================================
 
+Network topology and addressing
+--------------------------------
+
+- Starlink delegates a /56 IPv6 prefix to the ASUS RT-AX88U Pro through native
+  IPv6 with DHCP prefix delegation (DHCP-PD). This was verified in the router
+  interface on 2026-09-11 (firmware 3.0.0.6.102_37436).
+- The ASUS router uses that delegated prefix to provide an IPv6 address to the
+  Campbell base station on its LAN. The prefix can change; the base station's
+  observed interface-derived suffix has remained `2d0:2cff:fe02:1ddd`.
+- A changing Starlink prefix explains why an older complete IPv6 address can
+  stop responding even though the base station and radio network are healthy.
+- The verified LAN settings use stateless IPv6 autoconfiguration with router
+  advertisements enabled. At the time observed, the router LAN address was
+  `2605:59ca:227f:e00::1`, and the delegated LAN prefix was
+  `2605:59ca:227f:e00::/56`.
+- The ASUS client list confirms the Campbell base station is statically
+  configured as IPv4 `192.164.50.93`, IPv6
+  `2605:59ca:227f:e00:2d0:2cff:fe02:1ddd`, and MAC
+  `00:D0:2C:02:1D:DD` (observed 2026-09-11). The `192.164` address is not an
+  RFC1918 private address and differs from the ASUS LAN clients using
+  `192.168.50.x`; treat it as a confirmed legacy/intentional static value
+  unless the base-station network configuration is deliberately changed.
+- The Starlink-facing IPv4 address shown by ASUS was `100.103.243.229`, which
+  is in the shared CGNAT range and is not a directly reachable public IPv4
+  address.
+- ASUS DDNS is active for `Biochar-Fruita.asuscomm.com`, with IPv6 Update
+  enabled. On 2026-09-11 its public AAAA record resolved to the router's WAN
+  address `2605:59ca:2200:bff1:ea9c:25ff:fed5:5928`, not the delegated LAN
+  prefix or Campbell address. Therefore this hostname cannot be used directly
+  as the PakBus endpoint. Public resolvers also returned inconsistent IPv4 A
+  records during the check, so IPv4 DDNS is not a viable path through
+  Starlink's CGNAT.
+- PakBus/TCP uses port 6785. A locally configured literal IPv6 address must be
+  updated when the delegated prefix changes. Prefer a hostname with a current
+  AAAA record if the ASUS/Starlink setup can update one reliably.
+
+Useful ASUS web-interface checks
+--------------------------------
+
+1. Current delegated prefix (the connection type is native, with DHCP-PD and
+   a /56 prefix confirmed).
+2. The base station's current IPv6 and private IPv4 addresses in the client
+   list or IPv6 neighbor table.
+3. Whether `Biochar-Fruita.asuscomm.com` continues to update the router WAN
+   address. It does not currently publish the Campbell base-station address.
+4. The IPv6 firewall rule allowing inbound TCP port 6785 to the base station.
+5. Whether the Campbell device itself uses SLAAC or a manually configured
+   IPv6 address. The router provides stateless autoconfiguration and router
+   advertisements, while ASUS labels the Campbell client entry "Static."
+
+IPv6 remote-administration firewall rule
+----------------------------------------
+
 1. Enable IPv6 Firewall:
    - Go to: Advanced Settings > Firewall > IPv6 Firewall
    - Set: Enable IPv6 Firewall = ON
@@ -24,7 +77,7 @@ ASUS IPv6 Firewall Allow Rule for Remote Admin
 
 4. Effect:
    - From within the allowed /64, you can reach:
-       https://biochar.asuscomm.com:8443
+       https://Biochar-Fruita.asuscomm.com:8443
    - Everyone else will be blocked.
 
 5. To Check Your Source IPv6 Prefix (/64):

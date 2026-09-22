@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Biochar PakBus download daily just after midnight Mountain time
+
+[Timer]
+OnCalendar=*-*-* 00:15:00 America/Denver
+Persistent=true
+RandomizedDelaySec=120
+Unit=biochar-pakbus-daily.service
+
+[Install]
+WantedBy=timers.target

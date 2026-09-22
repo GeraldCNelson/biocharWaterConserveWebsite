@@ -12,9 +12,7 @@ from openpyxl import Workbook
 
 from biochar_app.config.paths import WARD_MASTER_NIR_CSV
 from biochar_app.scripts.lab.build_field_biomass_from_master import build_field_biomass
-from biochar_app.scripts.lab.clean_ward_master_common import read_ward_two_header_csv
 from biochar_app.scripts.lab.update_ward_master_nir import (
-    IN_MASTER_CSV,
     _read_supplemental_nir_csv,
 )
 from biochar_app.scripts.tables.tables_nir import build_nir_set1_table
@@ -71,14 +69,29 @@ class LabEtlBuilderTests(unittest.TestCase):
             self.assertEqual(result.loc[0, "2026-07-28"], 127)
 
     def test_2026_nir_file_uses_filename_sampling_date(self) -> None:
-        _, header_map = read_ward_two_header_csv(IN_MASTER_CSV)
-        source = Path("biochar_app/data-raw/lab-tests/hay-tests/csv-files/NIR_2026-07-28.csv")
+        header_map = {
+            "sample_id": "Sample ID 1",
+            "crude_protein_pct_db": "Crude Protein Dry Basis",
+        }
+        with tempfile.TemporaryDirectory() as directory_name:
+            source = Path(directory_name) / "NIR_2026-07-28.csv"
+            pd.DataFrame(
+                {
+                    "Sample ID 1": ["S1HAY", "S2HAY", "S3HAY", "S4HAY"],
+                    "Crude Protein Dry Basis": [10.6, 10.0, 12.6, 13.0],
+                }
+            ).to_csv(source, index=False)
 
-        result = _read_supplemental_nir_csv(source, header_map)
+            result = _read_supplemental_nir_csv(source, header_map)
 
-        self.assertEqual(result["strip"].tolist(), ["strip_1", "strip_2", "strip_3", "strip_4"])
-        self.assertEqual(result["nir_date"].unique().tolist(), ["2026-07-28"])
-        self.assertTrue(pd.to_numeric(result["crude_protein_pct_db"]).notna().all())
+            self.assertEqual(
+                result["strip"].tolist(),
+                ["strip_1", "strip_2", "strip_3", "strip_4"],
+            )
+            self.assertEqual(result["nir_date"].unique().tolist(), ["2026-07-28"])
+            self.assertTrue(
+                pd.to_numeric(result["crude_protein_pct_db"]).notna().all()
+            )
 
     def test_nir_table_includes_latest_year_from_clean_master(self) -> None:
         payload = build_nir_set1_table(WARD_MASTER_NIR_CSV)
