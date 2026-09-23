@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pandas as pd
 
 from biochar_app.pakbus.core.daily_download import (
     _build_report_email_body,
     _build_success_email_body,
+    _publish_to_production,
     build_communication_reliability,
     diagnose_download,
     merge_download_frames,
@@ -273,7 +276,10 @@ def test_communication_history_flags_repeated_initial_failures(tmp_path) -> None
 def test_success_email_is_one_line_and_mentions_recovery() -> None:
     body = _build_success_email_body(
         {
-            "publication": {"logger_latest_timestamp": "2026-09-18T00:00:00"},
+            "publication": {
+                "logger_latest_timestamp": "2026-09-18T00:00:00",
+                "production": {"status": "published"},
+            },
             "recovery": {
                 "requested_stations": ["S1B", "S1M"],
                 "still_missing": [],
@@ -284,4 +290,65 @@ def test_success_email_is_one_line_and_mentions_recovery() -> None:
 
     assert body.count("\n") == 0
     assert "completed successfully through 2026-09-18T00:00:00" in body
+    assert "Production website publication and health checks passed" in body
     assert "S1B, S1M" in body
+
+
+def test_publish_to_production_runs_guarded_deploy_and_records_log(
+    tmp_path, monkeypatch
+) -> None:
+    deploy_script = tmp_path / "deploy.sh"
+    deploy_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["kwargs"] = kwargs
+        return SimpleNamespace(returncode=0, stdout="Deployment finished.\n", stderr="")
+
+    monkeypatch.setattr(
+        "biochar_app.pakbus.core.daily_download.subprocess.run",
+        fake_run,
+    )
+
+    result = _publish_to_production(
+        2026,
+        tmp_path,
+        deploy_script=deploy_script,
+    )
+
+    assert result["status"] == "published"
+    assert observed["command"] == [
+        str(deploy_script),
+        "--year", "2026",
+        "--no-git-check",
+    ]
+    assert "timeout" not in observed["kwargs"]
+    assert (tmp_path / "production_publication.log").read_text(encoding="utf-8") == (
+        "Deployment finished.\n"
+    )
+
+
+def test_report_email_includes_failed_production_publication() -> None:
+    report = {
+        "status": "accepted_with_warnings",
+        "stations": {},
+        "findings": [
+            {
+                "severity": "warning",
+                "code": "production_publication_failed",
+                "message": "Production was not updated",
+            }
+        ],
+        "archive": {"status": "promoted", "rows_received": 96, "rows_added": 96},
+        "publication": {
+            "status": "published",
+            "website_service": "active",
+            "production": {"status": "failed", "detail": "SSH failed"},
+        },
+    }
+
+    body = _build_report_email_body(report)
+
+    assert "production website: failed (SSH failed)" in body
+    assert "Review the production publication log" in body

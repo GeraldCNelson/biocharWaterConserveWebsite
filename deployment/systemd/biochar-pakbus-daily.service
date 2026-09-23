@@ -12,5 +12,5 @@ EnvironmentFile=/etc/biochar/pipeline.env
 ExecStart=/home/ubuntu/biocharWaterConserveWebsite/.venv/bin/python -m biochar_app.pakbus.core.daily_download
 
 ProtectSystem=strict
-ReadWritePaths=/home/ubuntu/biocharWaterConserveWebsite/biochar_app/data-raw /home/ubuntu/biocharWaterConserveWebsite/biochar_app/data-processed /home/ubuntu/biocharWaterConserveWebsite/biochar_app/config/dataset_metadata.py
+ReadWritePaths=/home/ubuntu/biocharWaterConserveWebsite/biochar_app/data-raw /home/ubuntu/biocharWaterConserveWebsite/biochar_app/data-processed /home/ubuntu/biocharWaterConserveWebsite/biochar_app/config/dataset_metadata.py /home/ubuntu/.ssh/known_hosts
 PrivateTmp=true
