@@ -35,7 +35,15 @@ REMOTE_PARQUET_DIR="${REMOTE_REPO}/biochar_app/data-processed/parquet"
 REMOTE_DOWNLOADS_DIR="${REMOTE_REPO}/biochar_app/data-processed/downloads"
 
 REMOTE_VENV="${REMOTE_REPO}/venv/bin/activate"
+REMOTE_PYTHON="${REMOTE_REPO}/venv/bin/python"
 REMOTE_SERVICE="biochar"
+PUBLIC_URL="https://biocharresearch.org/"
+SSH_OPTIONS=(
+  -o BatchMode=yes
+  -o ConnectTimeout=15
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=4
+)
 
 DEFAULT_YEAR="2025"
 CHECK_GRANULARITIES=("daily" "hourly" "monthly" "15min")
@@ -48,6 +56,7 @@ DO_RESTART=1
 DO_REGEN=0
 CHECK_GIT=1
 YEAR="${DEFAULT_YEAR}"
+MAINTENANCE_ACTIVE=0
 
 # ----------------------------
 # Helpers
@@ -87,8 +96,18 @@ require_cmd() {
 }
 
 run_remote() {
-  ssh "${REMOTE_HOST}" "$@"
+  ssh "${SSH_OPTIONS[@]}" "${REMOTE_HOST}" "$@"
 }
+
+restore_remote_service() {
+  [[ "${MAINTENANCE_ACTIVE}" -eq 1 ]] || return 0
+  printf '\nDeployment did not finish; ensuring %s is started on production...\n' "${REMOTE_SERVICE}" >&2
+  run_remote "sudo -n systemctl start '${REMOTE_SERVICE}'" || true
+}
+
+trap restore_remote_service EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 verify_local_paths() {
   [[ -d "${LOCAL_REPO}" ]] || die "Local repo not found: ${LOCAL_REPO}"
@@ -120,14 +139,24 @@ sync_data() {
   [[ "${DO_RSYNC}" -eq 1 ]] || return 0
 
   log "Syncing parquet to production..."
-  rsync -av  --exclude '.DS_Store'\
+  rsync -av --timeout=120 --exclude '.DS_Store' \
+    -e "ssh ${SSH_OPTIONS[*]}" \
     "${LOCAL_PARQUET_DIR}/" \
     "${REMOTE_HOST}:${REMOTE_PARQUET_DIR}/"
 
   log "Syncing downloads to production..."
-  rsync -av  --exclude '.DS_Store'\
+  rsync -av --timeout=120 --exclude '.DS_Store' \
+    -e "ssh ${SSH_OPTIONS[*]}" \
     "${LOCAL_DOWNLOADS_DIR}/" \
     "${REMOTE_HOST}:${REMOTE_DOWNLOADS_DIR}/"
+}
+
+begin_remote_maintenance() {
+  [[ "${DO_RESTART}" -eq 1 ]] || return 0
+
+  log "Stopping production service for a consistent data update..."
+  run_remote "sudo -n systemctl stop '${REMOTE_SERVICE}'"
+  MAINTENANCE_ACTIVE=1
 }
 
 check_for_bad_tilde_dir() {
@@ -184,12 +213,36 @@ regen_remote_files() {
 restart_remote_service() {
   [[ "${DO_RESTART}" -eq 1 ]] || return 0
 
-  log "Restarting production service..."
+  log "Warming production seasonal-summary caches..."
   run_remote "
-    sudo systemctl daemon-reload
-    sudo systemctl restart '${REMOTE_SERVICE}'
-    sudo systemctl --no-pager --full status '${REMOTE_SERVICE}'
+    set -e
+    cd '${REMOTE_REPO}'
+    '${REMOTE_PYTHON}' -m biochar_app.scripts.gseason_cache_warmer --all-years
   "
+
+  log "Starting production service and checking local HTTPS..."
+  run_remote "
+    set -e
+    sudo -n systemctl daemon-reload
+    sudo -n systemctl start '${REMOTE_SERVICE}'
+    for attempt in \$(seq 1 30); do
+      if curl -kfsS --max-time 10 \\
+        --resolve biocharresearch.org:443:127.0.0.1 \\
+        '${PUBLIC_URL}' >/dev/null; then
+        systemctl is-active --quiet '${REMOTE_SERVICE}'
+        exit 0
+      fi
+      sleep 2
+    done
+    echo 'Production service did not pass its local HTTPS check.' >&2
+    exit 1
+  "
+
+  log "Checking the public website from the publishing server..."
+  curl -fsS --max-time 30 "${PUBLIC_URL}" >/dev/null \
+    || die "Public production website health check failed: ${PUBLIC_URL}"
+
+  MAINTENANCE_ACTIVE=0
 }
 
 print_post_checks() {
@@ -253,9 +306,11 @@ done
 require_cmd git
 require_cmd rsync
 require_cmd ssh
+require_cmd curl
 
 verify_local_paths
 check_local_git
+begin_remote_maintenance
 sync_data
 check_for_bad_tilde_dir
 verify_remote_files

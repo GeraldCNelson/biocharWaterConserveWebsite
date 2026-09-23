@@ -139,6 +139,7 @@ BIOCHAR_SMTP_HOST=email-smtp.us-east-2.amazonaws.com
 BIOCHAR_SMTP_PORT=587
 BIOCHAR_SMTP_USERNAME=the-ses-smtp-username
 BIOCHAR_SMTP_PASSWORD=the-ses-smtp-password
+BIOCHAR_PUBLISH_PRODUCTION=true
 ```
 
 Restrict that file to root and the service account. Do not paste its contents into an issue, log, email, or Git commit.
@@ -170,6 +171,37 @@ Install a narrowly scoped sudoers rule with `sudo visudo -f
 ```text
 ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl restart biochar
 ```
+
+### Publishing accepted data to production
+
+When `BIOCHAR_PUBLISH_PRODUCTION=true`, an accepted nightly run also invokes
+`deploy.sh` after local ETL and cache warming succeed. The deployment:
+
+1. stops the production web service so readers cannot observe a partial sync;
+2. synchronizes processed Parquet files and public download archives;
+3. verifies the required files on production;
+4. warms all configured seasonal-summary caches, reusing valid historical entries;
+5. starts the production service; and
+6. verifies both local production HTTPS and the public website.
+
+Raw PakBus downloads, accepted-data archives, and diagnostic reports remain on
+the acquisition server. Back those up independently; production receives only
+processed website data and downloads.
+
+Before enabling automatic publication, verify non-interactive SSH and remote
+service control from the test server:
+
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=10 biochar-webserver hostname
+ssh biochar-webserver sudo -n systemctl is-active biochar
+./deploy.sh --year 2026 --no-git-check
+```
+
+If synchronization, cache warming, service startup, or either health check
+fails, the deployment script ensures the production service is started again.
+The accepted data stay archived on test, the nightly result becomes
+`accepted_with_warnings`, and the email points to `production_publication.log`
+in that run's diagnostic directory.
 
 ## Slow or intermittent radio communication
 

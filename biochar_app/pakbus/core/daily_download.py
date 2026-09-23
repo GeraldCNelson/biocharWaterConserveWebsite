@@ -42,6 +42,7 @@ EXPECTED_STATIONS = tuple(name for name in ID_BY_STATION if name != "CR800")
 PARQUET_SUMMARY_ROOT = REPO_ROOT / "biochar_app/data-processed/parquet/summary"
 LOGGER_PARQUET = PARQUET_SUMMARY_ROOT / "15min"
 WEATHER_PARQUET = PARQUET_SUMMARY_ROOT / "weather/15min"
+DEFAULT_DEPLOY_SCRIPT = REPO_ROOT / "deploy.sh"
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,13 @@ def _station_names(items: Iterable[str]) -> str:
     return ", ".join(names) if names else "none"
 
 
+def _environment_flag(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _build_report_email_body(report: dict) -> str:
     """Build an operational summary from a completed diagnostic report."""
     findings = report.get("findings", [])
@@ -114,6 +122,7 @@ def _build_report_email_body(report: dict) -> str:
     }
     archive = report.get("archive", {})
     publication = report.get("publication", {})
+    production = publication.get("production", {})
     unusually_slow = any(
         float(item.get("duration_seconds") or 0) >= 120
         for _, item in all_timings
@@ -129,6 +138,7 @@ def _build_report_email_body(report: dict) -> str:
         and archive.get("status") == "promoted"
         and publication.get("status") == "published"
         and publication.get("website_service") == "active"
+        and production.get("status", "skipped") in {"published", "skipped"}
     )
 
     if routine_run:
@@ -155,6 +165,8 @@ def _build_report_email_body(report: dict) -> str:
                 f"({seasonal_cache.get('cache_entries', 0)} cache entries in "
                 f"{seasonal_cache.get('duration_seconds', 0)} seconds)"
             )
+        if production:
+            lines.append(f"Production publication: {production.get('status')}")
         if recurrent:
             lines.extend(["", "Historical communication warnings:"])
             for station, summary in sorted(recurrent.items()):
@@ -257,6 +269,12 @@ def _build_report_email_body(report: dict) -> str:
                 f"- seasonal summaries: {seasonal_cache.get('status')}"
                 + (f" ({cache_detail})" if cache_detail else "")
             )
+        if production:
+            production_detail = production.get("detail")
+            lines.append(
+                f"- production website: {production.get('status')}"
+                + (f" ({production_detail})" if production_detail else "")
+            )
     elif publication:
         lines.append(
             f"- {publication.get('status')}: {publication.get('detail', 'no details available')}"
@@ -301,6 +319,10 @@ def _build_report_email_body(report: dict) -> str:
         next_steps.append("Check the gateway/network endpoint before testing individual stations.")
     if report.get("status") == "failed_download":
         next_steps.append("Review the downloader service log and retry after correcting the reported process error.")
+    if production.get("status") == "failed":
+        next_steps.append(
+            "Review the production publication log, then rerun deploy.sh after correcting the failure."
+        )
     if not next_steps:
         next_steps.append("No action is required.")
     lines.extend(["", "Next steps:"] + [f"- {step}" for step in next_steps])
@@ -388,6 +410,8 @@ def _build_success_email_body(report: dict) -> str:
         )
     )
     message = f"Nightly logger and weather update completed successfully through {latest}."
+    if publication.get("production", {}).get("status") == "published":
+        message += " Production website publication and health checks passed."
     if recovered:
         message += f" Recovered after initial communication failures: {_station_names(recovered)}."
     recurrent = sorted(
@@ -466,6 +490,47 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
         "weather_rows": int(len(weather_frame)),
         "website_service": restart_status,
         "seasonal_cache": seasonal_cache,
+    }
+
+
+def _publish_to_production(
+    year: int,
+    run_dir: Path,
+    *,
+    deploy_script: Path = DEFAULT_DEPLOY_SCRIPT,
+) -> dict:
+    """Synchronize validated website outputs and verify the production site."""
+    if not deploy_script.is_file():
+        raise RuntimeError(f"production deploy script does not exist: {deploy_script}")
+
+    log_path = run_dir / "production_publication.log"
+    command = [
+        str(deploy_script),
+        "--year", str(year),
+        "--no-git-check",
+    ]
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_path.write_text(
+        (result.stdout or "")
+        + ("\n" if result.stdout and result.stderr else "")
+        + (result.stderr or ""),
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"production deployment exited with status {result.returncode}; see {log_path}"
+        )
+    return {
+        "status": "published",
+        "log": str(log_path),
+        "host": "biochar-webserver",
+        "url": "https://biocharresearch.org/",
     }
 
 
@@ -739,6 +804,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run and verify operational ETL without restarting the website.",
     )
+    parser.add_argument(
+        "--publish-production",
+        action=argparse.BooleanOptionalAction,
+        default=_environment_flag("BIOCHAR_PUBLISH_PRODUCTION"),
+        help=(
+            "After local publication succeeds, synchronize processed website data to "
+            "production (default from BIOCHAR_PUBLISH_PRODUCTION)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -915,6 +989,31 @@ def main(argv: list[str] | None = None) -> int:
                     ))
                     report["findings"] = [asdict(item) for item in findings]
                     report["status"] = "accepted_with_warnings"
+                if args.publish_production:
+                    try:
+                        report["publication"]["production"] = _publish_to_production(
+                            started.year,
+                            run_dir,
+                        )
+                    except Exception as exc:
+                        detail = f"{type(exc).__name__}: {exc}"
+                        report["publication"]["production"] = {
+                            "status": "failed",
+                            "detail": detail,
+                        }
+                        findings.append(Finding(
+                            "warning",
+                            "production_publication_failed",
+                            "Validated data were published on the acquisition server, but "
+                            f"production was not updated: {detail}",
+                        ))
+                        report["findings"] = [asdict(item) for item in findings]
+                        report["status"] = "accepted_with_warnings"
+                else:
+                    report["publication"]["production"] = {
+                        "status": "skipped",
+                        "detail": "BIOCHAR_PUBLISH_PRODUCTION is not enabled",
+                    }
             except Exception as exc:
                 publication_finding = Finding(
                     "critical",
