@@ -85,6 +85,29 @@ uvicorn biochar_app.scripts.app:app --reload --host 127.0.0.1 --port 8000
 If an existing project environment is already available, activate that
 environment instead of creating a new one.
 
+### Refresh published data for local use
+
+A Git pull updates application code but does not update the generated Parquet
+datasets or the prebuilt bulk-download files. To preview and then download the
+latest data currently published on the production server, run from the project
+root:
+
+```bash
+tools/sync-published-data --dry-run
+tools/sync-published-data
+```
+
+The command uses the `biochar-webserver` SSH alias documented in
+`biochar_app/docs/operations/deploy_to_main.md`. It updates
+`biochar_app/data-processed/parquet/` and
+`biochar_app/data-processed/downloads/` without deleting local files. Restart
+the local application afterward so its in-memory summaries are rebuilt from
+the new data.
+
+Use `--source test` to pull the test server's generated data, or `--only
+parquet` / `--only downloads` to update just one data group. Run
+`tools/sync-published-data --help` for all options.
+
 ## Master workbook: authoritative source and repository snapshot
 
 The master-workbook workflow has three stages:

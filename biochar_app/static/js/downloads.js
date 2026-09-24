@@ -312,13 +312,68 @@ export async function downloadSeasonalComparisonPlot(chartType) {
     alert("Load a Seasonal Periods comparison before downloading its plot.");
     return;
   }
-  await plotly.downloadImage(chart, {
-    format: "png",
-    filename: seasonalComparisonFilename(chartType, "png").replace(/\.png$/, ""),
-    width: 1600,
-    height: 900,
-    scale: 2,
+
+  // The interactive comparison is roughly dashboard-sized. Exporting that
+  // same layout at 1600 x 900 makes its screen-sized type look too small in
+  // the resulting 3200 x 1800 PNG. Render a hidden export-only copy with
+  // publication-sized type so the on-screen chart remains unchanged.
+  const exportChart = document.createElement("div");
+  exportChart.style.position = "fixed";
+  exportChart.style.left = "-10000px";
+  exportChart.style.top = "0";
+  exportChart.style.width = "1600px";
+  exportChart.style.height = "900px";
+  document.body.appendChild(exportChart);
+
+  const exportLayout = JSON.parse(JSON.stringify(chart.layout || {}));
+  exportLayout.autosize = false;
+  exportLayout.width = 1600;
+  exportLayout.height = 900;
+  exportLayout.font = { ...(exportLayout.font || {}), size: 22 };
+  const exportTitle = typeof exportLayout.title === "string"
+    ? { text: exportLayout.title }
+    : (exportLayout.title || {});
+  exportLayout.title = {
+    ...exportTitle,
+    font: { ...(exportTitle.font || {}), size: 30 },
+  };
+  exportLayout.legend = {
+    ...(exportLayout.legend || {}),
+    font: { ...(exportLayout.legend?.font || {}), size: 20 },
+  };
+  ["xaxis", "yaxis"].forEach((axisName) => {
+    const axis = exportLayout[axisName] || {};
+    const axisTitle = typeof axis.title === "string"
+      ? { text: axis.title }
+      : (axis.title || {});
+    exportLayout[axisName] = {
+      ...axis,
+      tickfont: { ...(axis.tickfont || {}), size: 18 },
+      title: {
+        ...axisTitle,
+        font: { ...(axisTitle.font || {}), size: 22 },
+      },
+    };
   });
+
+  try {
+    await plotly.newPlot(
+      exportChart,
+      JSON.parse(JSON.stringify(chart.data || [])),
+      exportLayout,
+      { staticPlot: true, displayModeBar: false }
+    );
+    await plotly.downloadImage(exportChart, {
+      format: "png",
+      filename: seasonalComparisonFilename(chartType, "png").replace(/\.png$/, ""),
+      width: 1600,
+      height: 900,
+      scale: 2,
+    });
+  } finally {
+    plotly.purge(exportChart);
+    exportChart.remove();
+  }
 }
 
 /**
