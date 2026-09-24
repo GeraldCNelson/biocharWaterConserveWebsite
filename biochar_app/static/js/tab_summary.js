@@ -703,6 +703,17 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
       font: { size: 18 },
     },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
+    shapes: [{
+      type: "line",
+      xref: "paper",
+      x0: 0,
+      x1: 1,
+      yref: "y",
+      y0: 1,
+      y1: 1,
+      line: { color: "#666666", width: 1.5, dash: "dot" },
+      layer: "above",
+    }],
     xaxis: {
       title: "Anchor year and logger position",
       autorange: true,
