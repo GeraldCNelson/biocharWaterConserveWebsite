@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+remote="${BIOCHAR_DATA_REMOTE:-biochar-webserver}"
+remote_root="${BIOCHAR_DATA_REMOTE_ROOT:-~/biocharWaterConserveWebsite}"
+selection="all"
+dry_run=false
+
+usage() {
+  printf '%s\n' \
+    "Usage: tools/sync-published-data [options]" \
+    "" \
+    "Pull the latest website-ready data into a local checkout." \
+    "No local files are deleted." \
+    "" \
+    "Options:" \
+    "  --source production|test  Use biochar-webserver or biochar-test-fetch" \
+    "  --remote SSH_ALIAS        Override the SSH host alias" \
+    "  --only all|parquet|downloads" \
+    "  --dry-run                 Show what would change" \
+    "  -h, --help                Show this help" \
+    "" \
+    "Environment overrides:" \
+    "  BIOCHAR_DATA_REMOTE       SSH host alias (default: biochar-webserver)" \
+    "  BIOCHAR_DATA_REMOTE_ROOT  Remote repository path" \
+    "" \
+    "Examples:" \
+    "  tools/sync-published-data --dry-run" \
+    "  tools/sync-published-data" \
+    "  tools/sync-published-data --source test --only parquet"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --source)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--source requires a value.' >&2; exit 2; }
+      case "$2" in
+        production) remote="biochar-webserver" ;;
+        test) remote="biochar-test-fetch" ;;
+        *) printf 'Unknown source: %s\n' "$2" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
+    --remote)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--remote requires a value.' >&2; exit 2; }
+      remote="$2"
+      shift 2
+      ;;
+    --only)
+      [[ $# -ge 2 ]] || { printf '%s\n' '--only requires a value.' >&2; exit 2; }
+      selection="$2"
+      case "${selection}" in
+        all|parquet|downloads) ;;
+        *) printf 'Unknown data selection: %s\n' "${selection}" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+command -v rsync >/dev/null 2>&1 || {
+  printf '%s\n' 'rsync is required but was not found.' >&2
+  exit 1
+}
+
+rsync_options=(-av --exclude=.DS_Store)
+if [[ "${dry_run}" == true ]]; then
+  rsync_options+=(--dry-run)
+fi
+
+sync_directory() {
+  local directory="$1"
+  local destination="${repo_root}/biochar_app/data-processed/${directory}/"
+  mkdir -p "${destination}"
+  printf 'Updating %s from %s...\n' "${directory}" "${remote}"
+  rsync "${rsync_options[@]}" \
+    "${remote}:${remote_root}/biochar_app/data-processed/${directory}/" \
+    "${destination}"
+}
+
+if [[ "${selection}" == all || "${selection}" == parquet ]]; then
+  sync_directory parquet
+fi
+
+if [[ "${selection}" == all || "${selection}" == downloads ]]; then
+  sync_directory downloads
+fi
+
+if [[ "${dry_run}" == true ]]; then
+  printf '%s\n' 'Dry run complete; no files were changed.'
+else
+  printf '%s\n' \
+    'Published data update complete.' \
+    'Restart the local Biochar app so in-memory summaries use the new files.'
+fi
