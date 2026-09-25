@@ -754,6 +754,15 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   await Promise.all([Promise.resolve(rawRender), Promise.resolve(ratioRender)]);
   setComparisonDownloadsAvailable(true);
 
+  const linkedView = new URLSearchParams(window.location.search).get("view");
+  if (!section.dataset.linkViewScrolled && ["comparison", "ratio"].includes(linkedView || "")) {
+    section.dataset.linkViewScrolled = "true";
+    const target = linkedView === "ratio" ? ratioChart : section;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "auto", block: linkedView === "ratio" ? "center" : "start" });
+    }));
+  }
+
 }
 
 function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
@@ -761,6 +770,7 @@ function appendMultiYearComparison(container, yearEntries, periods, variable, un
 
   const defaultPeriod = periods.find((period) => /growing/i.test(period.label || "")) || periods[0];
   const section = document.createElement("section");
+  section.id = "seasonal-comparison";
   section.className = "multi-year-summary mt-4";
   section.innerHTML = `
     <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
