@@ -6,7 +6,7 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20260925-seasonal-downloads-18";
+import { initSummaryTab } from "./tab_summary.js?v=20260925-summary-links-19";
 import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
@@ -16,7 +16,7 @@ import {
   downloadSummaryData,
   initBulkDownloadTab,
   initSummaryDownloadMenu,
-} from "./downloads.js?v=20260925-seasonal-downloads-18";
+} from "./downloads.js?v=20260925-summary-links-19";
 
 // 3) Debugging & logging
 import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20260822-plot-layout-1";
@@ -31,7 +31,7 @@ import {
   setupUnitToggleHandlers,
   getAllDropdownIds,
   initializeTraceOptionControls,
-} from "./control_panel.js?v=20260925-seasonal-downloads-18";
+} from "./control_panel.js?v=20260925-summary-links-19";
 
 import {
   fetchDefaultsAndOptions,
@@ -77,6 +77,41 @@ function hideBootLoading() {
   if (boot) {
     boot.style.display = "none";
   }
+}
+
+/**
+ * Apply supported Summary Statistics query parameters after the dropdowns
+ * have been populated. Example:
+ * ?tab=summary&year=2026&granularity=gseason
+ *
+ * @returns {boolean} true when the Summary Statistics tab was requested
+ */
+function applySummaryLinkParameters() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("tab") !== "summary") return false;
+
+  const parameterControls = {
+    year: "summary-year",
+    granularity: "summary-granularity",
+    variable: "summary-variable",
+    strip: "summary-strip",
+    depth: "summary-depth",
+  };
+
+  for (const [parameter, controlId] of Object.entries(parameterControls)) {
+    const requestedValue = params.get(parameter);
+    const control = /** @type {HTMLSelectElement | null} */ (
+      document.getElementById(controlId)
+    );
+    if (!requestedValue || !control) continue;
+
+    const available = Array.from(control.options).some(
+      (option) => option.value === requestedValue
+    );
+    if (available) control.value = requestedValue;
+  }
+
+  return true;
 }
 
 /**
@@ -310,6 +345,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     initSummaryTab();
+
+    if (applySummaryLinkParameters()) {
+      document.getElementById("summary-tab")?.click();
+    }
 
     try {
       await initBulkDownloadTab();

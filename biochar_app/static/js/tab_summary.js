@@ -683,16 +683,29 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   }, { responsive: true, displaylogo: false });
 
   const ratioX = years.flatMap((year) => positions.map((position) => `${yearLabel(year)} · ${position}`));
-  const ratioTrace = (group, field, color) => ({
-    type: "bar",
-    name: group,
-    x: ratioX,
-    y: years.flatMap((year) => positions.map((position) => rows.find(
+  const ratioTrace = (group, field, color) => {
+    const values = years.flatMap((year) => positions.map((position) => rows.find(
       (row) => row.year === year && row.position === position
-    )?.[field] ?? null)),
-    marker: { color },
-    hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<extra></extra>",
-  });
+    )?.[field] ?? null));
+    const isBelowOne = values.map(
+      (value) => Number.isFinite(Number(value)) && Number(value) < 1
+    );
+    return {
+      type: "bar",
+      name: group,
+      x: ratioX,
+      y: values,
+      marker: {
+        color,
+        line: {
+          color: isBelowOne.map((highlight) => highlight ? "#3b1f2b" : color),
+          width: isBelowOne.map((highlight) => highlight ? 3.5 : 0),
+        },
+      },
+      customdata: isBelowOne.map((highlight) => highlight ? "Below 1" : ""),
+      hovertemplate: "%{x}<br>%{fullData.name}: %{y:.4g}<br>%{customdata}<extra></extra>",
+    };
+  };
   const ratioRender = plotly.react(ratioChart, [
     ratioTrace("S1/S2", "s1s2Mean", "#3f8fc1"),
     ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
@@ -713,6 +726,21 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
       y1: 1,
       line: { color: "#666666", width: 1.5, dash: "dot" },
       layer: "above",
+    }],
+    annotations: [{
+      xref: "paper",
+      yref: "paper",
+      x: 0.995,
+      y: 0.99,
+      xanchor: "right",
+      yanchor: "top",
+      text: "Dark outline: ratio below 1",
+      showarrow: false,
+      bgcolor: "rgba(255,255,255,0.85)",
+      bordercolor: "#3b1f2b",
+      borderwidth: 1,
+      borderpad: 4,
+      font: { color: "#3b1f2b", size: 12 },
     }],
     xaxis: {
       title: "Anchor year and logger position",
@@ -839,6 +867,14 @@ export async function updateSummaryStatistics() {
     const depthRaw = /** @type {string | null} */ (getDropdownValue("summary-depth"));
     const depth = depthRaw ? depthRaw : null;
     const unitSystem = getUnitSystemForSummary();
+    const shareUrl = new URL(window.location.href);
+    shareUrl.searchParams.set("tab", "summary");
+    shareUrl.searchParams.set("year", String(yearVal || ""));
+    shareUrl.searchParams.set("granularity", granularity);
+    if (variable) shareUrl.searchParams.set("variable", variable);
+    if (strip) shareUrl.searchParams.set("strip", strip);
+    if (depth) shareUrl.searchParams.set("depth", depth);
+    window.history.replaceState(null, "", shareUrl);
     summaryWindow.__seasonalComparisonDownload = null;
     setComparisonDownloadsAvailable(false, granularity === "gseason");
     let periods = [];
