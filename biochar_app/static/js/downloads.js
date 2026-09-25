@@ -329,6 +329,11 @@ export async function downloadSeasonalComparisonPlot(chartType) {
   exportLayout.autosize = false;
   exportLayout.width = 1600;
   exportLayout.height = 900;
+  exportLayout.margin = {
+    ...(exportLayout.margin || {}),
+    b: 145,
+    t: 165,
+  };
   exportLayout.font = { ...(exportLayout.font || {}), size: 22 };
   const exportTitle = typeof exportLayout.title === "string"
     ? { text: exportLayout.title }
@@ -340,6 +345,12 @@ export async function downloadSeasonalComparisonPlot(chartType) {
   exportLayout.legend = {
     ...(exportLayout.legend || {}),
     font: { ...(exportLayout.legend?.font || {}), size: 20 },
+    x: 0,
+    xanchor: "left",
+    xref: "paper",
+    y: 1.02,
+    yanchor: "bottom",
+    yref: "paper",
   };
   ["xaxis", "yaxis"].forEach((axisName) => {
     const axis = exportLayout[axisName] || {};
@@ -352,6 +363,7 @@ export async function downloadSeasonalComparisonPlot(chartType) {
       title: {
         ...axisTitle,
         font: { ...(axisTitle.font || {}), size: 22 },
+        ...(axisName === "xaxis" ? { standoff: 32 } : {}),
       },
     };
   });
