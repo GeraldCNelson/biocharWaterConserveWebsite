@@ -284,12 +284,21 @@ export function getIncompletePeriodNotice(spec, anchorYear, today = new Date()) 
 function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchorYear, periodsRaw) {
   const periods = periodsRaw || summaryWindow.gseasonPeriods || {};
 
-  const seasonEntries = Array.isArray(periods)
+  const seasonEntriesUnsorted = Array.isArray(periods)
     ? periods.map((period) => [period.code, period])
     : Object.entries(periods);
-  if (!seasonEntries.length) {
+  if (!seasonEntriesUnsorted.length) {
     return `<p class="text-muted">No seasonal periods are defined.</p>`;
   }
+  const seasonPriority = ([code, spec]) => {
+    const text = `${code} ${spec?.label || ""}`;
+    if (/growing/i.test(text)) return 0;
+    if (/winter/i.test(text)) return 2;
+    return 1;
+  };
+  const seasonEntries = [...seasonEntriesUnsorted].sort(
+    (a, b) => seasonPriority(a) - seasonPriority(b)
+  );
 
   /**
    * @param {any} stats
@@ -400,7 +409,7 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
 
   const positionOrder = { Top: 0, Middle: 1, Bottom: 2 };
 
-  const renderRows = (stats) => Object.entries(stats)
+  const renderRows = (stats, rowAttributes = "") => Object.entries(stats)
     .map(([key, metrics]) => ({ key, position: positionForKey(key), metrics }))
     .sort((a, b) => (positionOrder[a.position] ?? 99) - (positionOrder[b.position] ?? 99))
     .map(({ position, metrics }) => {
@@ -411,7 +420,7 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
         ? ""
         : ` title="${escapeHTML(`${count} valid observations out of ${expected.toLocaleString()} expected`)}"`;
       return `
-        <tr>
+        <tr${rowAttributes}>
           <th scope="row">${escapeHTML(position)}</th>
           <td>${formatNumber(metrics?.min)}</td>
           <td>${formatNumber(metrics?.mean)}</td>
@@ -465,15 +474,28 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
     const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear);
+    const isWinter = /winter/i.test(`${code} ${spec?.label || ""}`);
+    const winterAttributes = isWinter ? " data-winter-detail hidden" : "";
+
+    if (isWinter) {
+      html += `
+        <tr>
+          <td colspan="7" class="pt-3 pb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-winter-toggle aria-expanded="false">
+              Show winter results
+            </button>
+          </td>
+        </tr>`;
+    }
 
     html += `
-      <tr class="table-primary">
+      <tr class="table-primary"${winterAttributes}>
         <th colspan="7" class="py-2">${escapeHTML(title)}</th>
       </tr>`;
 
     if (incompleteNotice) {
       html += `
-        <tr class="table-warning">
+        <tr class="table-warning"${winterAttributes}>
           <td colspan="7"><strong>Incomplete seasonal period:</strong> ${escapeHTML(incompleteNotice)}</td>
         </tr>`;
     }
@@ -485,10 +507,10 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
     ];
 
     sections.forEach(([label, stats, emptyMessage]) => {
-      html += `<tr class="table-light"><th colspan="7">${label}</th></tr>`;
+      html += `<tr class="table-light"${winterAttributes}><th colspan="7">${label}</th></tr>`;
       html += Object.keys(stats).length
-        ? renderRows(stats)
-        : `<tr><td colspan="7" class="text-muted">${emptyMessage}</td></tr>`;
+        ? renderRows(stats, winterAttributes)
+        : `<tr${winterAttributes}><td colspan="7" class="text-muted">${emptyMessage}</td></tr>`;
     });
   });
 
@@ -1008,6 +1030,14 @@ export async function updateSummaryStatistics() {
         year,
         displayPeriods
       );
+      const winterToggle = container.querySelector("[data-winter-toggle]");
+      winterToggle?.addEventListener("click", () => {
+        const details = container.querySelectorAll("[data-winter-detail]");
+        const willShow = Array.from(details).some((row) => row.hidden);
+        details.forEach((row) => { row.hidden = !willShow; });
+        winterToggle.setAttribute("aria-expanded", String(willShow));
+        winterToggle.textContent = willShow ? "Hide winter results" : "Show winter results";
+      });
 
       cachedComparison = comparisonKey
         ? summaryWindow.multiYearSummaryCache?.get(comparisonKey)
