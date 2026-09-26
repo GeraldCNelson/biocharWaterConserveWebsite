@@ -1,75 +1,173 @@
-# Logger EC adjusted for water content and temperature
+# Six-inch soil electrical-conductivity patterns and shallow laboratory chemistry
 
-## Question
+## What an EC ratio means
 
-Do the logger electrical-conductivity (EC) contrasts between each biochar strip and its paired non-biochar strip persist after accounting for simultaneous volumetric water content (VWC) and soil temperature, and do those adjusted contrasts agree with laboratory ion measurements?
+Electrical conductivity (EC) measures how readily the soil–water system conducts electricity. Conductivity increases as the concentration and mobility of dissolved ions increase. A ratio above 1 therefore means **higher EC in the biochar strip than in its paired non-biochar strip**; it does not automatically mean “better.”
 
-The treatment ratios are S1/S2 and S3/S4. A ratio above 1 means the logger or laboratory value was higher in the biochar strip; a ratio below 1 means it was lower.
+- Some ions contributing to EC are plant nutrients.
+- Excessive soluble salts can impair water uptake and crop growth.
+- Low EC can reflect low salinity, but it can also accompany low nutrient-ion concentrations.
+- The field sensor reports bulk-soil EC, which is affected by water content, temperature, texture, and ion concentration. It is not interchangeable with a standardized laboratory salinity threshold.
 
-## Data and method
+Accordingly, the analysis treats higher and lower ratios as differences to explain, not benefit scores.
 
-- Logger data: 15-minute EC, VWC, and temperature observations during April–October of 2023–2026.
-- Pairing: simultaneous observations within each year, strip pair, logger position (Top, Middle, Bottom), and sensor depth (6, 12, 18 inches).
-- To reduce serial repetition and isolated spikes, simultaneous records were summarized to hourly medians.
-- The response was the logarithm of the paired EC ratio. Robust regressions accounted for paired VWC and temperature differences and for nonlinear mean moisture and temperature conditions. The adjusted ratio is the model-estimated contrast when the paired strips have the same VWC and temperature.
-- Laboratory data: one composite sample per strip and sampling date, at 0–8 or 0–12 inches. The comparison uses the laboratory EC, sulfate-S, sodium, potassium, nitrate-N, and Olsen phosphorus ratios.
+## Scope
 
-This is an observational adjustment, not a randomized estimate of a biochar effect. In particular, the laboratory samples do not identify Top/Middle/Bottom locations or match the three logger depths.
+This revised analysis reports only the **6-inch sensor depth**. The laboratory samples combine the upper 8–12 inches of each entire strip. They overlap the 6-inch measurement zone and may include soil near the upper edge of the nominal 12-inch zone, but they cannot directly validate the 12- or 18-inch sensors.
 
-## Moisture- and temperature-adjusted logger EC
+Top, Middle, and Bottom are retained as separate logger positions in the field analysis. Whole-strip laboratory samples cannot be assigned to those positions, so no position-specific laboratory interpretation is attempted.
 
-The table combines all three sensor depths. Entries are the median adjusted treatment ratio across the 12 year-by-position strata, followed by the interquartile range. The final column is the unadjusted geometric-median ratio for comparison.
+## Daily paired data
 
-| Strip pair | Depth | Adjusted EC ratio | Interquartile range | Unadjusted ratio |
-|---|---:|---:|---:|---:|
-| S1/S2 | 6 in | 1.115 | 0.911–1.542 | 1.737 |
-| S1/S2 | 12 in | 1.117 | 0.999–1.864 | 1.155 |
-| S1/S2 | 18 in | 1.824 | 0.998–2.576 | 2.130 |
-| S3/S4 | 6 in | 0.948 | 0.616–1.077 | 1.251 |
-| S3/S4 | 12 in | 0.791 | 0.586–1.228 | 0.990 |
-| S3/S4 | 18 in | 0.688 | 0.482–1.076 | 0.605 |
+For each year, strip pair, and logger position, simultaneous 15-minute measurements were summarized to daily medians during April–October. The two treatment pairs are S1/S2 and S3/S4, with S1 and S3 treated with biochar. The response is
 
-Adjustment reduces several of the very large raw ratios, so unequal water content and temperature explain part of the apparent EC contrast. They do not eliminate the main spatial pattern: S1 tends to remain higher than S2, especially at 18 inches, whereas S3 tends to remain lower than S4, especially at 12 and 18 inches.
+\[
+y_{d,p,l}=\log\left(\frac{EC_{B,d,p,l}}{EC_{C,d,p,l}}\right),
+\]
 
-Position is at least as important as depth:
+where \(d\) is day, \(p\) is strip pair, \(l\) is logger position, \(B\) is the biochar strip, and \(C\) is its paired control strip.
 
-| Strip pair | Position | Adjusted EC ratio | Interquartile range | Unadjusted ratio |
-|---|---|---:|---:|---:|
-| S1/S2 | Top | 0.926 | 0.900–1.035 | 0.987 |
-| S1/S2 | Middle | 1.043 | 0.947–1.502 | 1.119 |
-| S1/S2 | Bottom | 2.472 | 2.085–4.166 | 3.803 |
-| S3/S4 | Top | 1.239 | 1.135–1.504 | 1.605 |
-| S3/S4 | Middle | 0.791 | 0.605–0.954 | 0.990 |
-| S3/S4 | Bottom | 0.531 | 0.373–0.601 | 0.271 |
+The simultaneous covariates are
 
-The opposing Top-to-Bottom gradients are not consistent with one uniform biochar response. They instead point toward persistent spatial differences in salt transport, drainage, irrigation advance, antecedent conditions, or soil properties. A biochar contribution remains possible, but it cannot be separated from these spatial effects using the EC ratios alone.
+\[
+\Delta VWC=VWC_B-VWC_C,\qquad \overline{VWC}=(VWC_B+VWC_C)/2,
+\]
 
-## Comparison with laboratory ions
+\[
+\Delta T=T_B-T_C,\qquad \overline{T}=(T_B+T_C)/2.
+\]
 
-Across the 14 sampling-date-by-pair contrasts, laboratory EC ratios were most closely associated with sulfate and sodium ratios.
+The previous day's \(\Delta VWC\) and \(\overline{VWC}\) represent antecedent moisture. Irrigation controls are days since the most recent paired-strip irrigation and an indicator for an irrigation day.
 
-| Laboratory constituent | Number of contrasts | Spearman correlation with laboratory EC ratio | p-value | Interpretation |
-|---|---:|---:|---:|---|
-| Sulfate-S | 14 | 0.789 | 0.001 | Strong positive association |
-| Sodium | 14 | 0.846 | <0.001 | Strong positive association |
-| Potassium | 14 | 0.305 | 0.288 | Weak/inconclusive |
-| Nitrate-N | 4 | -0.600 | 0.400 | Too few measured contrasts |
-| Olsen phosphorus | 14 | 0.112 | 0.703 | Little association |
+## Joint robust model
 
-The directions are also informative. S1/S2 sulfate and sodium ratios exceeded 1 on six of seven sampling dates. S3/S4 sulfate exceeded 1 on only two of seven dates, and sodium exceeded 1 on only one. This mirrors the broad logger pattern of higher EC in S1 than S2 and lower EC in S3 than S4.
+The fitted equation is
 
-## Interpretation
+\[
+\begin{aligned}
+y={}&\beta_0+\beta_P P+\beta_M M+\beta_D D
++\sum_{k=2024}^{2026}\gamma_k I(year=k)\\
+&+\beta_{PM}(P\times M)+\beta_{PD}(P\times D)\\
+&+\beta_1\Delta VWC+\beta_2\overline{VWC}+\beta_3\overline{VWC}^{2}\\
+&+\beta_4\Delta T+\beta_5\overline{T}+\beta_6\overline{T}^{2}\\
+&+\beta_7\Delta VWC_{d-1}+\beta_8\overline{VWC}_{d-1}\\
+&+\beta_9 DaysSinceIrrigation+\beta_{10}IrrigationDay+\varepsilon.
+\end{aligned}
+\]
 
-1. **Logger EC is not acting as a direct nutrient-availability measure.** Its paired-strip contrasts are much more consistent with sulfate and sodium than with nitrate, phosphorus, or potassium.
-2. **Moisture and temperature matter, but they are not the whole explanation.** Adjustment attenuates the most extreme ratios without removing the contrasting S1/S2 and S3/S4 patterns.
-3. **The strongest signal is spatial salt redistribution.** The large and opposite bottom-of-field contrasts suggest movement and accumulation of soluble ions, with drainage or irrigation hydraulics likely contributing.
-4. **A single project-wide “biochar raises EC” or “biochar lowers EC” conclusion is not supported.** The direction depends on strip pair and field position.
-5. **The chemistry evidence points primarily to salinity-related ions.** Sodium and sulfate should be analyzed as the leading explanatory candidates; nitrate and phosphorus should remain separate nutrient-availability outcomes.
+Here \(P=1\) for S3/S4, \(M=1\) for Middle, and \(D=1\) for Bottom; S1/S2 Top in 2023 is the reference category. Continuous variables are centered on their analysis means. The pair and position terms are the treatment-contrast interactions because the modeled outcome is already biochar divided by control.
 
-## Limitations and next tests
+Coefficients were estimated by Huber iteratively reweighted least squares. In standardized-residual form the objective is
 
-- Laboratory samples are strip composites from shallow intervals. They cannot validate individual logger positions or the 18-inch sensors.
-- The 2026 growing season is incomplete.
-- The adjusted ratios summarize repeated observations; formal confidence intervals should use day- or irrigation-event-level resampling rather than treating hours as independent.
-- Before causal treatment claims, fit a joint model with strip pair, position, depth, year, irrigation timing, and antecedent moisture, and test a biochar-by-pair and biochar-by-position interaction.
-- The most informative new sampling would collect matched Top/Middle/Bottom samples from S1–S4 at depths aligned with the sensors, measuring saturated-paste EC or another calibrated salinity measure together with sulfate, sodium, chloride, nitrate, potassium, and phosphorus.
+\[
+\min_\beta\sum_i \rho\left(\frac{y_i-X_i\beta}{s}\right),
+\]
+
+with tuning constant \(c=1.345\) and
+
+\[
+\rho(u)=
+\begin{cases}
+u^2/2,& |u|\le c,\\
+c|u|-c^2/2,& |u|>c.
+\end{cases}
+\]
+
+This limits the influence of extreme daily ratios. Confidence intervals use 1,000 calendar-week block-bootstrap samples, keeping measurements from the same week together. Adjusted ratios are \(\exp(X\widehat\beta)\), evaluated at equal paired VWC and temperature differences, average continuous conditions, equal weighting of the four years, and the stated pair and position.
+
+## Adjusted 6-inch EC contrasts
+
+| Strip pair | Logger position | Adjusted EC ratio | Week-block 95% interval | Direction |
+|---|---|---:|---:|---|
+| S1/S2 | Top | 1.093 | 1.010–1.169 | S1 slightly higher |
+| S1/S2 | Middle | 0.985 | 0.734–1.178 | No clear difference |
+| S1/S2 | Bottom | 3.132 | 2.725–3.601 | S1 much higher |
+| S3/S4 | Top | 1.392 | 1.307–1.582 | S3 higher |
+| S3/S4 | Middle | 1.348 | 1.300–1.475 | S3 higher |
+| S3/S4 | Bottom | 0.500 | 0.467–0.565 | S3 much lower |
+
+The model confirms strong, opposite position-specific patterns. This is a description of paired strips, not a clean causal estimate of biochar: each treatment is represented by only one physical strip within each pair, so treatment remains inseparable from persistent strip characteristics.
+
+## Soil-temperature differences
+
+Temperature differs between some paired strips, but the differences are small compared with the EC contrasts.
+
+| Pair | Position | Mean biochar minus control temperature | Week-block 95% interval |
+|---|---|---:|---:|
+| S1/S2 | Top | -0.47 °C | -0.81 to -0.12 |
+| S1/S2 | Middle | +0.26 °C | +0.07 to +0.47 |
+| S1/S2 | Bottom | +0.22 °C | +0.02 to +0.44 |
+| S3/S4 | Top | +0.34 °C | -0.11 to +0.78 |
+| S3/S4 | Middle | +0.02 °C | -0.26 to +0.30 |
+| S3/S4 | Bottom | +0.02 °C | -0.16 to +0.19 |
+
+The paired-temperature coefficient in the EC model is a 1.020 multiplier per 1 °C difference, with a week-block interval spanning no effect (log coefficient interval -0.006 to 0.051). Mean soil temperature has a detectable but modest association with EC. Removing all temperature terms changes the six adjusted EC ratios by only about 0.2%–2.5%. Temperature adjustment is therefore appropriate, but it is not the explanation for the large Bottom contrasts.
+
+## What “laboratory EC ratio” means
+
+The laboratory file contains a soil-test EC value (`ec_1_1`) for each whole-strip composite. For a given sampling date:
+
+\[
+Laboratory\ EC\ ratio=\frac{soil\text{-}test\ EC\ in\ S1\ (or\ S3)}{soil\text{-}test\ EC\ in\ S2\ (or\ S4)}.
+\]
+
+These are **soil-test values**, not logger values. The ratios vary substantially:
+
+| Sampling date | S1/S2 lab EC ratio | S3/S4 lab EC ratio |
+|---|---:|---:|
+| 2023-03-31 | 1.79 | 1.80 |
+| 2023-10-09 | 3.94 | 0.86 |
+| 2024-03-20 | 2.50 | 0.47 |
+| 2024-11-05 | 4.08 | 0.88 |
+| 2025-03-31 | 1.06 | 0.48 |
+| 2025-11-03 | 1.33 | 0.11 |
+| 2026-04-28 | 0.64 | 0.34 |
+
+Thus the laboratory EC evidence is not a stable treatment effect. It varies by pair and date, and S1/S2 even changes direction in 2026.
+
+## Two distinct laboratory comparisons
+
+### 1. Which measured ions accompany laboratory EC?
+
+This comparison stays entirely within each soil sample. Across 14 date-by-pair contrasts, laboratory EC ratios track sodium and sulfate most clearly. It asks what may be contributing to the soil-test conductivity; it does **not** validate the logger.
+
+| Ion ratio | n | Spearman correlation with laboratory EC ratio | p-value |
+|---|---:|---:|---:|
+| Sulfate-S | 14 | 0.789 | 0.001 |
+| Sodium | 14 | 0.846 | <0.001 |
+| Potassium | 14 | 0.305 | 0.288 |
+| Nitrate-N | 14 | 0.556 | 0.039 |
+| Olsen phosphorus | 14 | 0.112 | 0.703 |
+
+### 2. Do shallow laboratory ions track the adjusted 6-inch logger ratio?
+
+For each soil-sampling date with logger coverage, the adjusted 6-inch logger ratios were summarized over a ±7-day window and then averaged equally across the available Top/Middle/Bottom positions. Twelve date-by-pair comparisons were available.
+
+| Ion ratio | n | Spearman correlation with adjusted 6-inch logger EC ratio | p-value |
+|---|---:|---:|---:|
+| Sulfate-S | 12 | 0.476 | 0.118 |
+| Sodium | 12 | 0.797 | 0.002 |
+| Potassium | 12 | 0.867 | <0.001 |
+| Nitrate-N | 12 | 0.112 | 0.729 |
+| Olsen phosphorus | 12 | 0.615 | 0.033 |
+
+These correlations are exploratory. There are only 12 observations, five ions were tested, several sample dates fall outside the growing-season fitting period, and the whole-strip sample is being compared with an equal-weight average of three point locations. Pair and year can drive both variables. Sodium is the most consistent candidate across both comparisons. Potassium and phosphorus track the adjusted logger contrast in this small matched set but do not track laboratory EC consistently, so they should not yet be interpreted as conductivity drivers.
+
+## Conclusions
+
+1. A ratio above 1 means higher conductivity in the biochar strip, not necessarily a beneficial condition.
+2. Moisture, temperature, irrigation timing, antecedent moisture, year, pair, and position do not remove the strong 6-inch spatial contrasts.
+3. Temperature differences are generally less than 0.5 °C, and including temperature changes the adjusted ratios only slightly.
+4. The opposing Bottom results—S1/S2 near 3.13 and S3/S4 near 0.50—cannot be explained as one uniform biochar response.
+5. Whole-strip laboratory chemistry cannot explain location-specific logger patterns. It can only provide a shallow, strip-wide comparison.
+6. Sodium is the most reproducible ion association. Other ion results require additional matched sampling before interpretation.
+
+## Causal limitation and next sampling step
+
+The joint model improves adjustment but does not create treatment replication. Biochar is confounded with strip identity, and position-specific field effects are large. A defensible causal biochar estimate would require additional treated and untreated strips or another design that separates treatment from strip.
+
+The most useful next sampling round would collect matched Top/Middle/Bottom samples in all four strips, using depth intervals aligned with the 6-inch sensors. Laboratory analyses should include a calibrated salinity measure plus sodium, sulfate, chloride, potassium, nitrate, and phosphorus.
+
+## Reproducibility
+
+The analysis is generated by `biochar_app/scripts/research/analyze_ec_adjustment.py`. Machine-readable results are written to `biochar_app/data-processed/research/ec_adjustment/`.
