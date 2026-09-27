@@ -433,6 +433,102 @@ def test_fetch_batch_retries_broken_pipe_with_fresh_connection(monkeypatch) -> N
     assert results == [(4, expected)]
 
 
+def test_fetch_batch_resumes_failed_page_with_preserved_records(
+    monkeypatch, caplog
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    def response(first_record: int, timestamp: datetime) -> bytes:
+        return (
+            struct.pack(">HIH", 2, first_record, 1)
+            + struct.pack(
+                ">I10f",
+                int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+                *([float(first_record)] * 10),
+            )
+            + b"\x00"
+        )
+
+    calls: list[tuple[int, int, int]] = []
+    leaf_connections = 0
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(_table, _signature, *, mode, p1, p2):
+            calls.append((mode, p1, p2))
+            return len(calls)
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        def __init__(self, actions):
+            self.actions = list(actions)
+
+        @staticmethod
+        def gettime():
+            return datetime(2026, 5, 15, 5, 0)
+
+        def send_wait(self, _command):
+            action = self.actions.pop(0)
+            if isinstance(action, Exception):
+                raise action
+            return {}, {"RespCode": 0, "RecData": action}, None
+
+    first_device = FakeDevice(
+        [
+            response(200, datetime(2026, 5, 15, 3, 0)),
+            struct.error("unpack requires a buffer of 8 bytes"),
+        ]
+    )
+    resumed_device = FakeDevice(
+        [response(104, datetime(2026, 5, 14, 3, 0))]
+    )
+
+    def fake_cr1000(_link, **kwargs):
+        nonlocal leaf_connections
+        if kwargs["dest"] == PAKBUS.router_id:
+            return type("FakeRouter", (), {})()
+        leaf_connections += 1
+        return first_device if leaf_connections == 1 else resumed_device
+
+    mst = ZoneInfo("Etc/GMT+7")
+    start = datetime(2026, 5, 13, 5, 0, tzinfo=mst)
+    stop = datetime(2026, 5, 15, 5, 0, tzinfo=mst)
+    monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *_args: (True, "ok"))
+    monkeypatch.setattr(client, "ping6", lambda *_args: True)
+    monkeypatch.setattr(
+        client,
+        "open_pakbus_link",
+        lambda *_args, **_kwargs: nullcontext(object()),
+    )
+    monkeypatch.setattr(client, "CR1000", fake_cr1000)
+    monkeypatch.setattr(client, "_compute_window", lambda *_args: (start, stop))
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
+    with caplog.at_level("INFO"):
+        results = list(
+            fetch_batch(
+                "Table1",
+                48,
+                "America/Denver",
+                logger_ids=[10],
+                station_attempts=2,
+                retry_delay_seconds=0,
+            )
+        )
+
+    assert calls == [
+        (0x05, 104, 0),
+        (0x06, 104, 200),
+        (0x06, 104, 200),
+    ]
+    assert leaf_connections == 2
+    assert results[0][0] == 10
+    assert results[0][1]["RecNbr"].tolist() == [104, 200]
+    assert "resuming with 1 records preserved" in caplog.text
+    assert "retrying in 15.0 seconds" in caplog.text
+
+
 def test_fetch_batch_retries_delivery_failure(monkeypatch) -> None:
     import biochar_app.pakbus.core.client as client
 
