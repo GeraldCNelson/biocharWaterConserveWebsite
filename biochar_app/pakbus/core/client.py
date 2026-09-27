@@ -239,6 +239,14 @@ def _fetch_window(
         )
         try:
             result = dev.send_wait(command)
+        except struct.error as exc:
+            # pycampbellcr1000 raises struct.error when a connection returns a
+            # truncated PakBus frame that is too short to contain its header.
+            # Treat this as a transient link failure so fetch_batch opens a
+            # fresh socket and honors the configured station retry count.
+            raise ConnectionError(
+                "logger returned a truncated PakBus response"
+            ) from exc
         except TypeError as exc:
             # pycampbellcr1000 currently subscripts a missing response and
             # exposes it as a cryptic ``NoneType`` error. Translate that into

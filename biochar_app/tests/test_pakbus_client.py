@@ -198,6 +198,31 @@ def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
         )
 
 
+def test_fetch_window_translates_truncated_pakbus_frame_to_connection_error() -> None:
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            raise struct.error("unpack requires a buffer of 8 bytes")
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(ConnectionError, match="truncated PakBus response"):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
+        )
+
+
 def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
     class FakePakbus:
         @staticmethod
