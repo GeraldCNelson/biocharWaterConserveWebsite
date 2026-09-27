@@ -144,7 +144,7 @@ def test_fetch_window_continues_multi_fragment_table1_response() -> None:
     assert device.pakbus.calls == [(0x05, 20, 0), (0x06, 101, 120)]
 
 
-def test_fetch_window_does_not_cap_multi_day_request_at_96_records() -> None:
+def test_fetch_window_caps_initial_multi_day_request_at_safe_payload() -> None:
     class FakePakbus:
         def __init__(self) -> None:
             self.calls = []
@@ -170,7 +170,54 @@ def test_fetch_window_does_not_cap_multi_day_request_at_96_records() -> None:
         datetime(2026, 5, 15, tzinfo=mst),
     ))
 
-    assert device.pakbus.calls == [(0x05, 200, 0)]
+    assert device.pakbus.calls == [(0x05, 104, 0)]
+
+
+def test_fetch_window_pages_backward_for_multi_day_request() -> None:
+    def response(first_record: int, timestamp: datetime) -> bytes:
+        values = [float(first_record)] * 10
+        return (
+            struct.pack(">HIH", 2, first_record, 1)
+            + struct.pack(
+                ">I10f",
+                int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+                *values,
+            )
+            + b"\x00"
+        )
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.responses = [
+                response(200, datetime(2026, 5, 15, 3, 0)),
+                response(104, datetime(2026, 5, 14, 3, 0)),
+            ]
+
+        def send_wait(self, _command):
+            return {}, {"RespCode": 0, "RecData": self.responses.pop(0)}, None
+
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    frames = list(
+        _fetch_window(
+            device,
+            "Table1",
+            datetime(2026, 5, 13, 5, 0, tzinfo=mst),
+            datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+        )
+    )
+
+    assert device.pakbus.calls == [(0x05, 104, 0), (0x06, 104, 200)]
+    assert frames[0]["RecNbr"].tolist() == [104, 200]
 
 
 def test_fetch_window_translates_missing_library_response_to_timeout() -> None:

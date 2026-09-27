@@ -146,6 +146,11 @@ def quick_port_check_ipv6(host: str, port: int, timeout: float = 3.0) -> tuple[b
 TABLE1_NUMBER = 2
 TABLE1_SIGNATURE = 0x2C79
 TABLE1_INTERVAL_MINUTES = 15
+# A 24-hour request plus the eight-record boundary cushion has been verified
+# against the field CR206 loggers. Larger single requests can produce
+# truncated PakBus frames, so older records are fetched with bounded explicit
+# record-number ranges.
+TABLE1_MAX_RECORDS_PER_REQUEST = 104
 TABLE1_FIELDS = (
     "BattV_Min",
     "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
@@ -217,18 +222,18 @@ def _fetch_window(
         raise ValueError("The fixed CR206 downloader currently supports Table1 only")
 
     requested_minutes = max(1, int((stop - start).total_seconds() // 60))
-    # Include a small boundary cushion, but do not cap multi-day requests at
-    # 96 records (24 hours at the normal 15-minute interval).
+    # Include a small boundary cushion around the requested time window.
     record_count = requested_minutes // TABLE1_INTERVAL_MINUTES + 8
     frames: list[pd.DataFrame] = []
     # CR200/CR206 firmware uses 0x05 for the most-recent-N request. Mode 0x04
     # starts at a record number and therefore returns the oldest retained rows
     # when given a small count such as 96.
+    initial_chunk_size = min(record_count, TABLE1_MAX_RECORDS_PER_REQUEST)
     mode = 0x05
-    p1 = record_count
+    p1 = initial_chunk_size
     p2 = 0
-    next_record: int | None = None
-    final_record: int | None = None
+    request_end: int | None = None
+    records_remaining = record_count - initial_chunk_size
     for _fragment_number in range(100):
         command = dev.pakbus.get_collectdata_cmd(
             TABLE1_NUMBER,
@@ -274,21 +279,41 @@ def _fetch_window(
             break
         frames.append(fragment)
 
-        if final_record is None:
+        if request_end is None:
             # The end record used by mode 0x06 is exclusive.
-            final_record = int(fragment["RecNbr"].min()) + record_count
+            request_end = int(fragment["RecNbr"].min()) + initial_chunk_size
 
         fragment_next_record = int(fragment["RecNbr"].max()) + 1
-        if not fragment.attrs["more"] or fragment_next_record >= final_record:
+        if fragment.attrs["more"] and fragment_next_record < request_end:
+            # CR206 mode 0x05 does not reliably continue after a MostRecent
+            # response. Use the explicit inclusive record-number range.
+            if mode == 0x06 and fragment_next_record <= p1:
+                raise RuntimeError(
+                    "Table1 continuation did not advance the record number"
+                )
+            mode = 0x06
+            p1 = fragment_next_record
+            p2 = request_end
+            continue
+
+        if records_remaining <= 0:
             break
-        if fragment_next_record == next_record:
-            raise RuntimeError("Table1 continuation did not advance the record number")
-        next_record = fragment_next_record
-        # CR206 mode 0x05 does not reliably continue after a MostRecent
-        # response. Use the explicit inclusive record-number range instead.
+
+        # Work backward from the earliest record already received. Keeping
+        # each range at or below the proven 24-hour payload size avoids the
+        # truncated frames seen when requesting 48 hours in one transaction.
+        oldest_record = min(int(page["RecNbr"].min()) for page in frames)
+        older_chunk_size = min(
+            records_remaining, TABLE1_MAX_RECORDS_PER_REQUEST
+        )
+        older_start = max(0, oldest_record - older_chunk_size)
+        if older_start >= oldest_record:
+            break
         mode = 0x06
-        p1 = fragment_next_record
-        p2 = final_record
+        p1 = older_start
+        p2 = oldest_record
+        request_end = oldest_record
+        records_remaining -= oldest_record - older_start
     else:
         raise RuntimeError("Table1 collection exceeded 100 response fragments")
 
