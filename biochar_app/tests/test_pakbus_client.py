@@ -173,7 +173,7 @@ def test_fetch_window_caps_initial_multi_day_request_at_safe_payload() -> None:
     assert device.pakbus.calls == [(0x05, 104, 0)]
 
 
-def test_fetch_window_pages_backward_for_multi_day_request() -> None:
+def test_fetch_window_pages_backward_for_multi_day_request(caplog) -> None:
     def response(first_record: int, timestamp: datetime) -> bytes:
         values = [float(first_record)] * 10
         return (
@@ -207,17 +207,25 @@ def test_fetch_window_pages_backward_for_multi_day_request() -> None:
 
     device = FakeDevice()
     mst = ZoneInfo("Etc/GMT+7")
-    frames = list(
-        _fetch_window(
-            device,
-            "Table1",
-            datetime(2026, 5, 13, 5, 0, tzinfo=mst),
-            datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+    with caplog.at_level("INFO"):
+        frames = list(
+            _fetch_window(
+                device,
+                "Table1",
+                datetime(2026, 5, 13, 5, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
         )
-    )
 
     assert device.pakbus.calls == [(0x05, 104, 0), (0x06, 104, 200)]
     assert frames[0]["RecNbr"].tolist() == [104, 200]
+    assert "Table1 request page 1 (recent; mode=0x05, p1=104, p2=0)" in caplog.text
+    assert "Table1 response page 1: rows=1, records=200-200" in caplog.text
+    assert (
+        "Table1 request page 2 (older records; mode=0x06, p1=104, p2=200)"
+        in caplog.text
+    )
+    assert "Table1 response page 2: rows=1, records=104-104" in caplog.text
 
 
 def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
@@ -234,7 +242,10 @@ def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
             raise TypeError("'NoneType' object is not subscriptable")
 
     mst = ZoneInfo("Etc/GMT+7")
-    with pytest.raises(TimeoutError, match="did not return a Table1 response"):
+    with pytest.raises(
+        TimeoutError,
+        match=r"Table1 page 1 .* did not return a response",
+    ):
         list(
             _fetch_window(
                 FakeDevice(),
@@ -284,7 +295,10 @@ def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
             return {}, {"RespCode": 0}, None
 
     mst = ZoneInfo("Etc/GMT+7")
-    with pytest.raises(TimeoutError, match="did not contain Table1 record data"):
+    with pytest.raises(
+        TimeoutError,
+        match=r"Table1 page 1 .* response did not contain record data",
+    ):
         list(
             _fetch_window(
                 FakeDevice(),

@@ -234,7 +234,14 @@ def _fetch_window(
     p2 = 0
     request_end: int | None = None
     records_remaining = record_count - initial_chunk_size
+    request_kind = "recent"
     for _fragment_number in range(100):
+        request_number = _fragment_number + 1
+        request_context = (
+            f"page {request_number} ({request_kind}; mode=0x{mode:02X}, "
+            f"p1={p1}, p2={p2})"
+        )
+        logging.info("Table1 request %s", request_context)
         command = dev.pakbus.get_collectdata_cmd(
             TABLE1_NUMBER,
             TABLE1_SIGNATURE,
@@ -242,6 +249,7 @@ def _fetch_window(
             p1=p1,
             p2=p2,
         )
+        request_started = time.monotonic()
         try:
             result = dev.send_wait(command)
         except struct.error as exc:
@@ -250,7 +258,8 @@ def _fetch_window(
             # Treat this as a transient link failure so fetch_batch opens a
             # fresh socket and honors the configured station retry count.
             raise ConnectionError(
-                "logger returned a truncated PakBus response"
+                f"Table1 {request_context} returned a truncated PakBus "
+                f"response after {time.monotonic() - request_started:.1f} seconds"
             ) from exc
         except TypeError as exc:
             # pycampbellcr1000 currently subscripts a missing response and
@@ -258,25 +267,54 @@ def _fetch_window(
             # the communication failure that actually occurred.
             if "NoneType" not in str(exc):
                 raise
-            raise TimeoutError("logger did not return a Table1 response") from exc
+            raise TimeoutError(
+                f"Table1 {request_context} did not return a response after "
+                f"{time.monotonic() - request_started:.1f} seconds"
+            ) from exc
         if result is None:
-            raise TimeoutError("logger did not return a Table1 response")
+            raise TimeoutError(
+                f"Table1 {request_context} did not return a response after "
+                f"{time.monotonic() - request_started:.1f} seconds"
+            )
         _header, message, _send_time = result
         response_code = int(message.get("RespCode", 0))
         if response_code:
             raise RuntimeError(
-                f"Table1 collection failed with response code {response_code}"
+                f"Table1 {request_context} failed with response code "
+                f"{response_code}"
             )
 
         try:
             record_data = message["RecData"]
         except KeyError as exc:
             raise TimeoutError(
-                "logger response did not contain Table1 record data"
+                f"Table1 {request_context} response did not contain record data"
             ) from exc
-        fragment = decode_table1_response(record_data)
+        try:
+            fragment = decode_table1_response(record_data)
+        except ValueError as exc:
+            raise ValueError(f"Table1 {request_context}: {exc}") from exc
+        elapsed_seconds = time.monotonic() - request_started
         if fragment.empty:
+            logging.info(
+                "Table1 response page %s: rows=0, more=%s, elapsed=%.1f seconds",
+                request_number,
+                fragment.attrs["more"],
+                elapsed_seconds,
+            )
             break
+        first_record = int(fragment["RecNbr"].min())
+        last_record = int(fragment["RecNbr"].max())
+        logging.info(
+            "Table1 response page %s: rows=%s, records=%s-%s, more=%s, "
+            "elapsed=%.1f seconds",
+            request_number,
+            len(fragment),
+            first_record,
+            last_record,
+            fragment.attrs["more"],
+            elapsed_seconds,
+        )
         frames.append(fragment)
 
         if request_end is None:
@@ -294,6 +332,7 @@ def _fetch_window(
             mode = 0x06
             p1 = fragment_next_record
             p2 = request_end
+            request_kind = "continuation"
             continue
 
         if records_remaining <= 0:
@@ -314,6 +353,7 @@ def _fetch_window(
         p2 = oldest_record
         request_end = oldest_record
         records_remaining -= oldest_record - older_start
+        request_kind = "older records"
     else:
         raise RuntimeError("Table1 collection exceeded 100 response fragments")
 
