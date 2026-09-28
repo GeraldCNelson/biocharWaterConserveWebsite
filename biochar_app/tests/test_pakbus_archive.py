@@ -14,6 +14,7 @@ from biochar_app.pakbus.core.archive import (
     promote_accepted_frame,
     repair_rejected_run,
     promote_run_directory,
+    validate_archive_recovery,
 )
 
 
@@ -120,6 +121,54 @@ def test_repair_rejected_run_creates_separate_accepted_artifact(
     assert json.loads(
         (run_dir / "diagnostic_report.json").read_text(encoding="utf-8")
     ) == source_report
+
+
+def test_validate_archive_recovery_checks_immediate_neighbors(
+    tmp_path: Path,
+) -> None:
+    def row(record: int, minute: int) -> dict:
+        values = {
+            "station": "S3B",
+            "logger_id": 10,
+            "Datetime": (
+                pd.Timestamp("2026-09-25T06:00:00Z")
+                + pd.Timedelta(minutes=minute)
+            ).isoformat(),
+            "RecNbr": record,
+        }
+        values.update({column: 12.5 for column in VALUE_COLUMNS})
+        return values
+
+    archive_root = tmp_path / "archive"
+    promote_accepted_frame(
+        pd.DataFrame([row(100, 0), row(103, 45)]),
+        archive_root=archive_root,
+    )
+    first_recovery = tmp_path / "first.csv"
+    second_recovery = tmp_path / "second.csv"
+    pd.DataFrame([row(101, 15)]).to_csv(first_recovery, index=False)
+    pd.DataFrame([row(102, 30)]).to_csv(second_recovery, index=False)
+
+    output_dir = tmp_path / "validated"
+    result = validate_archive_recovery(
+        [first_recovery, second_recovery],
+        archive_root=archive_root,
+        output_dir=output_dir,
+    )
+
+    assert result["status"] == "accepted"
+    assert result["record_count"] == 2
+    assert result["findings"] == []
+    assert result["stations"]["S3B"]["records"] == [101, 102]
+    assert all(
+        check["previous_neighbor_valid"]
+        and check["following_neighbor_valid"]
+        for check in result["stations"]["S3B"]["row_checks"]
+    )
+    assert (output_dir / "logger_data.csv").exists()
+    assert json.loads(
+        (output_dir / "diagnostic_report.json").read_text(encoding="utf-8")
+    )["status"] == "accepted"
 
 
 def test_compare_matches_pc400_with_rounding_tolerance(tmp_path: Path) -> None:

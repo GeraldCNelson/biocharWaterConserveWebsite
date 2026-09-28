@@ -38,6 +38,7 @@ VALUE_COLUMNS = (
 )
 REQUIRED_COLUMNS = {"station", "logger_id", "Datetime", "RecNbr", *VALUE_COLUMNS}
 ARCHIVE_KEY = ["station", "logger_id", "Datetime", "RecNbr"]
+DEFAULT_MANUAL_ROOT = REPO_ROOT / "biochar_app/data-raw/pakbus_manual"
 
 
 def _atomic_write_csv(frame: pd.DataFrame, destination: Path) -> None:
@@ -211,6 +212,165 @@ def repair_rejected_run(
     return repair_report
 
 
+def validate_archive_recovery(
+    recovery_csvs: list[Path],
+    *,
+    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
+    output_dir: Path | None = None,
+) -> dict:
+    """Validate targeted gap rows against their immediate archive neighbors."""
+    if not recovery_csvs:
+        raise ValueError("At least one recovery CSV is required")
+
+    recovered_frames = []
+    for recovery_csv in recovery_csvs:
+        if not recovery_csv.exists():
+            raise FileNotFoundError(f"Recovery data not found: {recovery_csv}")
+        recovered_frames.append(normalize_download_frame(pd.read_csv(recovery_csv)))
+    recovered = normalize_download_frame(
+        pd.concat(recovered_frames, ignore_index=True)
+    )
+    duplicate_rows = int(recovered.duplicated(ARCHIVE_KEY, keep=False).sum())
+    recovered = recovered.drop_duplicates(ARCHIVE_KEY, keep="last").copy()
+    recovered["_timestamp"] = pd.to_datetime(
+        recovered["Datetime"], utc=True
+    )
+
+    findings: list[dict] = []
+    if duplicate_rows:
+        findings.append({
+            "severity": "warning",
+            "code": "duplicate_recovery_rows",
+            "message": f"Removed {duplicate_rows} duplicate recovery rows",
+        })
+    station_reports: dict[str, dict] = {}
+    for station, incoming_station in recovered.groupby("station", sort=True):
+        years = sorted(incoming_station["_timestamp"].dt.year.unique())
+        existing_parts = []
+        for year in years:
+            archive_path = archive_root / str(year) / "logger_data.csv"
+            if not archive_path.exists():
+                findings.append({
+                    "severity": "critical",
+                    "code": "archive_missing",
+                    "station": station,
+                    "message": f"Archive does not exist: {archive_path}",
+                })
+                continue
+            existing_parts.append(normalize_download_frame(pd.read_csv(archive_path)))
+        if not existing_parts:
+            continue
+        existing = normalize_download_frame(
+            pd.concat(existing_parts, ignore_index=True)
+        )
+        existing = existing.loc[existing["station"] == station].copy()
+        existing["_timestamp"] = pd.to_datetime(existing["Datetime"], utc=True)
+        existing_keys = set(map(tuple, existing[ARCHIVE_KEY].to_numpy()))
+        incoming_keys = set(map(tuple, incoming_station[ARCHIVE_KEY].to_numpy()))
+        already_present = len(existing_keys.intersection(incoming_keys))
+        if already_present:
+            findings.append({
+                "severity": "critical",
+                "code": "recovery_already_present",
+                "station": station,
+                "message": (
+                    f"{already_present} recovery rows already exist in the archive"
+                ),
+            })
+
+        combined = pd.concat([existing, incoming_station], ignore_index=True)
+        combined = (
+            combined.drop_duplicates(ARCHIVE_KEY, keep="last")
+            .sort_values(["RecNbr", "_timestamp"])
+            .reset_index(drop=True)
+        )
+        row_reports = []
+        for _row_index, row in incoming_station.sort_values("RecNbr").iterrows():
+            record_number = int(row["RecNbr"])
+            timestamp = row["_timestamp"]
+            position = combined.index[
+                (combined["RecNbr"] == record_number)
+                & (combined["_timestamp"] == timestamp)
+            ]
+            if len(position) != 1:
+                findings.append({
+                    "severity": "critical",
+                    "code": "recovery_key_ambiguous",
+                    "station": station,
+                    "message": f"Could not uniquely locate recovered record {record_number}",
+                })
+                continue
+            index = int(position[0])
+            previous = combined.iloc[index - 1] if index > 0 else None
+            following = combined.iloc[index + 1] if index + 1 < len(combined) else None
+            previous_ok = (
+                previous is not None
+                and int(previous["RecNbr"]) == record_number - 1
+                and timestamp - previous["_timestamp"] == pd.Timedelta(minutes=15)
+            )
+            following_ok = (
+                following is not None
+                and int(following["RecNbr"]) == record_number + 1
+                and following["_timestamp"] - timestamp == pd.Timedelta(minutes=15)
+            )
+            if not previous_ok or not following_ok:
+                findings.append({
+                    "severity": "critical",
+                    "code": "recovery_not_contiguous",
+                    "station": station,
+                    "message": (
+                        f"Recovered record {record_number} does not have contiguous "
+                        "15-minute record-number neighbors"
+                    ),
+                })
+            row_reports.append({
+                "record": record_number,
+                "timestamp": timestamp.isoformat(),
+                "previous_neighbor_valid": previous_ok,
+                "following_neighbor_valid": following_ok,
+            })
+        station_reports[station] = {
+            "rows": int(len(incoming_station)),
+            "records": sorted(int(value) for value in incoming_station["RecNbr"]),
+            "already_present": already_present,
+            "row_checks": row_reports,
+        }
+
+    has_critical = any(item["severity"] == "critical" for item in findings)
+    status = (
+        "rejected"
+        if has_critical
+        else "accepted_with_warnings"
+        if findings
+        else "accepted"
+    )
+    if output_dir is None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S+0000")
+        output_dir = DEFAULT_MANUAL_ROOT / f"{stamp}_archive_recovery"
+    output_dir.mkdir(parents=True, exist_ok=False)
+    recovery_output = output_dir / "logger_data.csv"
+    export = recovered.drop(columns="_timestamp")
+    _atomic_write_csv(
+        export.sort_values(["Datetime", "station", "RecNbr"]), recovery_output
+    )
+    report = {
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "archive_root": str(archive_root),
+        "recovery_csvs": [str(path) for path in recovery_csvs],
+        "raw_csv": str(recovery_output),
+        "record_count": int(len(export)),
+        "stations": station_reports,
+        "findings": findings,
+    }
+    report_path = output_dir / "diagnostic_report.json"
+    report_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    report["diagnostic_report"] = str(report_path)
+    return report
+
+
 def _read_toa5(path: Path) -> pd.DataFrame:
     with path.open("r", newline="") as source:
         reader = csv.reader(source)
@@ -314,6 +474,15 @@ def main() -> int:
     repair.add_argument("run_dir", type=Path)
     repair.add_argument("recovery_csv", type=Path, nargs="+")
     repair.add_argument("--output-dir", type=Path)
+    validate_recovery = subparsers.add_parser(
+        "validate-recovery",
+        help="validate targeted gap rows against the current archive",
+    )
+    validate_recovery.add_argument("recovery_csv", type=Path, nargs="+")
+    validate_recovery.add_argument(
+        "--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT
+    )
+    validate_recovery.add_argument("--output-dir", type=Path)
     compare = subparsers.add_parser("compare", help="compare PakBus CSV with PC400 .dat files")
     compare.add_argument("pakbus_csv", type=Path)
     compare.add_argument("--dat-dir", type=Path, default=REPO_ROOT / "biochar_app/data-raw/datfiles_2026")
@@ -326,6 +495,12 @@ def main() -> int:
         result = repair_rejected_run(
             args.run_dir,
             args.recovery_csv,
+            output_dir=args.output_dir,
+        )
+    elif args.command == "validate-recovery":
+        result = validate_archive_recovery(
+            args.recovery_csv,
+            archive_root=args.archive_root,
             output_dir=args.output_dir,
         )
     else:
