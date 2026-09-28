@@ -24,7 +24,7 @@
     "csv_decimal_places": 4
   },
   "daily": {
-    "hours": 24,
+    "hours": 26,
     "attempts": 1,
     "station_pause_seconds": 15.0,
     "minimum_rows": 90,

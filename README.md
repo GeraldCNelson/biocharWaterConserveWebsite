@@ -78,6 +78,11 @@ when timestamp and record counters agree. Run the same check manually with:
 tools/pakbus-download audit --lookback-days 7
 ```
 
+The daily download requests 26 hours of data so consecutive runs overlap by
+about two hours. Archive promotion deduplicates those overlapping rows. This
+prevents a small change in the scheduler or logger response time around a
+15-minute boundary from leaving one or two records between daily windows.
+
 Explicit record requests that predate the logger's retained ring buffer are
 reported immediately as unavailable, together with the oldest record number
 and timestamp returned by the logger; they are not retried as communication
