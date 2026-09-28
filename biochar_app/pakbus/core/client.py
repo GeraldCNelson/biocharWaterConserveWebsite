@@ -166,6 +166,10 @@ CAMPBELL_EPOCH = datetime(1990, 1, 1)
 LOGGER_STANDARD_TIME = ZoneInfo("Etc/GMT+7")  # MST year-round (UTC-07:00)
 
 
+class RecordRangeUnavailableError(RuntimeError):
+    """Requested records have rolled out of the logger's retained table."""
+
+
 @dataclass
 class _Table1FetchState:
     """Mutable page cursor retained while a station reconnects."""
@@ -453,6 +457,14 @@ def _fetch_window(
             return
         actual_start = int(frame["RecNbr"].min())
         actual_end = int(frame["RecNbr"].max())
+        if actual_start > state.explicit_start:
+            oldest_row = frame.loc[frame["RecNbr"].idxmin()]
+            oldest_timestamp = oldest_row["Datetime"].isoformat()
+            raise RecordRangeUnavailableError(
+                "Requested Table1 records are no longer retained: requested "
+                f"{state.explicit_start}-{state.explicit_end}; oldest available "
+                f"record is {actual_start} at {oldest_timestamp}"
+            )
         if (
             len(frame) != state.record_count
             or actual_start != state.explicit_start
@@ -629,6 +641,15 @@ def fetch_batch(
                             "%s (logger %s) succeeded on attempt %s/%s",
                             station, dest_id, attempt, station_attempts,
                         )
+                break
+            except RecordRangeUnavailableError as exc:
+                logging.error(
+                    "%s (logger %s) cannot satisfy the explicit range: %s. "
+                    "This condition is non-retryable.",
+                    station,
+                    dest_id,
+                    exc,
+                )
                 break
             except (
                 TimeoutError,

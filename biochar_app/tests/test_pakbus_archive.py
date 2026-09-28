@@ -10,6 +10,7 @@ import pytest
 
 from biochar_app.pakbus.core.archive import (
     VALUE_COLUMNS,
+    audit_archive_continuity,
     compare_with_pc400,
     promote_accepted_frame,
     repair_rejected_run,
@@ -169,6 +170,46 @@ def test_validate_archive_recovery_checks_immediate_neighbors(
     assert json.loads(
         (output_dir / "diagnostic_report.json").read_text(encoding="utf-8")
     )["status"] == "accepted"
+
+
+def test_archive_continuity_audit_emits_exact_recovery_plan(
+    tmp_path: Path,
+) -> None:
+    rows = _download_rows().loc[lambda frame: frame["station"] == "S3B"].copy()
+    rows.loc[rows.index[1], "Datetime"] = pd.Timestamp(
+        "2026-09-12T10:00:00-07:00"
+    ).isoformat()
+    rows.loc[rows.index[1], "RecNbr"] = 104
+    promote_accepted_frame(rows, archive_root=tmp_path)
+
+    report = audit_archive_continuity(archive_root=tmp_path, lookback_days=7)
+
+    assert report["status"] == "gaps_found"
+    assert report["gap_count"] == 1
+    gap = report["gaps"][0]
+    assert gap["station"] == "S3B"
+    assert gap["missing_intervals"] == 3
+    assert gap["record_start"] == 101
+    assert gap["record_end"] == 103
+    assert (
+        "tools/pakbus-download station S3B --record-start 101 --record-end 103"
+        in gap["recovery_command"]
+    )
+
+    missing = []
+    for record, minute in ((101, 15), (102, 30), (103, 45)):
+        item = rows.iloc[0].copy()
+        item["RecNbr"] = record
+        item["Datetime"] = (
+            pd.Timestamp("2026-09-12T09:00:00-07:00")
+            + pd.Timedelta(minutes=minute)
+        ).isoformat()
+        missing.append(item)
+    promote_accepted_frame(pd.DataFrame(missing), archive_root=tmp_path)
+
+    repaired = audit_archive_continuity(archive_root=tmp_path, lookback_days=7)
+    assert repaired["status"] == "continuous"
+    assert repaired["gap_count"] == 0
 
 
 def test_compare_matches_pc400_with_rounding_tolerance(tmp_path: Path) -> None:

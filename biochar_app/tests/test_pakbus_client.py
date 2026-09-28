@@ -16,6 +16,7 @@ import pandas as pd
 from biochar_app.config.pakbus import PAKBUS
 from biochar_app.pakbus.core.client import (
     CAMPBELL_EPOCH,
+    RecordRangeUnavailableError,
     _compute_window,
     _fetch_window,
     _new_table1_record_range_state,
@@ -243,6 +244,90 @@ def test_fetch_window_rejects_incomplete_explicit_record_range() -> None:
                 _new_table1_record_range_state(100244, 100248),
             )
         )
+
+
+def test_fetch_window_reports_oldest_record_when_requested_range_rolled_out() -> None:
+    timestamp = datetime(2026, 6, 12, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 93732, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([93732.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            return {}, {"RespCode": 0, "RecData": record_data}, None
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(
+        RecordRangeUnavailableError,
+        match=r"oldest available record is 93732 at 2026-06-12T03:00:00-07:00",
+    ):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 9, 1, tzinfo=mst),
+                datetime(2026, 9, 2, tzinfo=mst),
+                _new_table1_record_range_state(0, 0),
+            )
+        )
+
+
+def test_fetch_batch_does_not_retry_unavailable_record_range(monkeypatch) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    links: list[object] = []
+
+    def fake_open_link(_host, _port, **_kwargs):
+        link = object()
+        links.append(link)
+        return nullcontext(link)
+
+    def fake_cr1000(_link, **_kwargs):
+        device = type("FakeDevice", (), {})()
+        device.gettime = lambda: datetime(2026, 9, 28, 10, 0)
+        return device
+
+    def unavailable(*_args, **_kwargs):
+        raise RecordRangeUnavailableError(
+            "oldest available record is 93732 at 2026-06-12T03:00:00-07:00"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *_args: (True, "ok"))
+    monkeypatch.setattr(client, "ping6", lambda *_args: True)
+    monkeypatch.setattr(client, "open_pakbus_link", fake_open_link)
+    monkeypatch.setattr(client, "CR1000", fake_cr1000)
+    monkeypatch.setattr(client, "_fetch_window", unavailable)
+
+    results = list(
+        fetch_batch(
+            "Table1",
+            1,
+            "America/Denver",
+            logger_ids=[2],
+            station_attempts=5,
+            retry_delay_seconds=0,
+            record_start=0,
+            record_end=0,
+        )
+    )
+
+    assert results == []
+    assert len(links) == 1
 
 
 def test_fetch_window_caps_initial_multi_day_request_at_safe_payload() -> None:

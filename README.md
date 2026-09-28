@@ -69,6 +69,20 @@ To promote an older run after its diagnostic report has been verified as
 tools/pakbus-download promote /path/to/pakbus_daily/YYYY/MM/DD/RUN_DIRECTORY
 ```
 
+The nightly job also audits the most recent seven days of the accepted archive
+for internal 15-minute gaps. A gap prevents downstream publication and the
+diagnostic report includes the exact station and record-number recovery command
+when timestamp and record counters agree. Run the same check manually with:
+
+```bash
+tools/pakbus-download audit --lookback-days 7
+```
+
+Explicit record requests that predate the logger's retained ring buffer are
+reported immediately as unavailable, together with the oldest record number
+and timestamp returned by the logger; they are not retried as communication
+failures.
+
 ## Local development
 
 Create and activate a Python virtual environment, install the requirements, and

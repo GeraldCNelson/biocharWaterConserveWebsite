@@ -30,6 +30,7 @@
     "minimum_rows": 90,
     "maximum_gap_minutes": 30,
     "maximum_age_minutes": 90,
+    "archive_continuity_lookback_days": 7,
     "battery_warning_volts": 11.5,
     "battery_critical_volts": 10.5,
     "recovery_passes": 2,

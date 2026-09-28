@@ -124,6 +124,82 @@ def promote_run_directory(run_dir: Path, archive_root: Path = DEFAULT_ARCHIVE_RO
     return promote_accepted_frame(pd.read_csv(raw_path), archive_root=archive_root)
 
 
+def audit_archive_continuity(
+    *,
+    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
+    lookback_days: int = 7,
+) -> dict:
+    """Find recent internal 15-minute gaps and emit exact recovery ranges."""
+    if lookback_days < 1:
+        raise ValueError("lookback_days must be at least 1")
+    archive_files = sorted(archive_root.glob("*/logger_data.csv"))
+    if not archive_files:
+        return {
+            "status": "failed",
+            "lookback_days": lookback_days,
+            "gap_count": 0,
+            "gaps": [],
+            "detail": f"No annual archives found under {archive_root}",
+        }
+    data = normalize_download_frame(
+        pd.concat(
+            [pd.read_csv(path) for path in archive_files],
+            ignore_index=True,
+        )
+    )
+    data["_timestamp"] = pd.to_datetime(data["Datetime"], utc=True)
+    gaps: list[dict] = []
+    for station, station_data in data.groupby("station", sort=True):
+        station_data = station_data.sort_values("_timestamp").reset_index(drop=True)
+        latest = station_data["_timestamp"].max()
+        recent = station_data.loc[
+            station_data["_timestamp"] >= latest - pd.Timedelta(days=lookback_days)
+        ].reset_index(drop=True)
+        for index in range(1, len(recent)):
+            previous = recent.iloc[index - 1]
+            current = recent.iloc[index]
+            elapsed = current["_timestamp"] - previous["_timestamp"]
+            if elapsed <= pd.Timedelta(minutes=15):
+                continue
+            missing_intervals = int(
+                elapsed / pd.Timedelta(minutes=15)
+            ) - 1
+            record_start = int(previous["RecNbr"]) + 1
+            record_end = int(current["RecNbr"]) - 1
+            missing_records = max(0, record_end - record_start + 1)
+            exact_range = missing_records == missing_intervals and missing_records > 0
+            gap = {
+                "station": station,
+                "after": previous["_timestamp"].isoformat(),
+                "before": current["_timestamp"].isoformat(),
+                "previous_record": int(previous["RecNbr"]),
+                "next_record": int(current["RecNbr"]),
+                "missing_intervals": missing_intervals,
+                "missing_records": missing_records,
+                "record_start": record_start if exact_range else None,
+                "record_end": record_end if exact_range else None,
+            }
+            if exact_range:
+                gap["recovery_command"] = (
+                    f"tools/pakbus-download station {station} "
+                    f"--record-start {record_start} --record-end {record_end} "
+                    "--attempts 5 --response-timeout 30 --log-level INFO"
+                )
+            else:
+                gap["recovery_command"] = None
+                gap["detail"] = (
+                    "Timestamp and record-number gaps disagree; inspect for a "
+                    "logger reset or clock discontinuity before recovery."
+                )
+            gaps.append(gap)
+    return {
+        "status": "gaps_found" if gaps else "continuous",
+        "lookback_days": lookback_days,
+        "gap_count": len(gaps),
+        "gaps": gaps,
+    }
+
+
 def repair_rejected_run(
     run_dir: Path,
     recovery_csvs: list[Path],
@@ -483,6 +559,12 @@ def main() -> int:
         "--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT
     )
     validate_recovery.add_argument("--output-dir", type=Path)
+    audit = subparsers.add_parser(
+        "audit",
+        help="audit recent archive continuity and print exact recovery ranges",
+    )
+    audit.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
+    audit.add_argument("--lookback-days", type=int, default=7)
     compare = subparsers.add_parser("compare", help="compare PakBus CSV with PC400 .dat files")
     compare.add_argument("pakbus_csv", type=Path)
     compare.add_argument("--dat-dir", type=Path, default=REPO_ROOT / "biochar_app/data-raw/datfiles_2026")
@@ -503,12 +585,19 @@ def main() -> int:
             archive_root=args.archive_root,
             output_dir=args.output_dir,
         )
+    elif args.command == "audit":
+        result = audit_archive_continuity(
+            archive_root=args.archive_root,
+            lookback_days=args.lookback_days,
+        )
     else:
         result = compare_with_pc400(args.pakbus_csv, args.dat_dir, tolerance=args.tolerance)
     rendered = json.dumps(result, indent=2, sort_keys=True)
     print(rendered)
     if getattr(args, "output", None):
         args.output.write_text(rendered + "\n", encoding="utf-8")
+    if args.command == "audit":
+        return 0 if result.get("status") == "continuous" else 1
     return 0 if result.get("equivalent", True) else 1
 
 

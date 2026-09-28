@@ -19,6 +19,7 @@ usage() {
     "  tools/pakbus-download station STATION [download options]" \
     "  tools/pakbus-download discover [STATION]" \
     "  tools/pakbus-download daily [validation options]" \
+    "  tools/pakbus-download audit [--lookback-days DAYS]" \
     "  tools/pakbus-download compare PAKBUS_CSV [comparison options]" \
     "  tools/pakbus-download repair REJECTED_RUN RECOVERY_CSV [...]" \
     "  tools/pakbus-download validate-recovery RECOVERY_CSV [...]" \
@@ -87,7 +88,7 @@ case "${command_name}" in
   daily)
     exec "${python_bin}" -m biochar_app.pakbus.core.daily_download "$@"
     ;;
-  compare|repair|validate-recovery|promote)
+  audit|compare|repair|validate-recovery|promote)
     exec "${python_bin}" -m biochar_app.pakbus.core.archive "${command_name}" "$@"
     ;;
   help|-h|--help)
