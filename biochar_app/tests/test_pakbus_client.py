@@ -18,6 +18,7 @@ from biochar_app.pakbus.core.client import (
     CAMPBELL_EPOCH,
     _compute_window,
     _fetch_window,
+    _new_table1_record_range_state,
     decode_table1_response,
     fetch_batch,
     fetch_isolated_stations,
@@ -142,6 +143,106 @@ def test_fetch_window_continues_multi_fragment_table1_response() -> None:
     assert len(frames) == 1
     assert frames[0]["RecNbr"].tolist() == [100, 101]
     assert device.pakbus.calls == [(0x05, 20, 0), (0x06, 101, 120)]
+
+
+def test_fetch_window_collects_exact_explicit_record_range() -> None:
+    def response(first_record: int, count: int, more: bool) -> bytes:
+        records = b"".join(
+            struct.pack(
+                ">I10f",
+                int(
+                    (
+                        datetime(2026, 5, 10, 3, 0)
+                        + timedelta(minutes=15 * index)
+                        - CAMPBELL_EPOCH
+                    ).total_seconds()
+                ),
+                *([float(first_record + index)] * 10),
+            )
+            for index in range(count)
+        )
+        return (
+            struct.pack(">HIH", 2, first_record, count)
+            + records
+            + bytes([more])
+        )
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.responses = [
+                response(100244, 3, True),
+                response(100247, 2, False),
+            ]
+
+        def send_wait(self, _command):
+            return {}, {"RespCode": 0, "RecData": self.responses.pop(0)}, None
+
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    frames = list(
+        _fetch_window(
+            device,
+            "Table1",
+            # These dates intentionally exclude the returned rows: explicit
+            # record recovery must not apply the rolling time-window filter.
+            datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+            datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            _new_table1_record_range_state(100244, 100248),
+        )
+    )
+
+    assert len(frames) == 1
+    assert frames[0]["RecNbr"].tolist() == list(range(100244, 100249))
+    assert device.pakbus.calls == [
+        (0x06, 100244, 100249),
+        (0x06, 100247, 100249),
+    ]
+
+
+def test_fetch_window_rejects_incomplete_explicit_record_range() -> None:
+    timestamp = datetime(2026, 5, 10, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 100244, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([100244.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            return {}, {"RespCode": 0, "RecData": record_data}, None
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(RuntimeError, match="expected records 100244-100248"):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+                _new_table1_record_range_state(100244, 100248),
+            )
+        )
 
 
 def test_fetch_window_caps_initial_multi_day_request_at_safe_payload() -> None:
@@ -678,11 +779,18 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
         attempts=3,
         station_pause_seconds=15,
         timing_output=tmp_path / "timings.json",
+        record_start=100244,
+        record_end=100338,
     )
 
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
     assert len(commands) == 3
     assert all("--direct" in command for command in commands)
+    assert all(
+        command[command.index("--record-start") + 1] == "100244"
+        and command[command.index("--record-end") + 1] == "100338"
+        for command in commands
+    )
     assert all(command[command.index("--log-level") + 1] == "INFO" for command in commands)
     assert pauses == [15, 15]
     timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8"))

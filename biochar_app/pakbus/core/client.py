@@ -179,6 +179,9 @@ class _Table1FetchState:
     request_kind: str = "recent"
     request_number: int = 0
     completed: bool = False
+    filter_by_time: bool = True
+    explicit_start: int | None = None
+    explicit_end: int | None = None
     frames: list[pd.DataFrame] = field(default_factory=list)
 
 
@@ -191,6 +194,28 @@ def _new_table1_fetch_state(start: datetime, stop: datetime) -> _Table1FetchStat
         mode=0x05,
         p1=initial_chunk_size,
         records_remaining=record_count - initial_chunk_size,
+    )
+
+
+def _new_table1_record_range_state(
+    record_start: int, record_end: int
+) -> _Table1FetchState:
+    """Create a fetch cursor for an inclusive record-number range."""
+    if record_start < 0:
+        raise ValueError("record_start cannot be negative")
+    if record_end < record_start:
+        raise ValueError("record_end must be greater than or equal to record_start")
+    exclusive_end = record_end + 1
+    return _Table1FetchState(
+        record_count=exclusive_end - record_start,
+        mode=0x06,
+        p1=record_start,
+        p2=exclusive_end,
+        request_end=exclusive_end,
+        request_kind="explicit record range",
+        filter_by_time=False,
+        explicit_start=record_start,
+        explicit_end=record_end,
     )
 
 
@@ -423,6 +448,24 @@ def _fetch_window(
         .tail(state.record_count)
         .reset_index(drop=True)
     )
+    if not state.filter_by_time:
+        if frame.empty:
+            return
+        actual_start = int(frame["RecNbr"].min())
+        actual_end = int(frame["RecNbr"].max())
+        if (
+            len(frame) != state.record_count
+            or actual_start != state.explicit_start
+            or actual_end != state.explicit_end
+        ):
+            raise RuntimeError(
+                "Explicit Table1 range was incomplete: expected records "
+                f"{state.explicit_start}-{state.explicit_end} "
+                f"({state.record_count} rows), received {actual_start}-{actual_end} "
+                f"({len(frame)} rows)"
+            )
+        yield frame.sort_values("RecNbr").reset_index(drop=True)
+        return
     timestamps = frame["Datetime"].map(lambda value: value.astimezone(start.tzinfo))
     selected = frame.loc[(timestamps >= start) & (timestamps <= stop)].copy()
     if selected.empty and not frame.empty:
@@ -470,6 +513,8 @@ def fetch_batch(
     station_attempts: int = DEFAULT_STATION_ATTEMPTS,
     retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
+    record_start: int | None = None,
+    record_end: int | None = None,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -490,15 +535,34 @@ def fetch_batch(
     if not ping6(host):
         logging.warning("ICMPv6 ping had no reply; proceeding since TCP is reachable.")
 
+    if (record_start is None) != (record_end is None):
+        raise ValueError("record_start and record_end must be supplied together")
     start, stop = _compute_window(hours, tz_name)
-    logging.info(f"Fetching window {start.isoformat()} → {stop.isoformat()} (table={table})")
+    if record_start is None:
+        logging.info(
+            "Fetching window %s → %s (table=%s)",
+            start.isoformat(),
+            stop.isoformat(),
+            table,
+        )
+    else:
+        logging.info(
+            "Fetching explicit record range %s-%s inclusive (table=%s)",
+            record_start,
+            record_end,
+            table,
+        )
 
     if station_attempts < 1:
         raise ValueError("station_attempts must be at least 1")
 
     for dest_id in logger_ids or PAKBUS.logger_ids:
         station = STATION_BY_ID.get(dest_id, f"PakBus {dest_id}")
-        fetch_state = _new_table1_fetch_state(start, stop)
+        fetch_state = (
+            _new_table1_fetch_state(start, stop)
+            if record_start is None
+            else _new_table1_record_range_state(record_start, record_end)
+        )
         for attempt in range(1, station_attempts + 1):
             try:
                 if attempt > 1 and fetch_state.frames:
@@ -641,6 +705,8 @@ def fetch_isolated_stations(
     log_level: str = "INFO",
     timing_output: Path | None = None,
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
+    record_start: int | None = None,
+    record_end: int | None = None,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -676,6 +742,15 @@ def fetch_isolated_stations(
                 log_level,
                 "--direct",
             ]
+            if record_start is not None and record_end is not None:
+                command.extend(
+                    [
+                        "--record-start",
+                        str(record_start),
+                        "--record-end",
+                        str(record_end),
+                    ]
+                )
             logging.info(
                 "Starting isolated download for %s (%s of %s)",
                 station, index + 1, len(stations),
@@ -732,6 +807,16 @@ def main() -> None:
     )
     parser.add_argument("--table", default=DEFAULT_TABLE, help="Table to fetch")
     parser.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="Hours back")
+    parser.add_argument(
+        "--record-start",
+        type=int,
+        help="First Table1 record number for an explicit recovery range.",
+    )
+    parser.add_argument(
+        "--record-end",
+        type=int,
+        help="Last Table1 record number for an explicit recovery range (inclusive).",
+    )
     parser.add_argument(
         "--timezone",
         default=str(DEFAULT_TIMEZONE),
@@ -793,6 +878,11 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging(args.log_level)
 
+    if (args.record_start is None) != (args.record_end is None):
+        parser.error("--record-start and --record-end must be supplied together")
+    if args.record_start is not None and args.record_end < args.record_start:
+        parser.error("--record-end must be greater than or equal to --record-start")
+
     ok, why = quick_port_check_ipv6(PAKBUS.host, PAKBUS.port)
     if args.preflight_only:
         if ok:
@@ -822,6 +912,8 @@ def main() -> None:
             log_level=args.log_level,
             timing_output=args.timing_output,
             response_timeout_seconds=args.response_timeout,
+            record_start=args.record_start,
+            record_end=args.record_end,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -846,6 +938,8 @@ def main() -> None:
         station_attempts=args.attempts,
         logger_ids=logger_ids,
         response_timeout_seconds=args.response_timeout,
+        record_start=args.record_start,
+        record_end=args.record_end,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):
