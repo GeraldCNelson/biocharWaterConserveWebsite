@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import pandas as pd
 import pytest
@@ -11,6 +12,7 @@ from biochar_app.pakbus.core.archive import (
     VALUE_COLUMNS,
     compare_with_pc400,
     promote_accepted_frame,
+    repair_rejected_run,
     promote_run_directory,
 )
 
@@ -64,6 +66,60 @@ def test_rejected_run_cannot_be_promoted(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="rejected runs cannot be promoted"):
         promote_run_directory(run_dir, tmp_path / "archive")
+
+
+def test_repair_rejected_run_creates_separate_accepted_artifact(
+    tmp_path: Path,
+) -> None:
+    stations = [
+        "S1T", "S1M", "S1B", "S2T", "S2M", "S2B",
+        "S3T", "S3M", "S3B", "S4T", "S4M", "S4B",
+    ]
+
+    def station_rows(station: str, periods: int) -> pd.DataFrame:
+        station_index = stations.index(station)
+        timestamps = pd.date_range(
+            "2026-09-26T07:00:00Z", periods=periods, freq="15min"
+        )
+        rows = pd.DataFrame(
+            {
+                "station": station,
+                "logger_id": station_index + 2,
+                "Datetime": timestamps,
+                "RecNbr": range(100000 + station_index * 100, 100000 + station_index * 100 + periods),
+            }
+        )
+        for column in VALUE_COLUMNS:
+            rows[column] = 12.5 if column == "BattV_Min" else 1.0
+        return rows
+
+    run_dir = tmp_path / "rejected"
+    run_dir.mkdir()
+    source = pd.concat(
+        [station_rows(station, 96) for station in stations if station != "S3B"],
+        ignore_index=True,
+    )
+    source.to_csv(run_dir / "logger_data.csv", index=False)
+    source_report = {"status": "rejected", "raw_csv": "logger_data.csv"}
+    (run_dir / "diagnostic_report.json").write_text(
+        json.dumps(source_report), encoding="utf-8"
+    )
+    recovery_csv = tmp_path / "s3b.csv"
+    station_rows("S3B", 95).to_csv(recovery_csv, index=False)
+
+    result = repair_rejected_run(run_dir, [recovery_csv])
+
+    assert result["status"] == "accepted"
+    assert result["record_count"] == 11 * 96 + 95
+    assert result["stations"]["S3B"]["rows"] == 95
+    repair_dir = run_dir / "repair"
+    assert (repair_dir / "logger_data.csv").exists()
+    assert json.loads(
+        (repair_dir / "diagnostic_report.json").read_text(encoding="utf-8")
+    )["status"] == "accepted"
+    assert json.loads(
+        (run_dir / "diagnostic_report.json").read_text(encoding="utf-8")
+    ) == source_report
 
 
 def test_compare_matches_pc400_with_rounding_tolerance(tmp_path: Path) -> None:

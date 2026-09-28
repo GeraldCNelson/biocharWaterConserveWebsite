@@ -20,6 +20,7 @@ usage() {
     "  tools/pakbus-download discover [STATION]" \
     "  tools/pakbus-download daily [validation options]" \
     "  tools/pakbus-download compare PAKBUS_CSV [comparison options]" \
+    "  tools/pakbus-download repair REJECTED_RUN RECOVERY_CSV [...]" \
     "  tools/pakbus-download promote RUN_DIRECTORY" \
     "" \
     "Examples:" \
@@ -27,6 +28,7 @@ usage() {
     "  tools/pakbus-download discover S3B" \
     "  tools/pakbus-download station S3B --hours 48 --attempts 8" \
     "  tools/pakbus-download station S3B --record-start 100244 --record-end 100338" \
+    "  tools/pakbus-download repair path/to/rejected-run path/to/recovery/logger_data.csv" \
     "  tools/pakbus-download daily" \
     "" \
     "Station output: biochar_app/data-raw/pakbus_manual/" \
@@ -84,7 +86,7 @@ case "${command_name}" in
   daily)
     exec "${python_bin}" -m biochar_app.pakbus.core.daily_download "$@"
     ;;
-  compare|promote)
+  compare|repair|promote)
     exec "${python_bin}" -m biochar_app.pakbus.core.archive "${command_name}" "$@"
     ;;
   help|-h|--help)

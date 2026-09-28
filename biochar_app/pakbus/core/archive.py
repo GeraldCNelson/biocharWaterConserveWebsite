@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import asdict
+from datetime import datetime, timezone
 import json
 import os
 import tempfile
@@ -12,7 +14,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from biochar_app.config.pakbus import ARCHIVE_SETTINGS, DOWNLOAD_SETTINGS
+from biochar_app.config.pakbus import (
+    ARCHIVE_SETTINGS,
+    DAILY_SETTINGS,
+    DOWNLOAD_SETTINGS,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -117,6 +123,94 @@ def promote_run_directory(run_dir: Path, archive_root: Path = DEFAULT_ARCHIVE_RO
     return promote_accepted_frame(pd.read_csv(raw_path), archive_root=archive_root)
 
 
+def repair_rejected_run(
+    run_dir: Path,
+    recovery_csvs: list[Path],
+    *,
+    output_dir: Path | None = None,
+) -> dict:
+    """Create a separately validated run from a rejected run plus recovery rows.
+
+    The original run and diagnostic report remain unchanged. The returned repair
+    directory can be passed to ``promote`` only if its new report is accepted.
+    """
+    from biochar_app.pakbus.core.daily_download import (
+        diagnose_download,
+        merge_download_frames,
+    )
+
+    source_report_path = run_dir / "diagnostic_report.json"
+    source_report = json.loads(source_report_path.read_text(encoding="utf-8"))
+    if source_report.get("status") != "rejected":
+        raise ValueError(
+            "Only a rejected daily run can be repaired; source status is "
+            f"{source_report.get('status')!r}"
+        )
+    source_csv = Path(source_report.get("raw_csv") or run_dir / "logger_data.csv")
+    if not source_csv.is_absolute():
+        source_csv = run_dir / source_csv
+    if not source_csv.exists():
+        raise FileNotFoundError(f"Rejected run data not found: {source_csv}")
+    if not recovery_csvs:
+        raise ValueError("At least one recovery CSV is required")
+
+    frame = pd.read_csv(source_csv)
+    for recovery_csv in recovery_csvs:
+        if not recovery_csv.exists():
+            raise FileNotFoundError(f"Recovery data not found: {recovery_csv}")
+        frame = merge_download_frames(frame, pd.read_csv(recovery_csv))
+
+    timestamps = pd.to_datetime(frame["Datetime"], errors="coerce", utc=True)
+    if timestamps.notna().any():
+        reference_time = timestamps.max() + pd.Timedelta(minutes=15)
+    else:
+        reference_time = pd.Timestamp.now(tz="UTC")
+    findings, station_summary = diagnose_download(
+        frame,
+        reference_time=reference_time,
+        minimum_rows=int(DAILY_SETTINGS["minimum_rows"]),
+        maximum_gap_minutes=int(DAILY_SETTINGS["maximum_gap_minutes"]),
+        maximum_age_minutes=int(DAILY_SETTINGS["maximum_age_minutes"]),
+        battery_warning=float(DAILY_SETTINGS["battery_warning_volts"]),
+        battery_critical=float(DAILY_SETTINGS["battery_critical_volts"]),
+    )
+    has_critical = any(item.severity == "critical" for item in findings)
+    status = (
+        "rejected"
+        if has_critical
+        else "accepted_with_warnings"
+        if findings
+        else "accepted"
+    )
+
+    destination = output_dir or run_dir / "repair"
+    destination.mkdir(parents=True, exist_ok=True)
+    repaired_csv = destination / "logger_data.csv"
+    normalized = normalize_download_frame(frame)
+    _atomic_write_csv(
+        normalized.sort_values(["Datetime", "station", "RecNbr"]),
+        repaired_csv,
+    )
+    repair_report = {
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source_run": str(run_dir),
+        "source_report": str(source_report_path),
+        "recovery_csvs": [str(path) for path in recovery_csvs],
+        "raw_csv": str(repaired_csv),
+        "record_count": int(len(normalized)),
+        "stations": station_summary,
+        "findings": [asdict(item) for item in findings],
+    }
+    report_path = destination / "diagnostic_report.json"
+    report_path.write_text(
+        json.dumps(repair_report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    repair_report["diagnostic_report"] = str(report_path)
+    return repair_report
+
+
 def _read_toa5(path: Path) -> pd.DataFrame:
     with path.open("r", newline="") as source:
         reader = csv.reader(source)
@@ -213,6 +307,13 @@ def main() -> int:
     promote = subparsers.add_parser("promote", help="promote an accepted daily run")
     promote.add_argument("run_dir", type=Path)
     promote.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
+    repair = subparsers.add_parser(
+        "repair",
+        help="validate a rejected run completed with one or more recovery CSVs",
+    )
+    repair.add_argument("run_dir", type=Path)
+    repair.add_argument("recovery_csv", type=Path, nargs="+")
+    repair.add_argument("--output-dir", type=Path)
     compare = subparsers.add_parser("compare", help="compare PakBus CSV with PC400 .dat files")
     compare.add_argument("pakbus_csv", type=Path)
     compare.add_argument("--dat-dir", type=Path, default=REPO_ROOT / "biochar_app/data-raw/datfiles_2026")
@@ -221,6 +322,12 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "promote":
         result = promote_run_directory(args.run_dir, args.archive_root)
+    elif args.command == "repair":
+        result = repair_rejected_run(
+            args.run_dir,
+            args.recovery_csv,
+            output_dir=args.output_dir,
+        )
     else:
         result = compare_with_pc400(args.pakbus_csv, args.dat_dir, tolerance=args.tolerance)
     rendered = json.dumps(result, indent=2, sort_keys=True)
