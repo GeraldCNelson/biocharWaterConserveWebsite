@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Iterator
@@ -146,6 +147,14 @@ def quick_port_check_ipv6(host: str, port: int, timeout: float = 3.0) -> tuple[b
 TABLE1_NUMBER = 2
 TABLE1_SIGNATURE = 0x2C79
 TABLE1_INTERVAL_MINUTES = 15
+# A 24-hour request plus the eight-record boundary cushion has been verified
+# against the field CR206 loggers. Larger single requests can produce
+# truncated PakBus frames, so older records are fetched with bounded explicit
+# record-number ranges.
+TABLE1_MAX_RECORDS_PER_REQUEST = 104
+TABLE1_PAGE_ATTEMPTS = 3
+TABLE1_PAGE_RETRY_DELAY_SECONDS = 2.0
+TABLE1_RESUME_RETRY_DELAY_SECONDS = 15.0
 TABLE1_FIELDS = (
     "BattV_Min",
     "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
@@ -155,6 +164,63 @@ TABLE1_FIELDS = (
 TABLE1_RECORD = struct.Struct(">I10f")
 CAMPBELL_EPOCH = datetime(1990, 1, 1)
 LOGGER_STANDARD_TIME = ZoneInfo("Etc/GMT+7")  # MST year-round (UTC-07:00)
+
+
+class RecordRangeUnavailableError(RuntimeError):
+    """Requested records have rolled out of the logger's retained table."""
+
+
+@dataclass
+class _Table1FetchState:
+    """Mutable page cursor retained while a station reconnects."""
+
+    record_count: int
+    mode: int
+    p1: int
+    p2: int = 0
+    request_end: int | None = None
+    records_remaining: int = 0
+    request_kind: str = "recent"
+    request_number: int = 0
+    completed: bool = False
+    filter_by_time: bool = True
+    explicit_start: int | None = None
+    explicit_end: int | None = None
+    frames: list[pd.DataFrame] = field(default_factory=list)
+
+
+def _new_table1_fetch_state(start: datetime, stop: datetime) -> _Table1FetchState:
+    requested_minutes = max(1, int((stop - start).total_seconds() // 60))
+    record_count = requested_minutes // TABLE1_INTERVAL_MINUTES + 8
+    initial_chunk_size = min(record_count, TABLE1_MAX_RECORDS_PER_REQUEST)
+    return _Table1FetchState(
+        record_count=record_count,
+        mode=0x05,
+        p1=initial_chunk_size,
+        records_remaining=record_count - initial_chunk_size,
+    )
+
+
+def _new_table1_record_range_state(
+    record_start: int, record_end: int
+) -> _Table1FetchState:
+    """Create a fetch cursor for an inclusive record-number range."""
+    if record_start < 0:
+        raise ValueError("record_start cannot be negative")
+    if record_end < record_start:
+        raise ValueError("record_end must be greater than or equal to record_start")
+    exclusive_end = record_end + 1
+    return _Table1FetchState(
+        record_count=exclusive_end - record_start,
+        mode=0x06,
+        p1=record_start,
+        p2=exclusive_end,
+        request_end=exclusive_end,
+        request_kind="explicit record range",
+        filter_by_time=False,
+        explicit_start=record_start,
+        explicit_end=record_end,
+    )
 
 
 def _compute_window(hours: int, tz_name: str) -> tuple[datetime, datetime]:
@@ -209,90 +275,209 @@ def decode_table1_response(raw: bytes) -> pd.DataFrame:
 
 
 def _fetch_window(
-    dev: CR1000, table: str, start: datetime, stop: datetime
+    dev: CR1000,
+    table: str,
+    start: datetime,
+    stop: datetime,
+    state: _Table1FetchState | None = None,
 ) -> Iterator[pd.DataFrame]:
     import pandas as pd
 
     if table != "Table1":
         raise ValueError("The fixed CR206 downloader currently supports Table1 only")
 
-    requested_minutes = max(1, int((stop - start).total_seconds() // 60))
-    # Include a small boundary cushion, but do not cap multi-day requests at
-    # 96 records (24 hours at the normal 15-minute interval).
-    record_count = requested_minutes // TABLE1_INTERVAL_MINUTES + 8
-    frames: list[pd.DataFrame] = []
-    # CR200/CR206 firmware uses 0x05 for the most-recent-N request. Mode 0x04
-    # starts at a record number and therefore returns the oldest retained rows
-    # when given a small count such as 96.
-    mode = 0x05
-    p1 = record_count
-    p2 = 0
-    next_record: int | None = None
-    final_record: int | None = None
+    state = state or _new_table1_fetch_state(start, stop)
+    if state.completed:
+        logging.debug("Table1 fetch state is already complete")
     for _fragment_number in range(100):
-        command = dev.pakbus.get_collectdata_cmd(
-            TABLE1_NUMBER,
-            TABLE1_SIGNATURE,
-            mode=mode,
-            p1=p1,
-            p2=p2,
+        if state.completed:
+            break
+        state.request_number += 1
+        request_number = state.request_number
+        request_context = (
+            f"page {request_number} ({state.request_kind}; "
+            f"mode=0x{state.mode:02X}, p1={state.p1}, p2={state.p2})"
         )
-        try:
-            result = dev.send_wait(command)
-        except TypeError as exc:
-            # pycampbellcr1000 currently subscripts a missing response and
-            # exposes it as a cryptic ``NoneType`` error. Translate that into
-            # the communication failure that actually occurred.
-            if "NoneType" not in str(exc):
-                raise
-            raise TimeoutError("logger did not return a Table1 response") from exc
-        if result is None:
-            raise TimeoutError("logger did not return a Table1 response")
-        _header, message, _send_time = result
-        response_code = int(message.get("RespCode", 0))
-        if response_code:
-            raise RuntimeError(
-                f"Table1 collection failed with response code {response_code}"
+        fragment = None
+        elapsed_seconds = 0.0
+        for page_attempt in range(1, TABLE1_PAGE_ATTEMPTS + 1):
+            logging.info(
+                "Table1 request %s, page attempt %s/%s",
+                request_context,
+                page_attempt,
+                TABLE1_PAGE_ATTEMPTS,
+            )
+            command = dev.pakbus.get_collectdata_cmd(
+                TABLE1_NUMBER,
+                TABLE1_SIGNATURE,
+                mode=state.mode,
+                p1=state.p1,
+                p2=state.p2,
+            )
+            request_started = time.monotonic()
+            page_error: Exception | None = None
+            try:
+                result = dev.send_wait(command)
+                if result is None:
+                    raise TimeoutError("logger did not return a response")
+                _header, message, _send_time = result
+                response_code = int(message.get("RespCode", 0))
+                if response_code:
+                    raise RuntimeError(
+                        f"Table1 {request_context} failed with response code "
+                        f"{response_code}"
+                    )
+                try:
+                    record_data = message["RecData"]
+                except KeyError as exc:
+                    raise TimeoutError(
+                        "response did not contain record data"
+                    ) from exc
+                fragment = decode_table1_response(record_data)
+            except struct.error as exc:
+                page_error = ConnectionError(
+                    "returned a truncated PakBus response"
+                )
+                page_error.__cause__ = exc
+            except TypeError as exc:
+                if "NoneType" not in str(exc):
+                    raise
+                page_error = TimeoutError("logger did not return a response")
+                page_error.__cause__ = exc
+            except (TimeoutError, ValueError) as exc:
+                page_error = exc
+
+            elapsed_seconds = time.monotonic() - request_started
+            if page_error is None:
+                break
+            detailed_error = (
+                f"Table1 {request_context} {page_error} after "
+                f"{elapsed_seconds:.1f} seconds"
+            )
+            if page_attempt == TABLE1_PAGE_ATTEMPTS:
+                if isinstance(page_error, ConnectionError):
+                    raise ConnectionError(detailed_error) from page_error
+                if isinstance(page_error, TimeoutError):
+                    raise TimeoutError(detailed_error) from page_error
+                raise ValueError(detailed_error) from page_error
+            logging.warning(
+                "%s; retrying the same page on the current connection in "
+                "%.1f seconds",
+                detailed_error,
+                TABLE1_PAGE_RETRY_DELAY_SECONDS,
+            )
+            if TABLE1_PAGE_RETRY_DELAY_SECONDS > 0:
+                time.sleep(TABLE1_PAGE_RETRY_DELAY_SECONDS)
+
+        if fragment is None:
+            raise RuntimeError(f"Table1 {request_context} produced no fragment")
+        if fragment.empty:
+            logging.info(
+                "Table1 response page %s: rows=0, more=%s, elapsed=%.1f seconds",
+                request_number,
+                fragment.attrs["more"],
+                elapsed_seconds,
+            )
+            state.completed = True
+            break
+        first_record = int(fragment["RecNbr"].min())
+        last_record = int(fragment["RecNbr"].max())
+        logging.info(
+            "Table1 response page %s: rows=%s, records=%s-%s, more=%s, "
+            "elapsed=%.1f seconds",
+            request_number,
+            len(fragment),
+            first_record,
+            last_record,
+            fragment.attrs["more"],
+            elapsed_seconds,
+        )
+        state.frames.append(fragment)
+
+        if state.request_end is None:
+            # The end record used by mode 0x06 is exclusive.
+            state.request_end = (
+                int(fragment["RecNbr"].min()) + state.p1
             )
 
-        try:
-            record_data = message["RecData"]
-        except KeyError as exc:
-            raise TimeoutError(
-                "logger response did not contain Table1 record data"
-            ) from exc
-        fragment = decode_table1_response(record_data)
-        if fragment.empty:
-            break
-        frames.append(fragment)
-
-        if final_record is None:
-            # The end record used by mode 0x06 is exclusive.
-            final_record = int(fragment["RecNbr"].min()) + record_count
-
         fragment_next_record = int(fragment["RecNbr"].max()) + 1
-        if not fragment.attrs["more"] or fragment_next_record >= final_record:
+        if (
+            fragment.attrs["more"]
+            and fragment_next_record < state.request_end
+        ):
+            # CR206 mode 0x05 does not reliably continue after a MostRecent
+            # response. Use the explicit inclusive record-number range.
+            if state.mode == 0x06 and fragment_next_record <= state.p1:
+                raise RuntimeError(
+                    "Table1 continuation did not advance the record number"
+                )
+            state.mode = 0x06
+            state.p1 = fragment_next_record
+            state.p2 = state.request_end
+            state.request_kind = "continuation"
+            continue
+
+        if state.records_remaining <= 0:
+            state.completed = True
             break
-        if fragment_next_record == next_record:
-            raise RuntimeError("Table1 continuation did not advance the record number")
-        next_record = fragment_next_record
-        # CR206 mode 0x05 does not reliably continue after a MostRecent
-        # response. Use the explicit inclusive record-number range instead.
-        mode = 0x06
-        p1 = fragment_next_record
-        p2 = final_record
+
+        # Work backward from the earliest record already received. Keeping
+        # each range at or below the proven 24-hour payload size avoids the
+        # truncated frames seen when requesting 48 hours in one transaction.
+        oldest_record = min(
+            int(page["RecNbr"].min()) for page in state.frames
+        )
+        older_chunk_size = min(
+            state.records_remaining, TABLE1_MAX_RECORDS_PER_REQUEST
+        )
+        older_start = max(0, oldest_record - older_chunk_size)
+        if older_start >= oldest_record:
+            state.completed = True
+            break
+        state.mode = 0x06
+        state.p1 = older_start
+        state.p2 = oldest_record
+        state.request_end = oldest_record
+        state.records_remaining -= oldest_record - older_start
+        state.request_kind = "older records"
     else:
         raise RuntimeError("Table1 collection exceeded 100 response fragments")
 
-    if not frames:
+    if not state.frames:
         return
     frame = (
-        pd.concat(frames, ignore_index=True)
+        pd.concat(state.frames, ignore_index=True)
         .drop_duplicates(subset="RecNbr", keep="last")
         .sort_values("RecNbr")
-        .tail(record_count)
+        .tail(state.record_count)
         .reset_index(drop=True)
     )
+    if not state.filter_by_time:
+        if frame.empty:
+            return
+        actual_start = int(frame["RecNbr"].min())
+        actual_end = int(frame["RecNbr"].max())
+        if actual_start > state.explicit_start:
+            oldest_row = frame.loc[frame["RecNbr"].idxmin()]
+            oldest_timestamp = oldest_row["Datetime"].isoformat()
+            raise RecordRangeUnavailableError(
+                "Requested Table1 records are no longer retained: requested "
+                f"{state.explicit_start}-{state.explicit_end}; oldest available "
+                f"record is {actual_start} at {oldest_timestamp}"
+            )
+        if (
+            len(frame) != state.record_count
+            or actual_start != state.explicit_start
+            or actual_end != state.explicit_end
+        ):
+            raise RuntimeError(
+                "Explicit Table1 range was incomplete: expected records "
+                f"{state.explicit_start}-{state.explicit_end} "
+                f"({state.record_count} rows), received {actual_start}-{actual_end} "
+                f"({len(frame)} rows)"
+            )
+        yield frame.sort_values("RecNbr").reset_index(drop=True)
+        return
     timestamps = frame["Datetime"].map(lambda value: value.astimezone(start.tzinfo))
     selected = frame.loc[(timestamps >= start) & (timestamps <= stop)].copy()
     if selected.empty and not frame.empty:
@@ -340,6 +525,8 @@ def fetch_batch(
     station_attempts: int = DEFAULT_STATION_ATTEMPTS,
     retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
+    record_start: int | None = None,
+    record_end: int | None = None,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -360,16 +547,54 @@ def fetch_batch(
     if not ping6(host):
         logging.warning("ICMPv6 ping had no reply; proceeding since TCP is reachable.")
 
+    if (record_start is None) != (record_end is None):
+        raise ValueError("record_start and record_end must be supplied together")
     start, stop = _compute_window(hours, tz_name)
-    logging.info(f"Fetching window {start.isoformat()} → {stop.isoformat()} (table={table})")
+    if record_start is None:
+        logging.info(
+            "Fetching window %s → %s (table=%s)",
+            start.isoformat(),
+            stop.isoformat(),
+            table,
+        )
+    else:
+        logging.info(
+            "Fetching explicit record range %s-%s inclusive (table=%s)",
+            record_start,
+            record_end,
+            table,
+        )
 
     if station_attempts < 1:
         raise ValueError("station_attempts must be at least 1")
 
     for dest_id in logger_ids or PAKBUS.logger_ids:
         station = STATION_BY_ID.get(dest_id, f"PakBus {dest_id}")
+        fetch_state = (
+            _new_table1_fetch_state(start, stop)
+            if record_start is None
+            else _new_table1_record_range_state(record_start, record_end)
+        )
         for attempt in range(1, station_attempts + 1):
             try:
+                if attempt > 1 and fetch_state.frames:
+                    preserved_records = len(
+                        {
+                            int(record_number)
+                            for page in fetch_state.frames
+                            for record_number in page["RecNbr"]
+                        }
+                    )
+                    logging.info(
+                        "%s (logger %s) resuming with %s records preserved; "
+                        "next request is mode=0x%02X, p1=%s, p2=%s",
+                        station,
+                        dest_id,
+                        preserved_records,
+                        fetch_state.mode,
+                        fetch_state.p1,
+                        fetch_state.p2,
+                    )
                 # A new socket on every attempt discards late packets from a
                 # previous transaction before another logger is contacted.
                 with open_pakbus_link(host, port, connect_timeout=response_timeout_seconds) as link:
@@ -406,7 +631,9 @@ def fetch_batch(
                     except Exception:
                         pass
 
-                    pages = list(_fetch_window(dev, table, start, stop))
+                    pages = list(
+                        _fetch_window(dev, table, start, stop, fetch_state)
+                    )
                     for page in pages:
                         yield dest_id, page
                     if attempt > 1:
@@ -414,6 +641,15 @@ def fetch_batch(
                             "%s (logger %s) succeeded on attempt %s/%s",
                             station, dest_id, attempt, station_attempts,
                         )
+                break
+            except RecordRangeUnavailableError as exc:
+                logging.error(
+                    "%s (logger %s) cannot satisfy the explicit range: %s. "
+                    "This condition is non-retryable.",
+                    station,
+                    dest_id,
+                    exc,
+                )
                 break
             except (
                 TimeoutError,
@@ -439,13 +675,18 @@ def fetch_batch(
                         station, dest_id, station_attempts, reason,
                     )
                     break
+                retry_pause = retry_delay_seconds
+                if fetch_state.frames:
+                    retry_pause = max(
+                        retry_pause, TABLE1_RESUME_RETRY_DELAY_SECONDS
+                    )
                 logging.warning(
                     "%s (logger %s) attempt %s/%s failed: %s; retrying in %.1f seconds.",
                     station, dest_id, attempt, station_attempts, reason,
-                    retry_delay_seconds,
+                    retry_pause,
                 )
-                if retry_delay_seconds > 0:
-                    time.sleep(retry_delay_seconds)
+                if retry_pause > 0:
+                    time.sleep(retry_pause)
             except Exception as exc:
                 if isinstance(exc, _legacy_retryable_exceptions):
                     if attempt == station_attempts:
@@ -454,13 +695,18 @@ def fetch_batch(
                             station, dest_id, station_attempts, exc,
                         )
                         break
+                    retry_pause = retry_delay_seconds
+                    if fetch_state.frames:
+                        retry_pause = max(
+                            retry_pause, TABLE1_RESUME_RETRY_DELAY_SECONDS
+                        )
                     logging.warning(
                         "%s (logger %s) attempt %s/%s failed: %s; retrying in %.1f seconds.",
                         station, dest_id, attempt, station_attempts, exc,
-                        retry_delay_seconds,
+                        retry_pause,
                     )
-                    if retry_delay_seconds > 0:
-                        time.sleep(retry_delay_seconds)
+                    if retry_pause > 0:
+                        time.sleep(retry_pause)
                     continue
                 logging.exception(
                     "%s (logger %s) failed with a non-retryable error: %s",
@@ -480,6 +726,8 @@ def fetch_isolated_stations(
     log_level: str = "INFO",
     timing_output: Path | None = None,
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
+    record_start: int | None = None,
+    record_end: int | None = None,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -515,6 +763,15 @@ def fetch_isolated_stations(
                 log_level,
                 "--direct",
             ]
+            if record_start is not None and record_end is not None:
+                command.extend(
+                    [
+                        "--record-start",
+                        str(record_start),
+                        "--record-end",
+                        str(record_end),
+                    ]
+                )
             logging.info(
                 "Starting isolated download for %s (%s of %s)",
                 station, index + 1, len(stations),
@@ -571,6 +828,16 @@ def main() -> None:
     )
     parser.add_argument("--table", default=DEFAULT_TABLE, help="Table to fetch")
     parser.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="Hours back")
+    parser.add_argument(
+        "--record-start",
+        type=int,
+        help="First Table1 record number for an explicit recovery range.",
+    )
+    parser.add_argument(
+        "--record-end",
+        type=int,
+        help="Last Table1 record number for an explicit recovery range (inclusive).",
+    )
     parser.add_argument(
         "--timezone",
         default=str(DEFAULT_TIMEZONE),
@@ -632,6 +899,11 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging(args.log_level)
 
+    if (args.record_start is None) != (args.record_end is None):
+        parser.error("--record-start and --record-end must be supplied together")
+    if args.record_start is not None and args.record_end < args.record_start:
+        parser.error("--record-end must be greater than or equal to --record-start")
+
     ok, why = quick_port_check_ipv6(PAKBUS.host, PAKBUS.port)
     if args.preflight_only:
         if ok:
@@ -661,6 +933,8 @@ def main() -> None:
             log_level=args.log_level,
             timing_output=args.timing_output,
             response_timeout_seconds=args.response_timeout,
+            record_start=args.record_start,
+            record_end=args.record_end,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -685,6 +959,8 @@ def main() -> None:
         station_attempts=args.attempts,
         logger_ids=logger_ids,
         response_timeout_seconds=args.response_timeout,
+        record_start=args.record_start,
+        record_end=args.record_end,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):

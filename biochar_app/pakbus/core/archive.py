@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import asdict
+from datetime import datetime, timezone
 import json
 import os
 import tempfile
@@ -12,7 +14,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from biochar_app.config.pakbus import ARCHIVE_SETTINGS, DOWNLOAD_SETTINGS
+from biochar_app.config.pakbus import (
+    ARCHIVE_SETTINGS,
+    DAILY_SETTINGS,
+    DOWNLOAD_SETTINGS,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -32,6 +38,7 @@ VALUE_COLUMNS = (
 )
 REQUIRED_COLUMNS = {"station", "logger_id", "Datetime", "RecNbr", *VALUE_COLUMNS}
 ARCHIVE_KEY = ["station", "logger_id", "Datetime", "RecNbr"]
+DEFAULT_MANUAL_ROOT = REPO_ROOT / "biochar_app/data-raw/pakbus_manual"
 
 
 def _atomic_write_csv(frame: pd.DataFrame, destination: Path) -> None:
@@ -115,6 +122,329 @@ def promote_run_directory(run_dir: Path, archive_root: Path = DEFAULT_ARCHIVE_RO
         raise ValueError(f"Run status is {report.get('status')!r}; rejected runs cannot be promoted")
     raw_path = Path(report.get("raw_csv") or run_dir / "logger_data.csv")
     return promote_accepted_frame(pd.read_csv(raw_path), archive_root=archive_root)
+
+
+def audit_archive_continuity(
+    *,
+    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
+    lookback_days: int = 7,
+) -> dict:
+    """Find recent internal 15-minute gaps and emit exact recovery ranges."""
+    if lookback_days < 1:
+        raise ValueError("lookback_days must be at least 1")
+    archive_files = sorted(archive_root.glob("*/logger_data.csv"))
+    if not archive_files:
+        return {
+            "status": "failed",
+            "lookback_days": lookback_days,
+            "gap_count": 0,
+            "gaps": [],
+            "detail": f"No annual archives found under {archive_root}",
+        }
+    data = normalize_download_frame(
+        pd.concat(
+            [pd.read_csv(path) for path in archive_files],
+            ignore_index=True,
+        )
+    )
+    data["_timestamp"] = pd.to_datetime(data["Datetime"], utc=True)
+    gaps: list[dict] = []
+    for station, station_data in data.groupby("station", sort=True):
+        station_data = station_data.sort_values("_timestamp").reset_index(drop=True)
+        latest = station_data["_timestamp"].max()
+        recent = station_data.loc[
+            station_data["_timestamp"] >= latest - pd.Timedelta(days=lookback_days)
+        ].reset_index(drop=True)
+        for index in range(1, len(recent)):
+            previous = recent.iloc[index - 1]
+            current = recent.iloc[index]
+            elapsed = current["_timestamp"] - previous["_timestamp"]
+            if elapsed <= pd.Timedelta(minutes=15):
+                continue
+            missing_intervals = int(
+                elapsed / pd.Timedelta(minutes=15)
+            ) - 1
+            record_start = int(previous["RecNbr"]) + 1
+            record_end = int(current["RecNbr"]) - 1
+            missing_records = max(0, record_end - record_start + 1)
+            exact_range = missing_records == missing_intervals and missing_records > 0
+            gap = {
+                "station": station,
+                "after": previous["_timestamp"].isoformat(),
+                "before": current["_timestamp"].isoformat(),
+                "previous_record": int(previous["RecNbr"]),
+                "next_record": int(current["RecNbr"]),
+                "missing_intervals": missing_intervals,
+                "missing_records": missing_records,
+                "record_start": record_start if exact_range else None,
+                "record_end": record_end if exact_range else None,
+            }
+            if exact_range:
+                gap["recovery_command"] = (
+                    f"tools/pakbus-download station {station} "
+                    f"--record-start {record_start} --record-end {record_end} "
+                    "--attempts 5 --response-timeout 30 --log-level INFO"
+                )
+            else:
+                gap["recovery_command"] = None
+                gap["detail"] = (
+                    "Timestamp and record-number gaps disagree; inspect for a "
+                    "logger reset or clock discontinuity before recovery."
+                )
+            gaps.append(gap)
+    return {
+        "status": "gaps_found" if gaps else "continuous",
+        "lookback_days": lookback_days,
+        "gap_count": len(gaps),
+        "gaps": gaps,
+    }
+
+
+def repair_rejected_run(
+    run_dir: Path,
+    recovery_csvs: list[Path],
+    *,
+    output_dir: Path | None = None,
+) -> dict:
+    """Create a separately validated run from a rejected run plus recovery rows.
+
+    The original run and diagnostic report remain unchanged. The returned repair
+    directory can be passed to ``promote`` only if its new report is accepted.
+    """
+    from biochar_app.pakbus.core.daily_download import (
+        diagnose_download,
+        merge_download_frames,
+    )
+
+    source_report_path = run_dir / "diagnostic_report.json"
+    source_report = json.loads(source_report_path.read_text(encoding="utf-8"))
+    if source_report.get("status") != "rejected":
+        raise ValueError(
+            "Only a rejected daily run can be repaired; source status is "
+            f"{source_report.get('status')!r}"
+        )
+    source_csv = Path(source_report.get("raw_csv") or run_dir / "logger_data.csv")
+    if not source_csv.is_absolute():
+        source_csv = run_dir / source_csv
+    if not source_csv.exists():
+        raise FileNotFoundError(f"Rejected run data not found: {source_csv}")
+    if not recovery_csvs:
+        raise ValueError("At least one recovery CSV is required")
+
+    frame = pd.read_csv(source_csv)
+    for recovery_csv in recovery_csvs:
+        if not recovery_csv.exists():
+            raise FileNotFoundError(f"Recovery data not found: {recovery_csv}")
+        frame = merge_download_frames(frame, pd.read_csv(recovery_csv))
+
+    timestamps = pd.to_datetime(frame["Datetime"], errors="coerce", utc=True)
+    if timestamps.notna().any():
+        reference_time = timestamps.max() + pd.Timedelta(minutes=15)
+    else:
+        reference_time = pd.Timestamp.now(tz="UTC")
+    findings, station_summary = diagnose_download(
+        frame,
+        reference_time=reference_time,
+        minimum_rows=int(DAILY_SETTINGS["minimum_rows"]),
+        maximum_gap_minutes=int(DAILY_SETTINGS["maximum_gap_minutes"]),
+        maximum_age_minutes=int(DAILY_SETTINGS["maximum_age_minutes"]),
+        battery_warning=float(DAILY_SETTINGS["battery_warning_volts"]),
+        battery_critical=float(DAILY_SETTINGS["battery_critical_volts"]),
+    )
+    has_critical = any(item.severity == "critical" for item in findings)
+    status = (
+        "rejected"
+        if has_critical
+        else "accepted_with_warnings"
+        if findings
+        else "accepted"
+    )
+
+    destination = output_dir or run_dir / "repair"
+    destination.mkdir(parents=True, exist_ok=True)
+    repaired_csv = destination / "logger_data.csv"
+    normalized = normalize_download_frame(frame)
+    _atomic_write_csv(
+        normalized.sort_values(["Datetime", "station", "RecNbr"]),
+        repaired_csv,
+    )
+    repair_report = {
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source_run": str(run_dir),
+        "source_report": str(source_report_path),
+        "recovery_csvs": [str(path) for path in recovery_csvs],
+        "raw_csv": str(repaired_csv),
+        "record_count": int(len(normalized)),
+        "stations": station_summary,
+        "findings": [asdict(item) for item in findings],
+    }
+    report_path = destination / "diagnostic_report.json"
+    report_path.write_text(
+        json.dumps(repair_report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    repair_report["diagnostic_report"] = str(report_path)
+    return repair_report
+
+
+def validate_archive_recovery(
+    recovery_csvs: list[Path],
+    *,
+    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
+    output_dir: Path | None = None,
+) -> dict:
+    """Validate targeted gap rows against their immediate archive neighbors."""
+    if not recovery_csvs:
+        raise ValueError("At least one recovery CSV is required")
+
+    recovered_frames = []
+    for recovery_csv in recovery_csvs:
+        if not recovery_csv.exists():
+            raise FileNotFoundError(f"Recovery data not found: {recovery_csv}")
+        recovered_frames.append(normalize_download_frame(pd.read_csv(recovery_csv)))
+    recovered = normalize_download_frame(
+        pd.concat(recovered_frames, ignore_index=True)
+    )
+    duplicate_rows = int(recovered.duplicated(ARCHIVE_KEY, keep=False).sum())
+    recovered = recovered.drop_duplicates(ARCHIVE_KEY, keep="last").copy()
+    recovered["_timestamp"] = pd.to_datetime(
+        recovered["Datetime"], utc=True
+    )
+
+    findings: list[dict] = []
+    if duplicate_rows:
+        findings.append({
+            "severity": "warning",
+            "code": "duplicate_recovery_rows",
+            "message": f"Removed {duplicate_rows} duplicate recovery rows",
+        })
+    station_reports: dict[str, dict] = {}
+    for station, incoming_station in recovered.groupby("station", sort=True):
+        years = sorted(incoming_station["_timestamp"].dt.year.unique())
+        existing_parts = []
+        for year in years:
+            archive_path = archive_root / str(year) / "logger_data.csv"
+            if not archive_path.exists():
+                findings.append({
+                    "severity": "critical",
+                    "code": "archive_missing",
+                    "station": station,
+                    "message": f"Archive does not exist: {archive_path}",
+                })
+                continue
+            existing_parts.append(normalize_download_frame(pd.read_csv(archive_path)))
+        if not existing_parts:
+            continue
+        existing = normalize_download_frame(
+            pd.concat(existing_parts, ignore_index=True)
+        )
+        existing = existing.loc[existing["station"] == station].copy()
+        existing["_timestamp"] = pd.to_datetime(existing["Datetime"], utc=True)
+        existing_keys = set(map(tuple, existing[ARCHIVE_KEY].to_numpy()))
+        incoming_keys = set(map(tuple, incoming_station[ARCHIVE_KEY].to_numpy()))
+        already_present = len(existing_keys.intersection(incoming_keys))
+        if already_present:
+            findings.append({
+                "severity": "critical",
+                "code": "recovery_already_present",
+                "station": station,
+                "message": (
+                    f"{already_present} recovery rows already exist in the archive"
+                ),
+            })
+
+        combined = pd.concat([existing, incoming_station], ignore_index=True)
+        combined = (
+            combined.drop_duplicates(ARCHIVE_KEY, keep="last")
+            .sort_values(["RecNbr", "_timestamp"])
+            .reset_index(drop=True)
+        )
+        row_reports = []
+        for _row_index, row in incoming_station.sort_values("RecNbr").iterrows():
+            record_number = int(row["RecNbr"])
+            timestamp = row["_timestamp"]
+            position = combined.index[
+                (combined["RecNbr"] == record_number)
+                & (combined["_timestamp"] == timestamp)
+            ]
+            if len(position) != 1:
+                findings.append({
+                    "severity": "critical",
+                    "code": "recovery_key_ambiguous",
+                    "station": station,
+                    "message": f"Could not uniquely locate recovered record {record_number}",
+                })
+                continue
+            index = int(position[0])
+            previous = combined.iloc[index - 1] if index > 0 else None
+            following = combined.iloc[index + 1] if index + 1 < len(combined) else None
+            previous_ok = (
+                previous is not None
+                and int(previous["RecNbr"]) == record_number - 1
+                and timestamp - previous["_timestamp"] == pd.Timedelta(minutes=15)
+            )
+            following_ok = (
+                following is not None
+                and int(following["RecNbr"]) == record_number + 1
+                and following["_timestamp"] - timestamp == pd.Timedelta(minutes=15)
+            )
+            if not previous_ok or not following_ok:
+                findings.append({
+                    "severity": "critical",
+                    "code": "recovery_not_contiguous",
+                    "station": station,
+                    "message": (
+                        f"Recovered record {record_number} does not have contiguous "
+                        "15-minute record-number neighbors"
+                    ),
+                })
+            row_reports.append({
+                "record": record_number,
+                "timestamp": timestamp.isoformat(),
+                "previous_neighbor_valid": previous_ok,
+                "following_neighbor_valid": following_ok,
+            })
+        station_reports[station] = {
+            "rows": int(len(incoming_station)),
+            "records": sorted(int(value) for value in incoming_station["RecNbr"]),
+            "already_present": already_present,
+            "row_checks": row_reports,
+        }
+
+    has_critical = any(item["severity"] == "critical" for item in findings)
+    status = (
+        "rejected"
+        if has_critical
+        else "accepted_with_warnings"
+        if findings
+        else "accepted"
+    )
+    if output_dir is None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S+0000")
+        output_dir = DEFAULT_MANUAL_ROOT / f"{stamp}_archive_recovery"
+    output_dir.mkdir(parents=True, exist_ok=False)
+    recovery_output = output_dir / "logger_data.csv"
+    export = recovered.drop(columns="_timestamp")
+    _atomic_write_csv(
+        export.sort_values(["Datetime", "station", "RecNbr"]), recovery_output
+    )
+    report = {
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "archive_root": str(archive_root),
+        "recovery_csvs": [str(path) for path in recovery_csvs],
+        "raw_csv": str(recovery_output),
+        "record_count": int(len(export)),
+        "stations": station_reports,
+        "findings": findings,
+    }
+    report_path = output_dir / "diagnostic_report.json"
+    report_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    report["diagnostic_report"] = str(report_path)
+    return report
 
 
 def _read_toa5(path: Path) -> pd.DataFrame:
@@ -213,6 +543,28 @@ def main() -> int:
     promote = subparsers.add_parser("promote", help="promote an accepted daily run")
     promote.add_argument("run_dir", type=Path)
     promote.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
+    repair = subparsers.add_parser(
+        "repair",
+        help="validate a rejected run completed with one or more recovery CSVs",
+    )
+    repair.add_argument("run_dir", type=Path)
+    repair.add_argument("recovery_csv", type=Path, nargs="+")
+    repair.add_argument("--output-dir", type=Path)
+    validate_recovery = subparsers.add_parser(
+        "validate-recovery",
+        help="validate targeted gap rows against the current archive",
+    )
+    validate_recovery.add_argument("recovery_csv", type=Path, nargs="+")
+    validate_recovery.add_argument(
+        "--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT
+    )
+    validate_recovery.add_argument("--output-dir", type=Path)
+    audit = subparsers.add_parser(
+        "audit",
+        help="audit recent archive continuity and print exact recovery ranges",
+    )
+    audit.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
+    audit.add_argument("--lookback-days", type=int, default=7)
     compare = subparsers.add_parser("compare", help="compare PakBus CSV with PC400 .dat files")
     compare.add_argument("pakbus_csv", type=Path)
     compare.add_argument("--dat-dir", type=Path, default=REPO_ROOT / "biochar_app/data-raw/datfiles_2026")
@@ -221,12 +573,31 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "promote":
         result = promote_run_directory(args.run_dir, args.archive_root)
+    elif args.command == "repair":
+        result = repair_rejected_run(
+            args.run_dir,
+            args.recovery_csv,
+            output_dir=args.output_dir,
+        )
+    elif args.command == "validate-recovery":
+        result = validate_archive_recovery(
+            args.recovery_csv,
+            archive_root=args.archive_root,
+            output_dir=args.output_dir,
+        )
+    elif args.command == "audit":
+        result = audit_archive_continuity(
+            archive_root=args.archive_root,
+            lookback_days=args.lookback_days,
+        )
     else:
         result = compare_with_pc400(args.pakbus_csv, args.dat_dir, tolerance=args.tolerance)
     rendered = json.dumps(result, indent=2, sort_keys=True)
     print(rendered)
     if getattr(args, "output", None):
         args.output.write_text(rendered + "\n", encoding="utf-8")
+    if args.command == "audit":
+        return 0 if result.get("status") == "continuous" else 1
     return 0 if result.get("equivalent", True) else 1
 
 

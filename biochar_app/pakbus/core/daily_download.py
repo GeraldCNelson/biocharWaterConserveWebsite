@@ -28,7 +28,11 @@ import pandas as pd
 
 from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
-from biochar_app.pakbus.core.archive import DEFAULT_ARCHIVE_ROOT, promote_accepted_frame
+from biochar_app.pakbus.core.archive import (
+    DEFAULT_ARCHIVE_ROOT,
+    audit_archive_continuity,
+    promote_accepted_frame,
+)
 from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_caches
 
 
@@ -51,6 +55,40 @@ class Finding:
     code: str
     message: str
     station: str | None = None
+
+
+def apply_archive_continuity(
+    report: dict,
+    findings: list[Finding],
+    continuity: dict,
+) -> None:
+    """Attach continuity results and reject a run that would publish gaps."""
+    report["archive_continuity"] = continuity
+    if continuity.get("status") == "failed":
+        findings.append(Finding(
+            "critical",
+            "archive_continuity_failed",
+            continuity.get("detail", "Archive continuity audit failed"),
+        ))
+    for gap in continuity.get("gaps", []):
+        record_detail = (
+            f"; recover records {gap['record_start']}-{gap['record_end']}"
+            if gap.get("record_start") is not None
+            else ""
+        )
+        findings.append(Finding(
+            "critical",
+            "archive_timestamp_gap",
+            (
+                f"Archive gap after {gap['after']} through before "
+                f"{gap['before']} ({gap['missing_intervals']} missing "
+                f"15-minute interval(s){record_detail})"
+            ),
+            gap.get("station"),
+        ))
+    if any(item.severity == "critical" for item in findings):
+        report["status"] = "rejected"
+        report["findings"] = [asdict(item) for item in findings]
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -121,6 +159,8 @@ def _build_report_email_body(report: dict) -> str:
         if summary.get("recurrent_problem")
     }
     archive = report.get("archive", {})
+    archive_continuity = report.get("archive_continuity", {})
+    archive_gaps = archive_continuity.get("gaps", [])
     publication = report.get("publication", {})
     production = publication.get("production", {})
     unusually_slow = any(
@@ -136,6 +176,7 @@ def _build_report_email_body(report: dict) -> str:
         and not critical
         and not unusually_slow
         and archive.get("status") == "promoted"
+        and archive_continuity.get("status") == "continuous"
         and publication.get("status") == "published"
         and publication.get("website_service") == "active"
         and production.get("status", "skipped") in {"published", "skipped"}
@@ -150,6 +191,10 @@ def _build_report_email_body(report: dict) -> str:
             (
                 f"Archive: {archive.get('rows_received', 0)} validated rows promoted "
                 f"({archive.get('rows_added', 0)} new)"
+            ),
+            (
+                "Archive continuity: "
+                f"{archive_continuity.get('lookback_days')}-day check passed"
             ),
             (
                 f"Published: logger through {publication.get('logger_latest_timestamp')}; "
@@ -251,6 +296,30 @@ def _build_report_email_body(report: dict) -> str:
     else:
         lines.append("- not promoted")
 
+    lines.extend(["", "Archive continuity:"])
+    if archive_continuity.get("status") == "continuous":
+        lines.append(
+            "- continuous over the most recent "
+            f"{archive_continuity.get('lookback_days')} days"
+        )
+    elif archive_gaps:
+        for gap in archive_gaps:
+            lines.append(
+                f"- {gap.get('station')}: after {gap.get('after')} through before "
+                f"{gap.get('before')} ({gap.get('missing_intervals')} missing "
+                "15-minute interval(s); records "
+                f"{gap.get('record_start')}-{gap.get('record_end')})"
+            )
+            if gap.get("recovery_command"):
+                lines.append(f"  Recovery: {gap['recovery_command']}")
+    elif archive_continuity:
+        lines.append(
+            f"- {archive_continuity.get('status')}: "
+            f"{archive_continuity.get('detail', 'no details available')}"
+        )
+    else:
+        lines.append("- not assessed")
+
     lines.extend(["", "Website publication:"])
     if publication.get("status") == "published":
         lines.append(
@@ -312,6 +381,11 @@ def _build_report_email_body(report: dict) -> str:
         next_steps.append(f"Monitor intermittent communications at {_station_names(recovered)} on the next run.")
     if gaps_found:
         next_steps.append("Run a targeted backfill for the listed time ranges before publishing the data.")
+    if archive_gaps:
+        next_steps.append(
+            "Run the archive recovery command(s) listed above, validate the recovered "
+            "rows, and rebuild the processed data before publication."
+        )
     if battery_findings:
         battery_stations = sorted({item.get("station") for item in battery_findings if item.get("station")})
         next_steps.append(f"Inspect the power system at {_station_names(battery_stations)}.")
@@ -795,6 +869,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
     parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
     parser.add_argument(
+        "--archive-lookback-days",
+        type=int,
+        default=int(DAILY_SETTINGS.get("archive_continuity_lookback_days", 7)),
+        help="Recent archive window checked for internal 15-minute gaps.",
+    )
+    parser.add_argument(
         "--skip-publication",
         action="store_true",
         help="Accept and archive the download without running operational ETL.",
@@ -969,6 +1049,25 @@ def main(argv: list[str] | None = None) -> int:
                 report["findings"] = [asdict(item) for item in findings]
                 report["status"] = "rejected"
                 report["archive"] = {"status": "failed", "detail": str(exc)}
+        if report.get("archive", {}).get("status") == "promoted":
+            try:
+                report["archive_continuity"] = audit_archive_continuity(
+                    archive_root=args.archive_root,
+                    lookback_days=args.archive_lookback_days,
+                )
+            except Exception as exc:
+                report["archive_continuity"] = {
+                    "status": "failed",
+                    "lookback_days": args.archive_lookback_days,
+                    "gap_count": 0,
+                    "gaps": [],
+                    "detail": f"{type(exc).__name__}: {exc}",
+                }
+            apply_archive_continuity(
+                report,
+                findings,
+                report["archive_continuity"],
+            )
         if (
             report["status"] in {"accepted", "accepted_with_warnings"}
             and not args.skip_publication

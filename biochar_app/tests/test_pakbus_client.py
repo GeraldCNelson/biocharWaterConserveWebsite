@@ -16,8 +16,10 @@ import pandas as pd
 from biochar_app.config.pakbus import PAKBUS
 from biochar_app.pakbus.core.client import (
     CAMPBELL_EPOCH,
+    RecordRangeUnavailableError,
     _compute_window,
     _fetch_window,
+    _new_table1_record_range_state,
     decode_table1_response,
     fetch_batch,
     fetch_isolated_stations,
@@ -144,7 +146,191 @@ def test_fetch_window_continues_multi_fragment_table1_response() -> None:
     assert device.pakbus.calls == [(0x05, 20, 0), (0x06, 101, 120)]
 
 
-def test_fetch_window_does_not_cap_multi_day_request_at_96_records() -> None:
+def test_fetch_window_collects_exact_explicit_record_range() -> None:
+    def response(first_record: int, count: int, more: bool) -> bytes:
+        records = b"".join(
+            struct.pack(
+                ">I10f",
+                int(
+                    (
+                        datetime(2026, 5, 10, 3, 0)
+                        + timedelta(minutes=15 * index)
+                        - CAMPBELL_EPOCH
+                    ).total_seconds()
+                ),
+                *([float(first_record + index)] * 10),
+            )
+            for index in range(count)
+        )
+        return (
+            struct.pack(">HIH", 2, first_record, count)
+            + records
+            + bytes([more])
+        )
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.responses = [
+                response(100244, 3, True),
+                response(100247, 2, False),
+            ]
+
+        def send_wait(self, _command):
+            return {}, {"RespCode": 0, "RecData": self.responses.pop(0)}, None
+
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    frames = list(
+        _fetch_window(
+            device,
+            "Table1",
+            # These dates intentionally exclude the returned rows: explicit
+            # record recovery must not apply the rolling time-window filter.
+            datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+            datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            _new_table1_record_range_state(100244, 100248),
+        )
+    )
+
+    assert len(frames) == 1
+    assert frames[0]["RecNbr"].tolist() == list(range(100244, 100249))
+    assert device.pakbus.calls == [
+        (0x06, 100244, 100249),
+        (0x06, 100247, 100249),
+    ]
+
+
+def test_fetch_window_rejects_incomplete_explicit_record_range() -> None:
+    timestamp = datetime(2026, 5, 10, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 100244, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([100244.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            return {}, {"RespCode": 0, "RecData": record_data}, None
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(RuntimeError, match="expected records 100244-100248"):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+                _new_table1_record_range_state(100244, 100248),
+            )
+        )
+
+
+def test_fetch_window_reports_oldest_record_when_requested_range_rolled_out() -> None:
+    timestamp = datetime(2026, 6, 12, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 93732, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([93732.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            return {}, {"RespCode": 0, "RecData": record_data}, None
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(
+        RecordRangeUnavailableError,
+        match=r"oldest available record is 93732 at 2026-06-12T03:00:00-07:00",
+    ):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 9, 1, tzinfo=mst),
+                datetime(2026, 9, 2, tzinfo=mst),
+                _new_table1_record_range_state(0, 0),
+            )
+        )
+
+
+def test_fetch_batch_does_not_retry_unavailable_record_range(monkeypatch) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    links: list[object] = []
+
+    def fake_open_link(_host, _port, **_kwargs):
+        link = object()
+        links.append(link)
+        return nullcontext(link)
+
+    def fake_cr1000(_link, **_kwargs):
+        device = type("FakeDevice", (), {})()
+        device.gettime = lambda: datetime(2026, 9, 28, 10, 0)
+        return device
+
+    def unavailable(*_args, **_kwargs):
+        raise RecordRangeUnavailableError(
+            "oldest available record is 93732 at 2026-06-12T03:00:00-07:00"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *_args: (True, "ok"))
+    monkeypatch.setattr(client, "ping6", lambda *_args: True)
+    monkeypatch.setattr(client, "open_pakbus_link", fake_open_link)
+    monkeypatch.setattr(client, "CR1000", fake_cr1000)
+    monkeypatch.setattr(client, "_fetch_window", unavailable)
+
+    results = list(
+        fetch_batch(
+            "Table1",
+            1,
+            "America/Denver",
+            logger_ids=[2],
+            station_attempts=5,
+            retry_delay_seconds=0,
+            record_start=0,
+            record_end=0,
+        )
+    )
+
+    assert results == []
+    assert len(links) == 1
+
+
+def test_fetch_window_caps_initial_multi_day_request_at_safe_payload() -> None:
     class FakePakbus:
         def __init__(self) -> None:
             self.calls = []
@@ -170,10 +356,71 @@ def test_fetch_window_does_not_cap_multi_day_request_at_96_records() -> None:
         datetime(2026, 5, 15, tzinfo=mst),
     ))
 
-    assert device.pakbus.calls == [(0x05, 200, 0)]
+    assert device.pakbus.calls == [(0x05, 104, 0)]
 
 
-def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
+def test_fetch_window_pages_backward_for_multi_day_request(caplog) -> None:
+    def response(first_record: int, timestamp: datetime) -> bytes:
+        values = [float(first_record)] * 10
+        return (
+            struct.pack(">HIH", 2, first_record, 1)
+            + struct.pack(
+                ">I10f",
+                int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+                *values,
+            )
+            + b"\x00"
+        )
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.responses = [
+                response(200, datetime(2026, 5, 15, 3, 0)),
+                response(104, datetime(2026, 5, 14, 3, 0)),
+            ]
+
+        def send_wait(self, _command):
+            return {}, {"RespCode": 0, "RecData": self.responses.pop(0)}, None
+
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    with caplog.at_level("INFO"):
+        frames = list(
+            _fetch_window(
+                device,
+                "Table1",
+                datetime(2026, 5, 13, 5, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
+        )
+
+    assert device.pakbus.calls == [(0x05, 104, 0), (0x06, 104, 200)]
+    assert frames[0]["RecNbr"].tolist() == [104, 200]
+    assert "Table1 request page 1 (recent; mode=0x05, p1=104, p2=0)" in caplog.text
+    assert "Table1 response page 1: rows=1, records=200-200" in caplog.text
+    assert (
+        "Table1 request page 2 (older records; mode=0x06, p1=104, p2=200)"
+        in caplog.text
+    )
+    assert "Table1 response page 2: rows=1, records=104-104" in caplog.text
+
+
+def test_fetch_window_translates_missing_library_response_to_timeout(
+    monkeypatch,
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
     class FakePakbus:
         @staticmethod
         def get_collectdata_cmd(*_args, **_kwargs):
@@ -187,7 +434,10 @@ def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
             raise TypeError("'NoneType' object is not subscriptable")
 
     mst = ZoneInfo("Etc/GMT+7")
-    with pytest.raises(TimeoutError, match="did not return a Table1 response"):
+    with pytest.raises(
+        TimeoutError,
+        match=r"Table1 page 1 .* did not return a response",
+    ):
         list(
             _fetch_window(
                 FakeDevice(),
@@ -198,7 +448,42 @@ def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
         )
 
 
-def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
+def test_fetch_window_translates_truncated_pakbus_frame_to_connection_error(
+    monkeypatch,
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(*_args, **_kwargs):
+            return object()
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        @staticmethod
+        def send_wait(_command):
+            raise struct.error("unpack requires a buffer of 8 bytes")
+
+    mst = ZoneInfo("Etc/GMT+7")
+    with pytest.raises(ConnectionError, match="truncated PakBus response"):
+        list(
+            _fetch_window(
+                FakeDevice(),
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
+        )
+
+
+def test_fetch_window_translates_missing_record_data_to_timeout(monkeypatch) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
     class FakePakbus:
         @staticmethod
         def get_collectdata_cmd(*_args, **_kwargs):
@@ -212,7 +497,10 @@ def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
             return {}, {"RespCode": 0}, None
 
     mst = ZoneInfo("Etc/GMT+7")
-    with pytest.raises(TimeoutError, match="did not contain Table1 record data"):
+    with pytest.raises(
+        TimeoutError,
+        match=r"Table1 page 1 .* response did not contain record data",
+    ):
         list(
             _fetch_window(
                 FakeDevice(),
@@ -221,6 +509,60 @@ def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
                 datetime(2026, 5, 15, 5, 0, tzinfo=mst),
             )
         )
+
+
+def test_fetch_window_retries_page_on_same_connection(monkeypatch, caplog) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    timestamp = datetime(2026, 5, 15, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 200, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([200.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.actions = [
+                TimeoutError("temporary page timeout"),
+                record_data,
+            ]
+
+        def send_wait(self, _command):
+            action = self.actions.pop(0)
+            if isinstance(action, Exception):
+                raise action
+            return {}, {"RespCode": 0, "RecData": action}, None
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    with caplog.at_level("INFO"):
+        frames = list(
+            _fetch_window(
+                device,
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
+        )
+
+    assert device.pakbus.calls == [(0x05, 20, 0), (0x05, 20, 0)]
+    assert frames[0]["RecNbr"].tolist() == [200]
+    assert "retrying the same page on the current connection" in caplog.text
 
 
 def test_fetch_batch_reopens_connection_and_retries_missing_response(monkeypatch) -> None:
@@ -347,6 +689,106 @@ def test_fetch_batch_retries_broken_pipe_with_fresh_connection(monkeypatch) -> N
     assert results == [(4, expected)]
 
 
+def test_fetch_batch_resumes_failed_page_with_preserved_records(
+    monkeypatch, caplog
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    def response(first_record: int, timestamp: datetime) -> bytes:
+        return (
+            struct.pack(">HIH", 2, first_record, 1)
+            + struct.pack(
+                ">I10f",
+                int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+                *([float(first_record)] * 10),
+            )
+            + b"\x00"
+        )
+
+    calls: list[tuple[int, int, int]] = []
+    leaf_connections = 0
+
+    class FakePakbus:
+        @staticmethod
+        def get_collectdata_cmd(_table, _signature, *, mode, p1, p2):
+            calls.append((mode, p1, p2))
+            return len(calls)
+
+    class FakeDevice:
+        pakbus = FakePakbus()
+
+        def __init__(self, actions):
+            self.actions = list(actions)
+
+        @staticmethod
+        def gettime():
+            return datetime(2026, 5, 15, 5, 0)
+
+        def send_wait(self, _command):
+            action = self.actions.pop(0)
+            if isinstance(action, Exception):
+                raise action
+            return {}, {"RespCode": 0, "RecData": action}, None
+
+    first_device = FakeDevice(
+        [
+            response(200, datetime(2026, 5, 15, 3, 0)),
+            struct.error("unpack requires a buffer of 8 bytes"),
+            struct.error("unpack requires a buffer of 8 bytes"),
+            struct.error("unpack requires a buffer of 8 bytes"),
+        ]
+    )
+    resumed_device = FakeDevice(
+        [response(104, datetime(2026, 5, 14, 3, 0))]
+    )
+
+    def fake_cr1000(_link, **kwargs):
+        nonlocal leaf_connections
+        if kwargs["dest"] == PAKBUS.router_id:
+            return type("FakeRouter", (), {})()
+        leaf_connections += 1
+        return first_device if leaf_connections == 1 else resumed_device
+
+    mst = ZoneInfo("Etc/GMT+7")
+    start = datetime(2026, 5, 13, 5, 0, tzinfo=mst)
+    stop = datetime(2026, 5, 15, 5, 0, tzinfo=mst)
+    monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *_args: (True, "ok"))
+    monkeypatch.setattr(client, "ping6", lambda *_args: True)
+    monkeypatch.setattr(
+        client,
+        "open_pakbus_link",
+        lambda *_args, **_kwargs: nullcontext(object()),
+    )
+    monkeypatch.setattr(client, "CR1000", fake_cr1000)
+    monkeypatch.setattr(client, "_compute_window", lambda *_args: (start, stop))
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
+    with caplog.at_level("INFO"):
+        results = list(
+            fetch_batch(
+                "Table1",
+                48,
+                "America/Denver",
+                logger_ids=[10],
+                station_attempts=2,
+                retry_delay_seconds=0,
+            )
+        )
+
+    assert calls == [
+        (0x05, 104, 0),
+        (0x06, 104, 200),
+        (0x06, 104, 200),
+        (0x06, 104, 200),
+        (0x06, 104, 200),
+    ]
+    assert leaf_connections == 2
+    assert results[0][0] == 10
+    assert results[0][1]["RecNbr"].tolist() == [104, 200]
+    assert "resuming with 1 records preserved" in caplog.text
+    assert "retrying in 15.0 seconds" in caplog.text
+
+
 def test_fetch_batch_retries_delivery_failure(monkeypatch) -> None:
     import biochar_app.pakbus.core.client as client
 
@@ -422,11 +864,18 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
         attempts=3,
         station_pause_seconds=15,
         timing_output=tmp_path / "timings.json",
+        record_start=100244,
+        record_end=100338,
     )
 
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
     assert len(commands) == 3
     assert all("--direct" in command for command in commands)
+    assert all(
+        command[command.index("--record-start") + 1] == "100244"
+        and command[command.index("--record-end") + 1] == "100338"
+        for command in commands
+    )
     assert all(command[command.index("--log-level") + 1] == "INFO" for command in commands)
     assert pauses == [15, 15]
     timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8"))

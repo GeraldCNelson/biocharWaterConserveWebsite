@@ -24,12 +24,13 @@
     "csv_decimal_places": 4
   },
   "daily": {
-    "hours": 24,
+    "hours": 26,
     "attempts": 1,
     "station_pause_seconds": 15.0,
     "minimum_rows": 90,
     "maximum_gap_minutes": 30,
     "maximum_age_minutes": 90,
+    "archive_continuity_lookback_days": 7,
     "battery_warning_volts": 11.5,
     "battery_critical_volts": 10.5,
     "recovery_passes": 2,

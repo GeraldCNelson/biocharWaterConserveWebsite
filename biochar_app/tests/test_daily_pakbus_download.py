@@ -10,6 +10,8 @@ from biochar_app.pakbus.core.daily_download import (
     _build_report_email_body,
     _build_success_email_body,
     _publish_to_production,
+    Finding,
+    apply_archive_continuity,
     build_communication_reliability,
     diagnose_download,
     merge_download_frames,
@@ -64,6 +66,12 @@ def test_routine_report_email_uses_compact_summary() -> None:
             "rows_received": 96,
             "rows_added": 96,
         },
+        "archive_continuity": {
+            "status": "continuous",
+            "lookback_days": 7,
+            "gap_count": 0,
+            "gaps": [],
+        },
         "publication": {
             "status": "published",
             "logger_latest_timestamp": "2026-09-22T00:00:00",
@@ -88,6 +96,88 @@ def test_routine_report_email_uses_compact_summary() -> None:
     assert "Action required: none" in body
     assert "Station download timing:" not in body
     assert "Battery warnings:" not in body
+
+
+def test_report_email_includes_archive_gap_recovery_command() -> None:
+    command = (
+        "tools/pakbus-download station S3B --record-start 100244 "
+        "--record-end 100338 --attempts 5 --response-timeout 30 --log-level INFO"
+    )
+    report = {
+        "status": "rejected",
+        "started_at": "2026-09-27T00:16:39-06:00",
+        "completed_at": "2026-09-27T00:53:45-06:00",
+        "stations": {},
+        "findings": [
+            {
+                "severity": "critical",
+                "code": "archive_timestamp_gap",
+                "station": "S3B",
+                "message": "Archive gap",
+            }
+        ],
+        "archive": {"status": "promoted", "rows_received": 96, "rows_added": 96},
+        "archive_continuity": {
+            "status": "gaps_found",
+            "lookback_days": 7,
+            "gap_count": 1,
+            "gaps": [
+                {
+                    "station": "S3B",
+                    "after": "2026-09-26T06:15:00+00:00",
+                    "before": "2026-09-27T06:15:00+00:00",
+                    "missing_intervals": 95,
+                    "record_start": 100244,
+                    "record_end": 100338,
+                    "recovery_command": command,
+                }
+            ],
+        },
+    }
+
+    body = _build_report_email_body(report)
+
+    assert "Archive continuity:" in body
+    assert "records 100244-100338" in body
+    assert command in body
+    assert "before publication" in body
+
+
+def test_archive_gap_rejects_run_before_publication() -> None:
+    report = {"status": "accepted", "findings": []}
+    findings: list[Finding] = []
+    continuity = {
+        "status": "gaps_found",
+        "lookback_days": 7,
+        "gap_count": 1,
+        "gaps": [
+            {
+                "station": "S3B",
+                "after": "2026-09-26T06:15:00+00:00",
+                "before": "2026-09-27T06:15:00+00:00",
+                "missing_intervals": 95,
+                "record_start": 100244,
+                "record_end": 100338,
+            }
+        ],
+    }
+
+    apply_archive_continuity(report, findings, continuity)
+
+    assert report["status"] == "rejected"
+    assert report["archive_continuity"] == continuity
+    assert report["findings"] == [
+        {
+            "severity": "critical",
+            "code": "archive_timestamp_gap",
+            "message": (
+                "Archive gap after 2026-09-26T06:15:00+00:00 through before "
+                "2026-09-27T06:15:00+00:00 (95 missing 15-minute interval(s); "
+                "recover records 100244-100338)"
+            ),
+            "station": "S3B",
+        }
+    ]
 
 
 def test_missing_station_gap_and_low_battery_are_critical() -> None:
