@@ -247,14 +247,14 @@ A normal ETL run performs these major operations:
 Run ETL for a particular year from the repository root:
 
 ```bash
-python biochar_app/scripts/etl.py --year 2026
+python -m biochar_app.scripts.etl --year 2026
 ```
 
 For the routine 2026 logger update, merge the existing PC400 files with the
 accepted PakBus archive and rebuild only the logger-derived Parquet outputs:
 
 ```bash
-python biochar_app/scripts/etl.py --year 2026 --logger-only
+python -m biochar_app.scripts.etl --year 2026 --logger-only
 ```
 
 For overlapping timestamps, the PC400 value is retained because it has more
@@ -301,22 +301,22 @@ Other ETL examples:
 
 ```bash
 # Use the configured default year
-python biochar_app/scripts/etl.py
+python -m biochar_app.scripts.etl
 
 # Process every configured logger and weather year
-python biochar_app/scripts/etl.py --all-years
+python -m biochar_app.scripts.etl --all-years
 
 # Use the existing repository master-workbook snapshot
-python biochar_app/scripts/etl.py \
+python -m biochar_app.scripts.etl \
     --skip-master-workbook-refresh
 
 # Use the existing processed irrigation dataset
-python biochar_app/scripts/etl.py \
+python -m biochar_app.scripts.etl \
     --year 2026 \
     --skip-irrigation-build
 
 # Skip both management-data refresh stages
-python biochar_app/scripts/etl.py \
+python -m biochar_app.scripts.etl \
     --year 2026 \
     --skip-master-workbook-refresh \
     --skip-irrigation-build
@@ -514,7 +514,7 @@ When a project colleague adds or changes irrigation data:
 4. Run ETL for the required year:
 
    ```bash
-   python biochar_app/scripts/etl.py --year 2026
+   python -m biochar_app.scripts.etl --year 2026
    ```
 
 5. Confirm that the snapshot and irrigation-build messages report success.

@@ -57,11 +57,11 @@ outputs, provided those irrigation times are also interpreted as local
 America/Denver civil time.
 
 Usage:
-python biochar_app/scripts/etl.py
-python biochar_app/scripts/etl.py --year 2024
-python biochar_app/scripts/etl.py --force-backup-raw
-python biochar_app/scripts/etl.py --no-backup-raw
-python biochar_app/scripts/etl.py --skip-master-workbook-refresh
+python -m biochar_app.scripts.etl
+python -m biochar_app.scripts.etl --year 2024
+python -m biochar_app.scripts.etl --force-backup-raw
+python -m biochar_app.scripts.etl --no-backup-raw
+python -m biochar_app.scripts.etl --skip-master-workbook-refresh
 """
 
 from __future__ import annotations
