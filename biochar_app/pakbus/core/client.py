@@ -152,6 +152,8 @@ TABLE1_INTERVAL_MINUTES = 15
 # truncated PakBus frames, so older records are fetched with bounded explicit
 # record-number ranges.
 TABLE1_MAX_RECORDS_PER_REQUEST = 104
+TABLE1_PAGE_ATTEMPTS = 3
+TABLE1_PAGE_RETRY_DELAY_SECONDS = 2.0
 TABLE1_RESUME_RETRY_DELAY_SECONDS = 15.0
 TABLE1_FIELDS = (
     "BattV_Min",
@@ -267,60 +269,79 @@ def _fetch_window(
             f"page {request_number} ({state.request_kind}; "
             f"mode=0x{state.mode:02X}, p1={state.p1}, p2={state.p2})"
         )
-        logging.info("Table1 request %s", request_context)
-        command = dev.pakbus.get_collectdata_cmd(
-            TABLE1_NUMBER,
-            TABLE1_SIGNATURE,
-            mode=state.mode,
-            p1=state.p1,
-            p2=state.p2,
-        )
-        request_started = time.monotonic()
-        try:
-            result = dev.send_wait(command)
-        except struct.error as exc:
-            # pycampbellcr1000 raises struct.error when a connection returns a
-            # truncated PakBus frame that is too short to contain its header.
-            # Treat this as a transient link failure so fetch_batch opens a
-            # fresh socket and honors the configured station retry count.
-            raise ConnectionError(
-                f"Table1 {request_context} returned a truncated PakBus "
-                f"response after {time.monotonic() - request_started:.1f} seconds"
-            ) from exc
-        except TypeError as exc:
-            # pycampbellcr1000 currently subscripts a missing response and
-            # exposes it as a cryptic ``NoneType`` error. Translate that into
-            # the communication failure that actually occurred.
-            if "NoneType" not in str(exc):
-                raise
-            raise TimeoutError(
-                f"Table1 {request_context} did not return a response after "
-                f"{time.monotonic() - request_started:.1f} seconds"
-            ) from exc
-        if result is None:
-            raise TimeoutError(
-                f"Table1 {request_context} did not return a response after "
-                f"{time.monotonic() - request_started:.1f} seconds"
+        fragment = None
+        elapsed_seconds = 0.0
+        for page_attempt in range(1, TABLE1_PAGE_ATTEMPTS + 1):
+            logging.info(
+                "Table1 request %s, page attempt %s/%s",
+                request_context,
+                page_attempt,
+                TABLE1_PAGE_ATTEMPTS,
             )
-        _header, message, _send_time = result
-        response_code = int(message.get("RespCode", 0))
-        if response_code:
-            raise RuntimeError(
-                f"Table1 {request_context} failed with response code "
-                f"{response_code}"
+            command = dev.pakbus.get_collectdata_cmd(
+                TABLE1_NUMBER,
+                TABLE1_SIGNATURE,
+                mode=state.mode,
+                p1=state.p1,
+                p2=state.p2,
             )
+            request_started = time.monotonic()
+            page_error: Exception | None = None
+            try:
+                result = dev.send_wait(command)
+                if result is None:
+                    raise TimeoutError("logger did not return a response")
+                _header, message, _send_time = result
+                response_code = int(message.get("RespCode", 0))
+                if response_code:
+                    raise RuntimeError(
+                        f"Table1 {request_context} failed with response code "
+                        f"{response_code}"
+                    )
+                try:
+                    record_data = message["RecData"]
+                except KeyError as exc:
+                    raise TimeoutError(
+                        "response did not contain record data"
+                    ) from exc
+                fragment = decode_table1_response(record_data)
+            except struct.error as exc:
+                page_error = ConnectionError(
+                    "returned a truncated PakBus response"
+                )
+                page_error.__cause__ = exc
+            except TypeError as exc:
+                if "NoneType" not in str(exc):
+                    raise
+                page_error = TimeoutError("logger did not return a response")
+                page_error.__cause__ = exc
+            except (TimeoutError, ValueError) as exc:
+                page_error = exc
 
-        try:
-            record_data = message["RecData"]
-        except KeyError as exc:
-            raise TimeoutError(
-                f"Table1 {request_context} response did not contain record data"
-            ) from exc
-        try:
-            fragment = decode_table1_response(record_data)
-        except ValueError as exc:
-            raise ValueError(f"Table1 {request_context}: {exc}") from exc
-        elapsed_seconds = time.monotonic() - request_started
+            elapsed_seconds = time.monotonic() - request_started
+            if page_error is None:
+                break
+            detailed_error = (
+                f"Table1 {request_context} {page_error} after "
+                f"{elapsed_seconds:.1f} seconds"
+            )
+            if page_attempt == TABLE1_PAGE_ATTEMPTS:
+                if isinstance(page_error, ConnectionError):
+                    raise ConnectionError(detailed_error) from page_error
+                if isinstance(page_error, TimeoutError):
+                    raise TimeoutError(detailed_error) from page_error
+                raise ValueError(detailed_error) from page_error
+            logging.warning(
+                "%s; retrying the same page on the current connection in "
+                "%.1f seconds",
+                detailed_error,
+                TABLE1_PAGE_RETRY_DELAY_SECONDS,
+            )
+            if TABLE1_PAGE_RETRY_DELAY_SECONDS > 0:
+                time.sleep(TABLE1_PAGE_RETRY_DELAY_SECONDS)
+
+        if fragment is None:
+            raise RuntimeError(f"Table1 {request_context} produced no fragment")
         if fragment.empty:
             logging.info(
                 "Table1 response page %s: rows=0, more=%s, elapsed=%.1f seconds",

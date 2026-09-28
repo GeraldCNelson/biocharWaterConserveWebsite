@@ -228,7 +228,13 @@ def test_fetch_window_pages_backward_for_multi_day_request(caplog) -> None:
     assert "Table1 response page 2: rows=1, records=104-104" in caplog.text
 
 
-def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
+def test_fetch_window_translates_missing_library_response_to_timeout(
+    monkeypatch,
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
     class FakePakbus:
         @staticmethod
         def get_collectdata_cmd(*_args, **_kwargs):
@@ -256,7 +262,13 @@ def test_fetch_window_translates_missing_library_response_to_timeout() -> None:
         )
 
 
-def test_fetch_window_translates_truncated_pakbus_frame_to_connection_error() -> None:
+def test_fetch_window_translates_truncated_pakbus_frame_to_connection_error(
+    monkeypatch,
+) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
     class FakePakbus:
         @staticmethod
         def get_collectdata_cmd(*_args, **_kwargs):
@@ -281,7 +293,11 @@ def test_fetch_window_translates_truncated_pakbus_frame_to_connection_error() ->
         )
 
 
-def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
+def test_fetch_window_translates_missing_record_data_to_timeout(monkeypatch) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+
     class FakePakbus:
         @staticmethod
         def get_collectdata_cmd(*_args, **_kwargs):
@@ -307,6 +323,60 @@ def test_fetch_window_translates_missing_record_data_to_timeout() -> None:
                 datetime(2026, 5, 15, 5, 0, tzinfo=mst),
             )
         )
+
+
+def test_fetch_window_retries_page_on_same_connection(monkeypatch, caplog) -> None:
+    import biochar_app.pakbus.core.client as client
+
+    class FakePakbus:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+
+        def get_collectdata_cmd(self, _table, _signature, *, mode, p1, p2):
+            self.calls.append((mode, p1, p2))
+            return len(self.calls)
+
+    timestamp = datetime(2026, 5, 15, 3, 0)
+    record_data = (
+        struct.pack(">HIH", 2, 200, 1)
+        + struct.pack(
+            ">I10f",
+            int((timestamp - CAMPBELL_EPOCH).total_seconds()),
+            *([200.0] * 10),
+        )
+        + b"\x00"
+    )
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.pakbus = FakePakbus()
+            self.actions = [
+                TimeoutError("temporary page timeout"),
+                record_data,
+            ]
+
+        def send_wait(self, _command):
+            action = self.actions.pop(0)
+            if isinstance(action, Exception):
+                raise action
+            return {}, {"RespCode": 0, "RecData": action}, None
+
+    monkeypatch.setattr(client.time, "sleep", lambda _seconds: None)
+    device = FakeDevice()
+    mst = ZoneInfo("Etc/GMT+7")
+    with caplog.at_level("INFO"):
+        frames = list(
+            _fetch_window(
+                device,
+                "Table1",
+                datetime(2026, 5, 15, 2, 0, tzinfo=mst),
+                datetime(2026, 5, 15, 5, 0, tzinfo=mst),
+            )
+        )
+
+    assert device.pakbus.calls == [(0x05, 20, 0), (0x05, 20, 0)]
+    assert frames[0]["RecNbr"].tolist() == [200]
+    assert "retrying the same page on the current connection" in caplog.text
 
 
 def test_fetch_batch_reopens_connection_and_retries_missing_response(monkeypatch) -> None:
@@ -478,6 +548,8 @@ def test_fetch_batch_resumes_failed_page_with_preserved_records(
         [
             response(200, datetime(2026, 5, 15, 3, 0)),
             struct.error("unpack requires a buffer of 8 bytes"),
+            struct.error("unpack requires a buffer of 8 bytes"),
+            struct.error("unpack requires a buffer of 8 bytes"),
         ]
     )
     resumed_device = FakeDevice(
@@ -519,6 +591,8 @@ def test_fetch_batch_resumes_failed_page_with_preserved_records(
 
     assert calls == [
         (0x05, 104, 0),
+        (0x06, 104, 200),
+        (0x06, 104, 200),
         (0x06, 104, 200),
         (0x06, 104, 200),
     ]
