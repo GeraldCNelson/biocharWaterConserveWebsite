@@ -186,12 +186,20 @@ The script uses the following precedence:
    SHA-256 and include a reason.
 2. **Readable entry in the main review workbook.** This is the preferred
    reviewed value for the exact file.
-3. **Readable main-workbook photo-family consensus.** A readable value from the
+3. **Exact entry in the supplemental review workbook.** This imports the
+   completed `meter_photo_unresolved_review.xlsx` rows by SHA-256, including
+   explicit `not_meter_reading` statuses.
+4. **Readable main-workbook photo-family consensus.** A readable value from the
    full-resolution original is propagated to resized/exported renditions that
    share the same camera-photo identifier.
-4. **Full-resolution follow-up workbook.** This fills readings that remain
+5. **Readable main-workbook capture-time consensus.** A reviewed reading is
+   propagated to another rendition only when both have the same capture time
+   to the second, the reviewed rows agree on one six-digit reading, and the
+   target timestamp is not marked low confidence. Every such transfer is
+   recorded in the JSON audit and optional transfer-audit CSV.
+6. **Full-resolution follow-up workbook.** This fills readings that remain
    unresolved. It cannot silently replace a stronger main-workbook value.
-5. **Existing inventory value.** Used only when no reviewed source supplies a
+7. **Existing inventory value.** Used only when no reviewed source supplies a
    value.
 
 If readable rows in the main workbook disagree within the same filename
@@ -203,10 +211,10 @@ the same photograph.
 ## Inputs
 
 - `photos/photo_inventory.csv`
-- Main reviewed workbook, currently
-  `meter_photo_review_updated_2026-07-23.xlsx`
-- Full-resolution follow-up workbook, currently
-  `meter_photo_unreadable_full_resolution_review_updated_2026-07-23.xlsx`
+- Main reviewed workbook, currently `meter_photo_review.xlsx`
+- Supplemental flat review workbook, currently
+  `meter_photo_unresolved_review.xlsx`
+- Optional full-resolution follow-up workbook, when one is available
 - `photos/meter_photo_reading_corrections.csv`
 
 The Excel workbooks are user-reviewed source data. They should be supplied by
@@ -219,6 +227,9 @@ path at runtime. Do not hard-code a Downloads path in project code.
   or excluded, and the selected filename.
 - `photo_inventory_unique_audit.json`: input paths, row counts, reading-source
   counts, suppressed follow-up conflicts, and SHA-256 of the output CSV.
+- `photo_inventory_reading_transfer_audit.csv`: one row per capture-time
+  transfer, including the target file, transferred value, and reviewed source
+  evidence.
 - Optional `originals_unique/`: copied selected files when explicitly requested.
 
 Inputs are never edited.
@@ -230,13 +241,18 @@ Run from the repository root:
 ```bash
 python biochar_app/scripts/management/finalize_meter_photo_inventory.py \
   --inventory-csv biochar_app/data-processed/management/irrigation/photos/photo_inventory.csv \
-  --main-workbook /path/to/meter_photo_review_updated_2026-07-23.xlsx \
-  --full-resolution-workbook /path/to/meter_photo_unreadable_full_resolution_review_updated_2026-07-23.xlsx \
+  --main-workbook biochar_app/data-processed/management/irrigation/photos/meter_photo_review.xlsx \
+  --supplemental-workbook biochar_app/data-processed/management/irrigation/photos/meter_photo_unresolved_review.xlsx \
   --corrections-csv biochar_app/data-processed/management/irrigation/photos/meter_photo_reading_corrections.csv \
   --output-csv biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique.csv \
   --manifest-csv biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_manifest.csv \
+  --transfer-audit-csv biochar_app/data-processed/management/irrigation/photos/photo_inventory_reading_transfer_audit.csv \
   --audit-json biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_audit.json
 ```
+
+`--full-resolution-workbook` may be omitted when no separate follow-up review
+workbook is available. Timestamp transfers are never made from a file-modify
+date or another timestamp explicitly marked low confidence.
 
 To also create a working photo directory, add:
 
