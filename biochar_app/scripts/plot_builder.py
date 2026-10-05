@@ -182,15 +182,17 @@ def build_raw_plot_title(
     usys: UnitSystem = coerce_unit_system(unit_system)
     grouping = _normalize_trace_grouping(trace_option)
 
+    title_var = human_var.replace("Volumetric Water Content", "VWC")
+
     if grouping == "depth":
         fixed_label = f"{_logger_display_label(logger_location)} Logger"
     else:
         fixed_label = _depth_display_label(depth, usys, compact=True)
 
     if is_gseason:
-        return f"Growing-season Data Plot for {human_var} in Strip {strip}, {year} ({fixed_label})"
+        return f"Seasonal {title_var} in Strip {strip}, {year} ({fixed_label})"
 
-    return f"{granularity.capitalize()} {human_var} in Strip {strip}, {year} ({fixed_label})"
+    return f"{granularity.capitalize()} {title_var} in Strip {strip}, {year} ({fixed_label})"
 
 def build_ratio_plot_title(
     *,
