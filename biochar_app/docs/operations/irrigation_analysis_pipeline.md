@@ -596,6 +596,44 @@ The adoption classifications are `supported` for at least four warm events,
 all such gaps easy to filter regardless of event count. The percentage gap
 uses the observed maximum as its denominator.
 
+## Multi-year S3/S4 water-source audit
+
+Use the research audit when evaluating S3/S4 timestamp concerns, persistent
+18-inch-over-shallow VWC ordering, possible lateral water entry from the east,
+or paired event water balances:
+
+```bash
+MPLBACKEND=Agg python -m biochar_app.scripts.research.analyze_s3_s4_multiyear_water
+```
+
+The analysis writes its report, figures, and audit tables to
+`biochar_app/docs/research/s3_s4_multiyear_water_audit/`. It compares 2023–2026
+depth profiles, screens dry non-irrigation days for disproportionate 18-inch
+wetting, checks whether screened eastern events also occur in the western
+S1/S2 strips, records the 2026 photo-anchor decisions, and constructs matched
+S1/S2 and S3/S4 event water-balance tables.
+
+Interpret the daily deep-rise screen as a source-location diagnostic, not as
+proof of a ditch or pipe leak. It deliberately requires complete current and
+previous-day profiles, excludes recorded S3/S4 irrigation and material rain on
+either day, and flags whether the same screen fired in S1 or S2. Absolute VWC
+differences among depths can still reflect sensor calibration, installation,
+or soil-profile differences.
+
+The event-level pre-start classifier also compares both irrigation pairs at a
+shared recorded start. An S3/S4 pre-start response is labeled possible lateral
+entry only when neither S1 nor S2 has a comparable unexplained pre-start
+response. When a western comparison strip also responds, the event is labeled
+`field_wide_pre_start_drift` and routed to field-condition or event-boundary
+review rather than treated as evidence of east-side entry.
+
+The paired water-balance output keeps both the signed residual (applied water
+minus modeled 0–18-inch storage) and the legacy nonnegative unretained proxy.
+The latter clips negative residuals to zero and must not be substituted for the
+signed residual in paired treatment comparisons. Neither measure by itself
+separates runoff, deep drainage, lateral movement, continued infiltration,
+unequal gate delivery, or model error.
+
 ## Verification
 
 After a full rebuild:

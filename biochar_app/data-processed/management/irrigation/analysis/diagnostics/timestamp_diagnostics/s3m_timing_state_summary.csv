@@ -1,0 +1,6 @@
+documented_s3m_clock_state,minutes_added_to_raw_timestamp,evidence,additional_correction_supported_by_event_audit,event_audit_note,irrigation_event_count,median_s3m_minus_s3_top_bottom_reference_min,multi_depth_pre_start_event_count
+initial through 2023-09-04 reset,450,back-propagated from 2026 anchor through verified discontinuities,False,Corrected irrigation responses do not show a persistent multi-depth pre-start S3M offset.,10,465.0,0
+2023-09-04 through 2024-07-07 reset,390,verified raw 75-minute forward discontinuity,False,Corrected irrigation responses do not show a persistent multi-depth pre-start S3M offset.,8,457.5,0
+2024-07-07 through 2025-01-16 reset,330,verified raw 75-minute forward discontinuity,False,Corrected irrigation responses do not show a persistent multi-depth pre-start S3M offset.,8,397.5,0
+2025-01-16 through 2026-02-19 reset,270,verified raw 75-minute forward discontinuity,False,Corrected irrigation responses do not show a persistent multi-depth pre-start S3M offset.,11,-97.5,0
+after 2026-02-19 synchronization,0,PC400 comparison after battery replacement,False,Corrected irrigation responses do not show a persistent multi-depth pre-start S3M offset.,9,-75.0,0

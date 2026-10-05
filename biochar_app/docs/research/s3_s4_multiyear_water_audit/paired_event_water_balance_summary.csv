@@ -1,0 +1,7 @@
+year,strip_group,eligible_matched_events,median_applied_gal,median_biochar_storage_gal,median_control_storage_gal,median_biochar_minus_control_storage_gal,median_biochar_minus_control_nonnegative_unretained_proxy_gal,median_biochar_minus_control_stored_fraction,median_biochar_minus_control_post_bottom_applied_gal
+2024,S1_S2,3,53000.0,34203.77,38589.08,-4088.06,4088.06,-0.08,-30365.53
+2024,S3_S4,4,47375.0,22570.35,22210.615,1654.7,-1654.7,0.04,18537.66
+2025,S1_S2,6,75175.0,31049.45,36269.015,-8759.845,8759.845,-0.12,-15746.485
+2025,S3_S4,6,66825.0,22473.55,20010.15,2497.365,-2497.365,0.05,20868.88
+2026,S1_S2,5,34125.0,20083.76,29611.3,-7328.81,2880.41,-0.22,-12699.49
+2026,S3_S4,1,90350.0,22577.57,22682.63,-105.06,105.06,0.0,39730.46
