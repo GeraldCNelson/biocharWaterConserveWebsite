@@ -145,6 +145,7 @@ Management scripts:
 - build_meter_photo_inventory.py
 - apply_duplicate_actions.py
 - build_meter_review_workbook.py
+- consolidate_meter_photo_review.py
 - finalize_meter_photo_inventory.py
 - compare_meter_photos_to_irrigation.py
 
@@ -219,6 +220,18 @@ the same photograph.
 
 The Excel workbooks are user-reviewed source data. They should be supplied by
 path at runtime. Do not hard-code a Downloads path in project code.
+
+When the supplemental review is complete, copy its exact SHA-256 keyed results
+and embedded photo crops into the main workbook before archiving the review:
+
+```bash
+python biochar_app/scripts/management/consolidate_meter_photo_review.py
+```
+
+This preserves the existing embedded photographs, updates any exact matches,
+and appends newly reviewed photos. The finalized CSV remains the downstream
+authority; the consolidation simply makes the primary human-review workbook
+complete and easier to inspect.
 
 ## Outputs
 
