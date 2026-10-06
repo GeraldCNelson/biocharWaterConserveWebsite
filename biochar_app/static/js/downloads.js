@@ -353,9 +353,9 @@ raw_depth_code: Depth code used for the raw-value summary.
 raw_mean: Arithmetic mean of available processed observations for the selected strip, depth, position and seasonal period. It is not an individual instantaneous reading.
 raw_coverage_pct: Available raw observations as a percentage of expected observations under the website's seasonal coverage calculation.
 ratio_depth_code: Depth code used for both paired-strip ratios.
-s1_s2_ratio_mean: Mean of available S1/S2 ratios at matching depth and logger position. S1 is biochar-treated; S2 is untreated. This is a mean of ratios, not necessarily the ratio of seasonal raw means.
+s1_s2_ratio_mean: For VWC, seasonal mean S1 divided by seasonal mean S2, using only matching timestamps with finite readings in both strips at the same depth and logger position. S1 is biochar-treated; S2 is untreated. Other variables retain their mean of individual ratios.
 s1_s2_coverage_pct: Available S1/S2 ratio observations as a percentage of expected observations under the website's seasonal coverage calculation.
-s3_s4_ratio_mean: Mean of available S3/S4 ratios at matching depth and logger position. S3 is biochar-treated; S4 is untreated. This is a mean of ratios, not necessarily the ratio of seasonal raw means.
+s3_s4_ratio_mean: For VWC, seasonal mean S3 divided by seasonal mean S4, using only matching timestamps with finite readings in both strips at the same depth and logger position. S3 is biochar-treated; S4 is untreated. Other variables retain their mean of individual ratios.
 s3_s4_coverage_pct: Available S3/S4 ratio observations as a percentage of expected observations under the website's seasonal coverage calculation.
 
 UNITS AND INTERPRETATION
@@ -363,6 +363,7 @@ VWC raw means are percent soil volume occupied by water. EC is in dS/m. Temperat
 Ratios are dimensionless: 1 means equal values, greater than 1 means the numerator strip has a higher value, and less than 1 means it has a lower value.
 S1/S2 are the approximately monthly irrigation comparison; S3/S4 are the approximately fortnightly comparison. Frequency is not irrigation volume or application rate.
 The raw-strip selection affects raw_mean, not which two paired-strip ratios are included.
+For VWC, ratio coverage counts matched finite readings. A nonpositive denominator mean produces an unavailable ratio. The displayed raw_mean may use more observations than the paired means used in the ratio.
 Partial periods and unequal coverage can affect year-to-year comparisons. These descriptive ratios alone do not establish statistical significance, a causal treatment effect, or movement of biochar to deeper soil.
 `;
 }

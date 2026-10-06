@@ -10,6 +10,33 @@ import zipfile
 import pytest
 
 
+def test_comparison_chart_selects_ratio_of_means_for_vwc():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for the browser comparison test")
+    source = Path(__file__).resolve().parents[1] / "static/js/tab_summary.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+const source = fs.readFileSync(process.argv[1], "utf8");
+const start = source.indexOf("function comparisonRowsForPeriod(");
+const end = source.indexOf("\n}", start) + 2;
+const context = vm.createContext({getIncompletePeriodNotice: () => ""});
+vm.runInContext(source.slice(start, end), context);
+context.entries = [{year: 2025, periods: [{code: "GROWING"}], gseason_stats: [
+  {period_code: "GROWING", logger_location: "T", ratio_group: "S1/S2",
+   ratio_mean: 2, ratio_of_means: 1.5, ratio_coverage_pct: 99, ratio_of_means_coverage_pct: 75}
+]}];
+const vwc = vm.runInContext('comparisonRowsForPeriod(entries, "GROWING", "VWC")', context);
+const ec = vm.runInContext('comparisonRowsForPeriod(entries, "GROWING", "EC")', context);
+if (vwc[0].s1s2Mean !== 1.5 || vwc[0].s1s2Coverage !== 75) throw Error("VWC used old aggregation");
+if (ec[0].s1s2Mean !== 2) throw Error("Other variables changed unexpectedly");
+if (vwc[1].s1s2Mean !== null) throw Error("Missing pairs should stay unavailable");
+'''
+    subprocess.run([node, "--input-type=module", "-e", script, str(source)],
+                   capture_output=True, text=True, check=True)
+
+
 def test_seasonal_comparison_download_includes_csv_and_column_readme():
     node = shutil.which("node")
     if not node:
@@ -50,3 +77,5 @@ console.log(Buffer.from(await blob.arrayBuffer()).toString("base64"));
         assert rows[0]["s1_s2_ratio_mean"] == "1.2"
         assert all(f"{column}:" in readme for column in rows[0])
         assert "04-01–10-31" in readme
+        assert "seasonal mean S1 divided by seasonal mean S2" in readme
+        assert "matching timestamps" in readme

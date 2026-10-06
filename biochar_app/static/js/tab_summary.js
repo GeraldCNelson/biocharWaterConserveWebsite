@@ -527,7 +527,7 @@ function escapeSummaryHTML(value) {
     .replaceAll("'", "&#039;");
 }
 
-function comparisonRowsForPeriod(yearEntries, periodCode) {
+function comparisonRowsForPeriod(yearEntries, periodCode, variable) {
   const positions = ["T", "M", "B"];
   const positionLabels = { T: "Top", M: "Middle", B: "Bottom" };
   const rows = [];
@@ -550,10 +550,10 @@ function comparisonRowsForPeriod(yearEntries, periodCode) {
         position: positionLabels[position],
         rawMean: raw?.raw_mean ?? null,
         rawCoverage: raw?.raw_coverage_pct ?? null,
-        s1s2Mean: s1s2?.ratio_mean ?? null,
-        s1s2Coverage: s1s2?.ratio_coverage_pct ?? null,
-        s3s4Mean: s3s4?.ratio_mean ?? null,
-        s3s4Coverage: s3s4?.ratio_coverage_pct ?? null,
+        s1s2Mean: (variable === "VWC" ? s1s2?.ratio_of_means : s1s2?.ratio_mean) ?? null,
+        s1s2Coverage: (variable === "VWC" ? s1s2?.ratio_of_means_coverage_pct : s1s2?.ratio_coverage_pct) ?? null,
+        s3s4Mean: (variable === "VWC" ? s3s4?.ratio_of_means : s3s4?.ratio_mean) ?? null,
+        s3s4Coverage: (variable === "VWC" ? s3s4?.ratio_of_means_coverage_pct : s3s4?.ratio_coverage_pct) ?? null,
       });
     });
   });
@@ -574,7 +574,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   const selectedPeriod = periods.find((period) => period.code === selectedCode) || periods[0];
   if (!selectedPeriod) return;
 
-  const rows = comparisonRowsForPeriod(yearEntries, selectedPeriod.code);
+  const rows = comparisonRowsForPeriod(yearEntries, selectedPeriod.code, variable);
   const numberText = (value) => value == null || !Number.isFinite(Number(value))
     ? "—"
     : String(Math.round(Number(value) * 10000) / 10000);
@@ -606,7 +606,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
             <th colspan="2">Raw summary</th><th colspan="2">S1/S2 ratio</th><th colspan="2">S3/S4 ratio</th>
           </tr>
           <tr>
-            <th>Mean</th><th>Coverage</th><th>Mean</th><th>Coverage</th><th>Mean</th><th>Coverage</th>
+            <th>Mean</th><th>Coverage</th><th>${variable === "VWC" ? "Ratio of means" : "Mean"}</th><th>Coverage</th><th>${variable === "VWC" ? "Ratio of means" : "Mean"}</th><th>Coverage</th>
           </tr>
         </thead>
         <tbody>${tableRows || `<tr><td colspan="9" class="text-muted">No comparison data are available.</td></tr>`}</tbody>
@@ -734,7 +734,7 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   ], {
     ...commonLayout,
     title: {
-      text: `${selectedPeriod.label}: treatment ratios by year<br><sup>${ratioContext}${partialTitleNote}</sup>`,
+      text: `${selectedPeriod.label}: ${variable === "VWC" ? "ratios of seasonal means" : "treatment ratios"} by year<br><sup>${ratioContext}${partialTitleNote}</sup>`,
       font: { size: 18 },
     },
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },

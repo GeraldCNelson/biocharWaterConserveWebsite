@@ -399,6 +399,7 @@ def compute_period_summary_rows(
             column for column in df.columns
             if column == "timestamp"
             or column.startswith(raw_prefix)
+            or (variable == "VWC" and column.startswith(f"VWC_{depth}_raw_"))
             or column.startswith(ratio_prefixes)
         ]
 
@@ -480,8 +481,20 @@ def compute_period_summary_rows(
         raw_stats, ratio_stats = compute_summary_statistics(
             period_df, variable, strip, str(depth)
         )
+        if variable == "VWC":
+            # A seasonal ratio does not require a precomputed ratio column.
+            for numerator_strip, denominator_strip in (("S1", "S2"), ("S3", "S4")):
+                for location in ("T", "M", "B"):
+                    numerator = f"VWC_{depth}_raw_{numerator_strip}_{location}"
+                    denominator = f"VWC_{depth}_raw_{denominator_strip}_{location}"
+                    if numerator in period_df and denominator in period_df:
+                        ratio_stats.setdefault(
+                            f"VWC_{depth}_ratio_{numerator_strip}_{denominator_strip}_{location}", {}
+                        )
 
         for column, metrics in raw_stats.items():
+            if variable == "VWC" and not column.startswith(raw_prefix):
+                continue
             coverage = coverage_fields(
                 observation_count(column, period_df), start_ts, end_exclusive
             )
@@ -509,6 +522,22 @@ def compute_period_summary_rows(
                 observation_count(column, period_df), start_ts, end_exclusive
             )
             pair = "S1/S2" if "S1_S2" in column else "S3/S4" if "S3_S4" in column else ""
+            ratio_of_means = None
+            paired_n = 0
+            if variable == "VWC" and pair:
+                numerator_strip, denominator_strip = pair.split("/")
+                location = logger_location(column)
+                numerator = f"VWC_{depth}_raw_{numerator_strip}_{location}"
+                denominator = f"VWC_{depth}_raw_{denominator_strip}_{location}"
+                if numerator in period_df and denominator in period_df:
+                    matched = period_df[[numerator, denominator]].apply(
+                        pd.to_numeric, errors="coerce"
+                    ).replace([np.inf, -np.inf], np.nan).dropna()
+                    paired_n = len(matched)
+                    denominator_mean = matched[denominator].mean()
+                    if paired_n and denominator_mean > 0:
+                        ratio_of_means = float(matched[numerator].mean() / denominator_mean)
+            paired_coverage = coverage_fields(paired_n, start_ts, end_exclusive)
             rows.append(
                 {
                     "period_code": period["code"],
@@ -518,6 +547,9 @@ def compute_period_summary_rows(
                     "logger_location": logger_location(column),
                     "ratio_min": metrics.get("min"),
                     "ratio_mean": metrics.get("mean"),
+                    "ratio_of_means": ratio_of_means,
+                    "ratio_of_means_n": paired_n,
+                    "ratio_of_means_coverage_pct": paired_coverage["coverage_pct"],
                     "ratio_max": metrics.get("max"),
                     "ratio_std": metrics.get("std"),
                     "ratio_n": coverage["n"],
