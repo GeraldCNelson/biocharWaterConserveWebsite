@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -59,7 +60,7 @@ def _load_legacy_transport() -> None:
     if CR1000 is not None and open_pakbus_link is not None:
         return
     try:
-        from pycampbellcr1000 import CR1000 as cr1000_class
+        from biochar_app.pakbus.core.legacy_transport import ManagedCR1000 as cr1000_class
         from pycampbellcr1000.exceptions import (
             DeliveryFailureException,
             NoDeviceException,
@@ -81,6 +82,33 @@ def _load_legacy_transport() -> None:
         DeliveryFailureException,
         NoDeviceException,
     )
+
+
+@contextmanager
+def _logger_session(host, port, timeout, base_id, dest_id):
+    """Retire both sessions before their socket closes or a retry begins."""
+    with open_pakbus_link(host, port, connect_timeout=timeout) as link:
+        router = device = None
+        succeeded = False
+        try:
+            router = CR1000(link, dest_addr=ROUTER_ID, dest=ROUTER_ID,
+                            src_addr=base_id, src=base_id)
+            device = CR1000(link, dest_addr=ROUTER_ID, dest=dest_id,
+                            src_addr=base_id, src=base_id)
+            yield device
+            succeeded = True
+        finally:
+            for session in (device, router):
+                if session is None:
+                    continue
+                try:
+                    # A failed connection cannot safely carry cleanup commands.
+                    if succeeded and callable(getattr(session, "bye", None)):
+                        session.bye()
+                except Exception:
+                    logging.debug("PakBus session cleanup failed", exc_info=True)
+                finally:
+                    session.connected = False
 
 # CR800 (router) PakBus ID; default to 1 if not present in config
 ROUTER_ID = PAKBUS.router_id
@@ -597,37 +625,18 @@ def fetch_batch(
                     )
                 # A new socket on every attempt discards late packets from a
                 # previous transaction before another logger is contacted.
-                with open_pakbus_link(host, port, connect_timeout=response_timeout_seconds) as link:
-                    # Register this fresh client connection with the physical
-                    # CR800 router before addressing a logical leaf logger.
-                    # Without this handshake, the router answers the leaf
-                    # hello request with a 0x09 route/session failure.
-                    # Keep the router session alive while the leaf session is
-                    # active. PyCampbell sends Bye when a CR1000 instance is
-                    # destroyed, so constructing it without retaining a
-                    # reference closes the route before the leaf hello.
-                    _router_session = CR1000(
-                        link,
-                        dest_addr=ROUTER_ID,
-                        dest=ROUTER_ID,
-                        src_addr=base_id,
-                        src=base_id,
-                    )
-                    # Construct inside try so NoDeviceException does not crash
-                    # the run. The TCP endpoint is the CR800 router (physical
-                    # address 1); the CR2xx leaf is the logical destination.
-                    dev = CR1000(
-                        link,
-                        dest_addr=ROUTER_ID,
-                        dest=dest_id,
-                        src_addr=base_id,
-                        src=base_id,
-                    )
+                with _logger_session(host, port, response_timeout_seconds,
+                                     base_id, dest_id) as dev:
 
                     # Optional: best-effort clock read.
                     try:
                         clk = dev.gettime()
                         logging.debug(f"Logger {dest_id} clock: {clk}")
+                    except ConnectionError:
+                        # A Finished/off-line control packet ends this session,
+                        # even during the optional clock read. Reconnect rather
+                        # than collecting through an already-ended route.
+                        raise
                     except Exception:
                         pass
 

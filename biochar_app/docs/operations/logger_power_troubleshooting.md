@@ -127,6 +127,17 @@ python -m biochar_app.pakbus.core.daily_download
 
 Normal runs suppress packet-by-packet PyLink and PyCampbell messages while retaining concise station progress, retries, warnings, and errors. For a communications investigation, run the underlying client with `--log-level DEBUG` to restore the complete protocol trace.
 
+The repository-owned legacy transport adapter recognizes four-byte link-control
+packets before the application decoder. A checksum-valid Finished/off-line
+packet requests a fresh station connection, preserving the next record request;
+it is not reported as truncated record data. Each reconnection registers the
+router before the leaf logger. Session and packet-object destructors do not
+send commands or close sockets: the attempt context owns cleanup. Failed
+attempts retire both sessions without sending Bye over the failed connection;
+successful attempts send leaf Bye then router Bye before closing the socket.
+Offline regression tests replay the October 6 Finished frame and check cleanup
+ordering. Field confirmation still requires a successful server download.
+
 The command first checks the PakBus TCP endpoint and downloads 24 hours from all 12 stations using isolated station processes and retries. If the first pass misses any stations, it waits and performs a more persistent pass for only those stations. It merges recovered rows without duplicates and then validates the complete result. Each run is retained under `biochar_app/data-raw/pakbus_daily/YYYY/MM/DD/`. Accepted data are archived, followed by the operational logger-and-weather ETL, output verification, and a restart of the website service. A rejected download never reaches ETL. A publication or restart failure exits nonzero and leaves a detailed diagnostic report.
 
 The report also derives a rolling communication history from the most recent 30 diagnostic reports. A station is flagged when it fails initially in at least two of the last seven runs, at least three of the last 30, on consecutive nights, or remains unresolved in any retained run. Successful nights send one concise line unless a recurring communication warning exists; failures and warnings retain the detailed report email.
