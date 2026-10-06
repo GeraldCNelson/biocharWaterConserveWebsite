@@ -49,6 +49,16 @@ def test_loads_only_usable_canonical_inventory_rows(tmp_path) -> None:
                 "include": "FALSE",
                 "notes": "",
             },
+            {
+                "filename": "low-confidence-time.jpg",
+                "sha256": "e" * 64,
+                "effective_datetime": "2026-09-30 08:55:31-06:00",
+                "meter_reading": "174383",
+                "review_status": "readable",
+                "timestamp_confidence": "low",
+                "include": "TRUE",
+                "notes": "Filename suggests a 2023 date; confirmation pending",
+            },
         ]
     ).to_csv(path, index=False)
 

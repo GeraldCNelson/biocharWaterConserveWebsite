@@ -1,0 +1,13 @@
+year,episode_id,start_date,end_date,candidate_rows,positions,first_day_sites,all_sites,starts_in_s4,reaches_s3_later,days_s4_to_s3,maximum_deep_daily_change,maximum_deep_change_beyond_shallow,west_comparable_deep_rise
+2023,2023-01,2023-05-26,2023-05-26,1,M,S4M,S4M,True,False,,1.1284,1.0129,False
+2023,2023-02,2023-06-17,2023-06-18,2,B,S4B,S4B,True,False,,10.4087,10.0907,False
+2023,2023-03,2023-07-19,2023-07-19,1,M,S4M,S4M,True,False,,1.4505,1.8838,False
+2024,2024-01,2024-07-15,2024-07-15,1,B,S4B,S4B,True,False,,1.1409,1.2732,False
+2024,2024-02,2024-07-28,2024-07-28,1,M,S4M,S4M,True,False,,2.0221,3.586,False
+2025,2025-01,2025-05-08,2025-05-08,1,B,S4B,S4B,True,False,,1.0212,0.9939,False
+2025,2025-02,2025-05-26,2025-05-27,4,"B,M","S4B,S4M","S3B,S4B,S4M",True,True,1.0,10.2561,5.4185,False
+2025,2025-03,2025-06-24,2025-06-24,2,"B,M","S4B,S4M","S4B,S4M",True,False,,2.9321,2.7448,False
+2025,2025-04,2025-07-28,2025-07-29,4,"B,M","S4B,S4M","S3B,S4B,S4M",True,True,1.0,3.9801,2.1524,False
+2025,2025-05,2025-08-29,2025-08-30,4,"B,M","S4B,S4M","S3B,S4B,S4M",True,True,1.0,5.2419,4.7479,False
+2025,2025-06,2025-09-14,2025-09-16,5,"B,M","S4B,S4M","S3B,S3M,S4B,S4M",True,True,1.0,13.6548,5.7319,False
+2026,2026-01,2026-06-11,2026-06-15,5,"B,M",S4M,"S3B,S4M",True,True,1.0,3.8154,2.4717,False

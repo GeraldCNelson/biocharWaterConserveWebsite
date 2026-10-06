@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -59,7 +60,7 @@ def _load_legacy_transport() -> None:
     if CR1000 is not None and open_pakbus_link is not None:
         return
     try:
-        from pycampbellcr1000 import CR1000 as cr1000_class
+        from biochar_app.pakbus.core.legacy_transport import ManagedCR1000 as cr1000_class
         from pycampbellcr1000.exceptions import (
             DeliveryFailureException,
             NoDeviceException,
@@ -81,6 +82,33 @@ def _load_legacy_transport() -> None:
         DeliveryFailureException,
         NoDeviceException,
     )
+
+
+@contextmanager
+def _logger_session(host, port, timeout, base_id, dest_id):
+    """Retire both sessions before their socket closes or a retry begins."""
+    with open_pakbus_link(host, port, connect_timeout=timeout) as link:
+        router = device = None
+        succeeded = False
+        try:
+            router = CR1000(link, dest_addr=ROUTER_ID, dest=ROUTER_ID,
+                            src_addr=base_id, src=base_id)
+            device = CR1000(link, dest_addr=ROUTER_ID, dest=dest_id,
+                            src_addr=base_id, src=base_id)
+            yield device
+            succeeded = True
+        finally:
+            for session in (device, router):
+                if session is None:
+                    continue
+                try:
+                    # A failed connection cannot safely carry cleanup commands.
+                    if succeeded and callable(getattr(session, "bye", None)):
+                        session.bye()
+                except Exception:
+                    logging.debug("PakBus session cleanup failed", exc_info=True)
+                finally:
+                    session.connected = False
 
 # CR800 (router) PakBus ID; default to 1 if not present in config
 ROUTER_ID = PAKBUS.router_id
@@ -527,6 +555,7 @@ def fetch_batch(
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
     record_start: int | None = None,
     record_end: int | None = None,
+    defer_no_data: bool = False,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -597,37 +626,18 @@ def fetch_batch(
                     )
                 # A new socket on every attempt discards late packets from a
                 # previous transaction before another logger is contacted.
-                with open_pakbus_link(host, port, connect_timeout=response_timeout_seconds) as link:
-                    # Register this fresh client connection with the physical
-                    # CR800 router before addressing a logical leaf logger.
-                    # Without this handshake, the router answers the leaf
-                    # hello request with a 0x09 route/session failure.
-                    # Keep the router session alive while the leaf session is
-                    # active. PyCampbell sends Bye when a CR1000 instance is
-                    # destroyed, so constructing it without retaining a
-                    # reference closes the route before the leaf hello.
-                    _router_session = CR1000(
-                        link,
-                        dest_addr=ROUTER_ID,
-                        dest=ROUTER_ID,
-                        src_addr=base_id,
-                        src=base_id,
-                    )
-                    # Construct inside try so NoDeviceException does not crash
-                    # the run. The TCP endpoint is the CR800 router (physical
-                    # address 1); the CR2xx leaf is the logical destination.
-                    dev = CR1000(
-                        link,
-                        dest_addr=ROUTER_ID,
-                        dest=dest_id,
-                        src_addr=base_id,
-                        src=base_id,
-                    )
+                with _logger_session(host, port, response_timeout_seconds,
+                                     base_id, dest_id) as dev:
 
                     # Optional: best-effort clock read.
                     try:
                         clk = dev.gettime()
                         logging.debug(f"Logger {dest_id} clock: {clk}")
+                    except ConnectionError:
+                        # A Finished/off-line control packet ends this session,
+                        # even during the optional clock read. Reconnect rather
+                        # than collecting through an already-ended route.
+                        raise
                     except Exception:
                         pass
 
@@ -658,6 +668,10 @@ def fetch_batch(
                 OSError,
                 RuntimeError,
             ) as exc:
+                if defer_no_data and not fetch_state.frames:
+                    logging.warning("%s (logger %s) returned no records; deferring to a later pass: %s",
+                                    station, dest_id, exc)
+                    break
                 if isinstance(exc, TypeError) and "NoneType" not in str(exc):
                     logging.exception(
                         "%s (logger %s) failed with a non-retryable error: %s",
@@ -689,6 +703,10 @@ def fetch_batch(
                     time.sleep(retry_pause)
             except Exception as exc:
                 if isinstance(exc, _legacy_retryable_exceptions):
+                    if defer_no_data and not fetch_state.frames:
+                        logging.warning("%s (logger %s) returned no records; deferring to a later pass: %s",
+                                        station, dest_id, exc)
+                        break
                     if attempt == station_attempts:
                         logging.error(
                             "%s (logger %s) did not respond after %s attempts: %s. Skipping.",
@@ -728,6 +746,7 @@ def fetch_isolated_stations(
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
     record_start: int | None = None,
     record_end: int | None = None,
+    defer_no_data: bool = False,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -772,6 +791,8 @@ def fetch_isolated_stations(
                         str(record_end),
                     ]
                 )
+            if defer_no_data:
+                command.append("--defer-no-data")
             logging.info(
                 "Starting isolated download for %s (%s of %s)",
                 station, index + 1, len(stations),
@@ -896,6 +917,8 @@ def main() -> None:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument("--defer-no-data", action="store_true",
+                        help="Defer stations returning no records to a later pass; immediately retry interrupted transfers only.")
     args = parser.parse_args()
     configure_logging(args.log_level)
 
@@ -935,6 +958,7 @@ def main() -> None:
             response_timeout_seconds=args.response_timeout,
             record_start=args.record_start,
             record_end=args.record_end,
+            defer_no_data=args.defer_no_data,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -961,6 +985,7 @@ def main() -> None:
         response_timeout_seconds=args.response_timeout,
         record_start=args.record_start,
         record_end=args.record_end,
+        defer_no_data=args.defer_no_data,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):

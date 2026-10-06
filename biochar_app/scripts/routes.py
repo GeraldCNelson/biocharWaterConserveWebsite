@@ -1121,6 +1121,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
         ratio_columns = [
             "period_code", "period_label", "ratio_group", "depth", "logger_location",
             "ratio_min", "ratio_mean", "ratio_max", "ratio_std",
+            "ratio_of_means", "ratio_of_means_n", "ratio_of_means_coverage_pct",
             "ratio_n", "ratio_expected_n", "ratio_coverage_pct",
         ]
         if seasonal_df.empty:

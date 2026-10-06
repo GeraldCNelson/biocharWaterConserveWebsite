@@ -1,11 +1,41 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from biochar_app.scripts.gseason_utils import (
     compute_period_summary_rows,
     rebase_periods_to_anchor_year,
 )
+
+
+@pytest.mark.parametrize("pair", [("S1", "S2"), ("S3", "S4")])
+def test_vwc_seasonal_ratio_uses_matched_means_not_mean_ratios(pair):
+    num, den = pair
+    frame = pd.DataFrame({
+        "timestamp": pd.date_range("2025-04-01", periods=5, freq="15min"),
+        f"VWC_1_raw_{num}_T": [30, 30, 99, None, float("inf")],
+        f"VWC_1_raw_{den}_T": [10, 30, None, 10, 10],
+        f"VWC_1_ratio_{num}_{den}_T": [3, 1, None, None, None],
+    })
+    rows = compute_period_summary_rows(frame, year=2025,
+        periods=[{"code": "GROWING", "label": "Growing", "start": "04-01", "end": "04-01"}],
+        variable="VWC", strip=num, depth="1")
+    ratio = next(row for row in rows if row.get("ratio_group"))
+    assert ratio["ratio_mean"] == 2
+    assert ratio["ratio_of_means"] == 1.5
+    assert ratio["ratio_of_means_n"] == 2
+    assert ratio["ratio_of_means_coverage_pct"] == 2.1
+
+
+def test_vwc_seasonal_ratio_zero_denominator_is_unavailable():
+    frame = pd.DataFrame({"timestamp": [pd.Timestamp("2025-04-01")],
+        "VWC_1_raw_S1_T": [30], "VWC_1_raw_S2_T": [0],
+        "VWC_1_ratio_S1_S2_T": [None]})
+    rows = compute_period_summary_rows(frame, year=2025,
+        periods=[{"code": "GROWING", "label": "Growing", "start": "04-01", "end": "04-01"}],
+        variable="VWC", strip="S1", depth="1")
+    assert next(row for row in rows if row.get("ratio_group"))["ratio_of_means"] is None
 
 
 def test_three_named_custom_periods_are_summarized_independently() -> None:

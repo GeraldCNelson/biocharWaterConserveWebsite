@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
+import json
 
 from biochar_app.pakbus.core.daily_download import (
     _build_report_email_body,
@@ -30,6 +32,66 @@ def _station_rows(station: str, logger_id: int, *, periods: int = 96, battery: f
             "BattV_Min": battery,
         }
     )
+
+
+@pytest.mark.parametrize("recover", [True, False])
+def test_empty_initial_pass_reaches_recovery_and_never_publishes_incomplete_data(
+    monkeypatch, tmp_path, recover
+):
+    from biochar_app.pakbus.core import daily_download as daily
+
+    calls, waits, reports, archives = [], [], [], []
+
+    def run(output, **kwargs):
+        calls.append(kwargs)
+        recovered = recover and len(calls) == 2
+        if recovered:
+            frames = []
+            for number, station in enumerate(daily.EXPECTED_STATIONS, 2):
+                frame = _station_rows(station, number)
+                frame["Datetime"] = pd.date_range(
+                    end=pd.Timestamp.now(tz="UTC").floor("15min"), periods=96, freq="15min")
+                frames.append(frame)
+            pd.concat(frames).to_csv(output, index=False)
+        timings = [{"station": station, "exit_code": 0 if recovered else 1,
+                    "rows": 96 if recovered else 0,
+                    "completed_at": pd.Timestamp.now(tz="UTC").isoformat()}
+                   for station in daily.EXPECTED_STATIONS]
+        kwargs["timing_output"].write_text(json.dumps(timings))
+        return SimpleNamespace(returncode=0 if recovered else 1)
+
+    monkeypatch.setattr(daily, "quick_port_check_ipv6", lambda *args: (True, "ok"))
+    monkeypatch.setattr(daily, "_run_client", run)
+    monkeypatch.setattr(daily.time, "sleep", waits.append)
+    monkeypatch.setattr(daily, "_finish_report", lambda report, *args: reports.append(report.copy()))
+    monkeypatch.setattr(daily, "promote_accepted_frame",
+                        lambda frame, **kwargs: archives.append(len(frame)) or {"status": "test"})
+    monkeypatch.setattr(daily, "_publish_operational_update",
+                        lambda *args, **kwargs: pytest.fail("unexpected publication"))
+    result = daily.main(["--run-root", str(tmp_path / "runs"), "--lock", str(tmp_path / "lock"),
+                         "--archive-root", str(tmp_path / "archive"), "--skip-publication",
+                         "--recovery-wait", "5", "--recovery-passes", "2"])
+    assert calls[0]["attempts"] == 3
+    assert calls[1]["stations"] == list(daily.EXPECTED_STATIONS)
+    assert calls[1]["attempts"] == 3
+    assert waits == ([5] if recover else [5, 5])
+    assert result == (0 if recover else 1)
+    assert reports[-1]["status"] == ("accepted" if recover else "rejected")
+    assert reports[-1]["recovery"]["still_missing"] == ([] if recover else list(daily.EXPECTED_STATIONS))
+    assert archives == ([12 * 96] if recover else [])
+    assert reports[-1]["completed_at"]
+
+
+def test_daily_client_command_enables_hybrid_policy(monkeypatch, tmp_path):
+    from biochar_app.pakbus.core import daily_download as daily
+
+    commands = []
+    monkeypatch.setattr(daily.subprocess, "run",
+                        lambda command, **kwargs: commands.append(command) or SimpleNamespace(returncode=0))
+    daily._run_client(tmp_path / "data.csv", hours=26, attempts=3,
+                      station_pause=15, timezone="America/Denver")
+    assert "--defer-no-data" in commands[0]
+    assert commands[0][commands[0].index("--attempts") + 1] == "3"
 
 
 def test_healthy_download_is_accepted() -> None:

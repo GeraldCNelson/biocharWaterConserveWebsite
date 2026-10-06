@@ -633,6 +633,16 @@ def load_photo_readings(
             .str.strip()
             .str.lower()
         )
+        timestamp_usable = (
+            ~df["timestamp_confidence"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .eq("low")
+            if "timestamp_confidence" in df.columns
+            else pd.Series(True, index=df.index)
+        )
         counter = parse_numeric_series(df["meter_reading"])
         valid_counter = (
             counter.notna()
@@ -659,6 +669,7 @@ def load_photo_readings(
         out = out.loc[
             include
             & review_status.eq("readable")
+            & timestamp_usable
             & valid_counter
         ].copy()
     else:

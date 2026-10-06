@@ -272,6 +272,102 @@ function csvCell(value) {
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+// Small, dependency-free ZIP writer. Entries are stored without compression.
+function comparisonZip(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const directoryParts = [];
+  let offset = 0;
+  for (const [filename, content] of files) {
+    const name = encoder.encode(filename);
+    const data = encoder.encode(content);
+    let crc = 0xffffffff;
+    for (const byte of data) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    crc = (crc ^ 0xffffffff) >>> 0;
+    const local = new Uint8Array(30 + name.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true); // UTF-8 names.
+    lv.setUint16(12, 33, true); // DOS date: 1980-01-01.
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, name.length, true);
+    local.set(name, 30);
+    localParts.push(local, data);
+    const central = new Uint8Array(46 + name.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(14, 33, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, name.length, true);
+    cv.setUint32(42, offset, true);
+    central.set(name, 46);
+    directoryParts.push(central);
+    offset += local.length + data.length;
+  }
+  const directorySize = directoryParts.reduce((size, entry) => size + entry.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, directorySize, true);
+  ev.setUint32(16, offset, true);
+  return new Blob([...localParts, ...directoryParts, end], { type: "application/zip" });
+}
+
+function seasonalComparisonReadme(comparison, csvName) {
+  return `SEASONAL COMPARISON DATA
+CSV file: ${csvName}
+Exported: ${new Date().toISOString()}
+Selected period: ${comparison.periodLabel}
+Selected variable: ${comparison.variable}
+Selected raw strip: ${comparison.strip}
+Selected depth code: ${comparison.depth}
+Website unit system: ${downloadsWindow.unitSystem || "us"}
+
+One row represents one anchor year and logger position for the selected seasonal period and depth.
+Depth codes: 1 = 6 inches; 2 = 12 inches; 3 = 18 inches.
+Top, Middle and Bottom refer to positions along a strip, not sensor depths.
+Blank numeric cells mean unavailable data, not zero.
+Coverage uses expected 15-minute observations from the period start through the elapsed portion of the period (not future dates), rounded to one decimal place and capped at 100%.
+
+COLUMN DEFINITIONS
+seasonal_period: Name and date boundaries of the selected seasonal period.
+variable: Website variable code (for example VWC).
+year: Anchor year used to label the seasonal period. A winter period can begin in the preceding calendar year.
+status: Complete, Partial, or Not started, describing the seasonal period's progress; Complete does not guarantee complete data coverage.
+logger_position: Top, Middle or Bottom location along each strip.
+raw_strip: Strip selected for the raw-value summary (S1, S2, S3 or S4).
+raw_depth_code: Depth code used for the raw-value summary.
+raw_mean: Arithmetic mean of available processed observations for the selected strip, depth, position and seasonal period. It is not an individual instantaneous reading.
+raw_coverage_pct: Available raw observations as a percentage of expected observations under the website's seasonal coverage calculation.
+ratio_depth_code: Depth code used for both paired-strip ratios.
+s1_s2_ratio_mean: For VWC, seasonal mean S1 divided by seasonal mean S2, using only matching timestamps with finite readings in both strips at the same depth and logger position. S1 is biochar-treated; S2 is untreated. Other variables retain their mean of individual ratios.
+s1_s2_coverage_pct: Available S1/S2 ratio observations as a percentage of expected observations under the website's seasonal coverage calculation.
+s3_s4_ratio_mean: For VWC, seasonal mean S3 divided by seasonal mean S4, using only matching timestamps with finite readings in both strips at the same depth and logger position. S3 is biochar-treated; S4 is untreated. Other variables retain their mean of individual ratios.
+s3_s4_coverage_pct: Available S3/S4 ratio observations as a percentage of expected observations under the website's seasonal coverage calculation.
+
+UNITS AND INTERPRETATION
+VWC raw means are percent soil volume occupied by water. EC is in dS/m. Temperature and water-volume raw means use the selected website units (US or metric).
+Ratios are dimensionless: 1 means equal values, greater than 1 means the numerator strip has a higher value, and less than 1 means it has a lower value.
+S1/S2 are the approximately monthly irrigation comparison; S3/S4 are the approximately fortnightly comparison. Frequency is not irrigation volume or application rate.
+The raw-strip selection affects raw_mean, not which two paired-strip ratios are included.
+For VWC, ratio coverage counts matched finite readings. A nonpositive denominator mean produces an unavailable ratio. The displayed raw_mean may use more observations than the paired means used in the ratio.
+Partial periods and unequal coverage can affect year-to-year comparisons. These descriptive ratios alone do not establish statistical significance, a causal treatment effect, or movement of biochar to deeper soil.
+`;
+}
+
 export function downloadSeasonalComparisonData() {
   const comparison = downloadsWindow.__seasonalComparisonDownload;
   if (!comparison?.rows?.length) {
@@ -298,10 +394,11 @@ export function downloadSeasonalComparisonData() {
     columns.map(([name]) => name).join(","),
     ...comparison.rows.map((row) => columns.map(([, getter]) => csvCell(getter(row))).join(",")),
   ].join("\n");
-  downloadBrowserBlob(
-    new Blob([`${csv}\n`], { type: "text/csv;charset=utf-8" }),
-    seasonalComparisonFilename("data", "csv")
-  );
+  const csvName = seasonalComparisonFilename("data", "csv");
+  downloadBrowserBlob(comparisonZip([
+    [csvName, `${csv}\n`],
+    ["README.txt", seasonalComparisonReadme(comparison, csvName)],
+  ]), seasonalComparisonFilename("data", "zip"));
 }
 
 export async function downloadSeasonalComparisonPlot(chartType) {
@@ -798,6 +895,45 @@ function selectedBulkUnitSystem() {
 /**
  * @returns {Promise<void>}
  */
+async function runBulkDownloadWithFeedback(btn, download, refreshState) {
+  if (btn.dataset.bulkDownloading === "true") return false;
+  const label = btn.textContent;
+  const statusId = `${btn.id}-status`;
+  let status = document.getElementById(statusId);
+  if (!status) {
+    status = document.createElement("p");
+    status.id = statusId;
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.setAttribute("aria-atomic", "true");
+    btn.insertAdjacentElement("afterend", status);
+    btn.setAttribute("aria-describedby", statusId);
+  }
+  btn.dataset.bulkDownloading = "true";
+  btn.disabled = true;
+  btn.setAttribute("aria-disabled", "true");
+  btn.setAttribute("aria-busy", "true");
+  btn.textContent = "Preparing download…";
+  status.className = "small mt-1 mb-0 text-muted";
+  status.textContent = "Preparing ZIP download. Large datasets may take a minute or longer.";
+  try {
+    await download();
+    status.className = "small mt-1 mb-0 text-success";
+    status.textContent = "Download started. Check your browser’s downloads.";
+    return true;
+  } catch (err) {
+    console.error("❌ Bulk download failed:", err);
+    status.className = "small mt-1 mb-0 text-danger";
+    status.textContent = "Download failed. Please try again. If it keeps failing, contact us.";
+    return false;
+  } finally {
+    delete btn.dataset.bulkDownloading;
+    btn.textContent = label;
+    btn.setAttribute("aria-busy", "false");
+    refreshState();
+  }
+}
+
 export async function initBulkDownloadTab() {
   const yearEl = /** @type {HTMLSelectElement | null} */ (
     document.getElementById("bulk-year") ||
@@ -835,9 +971,10 @@ export async function initBulkDownloadTab() {
   }
 
   function setButtonState(btn, { visualEnabled, hardDisable = false }) {
-    btn.disabled = hardDisable;
+    const busy = btn.dataset.bulkDownloading === "true";
+    btn.disabled = hardDisable || busy;
     btn.classList.toggle("disabled", !visualEnabled);
-    btn.setAttribute("aria-disabled", String(!visualEnabled));
+    btn.setAttribute("aria-disabled", String(hardDisable || busy || !visualEnabled));
   }
 
   /** @type {any} */
@@ -995,6 +1132,7 @@ export async function initBulkDownloadTab() {
   for (const btn of buttons) {
     btn.addEventListener("click", async (evt) => {
       evt.preventDefault();
+      if (btn.dataset.bulkDownloading === "true") return;
 
       const uiDatasetRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
       const uiDataset = String(uiDatasetRaw || "").trim();
@@ -1048,12 +1186,9 @@ export async function initBulkDownloadTab() {
 
       const fallbackZipName = buildFilename(["biochar", key, suffix]) + ".zip";
 
-      try {
-        await postAndDownload("/api/bulk_download", payload, fallbackZipName);
-      } catch (err) {
-        console.error("❌ Bulk download failed:", err);
-        alert("Unable to download the selected dataset. Please check the console.");
-      }
+      await runBulkDownloadWithFeedback(btn,
+        () => postAndDownload("/api/bulk_download", payload, fallbackZipName),
+        refreshEnabledState);
     });
   }
 

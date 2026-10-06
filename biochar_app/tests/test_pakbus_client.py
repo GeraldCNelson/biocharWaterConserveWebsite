@@ -772,6 +772,7 @@ def test_fetch_batch_resumes_failed_page_with_preserved_records(
                 logger_ids=[10],
                 station_attempts=2,
                 retry_delay_seconds=0,
+                defer_no_data=True,
             )
         )
 
@@ -787,6 +788,28 @@ def test_fetch_batch_resumes_failed_page_with_preserved_records(
     assert results[0][1]["RecNbr"].tolist() == [104, 200]
     assert "resuming with 1 records preserved" in caplog.text
     assert "retrying in 15.0 seconds" in caplog.text
+
+
+def test_hybrid_retry_moves_on_when_station_returns_no_records(monkeypatch, caplog):
+    import biochar_app.pakbus.core.client as client
+
+    requested = []
+
+    def connect(link, **kwargs):
+        requested.append(kwargs["dest"])
+        if kwargs["dest"] != PAKBUS.router_id:
+            raise ConnectionError("No logger response")
+        return type("FakeRouter", (), {})()
+
+    monkeypatch.setattr(client, "CR1000", connect)
+    monkeypatch.setattr(client, "open_pakbus_link", lambda *args, **kwargs: nullcontext(object()))
+    monkeypatch.setattr(client, "quick_port_check_ipv6", lambda *args: (True, "ok"))
+    monkeypatch.setattr(client, "ping6", lambda *args: True)
+    monkeypatch.setattr(client.time, "sleep", lambda seconds: pytest.fail("unexpected immediate retry"))
+    assert list(fetch_batch("Table1", 26, "America/Denver", logger_ids=[2, 3],
+                            station_attempts=3, defer_no_data=True)) == []
+    assert requested == [1, 2, 1, 3]
+    assert "deferring to a later pass" in caplog.text
 
 
 def test_fetch_batch_retries_delivery_failure(monkeypatch) -> None:
@@ -866,11 +889,13 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
         timing_output=tmp_path / "timings.json",
         record_start=100244,
         record_end=100338,
+        defer_no_data=True,
     )
 
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
     assert len(commands) == 3
     assert all("--direct" in command for command in commands)
+    assert all("--defer-no-data" in command for command in commands)
     assert all(
         command[command.index("--record-start") + 1] == "100244"
         and command[command.index("--record-end") + 1] == "100338"

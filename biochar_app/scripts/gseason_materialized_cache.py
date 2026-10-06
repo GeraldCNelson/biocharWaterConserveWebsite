@@ -17,7 +17,7 @@ from biochar_app.config.paths import (
 )
 
 
-CACHE_FORMAT_VERSION = 2
+CACHE_FORMAT_VERSION = 3  # Includes matched-timestamp VWC ratios of seasonal means.
 DEFAULT_CACHE_DIR = DATA_PROCESSED_DIR / "seasonal-summary-cache"
 
 
