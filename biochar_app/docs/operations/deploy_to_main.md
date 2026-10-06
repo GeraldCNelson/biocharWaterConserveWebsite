@@ -228,6 +228,34 @@ git checkout etl-refactor
 
 # 4. Transfer Approved Data to Production
 
+## Preferred guarded publication (including seasonal summaries)
+
+After both servers have compatible approved code, run from the test server:
+
+```bash
+cd ~/biocharWaterConserveWebsite
+BIOCHAR_DEPLOY_PYTHON="$PWD/.venv/bin/python" ./deploy.sh --year 2026
+```
+
+Use the actual acquisition virtual environment if it differs. The nightly
+publisher supplies its own Python interpreter automatically. Deployment first
+warms and verifies all standard seasonal summaries on the publishing server.
+It then stops production, synchronizes parquet, download ZIPs and
+`data-processed/seasonal-summary-cache/`, and verifies the transferred cache
+before starting production and running local/public health checks. Production
+verification never rebuilds missing or stale summaries: it fails publication.
+The failure cleanup attempts to restore service; inspect the publication log
+before retrying. `--skip-rsync` also requires valid production caches.
+
+Cache format 4 fingerprints source roles and SHA-256 contents, not absolute
+paths or modification times. Any source-content or cache-format change
+invalidates the corresponding entries. Old entries are rebuilt on test; no
+manual cache deletion is necessary. Custom seasonal periods are not included
+in this standard precomputed cache.
+
+The manual transfer commands below do not transfer seasonal summaries and
+are not the preferred nightly publication procedure.
+
 After testing is complete, the test server becomes the approved source of generated data for production deployment.
 
 Transferred using rsync:

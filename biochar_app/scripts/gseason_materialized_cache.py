@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import threading
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -17,7 +18,7 @@ from biochar_app.config.paths import (
 )
 
 
-CACHE_FORMAT_VERSION = 3  # Includes matched-timestamp VWC ratios of seasonal means.
+CACHE_FORMAT_VERSION = 4  # Portable, content-based source fingerprints.
 DEFAULT_CACHE_DIR = DATA_PROCESSED_DIR / "seasonal-summary-cache"
 
 
@@ -32,12 +33,26 @@ def gseason_source_paths(year: int) -> list[Path]:
     return sorted({path for path in candidates if path.exists()}, key=str)
 
 
+@lru_cache(maxsize=128)
+def _content_digest(path: str, size: int, mtime: int, ctime: int, inode: int) -> str:
+    # Metadata only memoizes local reads; it is not part of the portable identity.
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def source_fingerprint(paths: Iterable[Path]) -> str:
-    """Hash path, size, and nanosecond modification time without reading data."""
+    """Identify source roles and bytes independently of host paths and timestamps."""
     records = []
     for path in sorted((Path(item) for item in paths), key=str):
         stat = path.stat()
-        records.append((str(path.resolve()), stat.st_size, stat.st_mtime_ns))
+        records.append((path.parent.name, path.name, stat.st_size, _content_digest(
+            str(path.resolve()), stat.st_size, stat.st_mtime_ns,
+            stat.st_ctime_ns, stat.st_ino,
+        )))
+    records.sort()
     encoded = json.dumps(records, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

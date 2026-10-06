@@ -30,9 +30,12 @@ REMOTE_REPO="/home/ubuntu/biocharWaterConserveWebsite"
 
 LOCAL_PARQUET_DIR="${LOCAL_REPO}/biochar_app/data-processed/parquet"
 LOCAL_DOWNLOADS_DIR="${LOCAL_REPO}/biochar_app/data-processed/downloads"
+LOCAL_CACHE_DIR="${LOCAL_REPO}/biochar_app/data-processed/seasonal-summary-cache"
+LOCAL_PYTHON="${BIOCHAR_DEPLOY_PYTHON:-python}"
 
 REMOTE_PARQUET_DIR="${REMOTE_REPO}/biochar_app/data-processed/parquet"
 REMOTE_DOWNLOADS_DIR="${REMOTE_REPO}/biochar_app/data-processed/downloads"
+REMOTE_CACHE_DIR="${REMOTE_REPO}/biochar_app/data-processed/seasonal-summary-cache"
 
 REMOTE_VENV="${REMOTE_REPO}/venv/bin/activate"
 REMOTE_PYTHON="${REMOTE_REPO}/venv/bin/python"
@@ -149,6 +152,19 @@ sync_data() {
     -e "ssh ${SSH_OPTIONS[*]}" \
     "${LOCAL_DOWNLOADS_DIR}/" \
     "${REMOTE_HOST}:${REMOTE_DOWNLOADS_DIR}/"
+
+  log "Syncing prepared seasonal summaries to production..."
+  rsync -av --timeout=120 --exclude '*.tmp-*' \
+    -e "ssh ${SSH_OPTIONS[*]}" \
+    "${LOCAL_CACHE_DIR}/" \
+    "${REMOTE_HOST}:${REMOTE_CACHE_DIR}/"
+}
+
+prepare_local_cache() {
+  [[ "${DO_RSYNC}" -eq 1 ]] || return 0
+  log "Preparing and verifying seasonal summaries on the publishing server..."
+  (cd "${LOCAL_REPO}" && "${LOCAL_PYTHON}" -m biochar_app.scripts.gseason_cache_warmer --all-years)
+  (cd "${LOCAL_REPO}" && "${LOCAL_PYTHON}" -m biochar_app.scripts.gseason_cache_warmer --all-years --verify-only)
 }
 
 begin_remote_maintenance() {
@@ -210,15 +226,17 @@ regen_remote_files() {
   "
 }
 
-restart_remote_service() {
-  [[ "${DO_RESTART}" -eq 1 ]] || return 0
-
-  log "Warming production seasonal-summary caches..."
+verify_remote_cache() {
+  log "Verifying transferred seasonal-summary caches without rebuilding..."
   run_remote "
     set -e
     cd '${REMOTE_REPO}'
-    '${REMOTE_PYTHON}' -m biochar_app.scripts.gseason_cache_warmer --all-years
+    '${REMOTE_PYTHON}' -m biochar_app.scripts.gseason_cache_warmer --all-years --verify-only
   "
+}
+
+restart_remote_service() {
+  [[ "${DO_RESTART}" -eq 1 ]] || return 0
 
   log "Starting production service and checking local HTTPS..."
   run_remote "
@@ -310,10 +328,12 @@ require_cmd curl
 
 verify_local_paths
 check_local_git
+prepare_local_cache
 begin_remote_maintenance
 sync_data
 check_for_bad_tilde_dir
 verify_remote_files
 regen_remote_files
+verify_remote_cache
 restart_remote_service
 print_post_checks

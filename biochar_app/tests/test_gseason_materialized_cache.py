@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import shutil
 
 from biochar_app.scripts.gseason_materialized_cache import (
     load_materialized_gseason_summary,
@@ -60,3 +62,22 @@ def test_period_configuration_has_its_own_cache_entry(tmp_path: Path) -> None:
     ]
 
     assert load_materialized_gseason_summary(**changed) is None
+
+
+def test_transferred_cache_accepts_same_bytes_not_changed_bytes(tmp_path: Path) -> None:
+    source = tmp_path / "test" / "15min" / "2025_15min.parquet"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"original")
+    arguments = cache_arguments(tmp_path, source)
+    rows = [{"raw_mean": 24.5}]
+    save_materialized_gseason_summary(**arguments, rows=rows)
+    target = tmp_path / "production" / "15min" / source.name
+    target.parent.mkdir(parents=True)
+    shutil.copyfile(source, target)
+    os.utime(target, (100, 100))
+    transferred = dict(arguments, source_paths=[target], cache_dir=tmp_path / "production-cache")
+    shutil.copytree(arguments["cache_dir"], transferred["cache_dir"])
+    assert load_materialized_gseason_summary(**transferred) == rows
+    target.write_bytes(b"modified")  # Same size; content must still invalidate.
+    os.utime(target, (100, 100))
+    assert load_materialized_gseason_summary(**transferred) is None

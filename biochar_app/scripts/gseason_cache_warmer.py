@@ -47,6 +47,7 @@ def warm_standard_gseason_cache(
     strips: Iterable[str] = STRIPS,
     depths: Iterable[str] = SENSOR_DEPTH_CODES,
     unit_systems: Iterable[str] = ("us", "metric"),
+    verify_only: bool = False,
 ) -> dict[str, Any]:
     """Materialize default seasonal summaries for every dashboard filter.
 
@@ -93,6 +94,10 @@ def warm_standard_gseason_cache(
                     continue
 
                 if frame is None:
+                    if verify_only:
+                        raise RuntimeError(
+                            f"Missing or stale seasonal cache: {year}/{variable}/{strip}/{depth}/{missing_units}"
+                        )
                     # Operational ETL runs in a subprocess, so discard any
                     # frame loaded before publication and read current files.
                     clear_logger_data_cache()
@@ -133,10 +138,11 @@ def warm_standard_gseason_cache(
 
 def warm_standard_gseason_caches(
     years: Iterable[int] = YEARS,
+    *, verify_only: bool = False,
 ) -> dict[str, Any]:
     """Verify all configured years, computing only missing or stale entries."""
     started = perf_counter()
-    results = [warm_standard_gseason_cache(int(year)) for year in years]
+    results = [warm_standard_gseason_cache(int(year), **({"verify_only": True} if verify_only else {})) for year in years]
     return {
         "status": "warmed",
         "years": [result["year"] for result in results],
@@ -166,11 +172,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify every configured year and rebuild only missing or stale entries",
     )
+    parser.add_argument("--verify-only", action="store_true", help="Reject missing/stale entries without loading datasets or rebuilding")
     args = parser.parse_args(argv)
     result = (
-        warm_standard_gseason_caches()
+        warm_standard_gseason_caches(**({"verify_only": True} if args.verify_only else {}))
         if args.all_years
-        else warm_standard_gseason_cache(args.year)
+        else warm_standard_gseason_cache(args.year, **({"verify_only": True} if args.verify_only else {}))
     )
     print(json.dumps(result, indent=2))
     return 0
