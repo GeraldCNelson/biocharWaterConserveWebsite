@@ -555,6 +555,7 @@ def fetch_batch(
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
     record_start: int | None = None,
     record_end: int | None = None,
+    defer_no_data: bool = False,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -667,6 +668,10 @@ def fetch_batch(
                 OSError,
                 RuntimeError,
             ) as exc:
+                if defer_no_data and not fetch_state.frames:
+                    logging.warning("%s (logger %s) returned no records; deferring to a later pass: %s",
+                                    station, dest_id, exc)
+                    break
                 if isinstance(exc, TypeError) and "NoneType" not in str(exc):
                     logging.exception(
                         "%s (logger %s) failed with a non-retryable error: %s",
@@ -698,6 +703,10 @@ def fetch_batch(
                     time.sleep(retry_pause)
             except Exception as exc:
                 if isinstance(exc, _legacy_retryable_exceptions):
+                    if defer_no_data and not fetch_state.frames:
+                        logging.warning("%s (logger %s) returned no records; deferring to a later pass: %s",
+                                        station, dest_id, exc)
+                        break
                     if attempt == station_attempts:
                         logging.error(
                             "%s (logger %s) did not respond after %s attempts: %s. Skipping.",
@@ -737,6 +746,7 @@ def fetch_isolated_stations(
     response_timeout_seconds: float = PAKBUS.response_timeout_seconds,
     record_start: int | None = None,
     record_end: int | None = None,
+    defer_no_data: bool = False,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -781,6 +791,8 @@ def fetch_isolated_stations(
                         str(record_end),
                     ]
                 )
+            if defer_no_data:
+                command.append("--defer-no-data")
             logging.info(
                 "Starting isolated download for %s (%s of %s)",
                 station, index + 1, len(stations),
@@ -905,6 +917,8 @@ def main() -> None:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument("--defer-no-data", action="store_true",
+                        help="Defer stations returning no records to a later pass; immediately retry interrupted transfers only.")
     args = parser.parse_args()
     configure_logging(args.log_level)
 
@@ -944,6 +958,7 @@ def main() -> None:
             response_timeout_seconds=args.response_timeout,
             record_start=args.record_start,
             record_end=args.record_end,
+            defer_no_data=args.defer_no_data,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -970,6 +985,7 @@ def main() -> None:
         response_timeout_seconds=args.response_timeout,
         record_start=args.record_start,
         record_end=args.record_end,
+        defer_no_data=args.defer_no_data,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):

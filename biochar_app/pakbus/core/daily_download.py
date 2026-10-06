@@ -801,7 +801,8 @@ def missing_stations(
 
 def merge_download_frames(initial: pd.DataFrame, recovery: pd.DataFrame) -> pd.DataFrame:
     """Merge recovery rows without duplicating previously downloaded records."""
-    combined = pd.concat([initial, recovery], ignore_index=True)
+    combined = (recovery.copy() if initial.empty else initial.copy() if recovery.empty
+                else pd.concat([initial, recovery], ignore_index=True))
     keys = [key for key in ("station", "logger_id", "Datetime", "RecNbr") if key in combined]
     if keys:
         combined = combined.drop_duplicates(subset=keys, keep="last")
@@ -838,6 +839,7 @@ def _run_client(
         timezone,
         "--log-level",
         "INFO",
+        "--defer-no-data",
     ]
     selected = list(stations or [])
     if selected:
@@ -941,15 +943,19 @@ def main(argv: list[str] | None = None) -> int:
         if timing_path.exists():
             report["station_timings"] = json.loads(timing_path.read_text(encoding="utf-8"))
         report["download_exit_code"] = result.returncode
-        if result.returncode != 0 or not raw_csv.exists():
-            finding = Finding("critical", "download_failed", f"Downloader exited with status {result.returncode}")
+        # No completed stations is a recoverable first-pass outcome, not a
+        # reason to bypass recovery. Unexpected crashes without station timings
+        # still stop rather than masquerading as a communications failure.
+        if result.returncode != 0 and not report.get("station_timings"):
             report["status"] = "failed_download"
-            report["findings"] = [asdict(finding)]
+            report["findings"] = [asdict(Finding("critical", "download_failed",
+                f"Downloader exited with status {result.returncode} without station diagnostics"))]
+            report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
             _finish_report(report, report_path, args.alert_config)
-            print(f"CRITICAL: {finding.message}; see {report_path}", file=sys.stderr)
             return 1
-
-        frame = pd.read_csv(raw_csv)
+        frame = pd.read_csv(raw_csv) if raw_csv.exists() else pd.DataFrame(
+            columns=["station", "logger_id", "Datetime", "RecNbr", "BattV_Min"]
+        )
         initially_missing = missing_stations(frame)
         if initially_missing:
             report["recovery"] = {
