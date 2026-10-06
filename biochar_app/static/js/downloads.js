@@ -894,6 +894,45 @@ function selectedBulkUnitSystem() {
 /**
  * @returns {Promise<void>}
  */
+async function runBulkDownloadWithFeedback(btn, download, refreshState) {
+  if (btn.dataset.bulkDownloading === "true") return false;
+  const label = btn.textContent;
+  const statusId = `${btn.id}-status`;
+  let status = document.getElementById(statusId);
+  if (!status) {
+    status = document.createElement("p");
+    status.id = statusId;
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.setAttribute("aria-atomic", "true");
+    btn.insertAdjacentElement("afterend", status);
+    btn.setAttribute("aria-describedby", statusId);
+  }
+  btn.dataset.bulkDownloading = "true";
+  btn.disabled = true;
+  btn.setAttribute("aria-disabled", "true");
+  btn.setAttribute("aria-busy", "true");
+  btn.textContent = "Preparing download…";
+  status.className = "small mt-1 mb-0 text-muted";
+  status.textContent = "Preparing ZIP download. Large datasets may take a minute or longer.";
+  try {
+    await download();
+    status.className = "small mt-1 mb-0 text-success";
+    status.textContent = "Download started. Check your browser’s downloads.";
+    return true;
+  } catch (err) {
+    console.error("❌ Bulk download failed:", err);
+    status.className = "small mt-1 mb-0 text-danger";
+    status.textContent = "Download failed. Please try again. If it keeps failing, contact us.";
+    return false;
+  } finally {
+    delete btn.dataset.bulkDownloading;
+    btn.textContent = label;
+    btn.setAttribute("aria-busy", "false");
+    refreshState();
+  }
+}
+
 export async function initBulkDownloadTab() {
   const yearEl = /** @type {HTMLSelectElement | null} */ (
     document.getElementById("bulk-year") ||
@@ -931,9 +970,10 @@ export async function initBulkDownloadTab() {
   }
 
   function setButtonState(btn, { visualEnabled, hardDisable = false }) {
-    btn.disabled = hardDisable;
+    const busy = btn.dataset.bulkDownloading === "true";
+    btn.disabled = hardDisable || busy;
     btn.classList.toggle("disabled", !visualEnabled);
-    btn.setAttribute("aria-disabled", String(!visualEnabled));
+    btn.setAttribute("aria-disabled", String(hardDisable || busy || !visualEnabled));
   }
 
   /** @type {any} */
@@ -1091,6 +1131,7 @@ export async function initBulkDownloadTab() {
   for (const btn of buttons) {
     btn.addEventListener("click", async (evt) => {
       evt.preventDefault();
+      if (btn.dataset.bulkDownloading === "true") return;
 
       const uiDatasetRaw = btn.dataset.dataset || btn.getAttribute("data-dataset") || "";
       const uiDataset = String(uiDatasetRaw || "").trim();
@@ -1144,12 +1185,9 @@ export async function initBulkDownloadTab() {
 
       const fallbackZipName = buildFilename(["biochar", key, suffix]) + ".zip";
 
-      try {
-        await postAndDownload("/api/bulk_download", payload, fallbackZipName);
-      } catch (err) {
-        console.error("❌ Bulk download failed:", err);
-        alert("Unable to download the selected dataset. Please check the console.");
-      }
+      await runBulkDownloadWithFeedback(btn,
+        () => postAndDownload("/api/bulk_download", payload, fallbackZipName),
+        refreshEnabledState);
     });
   }
 
