@@ -586,6 +586,7 @@ def _publish_to_production(
     result = subprocess.run(
         command,
         cwd=REPO_ROOT,
+        env={**os.environ, "BIOCHAR_DEPLOY_PYTHON": sys.executable},
         capture_output=True,
         text=True,
         check=False,

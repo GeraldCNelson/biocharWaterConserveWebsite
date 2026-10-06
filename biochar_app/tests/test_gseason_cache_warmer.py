@@ -1,8 +1,20 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from biochar_app.scripts import gseason_cache_warmer
+
+
+def test_verify_only_rejects_stale_cache_without_loading_data(monkeypatch):
+    monkeypatch.setattr(gseason_cache_warmer, "load_materialized_gseason_summary", lambda **kwargs: None)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Verification must not load source datasets")
+    monkeypatch.setattr(gseason_cache_warmer, "load_logger_data", forbidden)
+    with pytest.raises(RuntimeError, match="Missing or stale seasonal cache"):
+        gseason_cache_warmer.warm_standard_gseason_cache(
+            2026, variables=["VWC"], strips=["S1"], depths=["1"], verify_only=True,
+        )
 
 
 def test_warmer_materializes_each_requested_filter_and_unit(monkeypatch) -> None:
@@ -82,12 +94,23 @@ def test_warmer_reuses_valid_entries_without_loading_source(monkeypatch) -> None
         strips=["S3"],
         depths=["1"],
         unit_systems=["us", "metric"],
+        verify_only=True,
     )
 
     assert result["computed_configurations"] == 0
     assert result["reused_configurations"] == 1
     assert result["cache_entries"] == 0
     assert result["reused_cache_entries"] == 2
+
+
+def test_verify_cli_checks_all_years(monkeypatch, capsys):
+    calls = []
+    def verify(**kwargs):
+        calls.append(kwargs)
+        return {"status": "warmed"}
+    monkeypatch.setattr(gseason_cache_warmer, "warm_standard_gseason_caches", verify)
+    assert gseason_cache_warmer.main(["--all-years", "--verify-only"]) == 0
+    assert calls == [{"verify_only": True}]
 
 
 def test_all_years_aggregates_computed_and_reused_entries(monkeypatch) -> None:
