@@ -141,6 +141,46 @@ def clear_logger_data_cache() -> None:
     """Clear runtime data after an in-process data refresh or in tests."""
     _load_logger_data_cached.cache_clear()
 
+
+def load_seasonal_logger_slice(year: int, variable: str, depth: str) -> pd.DataFrame:
+    """Read only one variable/depth, without retaining full historical datasets.
+
+    Keep every strip for paired ratios, and every timestamp for unchanged
+    period/coverage semantics. Weather is not used by seasonal logger stats.
+    """
+    import pyarrow.parquet as pq
+
+    base = Path(PARQUET_SUMMARY_DIR) / "15min"
+    raw_path = base / f"{year}_15min.parquet"
+    if not raw_path.exists():
+        raise FileNotFoundError(raw_path)
+
+    def wanted(name: str) -> bool:
+        if name == "timestamp":
+            return True
+        if variable == "SWC":
+            return name.startswith(("SWC_vol_gal_", "SWC_vol_L_")) and name.endswith(f"_{depth}")
+        return name.startswith(f"{variable}_{depth}_raw_") or name.startswith((
+            f"{variable}_{depth}_ratio_S1_S2_", f"{variable}_{depth}_ratio_S3_S4_",
+        ))
+
+    def read(path: Path, excluded: set[str]) -> pd.DataFrame:
+        columns = [name for name in pq.read_schema(path).names
+                   if wanted(name) and (name == "timestamp" or name not in excluded)]
+        frame = pd.read_parquet(path, columns=columns)
+        if "timestamp" not in frame:
+            frame = frame.reset_index()
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce")
+        return frame.dropna(subset=["timestamp"])
+
+    frame = read(raw_path, set())
+    ratio_path = base / f"{year}_15min_ratios.parquet"
+    if ratio_path.exists():
+        ratios = read(ratio_path, set(frame.columns))
+        if len(ratios.columns) > 1:
+            frame = frame.merge(ratios, on="timestamp", how="left")
+    return frame.sort_values("timestamp").reset_index(drop=True)
+
 def _weather_base_dir(granularity: str) -> Path:
     gran = granularity.lower()
     mapping: dict[str, Path] = {
