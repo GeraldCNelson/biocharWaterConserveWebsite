@@ -341,12 +341,15 @@ Depth codes: 1 = 6 inches; 2 = 12 inches; 3 = 18 inches.
 Top, Middle and Bottom refer to positions along a strip, not sensor depths.
 Blank numeric cells mean unavailable data, not zero.
 Coverage uses expected 15-minute observations from the period start through the elapsed portion of the period (not future dates), rounded to one decimal place and capped at 100%.
+Coverage is valid observations divided by expected observations, multiplied by 100. Missing observations can reflect recording gaps or values excluded by quality checks; the coverage percentage alone does not identify the cause.
+The chart note "Some observations missing" means at least one displayed logger has less than 100% reported raw coverage, even if the shortfall is small. "Season unfinished" instead identifies a seasonal window whose end date has not yet passed.
+Coverage percentages are reported separately for each year, logger position and treatment pair. Missing observations can affect seasonal means, especially when gaps cluster during unusually wet or dry periods.
 
 COLUMN DEFINITIONS
 seasonal_period: Name and date boundaries of the selected seasonal period.
 variable: Website variable code (for example VWC).
 year: Anchor year used to label the seasonal period. A winter period can begin in the preceding calendar year.
-status: Complete, Partial, or Not started, describing the seasonal period's progress; Complete does not guarantee complete data coverage.
+status: Complete, Partial, No data, or Not started. Partial can indicate missing valid raw observations or an unfinished season. No data means no raw mean is available. Coverage percentages provide the quantitative detail.
 logger_position: Top, Middle or Bottom location along each strip.
 raw_strip: Strip selected for the raw-value summary (S1, S2, S3 or S4).
 raw_depth_code: Depth code used for the raw-value summary.

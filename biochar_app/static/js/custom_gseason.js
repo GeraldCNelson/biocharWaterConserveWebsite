@@ -36,6 +36,29 @@ export function initCustomGseason(cfg) {
    *   endMD?: string
    * }>} */
   let periodsData = [];
+  const seasonWindow = /** @type {any} */ (window);
+  const applyBtn = document.getElementById("apply-seasons");
+  const applyStatus = document.getElementById("apply-seasons-status");
+  function markPending() {
+    if (applyStatus) applyStatus.textContent = "Unapplied changes. Click Apply Seasons when finished.";
+  }
+  function applySeasons() {
+    // Read committed native-control values even if a change event is pending.
+    const rows = Array.from(containerEl.children);
+    const snapshot = periodsData.map((p, idx) => ({
+      code: p.code, label: rows[idx]?.querySelector(".period-label")?.value ?? p.label,
+      start: rows[idx]?.querySelector(".period-start")?.value || "",
+      end: rows[idx]?.querySelector(".period-end")?.value || "",
+    }));
+    const realDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+      Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
+    if (!snapshot.length || snapshot.some(p => !p.label.trim() || !realDate(p.start) || !realDate(p.end) || p.start > p.end)) {
+      if (applyStatus) applyStatus.textContent = "Enter a name and valid start/end dates for every period; the start must not follow the end.";
+      return;
+    }
+    seasonWindow.appliedCustomSeasons = { anchorYear: Number(yearSelectEl.value), periods: snapshot };
+    if (applyStatus) applyStatus.textContent = "Seasons applied. Select Seasonal Periods, then update your plots or summary.";
+  }
 
   const yearSelect = /** @type {HTMLSelectElement | null} */ (
     document.getElementById("anchor-year")
@@ -100,8 +123,10 @@ export function initCustomGseason(cfg) {
   // 2) initialize periodsData from defaults
   function initPeriodsData() {
     periodsData = defaultPeriods.map((p) => {
-      const [sm] = p.start.split("-");
-      const [em] = p.end.split("-");
+      const startMD = p.start.slice(-5);
+      const endMD = p.end.slice(-5);
+      const [sm] = startMD.split("-");
+      const [em] = endMD.split("-");
       const wraps = parseInt(sm, 10) > parseInt(em, 10);
       const startYear = wraps ? defaultYear - 1 : defaultYear;
       const endYear = wraps ? defaultYear : defaultYear;
@@ -110,10 +135,10 @@ export function initCustomGseason(cfg) {
         code: p.code,
         isDefault: true,
         label: p.label,
-        startMD: p.start,
-        endMD: p.end,
-        start: `${startYear}-${p.start}`,
-        end: `${endYear}-${p.end}`,
+        startMD,
+        endMD,
+        start: `${startYear}-${startMD}`,
+        end: `${endYear}-${endMD}`,
       };
     });
   }
@@ -193,32 +218,43 @@ export function initCustomGseason(cfg) {
         removeBtn.onclick = () => {
           periodsData.splice(idx, 1);
           renderPeriods();
+          markPending();
         };
       }
 
       if (labelInput) {
+        labelInput.value = p.label;
         labelInput.oninput = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
           periodsData[idx].label = target?.value || "";
           updateSeasonalPeriodSummary();
+          markPending();
         };
       }
 
       if (startInput) {
-        startInput.oninput = (e) => {
+        // Set native date-control state explicitly after inserting the row.
+        // Ignore events from controls detached by an anchor-year re-render.
+        startInput.value = p.start;
+        startInput.onchange = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
-          periodsData[idx].start = target?.value || "";
-          periodsData[idx].isDefault = false;
+          if (!target?.isConnected) return;
+          p.start = target.value;
+          p.isDefault = false;
           updateSeasonalPeriodSummary();
+          markPending();
         };
       }
 
       if (endInput) {
-        endInput.oninput = (e) => {
+        endInput.value = p.end;
+        endInput.onchange = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
-          periodsData[idx].end = target?.value || "";
-          periodsData[idx].isDefault = false;
+          if (!target?.isConnected) return;
+          p.end = target.value;
+          p.isDefault = false;
           updateSeasonalPeriodSummary();
+          markPending();
         };
       }
           });
@@ -240,14 +276,34 @@ export function initCustomGseason(cfg) {
     });
 
     renderPeriods();
+    markPending();
   };
 
   // 5) re-render on anchor-year change
-  yearSelectEl.onchange = renderPeriods;
+  let displayedAnchor = Number(yearSelectEl.value);
+  yearSelectEl.onchange = () => {
+    const newAnchor = Number(yearSelectEl.value);
+    const delta = newAnchor - displayedAnchor;
+    for (const period of periodsData) {
+      if (period.isDefault) continue;
+      for (const bound of ["start", "end"]) {
+        const value = period[bound];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) continue;
+        const [year, month, day] = value.split("-").map(Number);
+        const shiftedYear = year + delta;
+        const shiftedDay = Math.min(day, new Date(shiftedYear, month, 0).getDate());
+        period[bound] = `${shiftedYear}-${String(month).padStart(2, "0")}-${String(shiftedDay).padStart(2, "0")}`;
+      }
+    }
+    displayedAnchor = newAnchor;
+    renderPeriods(); markPending();
+  };
+  if (applyBtn) applyBtn.onclick = applySeasons;
 
   // 6) initial bootstrap
   initPeriodsData();
   renderPeriods();
+  applySeasons();
 
   // 7) expose periodsData for debugging just before you POST
   return () => periodsData;

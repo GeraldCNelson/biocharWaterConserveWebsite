@@ -14,7 +14,7 @@
 // 6. Choose ONE legend mode from plot-1 and force plot-2 to match it.
 // 7. Reserve enough right-side space for the wider ratio legend when legend mode is "right".
 
-import { getSelectedFilters } from "./ui_controls.js";
+import { getSelectedFilters } from "./ui_controls.js?v=20261007-apply-seasons";
 import { isMobileDevice } from "./ui_utils.js";
 import { showLoadingOverlay, hideLoadingOverlay } from "./ui_loading.js";
 
@@ -404,7 +404,7 @@ async function syncPairGeometryFromRaw() {
  * @param {string} plotDivId
  * @returns {Promise<void>}
  */
-export async function fetchAndRenderPlot(plotType, plotDivId) {
+export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = null) {
   const targetId = plotDivId || `plot-${plotType}`;
   const label = `🔧 fetchAndRenderPlot("${plotType}", "#${targetId}")`;
   console.group(label);
@@ -429,7 +429,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId) {
     }
 
     /** @type {{ kind?: string } & Record<string, any>} */
-    const filters = getSelectedFilters("main") || {};
+    const filters = {...(filterSnapshot || getSelectedFilters("main") || {})};
     filters.kind = plotType;
     console.log("plot filters being sent:", filters);
 
@@ -717,8 +717,10 @@ export async function renderMainPlots() {
     plotWindow._plotLegendMode = null;
     plotWindow._initialXRange = null;
 
-    await fetchAndRenderPlot("raw", "plot-1");
-    await fetchAndRenderPlot("ratio", "plot-2");
+    const filters = getSelectedFilters("main");
+    if (!filters) return;
+    await fetchAndRenderPlot("raw", "plot-1", filters);
+    await fetchAndRenderPlot("ratio", "plot-2", filters);
   } catch (err) {
     console.error("❌ renderMainPlots uncaught:", err);
   } finally {

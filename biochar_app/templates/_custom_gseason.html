@@ -1,16 +1,17 @@
 {# templates/_custom_gseason.html #}
   <h2 id="gseason-heading">Custom Seasons</h2>
   <p>
-    The Interactive Plots and Summary Results tabs provide results at
-    standard temporal aggregations — every 15 minutes, hourly, daily, and monthly.
-    This tab allows you to build your own aggregations to particular seasonal times. These can extend from before the anchor year
-    to after it. The seasonal window can have multiple periods as shown below
-    with some default values.
+    Define seasonal periods for Interactive Plots and Summary Results. The anchor
+    year is a reference year: in the example below Winter for anchor year 2025 runs from
+    November 2024 through March 2025. A period may fall within the anchor year or
+    extend before or after it.
   </p>
   <p>
-    You can modify the time windows and period names below or just leave them as is.
-    You can also add new periods. In the next two tabs, you can choose an aggregation
-    to view, either a standard aggregation or the custom-built aggregation defined below.
+    Edit the names and dates, then click Apply Seasons. The same relative dates
+    apply to every year selected in the plots and summaries, not just the anchor
+    year. Choose Seasonal Periods there and click Update Plots or Update Summary.
+    Periods without full data coverage (especially the first winter) are marked
+    incomplete. Applied settings last until this page is reloaded.
   </p>
 
 <!-- flex row for Anchor Year + Add button -->
@@ -29,3 +30,5 @@
 
 <!-- single-column list of period cards -->
 <div id="periods-container" class="row g-1 row-cols-1"></div>
+<button id="apply-seasons" type="button" class="btn btn-primary mt-3">Apply Seasons</button>
+<p id="apply-seasons-status" class="form-text mt-2" role="status" aria-live="polite"></p>

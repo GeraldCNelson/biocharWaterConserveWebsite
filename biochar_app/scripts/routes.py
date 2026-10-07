@@ -43,7 +43,8 @@ from biochar_app.scripts.readme_builders import (
     build_plot_download_readme,
 )
 
-from biochar_app.scripts.data_loading import load_logger_data
+from biochar_app.scripts.data_loading import load_logger_data, load_seasonal_logger_slice
+from threading import Lock
 
 from biochar_app.scripts.gseason_utils import (
     compute_summary_statistics,
@@ -186,6 +187,7 @@ templates = Jinja2Templates(
 
 _LOADED_LOGGER_CACHE: dict[tuple[int, str], Any] = {}
 _MULTIYEAR_GSEASON_CACHE: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+_SEASONAL_COMPUTE_LOCK = Lock()
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -622,6 +624,7 @@ class PlotRequest(BaseModel):
     traceOption: str
     unitSystem: str
     periods: Optional[list[PeriodSpec]] = Field(default=None)
+    periodsAnchorYear: Optional[int] = None
 
 class DownloadDataRequest(BaseModel):
     year: int
@@ -668,12 +671,16 @@ async def api_plot_raw(req: PlotRequest):
 
     if gran == "gseason":
         periods_raw = req.periods or []
-        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
+        periods_list = rebase_periods_to_anchor_year(
+            periods_raw or DEFAULT_GSEASON_PERIODS,
+            source_year=req.periodsAnchorYear or year, target_year=year,
+        )
 
-        df_gseason = load_gseason_df(
+        df_gseason = await asyncio.to_thread(load_gseason_df,
             year=year,
             periods=periods_list,
             unit_system=unit,
+            variable=var,
         )
 
         fig = make_raw_gseason_figure(
@@ -760,12 +767,16 @@ async def api_plot_ratio(req: PlotRequest):
     start, end = req.startDate, req.endDate
 
     if gran == "gseason":
-        periods = req.periods or []
-        df_gs = load_gseason_df(
+        periods = rebase_periods_to_anchor_year(
+            req.periods or DEFAULT_GSEASON_PERIODS,
+            source_year=req.periodsAnchorYear or year, target_year=year,
+        )
+        df_gs = await asyncio.to_thread(load_gseason_df,
             year=year,
             periods=periods,
             unit_system=unit,
             use_ratios=True,
+            variable=var,
         )
         fig = make_ratio_gseason_figure(
             df=df_gs,
@@ -875,7 +886,7 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
         )
         periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
 
-        def load_or_compute_year(
+        def load_or_compute_year_unlocked(
             summary_year: int,
             summary_periods: list[dict[str, Any]],
         ) -> list[dict[str, Any]]:
@@ -893,20 +904,10 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                     logger.info("Materialized seasonal summary cache hit: year=%s", summary_year)
                     return cached_rows
 
-            logger_cache_key = (summary_year, "15min")
-            summary_df = _LOADED_LOGGER_CACHE.get(logger_cache_key)
-            if summary_df is None:
-                try:
-                    summary_df = load_logger_data(summary_year, "15min")
-                except FileNotFoundError:
-                    summary_df = None
-                if summary_df is not None and not getattr(summary_df, "empty", True):
-                    if "timestamp" in summary_df.columns:
-                        summary_df = summary_df.copy()
-                        summary_df["timestamp"] = pd.to_datetime(
-                            summary_df["timestamp"], errors="coerce"
-                        )
-                    _LOADED_LOGGER_CACHE[logger_cache_key] = summary_df
+            try:
+                summary_df = load_seasonal_logger_slice(summary_year, variable, depth_code)
+            except FileNotFoundError:
+                summary_df = None
 
             rows: list[dict[str, Any]] = []
             if summary_df is not None and not getattr(summary_df, "empty", True):
@@ -936,6 +937,11 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                         summary_year,
                     )
             return rows
+
+        def load_or_compute_year(summary_year, summary_periods):
+            # Bound peak memory across concurrent requests as well as years.
+            with _SEASONAL_COMPUTE_LOCK:
+                return load_or_compute_year_unlocked(summary_year, summary_periods)
 
         flat = await asyncio.to_thread(load_or_compute_year, year, periods_list)
 
@@ -996,10 +1002,11 @@ async def api_get_summary_stats(payload: dict[str, Any] = Body(...)):
                         ),
                     }
 
-                multi_year_gseason = list(await asyncio.gather(*(
-                    asyncio.to_thread(build_comparison_year, int(comparison_year))
-                    for comparison_year in YEARS
-                )))
+                multi_year_gseason = []
+                for comparison_year in YEARS:
+                    multi_year_gseason.append(await asyncio.to_thread(
+                        build_comparison_year, int(comparison_year)
+                    ))
                 if len(_MULTIYEAR_GSEASON_CACHE) >= 128:
                     _MULTIYEAR_GSEASON_CACHE.pop(next(iter(_MULTIYEAR_GSEASON_CACHE)))
                 _MULTIYEAR_GSEASON_CACHE[summary_cache_key] = multi_year_gseason

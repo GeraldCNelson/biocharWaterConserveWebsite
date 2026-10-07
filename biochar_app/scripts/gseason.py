@@ -75,15 +75,15 @@ def compute_seasons(
 
     out_rows = []
     for code, spec in periods.items():
-        sm, sd = map(int, spec["start"].split("-"))
-        em, ed = map(int, spec["end"].split("-"))
+        sm, sd = map(int, spec["start"][-5:].split("-"))
+        em, ed = map(int, spec["end"][-5:].split("-"))
 
         # Resolve window for this calendar year (wrap-aware, e.g., Nov–Feb)
         start_year = year - 1 if sm > em else year
         end_year = year
-        start = pd.Timestamp(f"{start_year}-{spec['start']}")
+        start = pd.Timestamp(spec["start"] if len(spec["start"]) == 10 else f"{start_year}-{spec['start']}")
         end = (
-            pd.Timestamp(f"{end_year}-{spec['end']}")
+            pd.Timestamp(spec["end"] if len(spec["end"]) == 10 else f"{end_year}-{spec['end']}")
             + pd.Timedelta(days=1)
             - pd.Timedelta(seconds=1)
         )
@@ -111,6 +111,12 @@ def compute_seasons(
             "end": end,
         }
         row.update(means)
+        expected = int((end + pd.Timedelta(seconds=1) - start) / pd.Timedelta(minutes=15))
+        numeric_window = df.loc[window_mask].select_dtypes(include="number").drop(columns=[precip_col], errors="ignore")
+        observed = int(numeric_window.notna().any(axis=1).sum())
+        row["period_observed_n"] = observed
+        row["period_expected_n"] = expected
+        row["period_incomplete"] = observed < expected
 
         # SUM of precip increments over the window
         if include_precip and precip_col is not None:

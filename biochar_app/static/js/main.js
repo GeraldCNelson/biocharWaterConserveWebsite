@@ -6,7 +6,7 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20260925-season-order-21";
+import { initSummaryTab } from "./tab_summary.js?v=20261007-comparison-headings";
 import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
@@ -19,7 +19,7 @@ import {
 } from "./downloads.js?v=20260925-season-order-21";
 
 // 3) Debugging & logging
-import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20260822-plot-layout-1";
+import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20261007-apply-seasons";
 import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader
@@ -31,7 +31,7 @@ import {
   setupUnitToggleHandlers,
   getAllDropdownIds,
   initializeTraceOptionControls,
-} from "./control_panel.js?v=20260925-season-order-21";
+} from "./control_panel.js?v=20261007-comparison-headings";
 
 import {
   fetchDefaultsAndOptions,
@@ -40,10 +40,10 @@ import {
   updateDepthLabels,
   applyDateRangeFromDefaults,
   wireMainDateRangeListeners,
-} from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
+} from "./ui_controls.js?v=20261007-apply-seasons";
 
 // 7) Custom-season setup
-import { initCustomGseason } from "./custom_gseason.js?v=20260919-custom-seasons-fix-2";
+import { initCustomGseason } from "./custom_gseason.js?v=20261007-apply-seasons";
 
 /**
  * @typedef {Window & {

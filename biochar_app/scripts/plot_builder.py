@@ -975,7 +975,8 @@ def make_raw_gseason_figure(
 
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
-    labels = [f"{p['label']} ({p['start']}-{p['end']})" for p in norm_periods]
+    incomplete = df2.get("period_incomplete", pd.Series(False, index=df2.index)).tolist()
+    labels = [f"{p['label']} ({p['start']}-{p['end']})" + (" — incomplete data" if idx < len(incomplete) and incomplete[idx] else "") for idx, p in enumerate(norm_periods)]
 
     fig = go.Figure()
 
@@ -1187,7 +1188,8 @@ def make_ratio_gseason_figure(
     usys: UnitSystem = coerce_unit_system(unit_system)
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
-    labels = [f"{p['label']} ({p['start']}-{p['end']})" for p in norm_periods]
+    incomplete = df2.get("period_incomplete", pd.Series(False, index=df2.index)).tolist()
+    labels = [f"{p['label']} ({p['start']}-{p['end']})" + (" — incomplete data" if idx < len(incomplete) and incomplete[idx] else "") for idx, p in enumerate(norm_periods)]
 
     fig = go.Figure()
 

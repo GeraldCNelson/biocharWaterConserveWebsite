@@ -8,7 +8,7 @@
 
 import { fetchJson, generateSummaryTable, formatGseasonLabel } from "./api_requests.js";
 import { getDropdownValue } from "./ui_utils.js";
-import { getCustomSeasonPeriods } from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
+import { getCustomSeasonPeriods } from "./ui_controls.js?v=20261007-apply-seasons";
 import { showLoadingOverlay, hideLoadingOverlay, startLoadingDots, stopLoadingDots } from "./ui_loading.js";
 
 /**
@@ -473,7 +473,11 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
     const title = (typeof formatGseasonLabel === "function")
       ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
-    const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear);
+    const unavailable = Object.values(rawStats).every((s) => s?.mean == null);
+    const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear) || (unavailable
+      ? "No data are available for this seasonal period."
+      : (Object.values(rawStats).some((s) => s?.coverage_pct != null && s.coverage_pct < 100)
+        ? "This period has incomplete data coverage. Statistics use available observations only." : ""));
     const isWinter = /winter/i.test(`${code} ${spec?.label || ""}`);
     const winterAttributes = isWinter ? " data-winter-detail hidden" : "";
 
@@ -538,7 +542,7 @@ function comparisonRowsForPeriod(yearEntries, periodCode, variable) {
     if (!period || !Number.isFinite(year)) return;
 
     const notice = getIncompletePeriodNotice(period, year);
-    const status = notice.includes("not started") ? "Not started" : (notice ? "Partial" : "Complete");
+    const temporalStatus = notice.includes("not started") ? "Not started" : (notice ? "Partial" : "Complete");
     const periodRows = (entry?.gseason_stats || []).filter((row) => row?.period_code === periodCode);
     positions.forEach((position) => {
       const raw = periodRows.find((row) => row?.logger_location === position && row?.raw_mean != null);
@@ -546,7 +550,7 @@ function comparisonRowsForPeriod(yearEntries, periodCode, variable) {
       const s3s4 = periodRows.find((row) => row?.logger_location === position && row?.ratio_group === "S3/S4");
       rows.push({
         year,
-        status,
+        status: raw?.raw_mean == null ? "No data" : (raw?.raw_coverage_pct != null && raw.raw_coverage_pct < 100 ? "Partial" : temporalStatus),
         position: positionLabels[position],
         rawMean: raw?.raw_mean ?? null,
         rawCoverage: raw?.raw_coverage_pct ?? null,
@@ -570,6 +574,52 @@ function setComparisonDownloadsAvailable(available, visible = true) {
   });
 }
 
+export function comparisonPartialNote(rows, yearEntries, periodCode, today = new Date()) {
+  const partialYears = [...new Set(rows.filter(row => row.status === "Partial").map(row => row.year))];
+  const ongoing = partialYears.filter(year => {
+    const period = yearEntries.find(entry => Number(entry.year) === year)?.periods?.find(p => p.code === periodCode);
+    return Boolean(getIncompletePeriodNotice(period, year, today));
+  });
+  const coverage = partialYears.filter(year => !ongoing.includes(year));
+  return [coverage.length ? `Some observations missing: ${coverage.join(", ")}. Means use available valid observations. See the comparison data download and its README for coverage details.` : "",
+    ongoing.length ? `Season unfinished: ${ongoing.join(", ")}.` : ""].filter(Boolean).map((text, idx) => (idx ? "" : "* ") + text).join(" ");
+}
+
+export function comparisonChartHeading(heading, context, note, width = 640) {
+  const wrap = (text, size) => {
+    const limit = Math.max(18, Math.floor((Math.max(240, width) - 95) / (size * 0.58)));
+    const lines = [];
+    let line = "";
+    for (const word of String(text).split(/\s+/).filter(Boolean)) {
+      if (line && line.length + word.length + 1 > limit) { lines.push(line); line = ""; }
+      // Also wrap unusually long period names without spaces.
+      let remainder = word;
+      while (remainder.length > limit) {
+        if (line) { lines.push(line); line = ""; }
+        lines.push(remainder.slice(0, limit)); remainder = remainder.slice(limit);
+      }
+      line += (line ? " " : "") + remainder;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+  const mainLines = wrap(heading, 18);
+  const detailLines = [...wrap(context, 14), ...wrap(note, 14)];
+  const top = 74 + mainLines.length * 23 + detailLines.length * 17;
+  return {
+    title: {
+      text: mainLines.map(escapeSummaryHTML).join("<br>") +
+        (detailLines.length ? "<br><sup>" + detailLines.map(escapeSummaryHTML).join("<br>") + "</sup>" : ""),
+      // Keep the first text baseline safely inside the SVG in all browsers.
+      x: 0, xref: "paper", xanchor: "left", y: 1, yref: "container", yanchor: "top",
+      pad: { t: 28 },
+      font: { size: 18 },
+    },
+    margin: { l: 70, r: 25, t: top, b: 70 },
+    height: 290 + top + 70,
+  };
+}
+
 async function renderMultiYearComparison(section, yearEntries, periods, variable, unitSystem, selectedCode, metadata = {}) {
   const selectedPeriod = periods.find((period) => period.code === selectedCode) || periods[0];
   if (!selectedPeriod) return;
@@ -582,11 +632,17 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     ? "—"
     : `${numberText(value)}%`;
   const statusClass = { Complete: "text-bg-success", Partial: "text-bg-warning", "Not started": "text-bg-secondary" };
+  const yearStatus = (year) => {
+    const statuses = rows.filter(row => row.year === year).map(row => row.status);
+    if (statuses.every(status => status === "No data")) return "No data";
+    if (statuses.every(status => status === "Not started")) return "Not started";
+    return statuses.every(status => status === "Complete") ? "Complete" : "Partial";
+  };
 
   const tableRows = rows.map((row, index) => `
     <tr>
       ${index % 3 === 0 ? `<th scope="row" rowspan="3" class="align-middle">${row.year}</th>` : ""}
-      ${index % 3 === 0 ? `<td rowspan="3" class="align-middle"><span class="badge ${statusClass[row.status] || "text-bg-secondary"}">${row.status}</span></td>` : ""}
+      ${index % 3 === 0 ? `<td rowspan="3" class="align-middle"><span class="badge ${statusClass[yearStatus(row.year)] || "text-bg-secondary"}">${yearStatus(row.year)}</span></td>` : ""}
       <th scope="row">${row.position}</th>
       <td>${numberText(row.rawMean)}</td>
       <td>${coverageText(row.rawCoverage)}</td>
@@ -671,12 +727,8 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   const yearRange = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : "available years";
   const rawContext = `Strip ${String(metadata.strip || "").replace(/^S/i, "")}, ${depthLabel}, anchor years ${yearRange}`;
   const ratioContext = `Strip ratios S1/S2 and S3/S4, ${depthLabel}, anchor years ${yearRange}`;
-  const partialYears = years.filter((year) => rows.some(
-    (row) => row.year === year && row.status === "Partial"
-  ));
-  const partialTitleNote = partialYears.length
-    ? `; * ${partialYears.join(", ")} partial (seasonal period still in progress)`
-    : "";
+  const partialTitleNote = comparisonPartialNote(rows, yearEntries, selectedPeriod.code);
+  if (variable === "VWC") prettyVariable = "VWC (%)";
   const commonLayout = {
     autosize: true,
     height: 395,
@@ -684,15 +736,13 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     barmode: "group",
-    legend: { orientation: "h", y: 1.12 },
+    legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, xanchor: "left" },
     xaxis: { title: "Anchor year" },
   };
   const rawRender = plotly.react(rawChart, rawTraces, {
     ...commonLayout,
-    title: {
-      text: `${selectedPeriod.label}: mean ${prettyVariable} by year<br><sup>${rawContext}${partialTitleNote}</sup>`,
-      font: { size: 18 },
-    },
+    ...comparisonChartHeading(`${selectedPeriod.label}: mean ${prettyVariable} by year`, rawContext,
+      partialTitleNote, rawChart.clientWidth || 640),
     yaxis: { title: `Mean ${prettyVariable}`, rangemode: "tozero" },
     xaxis: {
       title: "Anchor year",
@@ -733,10 +783,8 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     ratioTrace("S3/S4", "s3s4Mean", "#df7f3f"),
   ], {
     ...commonLayout,
-    title: {
-      text: `${selectedPeriod.label}: ${variable === "VWC" ? "ratios of seasonal means" : "treatment ratios"} by year<br><sup>${ratioContext}${partialTitleNote}</sup>`,
-      font: { size: 18 },
-    },
+    ...comparisonChartHeading(`${selectedPeriod.label}: ${variable === "VWC" ? "ratios of seasonal means" : "treatment ratios"} by year`, ratioContext,
+      partialTitleNote, ratioChart.clientWidth || 640),
     yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
     shapes: [{
       type: "line",
@@ -845,6 +893,8 @@ function hideSummaryStatus() {
 }
 
 function getCustomPeriodsAnchorYear(fallbackYear) {
+  const applied = /** @type {any} */ (window).appliedCustomSeasons;
+  if (applied) return applied.anchorYear;
   const value = /** @type {HTMLSelectElement | null} */ (
     document.getElementById("anchor-year")
   )?.value;
