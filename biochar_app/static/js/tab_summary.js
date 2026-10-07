@@ -581,7 +581,7 @@ export function comparisonPartialNote(rows, yearEntries, periodCode, today = new
     return Boolean(getIncompletePeriodNotice(period, year, today));
   });
   const coverage = partialYears.filter(year => !ongoing.includes(year));
-  return [coverage.length ? `Incomplete data coverage: ${coverage.join(", ")}.` : "",
+  return [coverage.length ? `Some observations missing: ${coverage.join(", ")}. Means use available valid observations. See the comparison data download and its README for coverage details.` : "",
     ongoing.length ? `Season unfinished: ${ongoing.join(", ")}.` : ""].filter(Boolean).map((text, idx) => (idx ? "" : "* ") + text).join(" ");
 }
 
