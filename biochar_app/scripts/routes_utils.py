@@ -6,6 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, cast, Any
 from biochar_app.scripts.data_loading import load_logger_data
+from biochar_app.scripts.data_loading import load_seasonal_logger_slice
+from biochar_app.scripts.gseason_materialized_cache import gseason_source_paths, source_fingerprint
+from threading import Lock
+import json
 
 import pandas as pd
 
@@ -24,6 +28,48 @@ class PeriodSpec:
     end: str
 
 GSEASON_SUMMARY_DIR = PARQUET_DIR / "summary" / "gseason"
+_PLOT_SEASON_CACHE = {}
+_PLOT_SEASON_LOCK = Lock()
+
+
+def load_projected_seasons(year, periods, variable, unit_system):
+    """Bound custom-plot memory and share small results between raw/ratio requests."""
+    normalized = periods_to_list_of_dicts(periods, preserve_year=True)
+    for p in normalized:
+        wraps = p["start"][-5:] > p["end"][-5:]
+        if len(p["start"]) == 5:
+            p["start"] = f"{year - 1 if wraps else year}-{p['start']}"
+        if len(p["end"]) == 5:
+            p["end"] = f"{year}-{p['end']}"
+    first = min(pd.Timestamp(p["start"]).year for p in normalized)
+    last = max(pd.Timestamp(p["end"]).year for p in normalized)
+    years = range(first, last + 1)
+    fingerprints = tuple((y, source_fingerprint([
+        *gseason_source_paths(y),
+        *list((Path(PARQUET_DIR) / "summary" / "weather" / "daily").glob(f"{y}_daily.parquet")),
+    ])) for y in years)
+    key = (variable, json.dumps(normalized, sort_keys=True), fingerprints)
+    with _PLOT_SEASON_LOCK:
+        if key in _PLOT_SEASON_CACHE:
+            return _PLOT_SEASON_CACHE[key].copy()
+        frames = []
+        for source_year in years:
+            try:
+                frame = load_seasonal_logger_slice(source_year, variable, "*")
+                # Annual products can overlap at year boundaries. Retain the
+                # file's own calendar year without erasing legitimate repeated
+                # local timestamps during the autumn DST transition.
+                frames.append(frame.loc[frame["timestamp"].dt.year == source_year])
+            except FileNotFoundError:
+                continue
+        source = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame({"timestamp": pd.Series(dtype="datetime64[ns]")})
+        period_map = {p["code"]: p for p in normalized}
+        result = compute_seasons(source, year=year, periods=period_map, include_precip=False)
+        result = add_gseason_precip_from_daily(result, year, normalized)
+        if len(_PLOT_SEASON_CACHE) >= 32:
+            _PLOT_SEASON_CACHE.pop(next(iter(_PLOT_SEASON_CACHE)))
+        _PLOT_SEASON_CACHE[key] = result
+        return result.copy()
 
 def load_summary_df(year: int, granularity: str, variable: str, strip: str) -> pd.DataFrame:
     path = PARQUET_DIR / "summary" / granularity / f"{year}_{granularity}.parquet"
@@ -53,11 +99,14 @@ def load_gseason_df(
     periods: Any,
     unit_system: str = "us",
     use_ratios: bool = False,
+    variable: str | None = None,
 ) -> pd.DataFrame:
     """
     Load growing-season aggregated data for `year`.
     """
-    if not periods:
+    if periods and variable:
+        df = load_projected_seasons(year, periods, variable, unit_system)
+    elif not periods:
         fn_raw = GSEASON_SUMMARY_DIR / f"{year}_gseason.parquet"
         fn_ratio = GSEASON_SUMMARY_DIR / f"{year}_gseason_ratios.parquet"
         fn = fn_ratio if use_ratios else fn_raw
@@ -89,11 +138,8 @@ def load_gseason_df(
 
         period_source = periods
 
-    df = add_gseason_precip_from_daily(
-        df_gs=df,
-        year=year,
-        periods_raw=period_source,
-    )
+    if not (periods and variable):
+        df = add_gseason_precip_from_daily(df_gs=df, year=year, periods_raw=period_source)
 
     has_in = "precip_in" in df.columns
     has_mm = "precip_mm" in df.columns

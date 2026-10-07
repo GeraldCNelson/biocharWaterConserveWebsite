@@ -2,9 +2,9 @@
 // control_panel.js – Shared logic for control panel setup (Main & Summary)
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
-import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
-import { updateSummaryStatistics } from "./tab_summary.js?v=20260925-season-order-21";
-import { renderMainPlots } from "./plots.js?v=20260822-plot-layout-1";
+import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js?v=20261007-apply-seasons";
+import { updateSummaryStatistics } from "./tab_summary.js?v=20261007-comparison-headings";
+import { renderMainPlots } from "./plots.js?v=20261007-apply-seasons";
 
 /**
  * @typedef {Window & {

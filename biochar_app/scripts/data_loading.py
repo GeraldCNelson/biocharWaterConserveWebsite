@@ -159,7 +159,9 @@ def load_seasonal_logger_slice(year: int, variable: str, depth: str) -> pd.DataF
         if name == "timestamp":
             return True
         if variable == "SWC":
-            return name.startswith(("SWC_vol_gal_", "SWC_vol_L_")) and name.endswith(f"_{depth}")
+            return name.startswith(("SWC_vol_gal_", "SWC_vol_L_")) and (depth == "*" or name.endswith(f"_{depth}"))
+        if depth == "*":
+            return name.startswith(f"{variable}_") and ("_raw_" in name or "_ratio_" in name)
         return name.startswith(f"{variable}_{depth}_raw_") or name.startswith((
             f"{variable}_{depth}_ratio_S1_S2_", f"{variable}_{depth}_ratio_S3_S4_",
         ))

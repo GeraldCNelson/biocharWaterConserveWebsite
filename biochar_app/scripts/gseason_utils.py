@@ -721,7 +721,7 @@ def add_gseason_precip_from_daily(
     """
 
     # 1) Normalize periods → list[dict] with keys: code,label,start,end
-    periods = periods_to_list_of_dicts(periods_raw or [])
+    periods = periods_to_list_of_dicts(periods_raw or [], preserve_year=True)
 
     # 2) Load daily weather
     daily_path = (
@@ -731,7 +731,19 @@ def add_gseason_precip_from_daily(
         / "daily"
         / f"{year}_daily.parquet"
     )
-    dfw = pd.read_parquet(daily_path)
+    weather_years = {year}
+    for p in periods:
+        for bound in (p["start"], p["end"]):
+            if len(str(bound)) == 10:
+                weather_years.add(pd.Timestamp(bound).year)
+        if str(p["start"])[-5:] > str(p["end"])[-5:]:
+            weather_years.add(year - 1)
+    weather_frames = []
+    for weather_year in range(min(weather_years), max(weather_years) + 1):
+        candidate = daily_path.with_name(f"{weather_year}_daily.parquet")
+        if candidate.exists():
+            weather_frames.append(pd.read_parquet(candidate))
+    dfw = pd.concat(weather_frames, ignore_index=True) if weather_frames else pd.DataFrame({"timestamp": pd.Series(dtype="datetime64[ns]"), "precip_in": pd.Series(dtype=float)})
     dfw["timestamp"] = pd.to_datetime(dfw["timestamp"], errors="coerce")
     dfw = dfw.set_index("timestamp").sort_index()
 
@@ -744,8 +756,8 @@ def add_gseason_precip_from_daily(
         start_mmdd = str(p["start"])  # e.g. "11-01"
         end_mmdd = str(p["end"])  # e.g. "04-30"
 
-        sm, sd = map(int, start_mmdd.split("-"))
-        em, ed = map(int, end_mmdd.split("-"))
+        sm, sd = map(int, start_mmdd[-5:].split("-"))
+        em, ed = map(int, end_mmdd[-5:].split("-"))
 
         # wrap-around if start month > end month (e.g. Nov→Apr)
         if sm > em:
@@ -754,12 +766,16 @@ def add_gseason_precip_from_daily(
         else:
             start_ts = pd.Timestamp(year, sm, sd)
             end_ts = pd.Timestamp(year, em, ed)
+        if len(start_mmdd) == 10:
+            start_ts = pd.Timestamp(start_mmdd)
+        if len(end_mmdd) == 10:
+            end_ts = pd.Timestamp(end_mmdd)
 
         # inclusive end-of-day (important)
         end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
         mask = (dfw.index >= start_ts) & (dfw.index <= end_ts)
-        total_in = float(dfw.loc[mask, "precip_in"].sum())
+        total_in = float(dfw.loc[mask, "precip_in"].sum()) if mask.any() else np.nan
 
         precip_in_sums.append(total_in)
         precip_mm_sums.append(conv_in_to_mm(total_in))

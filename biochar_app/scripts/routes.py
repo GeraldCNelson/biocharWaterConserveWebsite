@@ -624,6 +624,7 @@ class PlotRequest(BaseModel):
     traceOption: str
     unitSystem: str
     periods: Optional[list[PeriodSpec]] = Field(default=None)
+    periodsAnchorYear: Optional[int] = None
 
 class DownloadDataRequest(BaseModel):
     year: int
@@ -670,12 +671,16 @@ async def api_plot_raw(req: PlotRequest):
 
     if gran == "gseason":
         periods_raw = req.periods or []
-        periods_list = periods_to_list_of_dicts(periods_raw, preserve_year=True)
+        periods_list = rebase_periods_to_anchor_year(
+            periods_raw or DEFAULT_GSEASON_PERIODS,
+            source_year=req.periodsAnchorYear or year, target_year=year,
+        )
 
-        df_gseason = load_gseason_df(
+        df_gseason = await asyncio.to_thread(load_gseason_df,
             year=year,
             periods=periods_list,
             unit_system=unit,
+            variable=var,
         )
 
         fig = make_raw_gseason_figure(
@@ -762,12 +767,16 @@ async def api_plot_ratio(req: PlotRequest):
     start, end = req.startDate, req.endDate
 
     if gran == "gseason":
-        periods = req.periods or []
-        df_gs = load_gseason_df(
+        periods = rebase_periods_to_anchor_year(
+            req.periods or DEFAULT_GSEASON_PERIODS,
+            source_year=req.periodsAnchorYear or year, target_year=year,
+        )
+        df_gs = await asyncio.to_thread(load_gseason_df,
             year=year,
             periods=periods,
             unit_system=unit,
             use_ratios=True,
+            variable=var,
         )
         fig = make_ratio_gseason_figure(
             df=df_gs,

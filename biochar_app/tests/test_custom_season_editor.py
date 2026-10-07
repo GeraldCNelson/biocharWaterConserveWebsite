@@ -25,8 +25,8 @@ class Element {
   appendChild(child) { this.children.push(child); if (child.selected) this.value=child.value; }
   querySelector(key) { return this.inputs[key]; }
 }
-const ids=Object.fromEntries(["anchor-year","add-period","periods-container","seasonal-period-summary"].map(k=>[k,new Element()]));
-const context={console,document:{getElementById:k=>ids[k],createElement:()=>new Element()}};
+const ids=Object.fromEntries(["anchor-year","add-period","periods-container","seasonal-period-summary","apply-seasons","apply-seasons-status"].map(k=>[k,new Element()]));
+const context={console,window:{},document:{getElementById:k=>ids[k],createElement:()=>new Element()}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[1],"utf8").replace(/^export /gm,""),context);
 for (const dated of [false,true]) {
@@ -37,6 +37,10 @@ for (const dated of [false,true]) {
  const container=ids["periods-container"], year=ids["anchor-year"];
  const oldEnd=container.children[0].querySelector(".period-end");
  year.value="2025"; year.onchange();
+ assert.equal(context.window.appliedCustomSeasons.anchorYear,2026);
+ ids["apply-seasons"].onclick();
+ assert.equal(context.window.appliedCustomSeasons.anchorYear,2025);
+ assert.equal(context.window.appliedCustomSeasons.periods[0].end,"2025-03-31");
  assert.equal(get()[0].start,"2024-11-01"); assert.equal(get()[0].end,"2025-03-31");
  assert.equal(container.children[0].querySelector(".period-end").value,"2025-03-31");
  oldEnd.value=""; oldEnd.onchange({target:oldEnd});
@@ -47,7 +51,36 @@ for (const dated of [false,true]) {
  const edited=container.children[0].querySelector(".period-end");
  edited.value="2026-03-15"; edited.onchange({target:edited});
  year.value="2025"; year.onchange();
- assert.equal(get()[0].end,"2026-03-15"); // Preserve deliberate custom dates.
+ assert.equal(get()[0].end,"2025-03-15"); // Preserve edited relative dates.
+ const invalid=container.children[0].querySelector(".period-end");
+ invalid.value=""; ids["apply-seasons"].onclick();
+ assert.equal(context.window.appliedCustomSeasons.periods[0].end,"2025-03-31");
+ assert.ok(ids["apply-seasons-status"].textContent.includes("valid"));
 }
+'''
+    subprocess.run([node, "-e", script, str(source)], check=True, capture_output=True, text=True)
+
+
+def test_seasonal_year_filters_ignore_calendar_range_and_use_applied_snapshot():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node required")
+    source = Path(__file__).resolve().parents[1] / "static/js/ui_controls.js"
+    script = r'''
+const fs=require("fs"), vm=require("vm"), assert=require("assert");
+const ids={"main-year":{value:"2025"},"main-granularity":{value:"gseason"},
+ "main-startDate":{value:"invalid"},"main-endDate":{value:"invalid"}};
+const context={console,window:{appliedCustomSeasons:{anchorYear:2026,periods:[
+ {code:"WINTER",label:"Winter",start:"2025-11-01",end:"2026-03-31"}]}},
+ document:{getElementById:id=>ids[id]},alert:()=>{throw new Error("Unexpected calendar-date validation");}};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(process.argv[1],"utf8").replace(/^export /gm,""),context);
+let result=context.getSelectedFilters("main");
+assert.equal(result.year,"2025"); assert.equal(result.periodsAnchorYear,2026);
+assert.equal(result.periods[0].start,"2025-11-01");
+result.periods[0].start="mutated";
+assert.equal(context.window.appliedCustomSeasons.periods[0].start,"2025-11-01");
+ids["main-year"].value="2024";
+assert.equal(context.getSelectedFilters("main").year,"2024");
 '''
     subprocess.run([node, "-e", script, str(source)], check=True, capture_output=True, text=True)

@@ -304,7 +304,7 @@ export function getSelectedFilters(tab) {
     return acc;
   }, /** @type {any} */ ({}));
 
-  if (tab === "main") {
+  if (tab === "main" && filters.granularity !== "gseason") {
     const start = (filters.startDate || "").trim();
     const end = (filters.endDate || "").trim();
 
@@ -387,6 +387,8 @@ export function getSelectedFilters(tab) {
   if (tab === "main" && filters.granularity === "gseason") {
     try {
       filters.periods = getCustomSeasonPeriods();
+      filters.periodsAnchorYear = /** @type {any} */ (window).appliedCustomSeasons?.anchorYear
+        || Number(document.getElementById("anchor-year")?.value) || Number(filters.year);
     } catch (error) {
       alert(error instanceof Error ? error.message : "The custom seasonal periods are invalid.");
       return null;
@@ -406,6 +408,8 @@ export function getSelectedFilters(tab) {
  * @returns {Array<{code?: string, label?: string, start?: string, end?: string}>}
  */
 export function getCustomSeasonPeriods() {
+  const applied = /** @type {any} */ (window).appliedCustomSeasons;
+  if (applied) return validateCustomSeasonPeriods(applied.periods.map(p => ({...p})));
   const periods = Array.from(document.querySelectorAll(".period-row")).map((row, index) => {
       const rowEl = /** @type {HTMLElement} */ (row);
       const code = rowEl.dataset.code;
