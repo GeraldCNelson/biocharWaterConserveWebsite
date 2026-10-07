@@ -451,7 +451,7 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
         </thead>
         <tbody>`;
 
-  seasonEntries.forEach(([code, spec]) => {
+  seasonEntries.forEach(([code, spec], periodIndex) => {
     const block = groupedStats[code] || {};
     const rawStats = block.raw_statistics || {};
     const ratioStats = block.ratio_statistics || {};
@@ -478,15 +478,15 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       ? "No data are available for this seasonal period."
       : (Object.values(rawStats).some((s) => s?.coverage_pct != null && s.coverage_pct < 100)
         ? "This period has incomplete data coverage. Statistics use available observations only." : ""));
-    const isWinter = /winter/i.test(`${code} ${spec?.label || ""}`);
-    const winterAttributes = isWinter ? " data-winter-detail hidden" : "";
+    const isWinter = periodIndex > 0;
+    const winterAttributes = isWinter ? ` data-season-detail="${periodIndex}" hidden` : "";
 
     if (isWinter) {
       html += `
         <tr>
           <td colspan="7" class="pt-3 pb-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-winter-toggle aria-expanded="false">
-              Show winter results
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-season-toggle="${periodIndex}" data-season-label="${escapeHTML(spec?.label || code)}" aria-expanded="false">
+              Show ${escapeHTML(spec?.label || code)} results
             </button>
           </td>
         </tr>`;
@@ -848,27 +848,37 @@ function appendMultiYearComparison(container, yearEntries, periods, variable, un
         <h5 class="mb-1">Comparison across all years</h5>
         <p class="text-muted mb-0">Means use the same seasonal definitions and filters as the detailed summary above.</p>
       </div>
-      <div>
-        <label for="multi-year-period" class="form-label mb-1">Seasonal period</label>
-        <select id="multi-year-period" class="form-select form-select-sm">
-          ${periods.map((period) => `<option value="${escapeSummaryHTML(period.code)}"${period.code === defaultPeriod.code ? " selected" : ""}>${escapeSummaryHTML(period.label)}</option>`).join("")}
-        </select>
-      </div>
     </div>
     <div class="multi-year-content"></div>`;
   container.appendChild(section);
 
-  const select = section.querySelector("#multi-year-period");
   const render = () => {
     void renderMultiYearComparison(
-      section, yearEntries, periods, variable, unitSystem, select?.value || defaultPeriod.code, metadata
+      section, yearEntries, periods, variable, unitSystem, defaultPeriod.code, metadata
     ).catch((error) => {
       console.error("Failed to render seasonal comparison plots:", error);
       setComparisonDownloadsAvailable(false, true);
     });
   };
-  select?.addEventListener("change", render);
   render();
+  periods.filter(period => period.code !== defaultPeriod.code).forEach(period => {
+    const details = document.createElement("details");
+    details.className = "mt-4";
+    details.innerHTML = `<summary class="btn btn-sm btn-outline-secondary">Show ${escapeSummaryHTML(period.label)} results</summary><section class="multi-year-summary mt-3"><div class="multi-year-content"></div></section>`;
+    section.appendChild(details);
+    let rendered = false;
+    details.addEventListener("toggle", () => {
+      details.querySelector("summary").textContent = `${details.open ? "Hide" : "Show"} ${period.label} results`;
+      if (!details.open || rendered) return;
+      rendered = true;
+      void renderMultiYearComparison(details.querySelector("section"), yearEntries, periods,
+        variable, unitSystem, period.code, metadata).catch(error => {
+          rendered = false;
+          console.error("Failed to render seasonal comparison:", error);
+          details.querySelector(".multi-year-content").textContent = "Unable to load this season. Close and reopen to retry.";
+        });
+    });
+  });
 }
 
 /**
@@ -1080,14 +1090,13 @@ export async function updateSummaryStatistics() {
         year,
         displayPeriods
       );
-      const winterToggle = container.querySelector("[data-winter-toggle]");
-      winterToggle?.addEventListener("click", () => {
-        const details = container.querySelectorAll("[data-winter-detail]");
+      container.querySelectorAll("[data-season-toggle]").forEach(winterToggle => winterToggle.addEventListener("click", () => {
+        const details = container.querySelectorAll(`[data-season-detail="${winterToggle.dataset.seasonToggle}"]`);
         const willShow = Array.from(details).some((row) => row.hidden);
         details.forEach((row) => { row.hidden = !willShow; });
         winterToggle.setAttribute("aria-expanded", String(willShow));
-        winterToggle.textContent = willShow ? "Hide winter results" : "Show winter results";
-      });
+        winterToggle.textContent = `${willShow ? "Hide" : "Show"} ${winterToggle.dataset.seasonLabel} results`;
+      }));
 
       cachedComparison = comparisonKey
         ? summaryWindow.multiYearSummaryCache?.get(comparisonKey)

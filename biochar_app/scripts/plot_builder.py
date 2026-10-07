@@ -958,6 +958,32 @@ def make_temperature_delta_figure(
 # RAW gseason (categorical)
 # -----------------------------------------------------------------------------
 
+def _season_plot_labels(periods, frame):
+    labels = []
+    for idx, period in enumerate(periods):
+        notes = []
+        if idx < len(frame):
+            row = frame.iloc[idx]
+            if row.get("period_unfinished", False):
+                notes.append("season unfinished")
+            if row.get("period_missing_n", 0) > 0:
+                notes.append("some observations missing")
+        label = f"{period['label']} ({period['start']}-{period['end']})"
+        labels.append(label + (" — " + "; ".join(notes) if notes else ""))
+    return labels
+
+
+def _add_season_coverage_note(fig):
+    fig.add_annotation(
+        text="Means use available valid observations. For missing observations and coverage details,<br>"
+             "see README.txt in the Download Data ZIP.",
+        x=0, y=-0.30, xref="paper", yref="paper", xanchor="left", yanchor="top",
+        showarrow=False, align="left", font={"size": 11, "color": "#555"},
+    )
+    fig.update_layout(margin={"b": max(fig.layout.margin.b or 0, 155)},
+                      height=(fig.layout.height or DEFAULT_PLOT_HEIGHT) + 70)
+
+
 def make_raw_gseason_figure(
     *,
     df: pd.DataFrame,
@@ -975,8 +1001,7 @@ def make_raw_gseason_figure(
 
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
-    incomplete = df2.get("period_incomplete", pd.Series(False, index=df2.index)).tolist()
-    labels = [f"{p['label']} ({p['start']}-{p['end']})" + (" — incomplete data" if idx < len(incomplete) and incomplete[idx] else "") for idx, p in enumerate(norm_periods)]
+    labels = _season_plot_labels(norm_periods, df2)
 
     fig = go.Figure()
 
@@ -1168,6 +1193,7 @@ def make_raw_gseason_figure(
         height=DEFAULT_PLOT_HEIGHT,
     )
 
+    _add_season_coverage_note(fig)
     return prepare_plot_for_json(fig)
 
 # -----------------------------------------------------------------------------
@@ -1188,8 +1214,7 @@ def make_ratio_gseason_figure(
     usys: UnitSystem = coerce_unit_system(unit_system)
     df2 = convert_units(df, usys).copy()
     norm_periods = periods_to_list_of_dicts(periods or [])
-    incomplete = df2.get("period_incomplete", pd.Series(False, index=df2.index)).tolist()
-    labels = [f"{p['label']} ({p['start']}-{p['end']})" + (" — incomplete data" if idx < len(incomplete) and incomplete[idx] else "") for idx, p in enumerate(norm_periods)]
+    labels = _season_plot_labels(norm_periods, df2)
 
     fig = go.Figure()
 
@@ -1316,6 +1341,7 @@ def make_ratio_gseason_figure(
             height=DEFAULT_PLOT_HEIGHT,
         )
 
+        _add_season_coverage_note(fig)
         return prepare_plot_for_json(fig)
 
     y_cols = [
@@ -1416,4 +1442,5 @@ def make_ratio_gseason_figure(
         height=DEFAULT_PLOT_HEIGHT,
     )
 
+    _add_season_coverage_note(fig)
     return prepare_plot_for_json(fig)

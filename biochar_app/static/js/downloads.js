@@ -1,5 +1,6 @@
 // @ts-check
 // static/js/downloads.js
+import { getSelectedFilters } from "./ui_controls.js?v=20261007-apply-seasons";
 
 /**
  * @typedef {Window & {
@@ -156,6 +157,8 @@ export async function downloadTraceData(kind = "all") {
     const depth = depthEl.value;
     const traceOption = traceOptionEl.value;
     const unitSystem = downloadsWindow.unitSystem || "us";
+    const seasonalFilters = granularity === "gseason" ? getSelectedFilters("main") : null;
+    if (granularity === "gseason" && !seasonalFilters) return;
 
     const payload = {
       year,
@@ -167,6 +170,10 @@ export async function downloadTraceData(kind = "all") {
       traceOption,
       unitSystem,
       downloadType: kind,
+      ...(granularity === "gseason" ? {
+        periods: seasonalFilters?.periods,
+        periodsAnchorYear: seasonalFilters?.periodsAnchorYear,
+      } : {}),
     };
 
     console.log("⬇️ downloadTraceData payload:", payload);
