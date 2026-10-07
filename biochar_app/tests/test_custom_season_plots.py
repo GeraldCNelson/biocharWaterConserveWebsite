@@ -51,7 +51,15 @@ def test_plot_labels_identify_partial_periods(seasonal_sources):
     periods = [{"code": "WINTER", "label": "Winter", "start": "2024-12-31", "end": "2025-01-01"}]
     result = routes_utils.load_gseason_df(2025, periods, variable="VWC")
     figure = make_raw_gseason_figure(df=result, periods=periods, variable="VWC", strip="S1", logger_location="T", depth=1, unit_system="us", year=2025, trace_option="depth")
-    assert "some observations missing" in figure["data"][0]["x"][0]
+    assert "some observations missing" not in figure["data"][0]["x"][0]
+    assert "some observations missing" in figure["layout"]["annotations"][-1]["text"]
+    assert "<br>" in figure["data"][0]["x"][0]
+    assert figure["layout"]["xaxis"]["tickangle"] == 0
+    assert figure["layout"]["margin"]["b"] < 220
+    assert figure["layout"]["annotations"][-1]["yshift"] == -85
+    assert "%{x}" not in figure["data"][0]["hovertemplate"]
+    assert "%{y:.3f}" in figure["data"][0]["hovertemplate"]
+    assert figure["data"][0]["customdata"][0] == "Winter"
 
 
 def test_duplicate_timestamps_do_not_hide_missing_intervals():
@@ -66,12 +74,17 @@ def test_duplicate_timestamps_do_not_hide_missing_intervals():
 
 
 def test_unfinished_label_is_separate_from_missing_observations():
-    from biochar_app.scripts.plot_builder import _season_plot_labels
+    from biochar_app.scripts.plot_builder import _season_plot_labels, _add_season_coverage_note
+    import plotly.graph_objects as go
     periods = [{"label": "Growing Season", "start": "04-15", "end": "10-31"}]
     frame = pd.DataFrame([{"period_unfinished": True, "period_missing_n": 0}])
     label = _season_plot_labels(periods, frame)[0]
-    assert "season unfinished" in label
+    assert "season unfinished" not in label
     assert "observations missing" not in label
+    fig = go.Figure()
+    _add_season_coverage_note(fig, periods, frame)
+    assert "season unfinished" in fig.layout.annotations[-1].text
+    assert "observations missing" not in fig.layout.annotations[-1].text
 
 
 def test_month_day_defaults_are_expanded_for_requested_year(seasonal_sources):
