@@ -100,8 +100,10 @@ export function initCustomGseason(cfg) {
   // 2) initialize periodsData from defaults
   function initPeriodsData() {
     periodsData = defaultPeriods.map((p) => {
-      const [sm] = p.start.split("-");
-      const [em] = p.end.split("-");
+      const startMD = p.start.slice(-5);
+      const endMD = p.end.slice(-5);
+      const [sm] = startMD.split("-");
+      const [em] = endMD.split("-");
       const wraps = parseInt(sm, 10) > parseInt(em, 10);
       const startYear = wraps ? defaultYear - 1 : defaultYear;
       const endYear = wraps ? defaultYear : defaultYear;
@@ -110,10 +112,10 @@ export function initCustomGseason(cfg) {
         code: p.code,
         isDefault: true,
         label: p.label,
-        startMD: p.start,
-        endMD: p.end,
-        start: `${startYear}-${p.start}`,
-        end: `${endYear}-${p.end}`,
+        startMD,
+        endMD,
+        start: `${startYear}-${startMD}`,
+        end: `${endYear}-${endMD}`,
       };
     });
   }
@@ -205,19 +207,25 @@ export function initCustomGseason(cfg) {
       }
 
       if (startInput) {
-        startInput.oninput = (e) => {
+        // Set native date-control state explicitly after inserting the row.
+        // Ignore events from controls detached by an anchor-year re-render.
+        startInput.value = p.start;
+        startInput.onchange = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
-          periodsData[idx].start = target?.value || "";
-          periodsData[idx].isDefault = false;
+          if (!target?.isConnected) return;
+          p.start = target.value;
+          p.isDefault = false;
           updateSeasonalPeriodSummary();
         };
       }
 
       if (endInput) {
-        endInput.oninput = (e) => {
+        endInput.value = p.end;
+        endInput.onchange = (e) => {
           const target = /** @type {HTMLInputElement | null} */ (e.target);
-          periodsData[idx].end = target?.value || "";
-          periodsData[idx].isDefault = false;
+          if (!target?.isConnected) return;
+          p.end = target.value;
+          p.isDefault = false;
           updateSeasonalPeriodSummary();
         };
       }

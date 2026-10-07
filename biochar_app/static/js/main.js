@@ -43,7 +43,7 @@ import {
 } from "./ui_controls.js?v=20260919-custom-seasons-fix-3";
 
 // 7) Custom-season setup
-import { initCustomGseason } from "./custom_gseason.js?v=20260919-custom-seasons-fix-2";
+import { initCustomGseason } from "./custom_gseason.js?v=20261006-anchor-dates";
 
 /**
  * @typedef {Window & {
