@@ -51,7 +51,40 @@ def test_plot_labels_identify_partial_periods(seasonal_sources):
     periods = [{"code": "WINTER", "label": "Winter", "start": "2024-12-31", "end": "2025-01-01"}]
     result = routes_utils.load_gseason_df(2025, periods, variable="VWC")
     figure = make_raw_gseason_figure(df=result, periods=periods, variable="VWC", strip="S1", logger_location="T", depth=1, unit_system="us", year=2025, trace_option="depth")
-    assert "incomplete data" in figure["data"][0]["x"][0]
+    assert "some observations missing" not in figure["data"][0]["x"][0]
+    assert "some observations missing" in figure["layout"]["annotations"][-1]["text"]
+    assert "<br>" in figure["data"][0]["x"][0]
+    assert figure["layout"]["xaxis"]["tickangle"] == 0
+    assert figure["layout"]["margin"]["b"] < 220
+    assert figure["layout"]["annotations"][-1]["yshift"] == -85
+    assert "%{x}" not in figure["data"][0]["hovertemplate"]
+    assert "%{y:.3f}" in figure["data"][0]["hovertemplate"]
+    assert figure["data"][0]["customdata"][0] == "Winter"
+
+
+def test_duplicate_timestamps_do_not_hide_missing_intervals():
+    from biochar_app.scripts.gseason import compute_seasons
+    index = pd.date_range("2025-01-01", periods=96, freq="15min")
+    index = index.delete(5).append(pd.DatetimeIndex([index[0]]))
+    result = compute_seasons(pd.DataFrame({"VWC": 1.0}, index=index), 2025,
+        {"D": {"start": "01-01", "end": "01-01"}})
+    assert result.iloc[0]["period_observed_n"] == 95
+    assert result.iloc[0]["period_missing_n"] == 1
+    assert not result.iloc[0]["period_unfinished"]
+
+
+def test_unfinished_label_is_separate_from_missing_observations():
+    from biochar_app.scripts.plot_builder import _season_plot_labels, _add_season_coverage_note
+    import plotly.graph_objects as go
+    periods = [{"label": "Growing Season", "start": "04-15", "end": "10-31"}]
+    frame = pd.DataFrame([{"period_unfinished": True, "period_missing_n": 0}])
+    label = _season_plot_labels(periods, frame)[0]
+    assert "season unfinished" not in label
+    assert "observations missing" not in label
+    fig = go.Figure()
+    _add_season_coverage_note(fig, periods, frame)
+    assert "season unfinished" in fig.layout.annotations[-1].text
+    assert "observations missing" not in fig.layout.annotations[-1].text
 
 
 def test_month_day_defaults_are_expanded_for_requested_year(seasonal_sources):
@@ -73,3 +106,22 @@ def test_plot_year_rebases_applied_dates(seasonal_sources, monkeypatch):
     asyncio.run(routes.api_plot_ratio(request))
     assert len(seen) == 2
     assert all(p[0]["start"] == "2024-12-31" and p[0]["end"] == "2025-01-01" for p in seen)
+
+
+def test_seasonal_plot_download_zip_uses_applied_window(seasonal_sources, monkeypatch):
+    import io
+    import zipfile
+    monkeypatch.setattr(routes, "_ensure_year_allowed", lambda year: None)
+    request = routes.DownloadDataRequest(year=2025, variable="VWC", strip="S1",
+        depth="1", granularity="gseason", downloadType="all", periodsAnchorYear=2026,
+        periods=[{"code": "WINTER", "label": "Winter", "start": "2025-12-31", "end": "2026-01-01"}])
+    response = asyncio.run(routes.api_download_plot_data(request))
+    with zipfile.ZipFile(io.BytesIO(response.body)) as archive:
+        csv = pd.read_csv(archive.open(next(n for n in archive.namelist() if n.endswith(".csv"))))
+        assert csv.iloc[0]["code"] == "WINTER"
+        assert csv.iloc[0]["start"].startswith("2024-12-31")
+        assert csv.iloc[0]["end"].startswith("2025-01-01")
+        for column in csv.columns:
+            if column.startswith("VWC_") and "_raw_" in column:
+                assert (csv[column].dropna() == csv[column].dropna().round(2)).all()
+        assert "applied seasonal definitions" in archive.read("README.txt").decode()

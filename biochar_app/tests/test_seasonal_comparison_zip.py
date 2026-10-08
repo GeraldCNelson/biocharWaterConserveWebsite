@@ -54,7 +54,7 @@ const window = {unitSystem: "us", __seasonalComparisonDownload: {
 const context = vm.createContext({window, document: {body: {appendChild() {}},
   createElement() {return {set download(value) {filename = value;}, click() {}, remove() {}};}},
   Blob, TextEncoder, DataView, Uint8Array, Date, console, alert() {alerts++;}});
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8").replace(/^export /gm, ""), context);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, ""), context);
 vm.runInContext("downloadSeasonalComparisonData()", context);
 if (!filename.endsWith(".zip") || blob.type !== "application/zip") throw Error("Not a ZIP download");
 if (vm.runInContext('csvCell(\'a,"b"\')', context) !== '"a,""b"""') throw Error("CSV quoting");

@@ -40,8 +40,8 @@ BIOCHAR_MASTER_SOURCE = WorkbookDataSource(
     description="Authoritative field-management workbook",
     source_url=(
         "https://1drv.ms/f/c/4313d94c9016d33f/"
-        "IgA_0xaQTNkTIIBDJV8AAAAAAUsa967PVmeS94-lnV3ksPU"
-        "?e=pPtL66"
+        "Ej_TFpBM2RMggEP0SAAAAAABtex3-yIuNGbovuvKAurUJg"
+        "?e=5%3a2255Nx&sharingv2=true&fromShare=true&at=9"
     ),
     synced_source_path=(
         Path.home()
@@ -52,7 +52,7 @@ BIOCHAR_MASTER_SOURCE = WorkbookDataSource(
         / "Biochar Injection Concept - Master.xlsx"
     ),
     local_path=BIOCHAR_MASTER_WORKBOOK,
-    update_method="copy_synced_file",
+    update_method="anonymous_shared_download",
     required_sheets=(
         "2023 IRRIGATION",
         "2024 IRRIGATION",
@@ -63,6 +63,13 @@ BIOCHAR_MASTER_SOURCE = WorkbookDataSource(
         "2025 BIOMASS",
         "2026 BIOMASS",
     ),
+)
+
+# Stable workbook identifier observed in OneDrive's workbook URL. Establish
+# anonymous access with the shared-folder link before requesting this URL.
+BIOCHAR_MASTER_DOWNLOAD_URL = (
+    "https://onedrive.live.com/personal/4313d94c9016d33f/"
+    "_layouts/15/download.aspx?UniqueId=9016D33F-D94C-2013-8043-325F00000000"
 )
 
 COAGMET_WEATHER_SOURCE = ExternalDataSource(

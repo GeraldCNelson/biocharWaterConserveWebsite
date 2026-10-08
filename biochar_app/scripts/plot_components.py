@@ -134,6 +134,14 @@ def common_xaxis_config(_granularity: str, start: str, end: str) -> dict[str, An
 
     cfg["range"] = [start_ts, end_ts]
 
+    if _granularity == "monthly":
+        cfg.update({
+            "tickmode": "linear", "dtick": "M1",
+            "tick0": start_ts.to_period("M").start_time.isoformat(),
+            "tickformat": "%b<br>%Y", "tickangle": 0,
+        })
+        return cfg
+
     total_hours = (end_ts - start_ts).total_seconds() / 3600.0
     total_days = total_hours / 24.0
 

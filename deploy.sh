@@ -153,6 +153,20 @@ sync_data() {
     "${LOCAL_DOWNLOADS_DIR}/" \
     "${REMOTE_HOST}:${REMOTE_DOWNLOADS_DIR}/"
 
+  log "Syncing validated irrigation data and refresh status to production..."
+  local irrigation_dir="${LOCAL_REPO}/biochar_app/data-processed/management/irrigation"
+  local remote_irrigation_dir="${REMOTE_REPO}/biochar_app/data-processed/management/irrigation"
+  run_remote "mkdir -p '${remote_irrigation_dir}'"
+  rsync -av --timeout=120 -e "ssh ${SSH_OPTIONS[*]}" \
+    "${irrigation_dir}/irrigation_clean.csv" \
+    "${irrigation_dir}/irrigation_build_audit.json" \
+    "${REMOTE_HOST}:${remote_irrigation_dir}/"
+  if [[ -f "${irrigation_dir}/irrigation_refresh_status.json" ]]; then
+    rsync -av --timeout=120 -e "ssh ${SSH_OPTIONS[*]}" \
+      "${irrigation_dir}/irrigation_refresh_status.json" \
+      "${REMOTE_HOST}:${remote_irrigation_dir}/"
+  fi
+
   log "Syncing prepared seasonal summaries to production..."
   rsync -av --timeout=120 --exclude '*.tmp-*' \
     -e "ssh ${SSH_OPTIONS[*]}" \

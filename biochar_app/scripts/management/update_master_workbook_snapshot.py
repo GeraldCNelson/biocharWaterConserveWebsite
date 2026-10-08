@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 update_master_workbook_snapshot.py
-Copy and validate a snapshot of the synchronized master project workbook.
+Download and validate a snapshot of the shared master project workbook.
 
 Purpose
 -------
-Copy the authoritative master workbook from its local OneDrive synchronized
-location into the project's canonical raw-data location.
+Download the authoritative master workbook anonymously from OneDrive into the
+project's canonical raw-data location. Explicit --source retains local copying.
 
 The synchronized source, destination, view-only source URL, update method, and
 required worksheets are registered in
@@ -55,13 +55,54 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
+import requests
 from openpyxl import load_workbook
 
-from biochar_app.config.data_sources import BIOCHAR_MASTER_SOURCE
+from biochar_app.config.data_sources import BIOCHAR_MASTER_SOURCE, BIOCHAR_MASTER_DOWNLOAD_URL
 
 
 READ_CHUNK_SIZE = 1024 * 1024
+
+
+def download_snapshot(*, destination: Path, audit_path: Path,
+                      validate_only: bool = False) -> dict[str, Any]:
+    """Retrieve the shared workbook anonymously, then validate/install atomically.
+
+    A fresh session redeems the shared-folder link on every run. No browser
+    cookies, Microsoft credentials, or expiring download URLs are persisted.
+    Failed HTTP requests and HTML/login responses never replace the snapshot.
+    """
+    share_url = os.getenv("BIOCHAR_MASTER_SHARE_URL", BIOCHAR_MASTER_SOURCE.source_url)
+    download_url = os.getenv("BIOCHAR_MASTER_DOWNLOAD_URL", BIOCHAR_MASTER_DOWNLOAD_URL)
+    for url in (share_url, download_url):
+        parsed = urlparse(url or "")
+        if parsed.scheme != "https" or parsed.hostname not in {"1drv.ms", "onedrive.live.com"}:
+            raise ValueError("Master workbook URLs must use HTTPS on OneDrive")
+    with tempfile.TemporaryDirectory(prefix="biochar-master-") as directory:
+        source = Path(directory) / "master.xlsx"
+        with requests.Session() as session:
+            with session.get(share_url, timeout=(15, 60)) as response:
+                response.raise_for_status()
+            with session.get(download_url, timeout=(15, 60), stream=True) as response:
+                response.raise_for_status()
+                size = 0
+                with source.open("wb") as output:
+                    for chunk in response.iter_content(READ_CHUNK_SIZE):
+                        size += len(chunk)
+                        if size > 100 * READ_CHUNK_SIZE:
+                            raise ValueError("Master workbook exceeds 100 MiB download limit")
+                        output.write(chunk)
+        audit = update_snapshot(
+            source=source, destination=destination,
+            required_sheets=BIOCHAR_MASTER_SOURCE.required_sheets,
+            audit_path=audit_path, validate_only=validate_only,
+        )
+        audit["update_method"] = "anonymous_shared_download"
+        audit.pop("synced_source_path", None)
+        write_audit(audit_path, audit)
+        return audit
 
 
 def require_onedrive_desktop_app() -> None:
@@ -310,7 +351,7 @@ def update_snapshot(
             "provider": BIOCHAR_MASTER_SOURCE.provider,
             "description": BIOCHAR_MASTER_SOURCE.description,
             "source_url": BIOCHAR_MASTER_SOURCE.source_url,
-            "update_method": BIOCHAR_MASTER_SOURCE.update_method,
+            "update_method": "copy_synced_file",
             "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
             "synced_source_path": str(source),
             "destination_path": str(destination),
@@ -358,17 +399,16 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Copy and validate the synchronized master workbook."
+            "Download and validate the shared master workbook (or copy --source)."
         )
     )
 
     parser.add_argument(
         "--source",
         type=Path,
-        default=BIOCHAR_MASTER_SOURCE.synced_source_path,
+        default=None,
         help=(
-            "Synchronized OneDrive workbook. "
-            f"Default: {BIOCHAR_MASTER_SOURCE.synced_source_path}"
+            "Optional local workbook instead of the default anonymous download."
         ),
     )
 
@@ -406,6 +446,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run the master-workbook snapshot update."""
     args = parse_args()
+
+    if args.source is None:
+        audit = download_snapshot(destination=args.destination,
+                                  audit_path=args.audit_json,
+                                  validate_only=args.validate_only)
+        print(json.dumps(audit, indent=2, sort_keys=True))
+        return
 
     audit = update_snapshot(
         source=args.source,

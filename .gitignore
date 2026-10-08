@@ -231,3 +231,4 @@ biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_a
 # Daily PakBus run artifacts and lock state
 biochar_app/data-raw/pakbus_daily/
 biochar_app/data-processed/pakbus_daily.lock
+biochar_app/data-processed/management/irrigation/irrigation_refresh_status.json

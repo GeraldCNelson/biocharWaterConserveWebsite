@@ -922,7 +922,7 @@
         function toggleDateControls() {
             const disable = gran && gran.value === "gseason";
             if (!dateControls) return;
-            dateControls.querySelectorAll("select, input").forEach(el => {
+            dateControls.querySelectorAll("input").forEach(el => {
                 el.disabled = disable;
                 el.classList.toggle("disabled", disable);
             });

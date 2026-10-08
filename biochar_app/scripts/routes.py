@@ -638,6 +638,8 @@ class DownloadDataRequest(BaseModel):
     endDate: Optional[str] = None
     loggerLocation: str = DEFAULT_LOGGER_LOCATION
     traceOption: str = "depth"
+    periods: Optional[list[dict[str, Any]]] = None
+    periodsAnchorYear: Optional[int] = None
 
 logger.info("DEBUG load_logger_data object = %r", load_logger_data)
 logger.info("DEBUG load_logger_data module = %s", getattr(load_logger_data, "__module__", "unknown"))
@@ -1391,7 +1393,15 @@ async def api_download_plot_data(req: DownloadDataRequest):
     _ensure_year_allowed(year)
 
     try:
-        df = load_logger_data(year, granularity)
+        if granularity == "gseason":
+            download_periods = rebase_periods_to_anchor_year(
+                req.periods or DEFAULT_GSEASON_PERIODS,
+                source_year=req.periodsAnchorYear or year, target_year=year,
+            )
+            df = await asyncio.to_thread(load_gseason_df, year=year,
+                periods=download_periods, unit_system=unit_system, variable=variable)
+        else:
+            df = load_logger_data(year, granularity)
     except Exception as e:
         logger.exception("❌ Failed to load logger data for download")
         raise HTTPException(status_code=400, detail=str(e))
@@ -1435,7 +1445,17 @@ async def api_download_plot_data(req: DownloadDataRequest):
     )
 
     logger.info("DOWNLOAD OUTPUT COLUMNS: %s", list(df_out.columns))
+    if granularity == "gseason":
+        df_out = df_out.copy()
+        for column in ("code", "label", "start", "end", "period_observed_n",
+                       "period_expected_n", "period_missing_n", "period_unfinished"):
+            if column in df.columns:
+                df_out[column] = df[column]
     df_out = _round_ratio_columns(df_out)
+    vwc_columns = [column for column in df_out.columns
+                   if column.startswith("VWC_") and "_raw_" in column]
+    if vwc_columns:
+        df_out[vwc_columns] = df_out[vwc_columns].round(2)
     df_out = _add_unit_suffixes_for_download(df_out, variable)
 
     logger_location_label = {
@@ -1536,6 +1556,16 @@ async def api_download_plot_data(req: DownloadDataRequest):
     )
 
     out = BytesIO()
+
+    if granularity == "gseason":
+        readme += (
+            "\nSEASONAL WINDOWS\n"
+            "This export uses the applied seasonal definitions rebased to the selected anchor year, just like the plots.\n"
+            "code and label identify each season; start and end give its inclusive boundaries.\n"
+            "period_observed_n counts unique expected 15-minute timestamps with any valid selected-variable data; "
+            "period_expected_n covers the full seasonal window. These are window-level counts, not per-sensor coverage.\n"
+            "period_missing_n counts absent valid timestamps in the elapsed window; period_unfinished indicates a future end date.\n"
+        )
 
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(csv_name, df_out.to_csv(index=False))

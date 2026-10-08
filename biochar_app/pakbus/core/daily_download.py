@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Iterable
@@ -34,6 +34,7 @@ from biochar_app.pakbus.core.archive import (
     promote_accepted_frame,
 )
 from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_caches
+from biochar_app.scripts.management.refresh_irrigation import REFRESH_STATUS_PATH
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -203,6 +204,10 @@ def _build_report_email_body(report: dict) -> str:
             f"Website service: {publication.get('website_service')}",
         ]
         seasonal_cache = publication.get("seasonal_cache", {})
+        irrigation = publication.get("irrigation", {})
+        if irrigation:
+            lines.append(f"Irrigation: {irrigation.get('status')}; latest event: "
+                         f"{irrigation.get('latest_irrigation_start', 'unknown')}")
         if seasonal_cache:
             lines.append(
                 "Seasonal summaries: "
@@ -331,6 +336,10 @@ def _build_report_email_body(report: dict) -> str:
         lines.append(
             f"- website service: {publication.get('website_service')}"
         )
+        irrigation = publication.get("irrigation", {})
+        if irrigation:
+            lines.append(f"- irrigation: {irrigation.get('status')}; latest event: "
+                         f"{irrigation.get('latest_irrigation_start', 'last validated data retained')}")
         seasonal_cache = publication.get("seasonal_cache", {})
         if seasonal_cache:
             cache_detail = seasonal_cache.get("detail")
@@ -486,6 +495,9 @@ def _build_success_email_body(report: dict) -> str:
     message = f"Nightly logger and weather update completed successfully through {latest}."
     if publication.get("production", {}).get("status") == "published":
         message += " Production website publication and health checks passed."
+    irrigation = publication.get("irrigation", {})
+    if irrigation.get("status") == "refreshed":
+        message += f" Irrigation refreshed; latest event: {irrigation.get('latest_irrigation_start')}."
     if recovered:
         message += f" Recovered after initial communication failures: {_station_names(recovered)}."
     recurrent = sorted(
@@ -505,6 +517,7 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
         sys.executable, "-m", "biochar_app.scripts.etl",
         "--year", str(year), "--operational-update",
     ]
+    management_started = datetime.now(timezone.utc)
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     log_path.write_text(
         (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or ""),
@@ -512,6 +525,14 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
     )
     if result.returncode != 0:
         raise RuntimeError(f"operational ETL exited with status {result.returncode}; see {log_path}")
+
+    try:
+        irrigation = json.loads(REFRESH_STATUS_PATH.read_text(encoding="utf-8"))
+        attempted = datetime.fromisoformat(irrigation["attempted_at_utc"])
+        if attempted < management_started:
+            raise ValueError("Stale irrigation refresh report")
+    except (OSError, ValueError, KeyError, TypeError):
+        irrigation = {"status": "failed", "detail": "Missing or invalid irrigation refresh report"}
 
     logger_path = LOGGER_PARQUET / f"{year}_15min.parquet"
     weather_path = WEATHER_PARQUET / f"{year}_15min.parquet"
@@ -564,6 +585,7 @@ def _publish_operational_update(year: int, run_dir: Path, *, restart: bool) -> d
         "weather_rows": int(len(weather_frame)),
         "website_service": restart_status,
         "seasonal_cache": seasonal_cache,
+        "irrigation": irrigation,
     }
 
 
@@ -1086,6 +1108,14 @@ def main(argv: list[str] | None = None) -> int:
                     restart=not args.skip_restart,
                 )
                 seasonal_cache = report["publication"].get("seasonal_cache", {})
+                if report["publication"].get("irrigation", {}).get("status") != "refreshed":
+                    findings.append(Finding(
+                        "warning", "irrigation_refresh_failed",
+                        "Irrigation refresh failed; last validated irrigation data retained. "
+                        "Logger/weather publication continued. Inspect operational_update.log.",
+                    ))
+                    report["findings"] = [asdict(item) for item in findings]
+                    report["status"] = "accepted_with_warnings"
                 if seasonal_cache.get("status") != "warmed":
                     findings.append(Finding(
                         "warning",

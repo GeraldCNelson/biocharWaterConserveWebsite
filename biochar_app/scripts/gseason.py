@@ -113,10 +113,17 @@ def compute_seasons(
         row.update(means)
         expected = int((end + pd.Timedelta(seconds=1) - start) / pd.Timedelta(minutes=15))
         numeric_window = df.loc[window_mask].select_dtypes(include="number").drop(columns=[precip_col], errors="ignore")
-        observed = int(numeric_window.notna().any(axis=1).sum())
+        valid_index = numeric_window.index[numeric_window.notna().any(axis=1)]
+        expected_index = pd.date_range(start, end, freq="15min")
+        observed = int(expected_index.isin(valid_index.unique()).sum())
+        now = pd.Timestamp.now()
+        elapsed_index = expected_index[expected_index <= now.floor("15min")]
+        missing = int((~elapsed_index.isin(valid_index.unique())).sum())
         row["period_observed_n"] = observed
         row["period_expected_n"] = expected
         row["period_incomplete"] = observed < expected
+        row["period_missing_n"] = missing
+        row["period_unfinished"] = end > now
 
         # SUM of precip increments over the window
         if include_precip and precip_col is not None:

@@ -130,9 +130,9 @@ from biochar_app.scripts.management.build_irrigation_from_master import (
     build_and_install_irrigation,
 )
 from biochar_app.scripts.management.update_master_workbook_snapshot import (
-    require_onedrive_desktop_app,
-    update_snapshot,
+    download_snapshot,
 )
+from biochar_app.scripts.management.refresh_irrigation import refresh_irrigation_products
 from biochar_app.scripts.lab.build_field_biomass_from_master import (
     build_and_install_field_biomass,
 )
@@ -2302,42 +2302,11 @@ def update_plot_metadata(
 
 
 def refresh_master_workbook_snapshot() -> dict[str, Any]:
-    """
-    Validate and install the latest locally synchronized master workbook.
-
-    Microsoft OneDrive performs cloud synchronization. This function verifies
-    that the desktop application is running and then installs a validated,
-    byte-identical repository snapshot for application and analysis code.
-    """
-    require_onedrive_desktop_app()
-
-    source = BIOCHAR_MASTER_SOURCE.synced_source_path
-    logger.info("Checking synchronized master workbook: %s", source)
-    logger.info(
-        "Synchronized workbook modification time: %s",
-        datetime.fromtimestamp(source.stat().st_mtime).astimezone().isoformat()
-        if source.exists()
-        else "unavailable",
-    )
-
-    audit = update_snapshot(
-        source=source,
+    """Download and install a validated master workbook without desktop sync."""
+    return download_snapshot(
         destination=BIOCHAR_MASTER_SOURCE.local_path,
-        required_sheets=BIOCHAR_MASTER_SOURCE.required_sheets,
-        audit_path=BIOCHAR_MASTER_SOURCE.local_path.with_suffix(
-            ".snapshot.json"
-        ),
-        validate_only=False,
+        audit_path=BIOCHAR_MASTER_SOURCE.local_path.with_suffix(".snapshot.json"),
     )
-
-    logger.info(
-        "Master workbook snapshot: result=%s changed=%s sha256=%s",
-        audit["result"],
-        audit["changed"],
-        audit["installed_sha256"],
-    )
-    return audit
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -2360,8 +2329,8 @@ def main() -> None:
         action="store_true",
         help=(
             "Rebuild logger products from PC400 files plus the accepted "
-            "PakBus archive and refresh CoAgMet weather products; skip "
-            "workbook, irrigation, laboratory, and legacy raw-data backup work."
+            "PakBus archive, refresh CoAgMet weather and master-workbook "
+            "irrigation products; skip laboratory and legacy raw-data backup work."
         ),
     )
     parser.add_argument(
@@ -2409,9 +2378,14 @@ def main() -> None:
     operational_subset = args.logger_only or args.operational_update
 
     if args.operational_update:
+        management = refresh_irrigation_products()
+        if management["status"] != "refreshed":
+            logger.warning("Irrigation refresh failed (%s); retaining last validated data", management["detail"])
+        else:
+            logger.info("Irrigation refreshed through %s", management["latest_irrigation_start"])
         logger.info(
             "Operational update: refreshing logger and weather products; "
-            "skipping master workbook, irrigation, laboratory, and legacy "
+            "skipping laboratory and legacy "
             "raw-data backup stages."
         )
     elif args.logger_only:
