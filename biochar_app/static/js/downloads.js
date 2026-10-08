@@ -411,6 +411,44 @@ export function downloadSeasonalComparisonData() {
   ]), seasonalComparisonFilename("data", "zip"));
 }
 
+function comparisonExportHeading({ heading, context, note }, width = 1600) {
+  const escape = (text) => String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const wrap = (text, size) => {
+    const limit = Math.max(20, Math.floor((width - 110) / (size * 0.58)));
+    const lines = [];
+    let line = "";
+    for (const word of String(text || "").split(/\s+/).filter(Boolean)) {
+      if (line && line.length + word.length + 1 > limit) { lines.push(line); line = ""; }
+      let rest = word;
+      while (rest.length > limit) {
+        if (line) { lines.push(line); line = ""; }
+        lines.push(rest.slice(0, limit)); rest = rest.slice(limit);
+      }
+      line += (line ? " " : "") + rest;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+  const blocks = [
+    { lines: wrap(heading, 30), size: 30, leading: 38 },
+    { lines: wrap(context, 22), size: 22, leading: 28 },
+    { lines: wrap(note, 16), size: 16, leading: 21 },
+  ];
+  const top = 24 + blocks.reduce((height, block) => height + block.lines.length * block.leading, 0) + 55;
+  let offset = 24;
+  const annotations = [];
+  for (const block of blocks) {
+    for (const line of block.lines) {
+      annotations.push({ xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "top", yshift: top - offset,
+        text: escape(line), showarrow: false, align: "left",
+        font: { size: block.size }, borderpad: 0 });
+      offset += block.leading;
+    }
+  }
+  return { top, annotations };
+}
+
 export async function downloadSeasonalComparisonPlot(chartType) {
   const comparison = downloadsWindow.__seasonalComparisonDownload;
   const plotly = downloadsWindow.Plotly;
@@ -433,6 +471,13 @@ export async function downloadSeasonalComparisonPlot(chartType) {
   document.body.appendChild(exportChart);
 
   const exportLayout = JSON.parse(JSON.stringify(chart.layout || {}));
+  exportLayout.annotations = (exportLayout.annotations || []).map((annotation) => {
+    if (!String(annotation.text || "").startsWith("Dark outline")) return annotation;
+    return { ...annotation, text: "Dark outline indicates ratio below 1",
+      x: 0, xshift: 225, yshift: 7, y: 1.01, xref: "paper", yref: "paper",
+      xanchor: "left", yanchor: "bottom", borderwidth: 0, borderpad: 0,
+      bgcolor: "rgba(0,0,0,0)", font: { ...(annotation.font || {}), size: 16 } };
+  });
   exportLayout.autosize = false;
   exportLayout.width = 1600;
   exportLayout.height = 900;
@@ -449,13 +494,24 @@ export async function downloadSeasonalComparisonPlot(chartType) {
     ...exportTitle,
     font: { ...(exportTitle.font || {}), size: 30 },
   };
+  // Do not enlarge the interactive title's <sup> block: exported notes need
+  // independent type size and line spacing, with room reserved above the legend.
+  const heading = comparison.headings?.[chartType];
+  if (heading) {
+    const headingLayout = comparisonExportHeading(heading);
+    exportLayout.title = { text: "" };
+    exportLayout.margin.t = headingLayout.top;
+    exportLayout.annotations = [
+      ...(exportLayout.annotations || []), ...headingLayout.annotations,
+    ];
+  }
   exportLayout.legend = {
     ...(exportLayout.legend || {}),
     font: { ...(exportLayout.legend?.font || {}), size: 20 },
     x: 0,
     xanchor: "left",
     xref: "paper",
-    y: 1.02,
+    y: 1.01,
     yanchor: "bottom",
     yref: "paper",
   };

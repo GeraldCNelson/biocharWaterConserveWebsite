@@ -210,6 +210,8 @@ def build_ratio_plot_title(
     depth_label = _depth_display_label(depth, usys, compact=True)
 
     prefix = "Growing-season Ratio Plot" if is_gseason else f"{granularity.capitalize()} Ratio Plot"
+    if is_gseason and variable == "VWC":
+        prefix = "Seasonal Ratio of Means"
     title_text = f"{prefix} for {variable} in {year} ({logger_label}, {depth_label})"
 
     if no_data:

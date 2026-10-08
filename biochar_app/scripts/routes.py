@@ -1138,7 +1138,7 @@ async def api_download_summary_data(req: DownloadSummaryDataRequest):
             ratio_df = pd.DataFrame(columns=ratio_columns)
         else:
             raw_mask = seasonal_df.get("raw_mean", pd.Series(index=seasonal_df.index, dtype=float)).notna()
-            ratio_mask = seasonal_df.get("ratio_mean", pd.Series(index=seasonal_df.index, dtype=float)).notna()
+            ratio_mask = seasonal_df.get("ratio_mean", pd.Series(index=seasonal_df.index, dtype=float)).notna() | seasonal_df.get("ratio_of_means", pd.Series(index=seasonal_df.index, dtype=float)).notna()
             raw_df = seasonal_df.loc[
                 raw_mask, [column for column in raw_columns if column in seasonal_df.columns]
             ].copy()

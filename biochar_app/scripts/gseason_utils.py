@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from biochar_app.scripts.gseason import assign_gseason_periods  # core mapper
+from biochar_app.scripts.gseason import assign_gseason_periods, matched_ratio_of_means
 from biochar_app.scripts.config import (
     DATA_PROCESSED_DIR,
     DEFAULT_GSEASON_PERIODS,
@@ -530,13 +530,7 @@ def compute_period_summary_rows(
                 numerator = f"VWC_{depth}_raw_{numerator_strip}_{location}"
                 denominator = f"VWC_{depth}_raw_{denominator_strip}_{location}"
                 if numerator in period_df and denominator in period_df:
-                    matched = period_df[[numerator, denominator]].apply(
-                        pd.to_numeric, errors="coerce"
-                    ).replace([np.inf, -np.inf], np.nan).dropna()
-                    paired_n = len(matched)
-                    denominator_mean = matched[denominator].mean()
-                    if paired_n and denominator_mean > 0:
-                        ratio_of_means = float(matched[numerator].mean() / denominator_mean)
+                    ratio_of_means, paired_n = matched_ratio_of_means(period_df, numerator, denominator)
             paired_coverage = coverage_fields(paired_n, start_ts, end_exclusive)
             rows.append(
                 {

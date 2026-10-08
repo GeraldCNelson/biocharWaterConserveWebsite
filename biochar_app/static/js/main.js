@@ -6,7 +6,7 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20261007-comparison-headings";
+import { initSummaryTab } from "./tab_summary.js?v=20261008-seasonal-ratios-export-2";
 import { renderGlossary } from "./glossary.js";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
@@ -16,7 +16,7 @@ import {
   downloadSummaryData,
   initBulkDownloadTab,
   initSummaryDownloadMenu,
-} from "./downloads.js?v=20260925-season-order-21";
+} from "./downloads.js?v=20261008-seasonal-ratios-export-2";
 
 // 3) Debugging & logging
 import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20261007-apply-seasons";
@@ -31,7 +31,7 @@ import {
   setupUnitToggleHandlers,
   getAllDropdownIds,
   initializeTraceOptionControls,
-} from "./control_panel.js?v=20261007-comparison-headings";
+} from "./control_panel.js?v=20261008-seasonal-ratios-export-2";
 
 import {
   fetchDefaultsAndOptions,

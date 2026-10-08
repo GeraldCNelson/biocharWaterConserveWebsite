@@ -18,7 +18,7 @@ from biochar_app.config.paths import (
 )
 
 
-CACHE_FORMAT_VERSION = 4  # Portable, content-based source fingerprints.
+CACHE_FORMAT_VERSION = 5  # Seasonal VWC presentation uses matched ratios of means.
 DEFAULT_CACHE_DIR = DATA_PROCESSED_DIR / "seasonal-summary-cache"
 
 

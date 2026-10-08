@@ -359,6 +359,7 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       const ratioKey = ratioKeyParts.join("_");
 
       const hasRatioStats =
+        row.ratio_of_means != null ||
         row.ratio_min != null ||
         row.ratio_mean != null ||
         row.ratio_max != null ||
@@ -373,12 +374,12 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       if (hasRatioStats && ratioKey && looksLikeRatioGroup) {
         grouped[periodCode].ratio_statistics[ratioKey] = {
           min: row.ratio_min,
-          mean: row.ratio_mean,
+          mean: variable === "VWC" ? row.ratio_of_means : row.ratio_mean,
           max: row.ratio_max,
           std: row.ratio_std,
-          n: row.ratio_n,
+          n: variable === "VWC" ? row.ratio_of_means_n : row.ratio_n,
           expected_n: row.ratio_expected_n,
-          coverage_pct: row.ratio_coverage_pct,
+          coverage_pct: variable === "VWC" ? row.ratio_of_means_coverage_pct : row.ratio_coverage_pct,
         };
       }
     });
@@ -437,12 +438,13 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
         <caption class="caption-top text-muted pt-0">
           Coverage is the percentage of expected 15-minute observations with valid data, through the elapsed part of each period.
           Raw statistics summarize all valid 15-minute observations for the selected strip, depth, and logger position.
+          ${variable === "VWC" ? "For VWC ratio sections, Mean is the ratio of seasonal means using matching valid timestamps; Valid n and Coverage describe those matched observations. Min, Max and SD describe individual 15-minute ratios, not the seasonal ratio." : ""}
         </caption>
         <thead>
           <tr>
             <th scope="col">Position</th>
             <th scope="col">Min</th>
-            <th scope="col">Mean</th>
+            <th scope="col">${variable === "VWC" ? "Mean / seasonal ratio" : "Mean"}</th>
             <th scope="col">Max</th>
             <th scope="col">SD</th>
             <th scope="col">Valid n</th>
@@ -729,6 +731,10 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
   const ratioContext = `Strip ratios S1/S2 and S3/S4, ${depthLabel}, anchor years ${yearRange}`;
   const partialTitleNote = comparisonPartialNote(rows, yearEntries, selectedPeriod.code);
   if (variable === "VWC") prettyVariable = "VWC (%)";
+  summaryWindow.__seasonalComparisonDownload.headings = {
+    raw: { heading: `${selectedPeriod.label}: mean ${prettyVariable} by year`, context: rawContext, note: partialTitleNote },
+    ratio: { heading: `${selectedPeriod.label}: ${variable === "VWC" ? "ratios of seasonal means" : "treatment ratios"} by year`, context: ratioContext, note: partialTitleNote },
+  };
   const commonLayout = {
     autosize: true,
     height: 395,
@@ -800,16 +806,15 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     annotations: [{
       xref: "paper",
       yref: "paper",
-      x: 0.995,
-      y: 0.99,
-      xanchor: "right",
-      yanchor: "top",
-      text: "Dark outline: ratio below 1",
+      x: 0,
+      xshift: 185,
+      yshift: 5,
+      y: 1.02,
+      xanchor: "left",
+      yanchor: "bottom",
+      text: "Dark outline indicates ratio below 1",
       showarrow: false,
-      bgcolor: "rgba(255,255,255,0.85)",
-      bordercolor: "#3b1f2b",
-      borderwidth: 1,
-      borderpad: 4,
+      borderpad: 0,
       font: { color: "#3b1f2b", size: 12 },
     }],
     xaxis: {

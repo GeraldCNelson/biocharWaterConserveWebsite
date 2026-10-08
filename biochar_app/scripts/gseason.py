@@ -3,7 +3,7 @@ Growing-season core utilities.
 
 Provides:
   • compute_seasons(...) – build per-period rows from a time-indexed DataFrame
-      - MEANS for non-precip variables
+      - MEANS for non-precip variables; matched ratios of means for VWC ratios
       - SUM for precip increments (precip_in / precip_mm)
   • assign_gseason_periods(...) – tag a timestamp with a season code
 """
@@ -15,6 +15,19 @@ import pandas as pd
 from biochar_app.scripts.config import DEFAULT_GSEASON_PERIODS
 
 logger = logging.getLogger(__name__)
+
+def matched_ratio_of_means(df: pd.DataFrame, numerator: str, denominator: str) -> tuple[float | None, int]:
+    """Seasonal ratio using the same finite observations for both strip means."""
+    if numerator not in df or denominator not in df:
+        return None, 0
+    matched = df[[numerator, denominator]].apply(pd.to_numeric, errors="coerce").replace(
+        [float("inf"), float("-inf")], float("nan")
+    ).dropna()
+    count = len(matched)
+    denominator_mean = matched[denominator].mean()
+    if not count or denominator_mean <= 0:
+        return None, count
+    return float(matched[numerator].mean() / denominator_mean), count
 
 def _slice_and_mean(
     df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp
@@ -49,7 +62,8 @@ def compute_seasons(
 
     Returns
     -------
-    DataFrame with one row per period (code, label, start, end, precip?, plus MEANs of other columns).
+    DataFrame with one row per period (code, label, start, end, precip?,
+    column means, and matched ratios of means for VWC ratio columns).
     """
     if "timestamp" in df.columns:
         df = df.set_index(
@@ -111,6 +125,17 @@ def compute_seasons(
             "end": end,
         }
         row.update(means)
+        # Seasonal VWC bars and data downloads use matched ratios of means,
+        # never means of the precomputed instantaneous ratio columns.
+        window = df.loc[window_mask]
+        for depth in ("1", "2", "3"):
+            for location in ("T", "M", "B"):
+                for numerator, denominator in (("S1", "S2"), ("S3", "S4")):
+                    num_col = f"VWC_{depth}_raw_{numerator}_{location}"
+                    den_col = f"VWC_{depth}_raw_{denominator}_{location}"
+                    ratio_col = f"VWC_{depth}_ratio_{numerator}_{denominator}_{location}"
+                    if ratio_col in df or (num_col in df and den_col in df):
+                        row[ratio_col], _ = matched_ratio_of_means(window, num_col, den_col)
         expected = int((end + pd.Timedelta(seconds=1) - start) / pd.Timedelta(minutes=15))
         numeric_window = df.loc[window_mask].select_dtypes(include="number").drop(columns=[precip_col], errors="ignore")
         valid_index = numeric_window.index[numeric_window.notna().any(axis=1)]
