@@ -3,7 +3,7 @@
 console.log(`🚀 control_panel.js loaded at ${new Date().toISOString()}`);
 
 import { updateDepthLabels, getSelectedFilters } from "./ui_controls.js?v=20261007-apply-seasons";
-import { updateSummaryStatistics } from "./tab_summary.js?v=20261007-comparison-headings";
+import { updateSummaryStatistics } from "./tab_summary.js?v=20261008-seasonal-ratios-export-2";
 import { renderMainPlots } from "./plots.js?v=20261007-apply-seasons";
 
 /**

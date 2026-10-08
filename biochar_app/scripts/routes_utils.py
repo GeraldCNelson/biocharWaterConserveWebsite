@@ -104,6 +104,8 @@ def load_gseason_df(
     """
     Load growing-season aggregated data for `year`.
     """
+    if not periods and variable == "VWC":
+        periods = DEFAULT_GSEASON_PERIODS
     if periods and variable:
         df = load_projected_seasons(year, periods, variable, unit_system)
     elif not periods:

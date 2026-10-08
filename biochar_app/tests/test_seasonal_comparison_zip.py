@@ -10,6 +10,45 @@ import zipfile
 import pytest
 
 
+def test_comparison_image_export_keeps_compact_notes_above_legend():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required")
+    source = Path(__file__).resolve().parents[1] / "static/js/downloads.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+let rendered, image, purged = false, removed = false;
+const chart = {data: [{type:"bar", y:[1.5]}], layout: {
+ title: {text:"old combined title"}, annotations:[{text:"Dark outline: ratio below 1"}]}};
+const original = JSON.stringify(chart);
+const window = {unitSystem:"us", __seasonalComparisonDownload: {
+ rows:[{}], years:[2025], variable:"VWC", strip:"S1", depth:"1", periodLabel:"Growing Season",
+ ratioChart:chart, rawChart:chart, headings:{ratio: {
+ heading:"Growing Season: ratios of seasonal means by year",
+ context:"Strip ratios S1/S2 and S3/S4, 6 in, anchor years 2023–2026",
+ note:"* Some observations missing: 2023. Means use available valid observations. See the comparison data download and its README for coverage details. Season unfinished: 2026."}}},
+ Plotly:{async newPlot(el,data,layout) {rendered=layout;},
+ async downloadImage(el,options) {image=options;}, purge() {purged=true;}}};
+const context = vm.createContext({window, document:{body:{appendChild() {}},
+ createElement() {return {style:{}, remove(){removed=true;}};}}, console, alert(){throw Error("Unexpected alert");}});
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, ""), context);
+await vm.runInContext('downloadSeasonalComparisonPlot("ratio")', context);
+if (rendered.title.text !== "") throw Error("Old oversized title retained");
+const notes = rendered.annotations.filter(a => a.font?.size === 16 && !a.text.startsWith("Dark outline"));
+if (notes.length < 2) throw Error("Expected wrapped compact notes");
+for(let i=1;i<notes.length;i++) if(notes[i-1].yshift-notes[i].yshift !== 21) throw Error("Wrong leading");
+if(notes.at(-1).yshift < 55) throw Error("Notes collide with legend");
+if(rendered.legend.y !== 1.01) throw Error("Wrong legend placement");
+const outline = rendered.annotations.find(a=>a.text === "Dark outline indicates ratio below 1");
+if(!outline || outline.y !== rendered.legend.y || outline.yanchor !== "bottom" || outline.borderwidth !== 0) throw Error("Outline explanation not alongside legend");
+if(outline.x !== 0 || outline.xshift !== 225) throw Error("Explanation not immediately after legend entries");
+if(JSON.stringify(chart)!==original || !purged || !removed || image.scale!==2) throw Error("Export mutated screen or leaked chart");
+'''
+    subprocess.run([node, "--input-type=module", "-e", script, str(source)],
+                   capture_output=True, text=True, check=True)
+
+
 def test_comparison_chart_selects_ratio_of_means_for_vwc():
     node = shutil.which("node")
     if not node:
