@@ -102,9 +102,32 @@ class TimestampCorrection:
     corrected_end_timestamp: str | None
     correction_code: str
     correction_reason: str
+    expected_start_counter: float | None = None
+    expected_end_counter: float | None = None
+    accept_corrected_source_date: bool = False
 
 
 IRRIGATION_QC_CORRECTIONS: Final[tuple[TimestampCorrection, ...]] = (
+    *(
+        TimestampCorrection(
+            source_date="2026-09-30",
+            strip_group=group,
+            corrected_start_timestamp="2026-09-29 10:14:00",
+            corrected_end_timestamp="2026-09-29 15:33:00",
+            correction_code="camera_date_preferred",
+            correction_reason=(
+                "User-reviewed meter photos IMG_9123.HEIC (2026-09-29 10:14), "
+                "IMG_9124.HEIC (10:16) and IMG_9139.HEIC (15:33) support "
+                "September 29 rather than workbook September 30. Manual "
+                "readings 240194 and 241488 match workbook counters. "
+                "Both strip groups irrigated together; volume unchanged."
+            ),
+            expected_start_counter=240194.0,
+            expected_end_counter=241488.0,
+            accept_corrected_source_date=True,
+        )
+        for group in ("S1_S2", "S3_S4")
+    ),
     TimestampCorrection(
         source_date="2025-05-03",
         strip_group="S3_S4",
@@ -393,12 +416,20 @@ def match_correction_rows(
         errors="coerce",
     ).dt.strftime("%Y-%m-%d")
 
-    return (
-        date_values.eq(correction.source_date)
+    dates = date_values.eq(correction.source_date)
+    if correction.accept_corrected_source_date:
+        dates |= date_values.eq(str(correction.corrected_start_timestamp)[:10])
+    mask = (
+        dates
         & df["strip_group"].eq(
             correction.strip_group
         )
     )
+    if correction.expected_start_counter is not None:
+        mask &= pd.to_numeric(df["start_totalizer_gal_x100"], errors="coerce").eq(correction.expected_start_counter)
+    if correction.expected_end_counter is not None:
+        mask &= pd.to_numeric(df["end_totalizer_gal_x100"], errors="coerce").eq(correction.expected_end_counter)
+    return mask
 
 
 def apply_timestamp_corrections(
@@ -439,7 +470,7 @@ def apply_timestamp_corrections(
             .astype(str)
         )
 
-        if matched_strips != expected_strips:
+        if matched_strips != expected_strips or len(matched) != len(expected_strips):
             raise ValueError(
                 "Timestamp correction did not match the expected two strip "
                 "rows.\n"
