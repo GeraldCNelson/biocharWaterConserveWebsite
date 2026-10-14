@@ -152,11 +152,25 @@
           "key": "ec",
           "term": "Electrical Conductivity",
           "abbreviation": "EC",
-          "definition": "A measure of the soil’s ability to conduct electricity, related to dissolved salts and ion concentration. Common units include deciSiemens per meter (dS/m), milliSiemens per centimeter (mS/cm), or millimhos per centimeter (mmho/cm), where 1 dS/m = 1 mS/cm = 1 mmho/cm.",
+          "definition": "A measure of the soil’s ability to conduct electricity, related to dissolved salts and ion concentration. Common units include deciSiemens per meter (dS/m), milliSiemens per centimeter (mS/cm), or millimhos per centimeter (mmho/cm), where 1 dS/m = 1 mS/cm = 1 mmho/cm. On this site, EC reported by the soil loggers is bulk EC unless otherwise specified.",
           "units": "dS/m, mS/cm, or mmho/cm",
           "matches": ["EC", "electrical_conductivity", "1_1_s_salts_mmho_cm"],
+          "related_to": ["bulk_ec"],
           "source": {
             "note": "Standard soil science unit equivalence."
+          }
+        },
+        {
+          "key": "bulk_ec",
+          "term": "Bulk Electrical Conductivity",
+          "abbreviation": "Bulk EC or ECb",
+          "definition": "The electrical conductivity of the intact soil volume measured by an in-soil sensor. Bulk EC is influenced by dissolved ions, volumetric water content, the continuity and tortuosity of water-filled pores, soil texture and clay content, compaction, and temperature. It is not equivalent to pore-water EC or laboratory extract EC. Comparisons should therefore be made at similar soil moisture and temperature conditions or after appropriate adjustment.",
+          "units": "dS/m, mS/cm, or mmho/cm",
+          "matches": ["Bulk EC", "ECb", "bulk_electrical_conductivity", "bulk electrical conductivity"],
+          "related_to": ["ec", "vwc"],
+          "source": {
+            "citation": "Campbell Scientific. CS650 and CS655 Water Content Reflectometers product manual.",
+            "url": "https://s.campbellsci.com/documents/us/manuals/cs650.pdf"
           }
         },
         {
@@ -206,10 +220,11 @@
         },
         {
           "key": "ec_ratio",
-          "term": "EC Ratio",
-          "definition": "A ratio comparing electrical conductivity between paired strips, used to highlight relative differences in salts or dissolved ions.",
+          "term": "Bulk EC Ratio",
+          "definition": "A ratio comparing bulk electrical conductivity measured by the soil loggers between paired strips. It reflects relative differences in the sensor readings but remains sensitive to differences in soil water content and temperature; it is not a direct ratio of pore-water salinity or dissolved-ion concentration.",
           "units": "unitless",
-          "matches": ["EC", "ratio"]
+          "matches": ["Bulk EC ratio", "EC ratio"],
+          "related_to": ["bulk_ec", "ratio"]
         },
         {
           "key": "temperature_ratio",

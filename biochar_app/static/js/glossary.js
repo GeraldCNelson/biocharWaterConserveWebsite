@@ -4,7 +4,8 @@
  * @typedef {{
  *   citation?: string,
  *   doi?: string,
- *   note?: string
+ *   note?: string,
+ *   url?: string
  * }} GlossarySource
  */
 
@@ -50,7 +51,7 @@
 /** @type {GlossaryWindow} */
 const glossaryWindow = /** @type {GlossaryWindow} */ (window);
 
-const GLOSSARY_JSON_URL = "/static/data/glossary_terms.json";
+const GLOSSARY_JSON_URL = "/static/data/glossary_terms.json?v=20261011-bulk-ec-2";
 
 /**
  * @param {GlossaryEntry} entry
@@ -86,6 +87,7 @@ function searchableEntryText(entry) {
     entry.source?.citation || "",
     entry.source?.doi || "",
     entry.source?.note || "",
+    entry.source?.url || "",
   ];
 
   return normalizeSearchText(parts.join(" "));
@@ -157,7 +159,7 @@ export async function loadGlossaryData() {
     return glossaryWindow.__glossaryData;
   }
 
-  const resp = await fetch(GLOSSARY_JSON_URL);
+  const resp = await fetch(GLOSSARY_JSON_URL, { cache: "no-cache" });
   if (!resp.ok) {
     throw new Error(`Failed to load glossary JSON: HTTP ${resp.status}`);
   }
@@ -271,7 +273,11 @@ intro.innerHTML = `
           : "";
 
         const sourceParts = [];
-        if (entry.source?.citation) sourceParts.push(entry.source.citation);
+        if (entry.source?.citation && entry.source?.url) {
+          sourceParts.push(`<a href="${entry.source.url}" target="_blank" rel="noopener noreferrer">${entry.source.citation}</a>`);
+        } else if (entry.source?.citation) {
+          sourceParts.push(entry.source.citation);
+        }
         if (entry.source?.doi) sourceParts.push(`DOI: ${entry.source.doi}`);
         if (entry.source?.note) sourceParts.push(entry.source.note);
 

@@ -167,7 +167,7 @@ def build_gseason_period_labels(periods: dict) -> list[str]:
 VARIABLE_NAME_MAPPING = {
     "VWC": "Vol. Water Content",
     "T": "Soil Temperature",
-    "EC": "Electrical Conductivity",
+    "EC": "Bulk Electrical Conductivity (EC)",
     "SWC": "Soil Water Content",
 }
 GRANULARITY_NAME_MAPPING = {
@@ -179,7 +179,7 @@ GRANULARITY_NAME_MAPPING = {
 }
 VARIABLE_NAME_ABBREV = {
     "VWC": "VWC",
-    "EC": "EC",
+    "EC": "Bulk EC",
     "SWC": "SWC",
     "T": "Soil Temp.",
     "temp_air": "Air Temp.",
@@ -268,6 +268,7 @@ PLOT_COLORS = {
     "air_temp": OKABE_ITO["reddish_purple"],
 
     "irrigation": OKABE_ITO["black"],
+    "fertilizer": OKABE_ITO["reddish_purple"],
 
     # Reference lines / annotations
     "zero_line": OKABE_ITO["black"],

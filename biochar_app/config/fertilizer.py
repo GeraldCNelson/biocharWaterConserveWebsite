@@ -22,6 +22,33 @@ Conversions:
 P_FROM_P2O5 = 0.4364
 K_FROM_K2O = 0.8301
 
+# Product-grade fractions as printed on the fertilizer label.  These are used
+# to translate a nutrient recommendation into a product rate.  P and K are
+# label-basis P2O5 and K2O here; FERTILIZER_PRODUCT_ANALYSIS below converts
+# those values to elemental mass fractions for nutrient-budget columns.
+FERTILIZER_PRODUCT_GRADE = {
+    "11-52-0": {"n": 0.11, "p2o5": 0.52, "k2o": 0.00},
+    "UREA": {"n": 0.46},
+    "SULFATE OF POTASH": {"k2o": 0.50},
+    "MANGANESE SULFATE (MNSO4)": {"mn": 0.32},
+}
+
+# The annual recommendation sheets use several names for the same products.
+# The 2024-2026 row labelled "11-52-1" states "11, 52, 0%" in its analysis
+# cell, so it is mapped to 11-52-0 pending confirmation of the actual product.
+FERTILIZER_PRODUCT_ALIASES = {
+    "11-52-0": "11-52-0",
+    "LBS OF 11-52-0": "11-52-0",
+    "11-52-1 (PHOSPHORUS)": "11-52-0",
+    "UREA": "UREA",
+    "LBS OF UREA": "UREA",
+    "46-0-0 UREA (N)": "UREA",
+    "SULFATE OF POTASH": "SULFATE OF POTASH",
+    "LBS OF SULFATE OF POTASH": "SULFATE OF POTASH",
+    "POTASSIUM SULFATE (K2SO4)": "SULFATE OF POTASH",
+    "MANGANESE SULFATE (MNSO4)": "MANGANESE SULFATE (MNSO4)",
+}
+
 FERTILIZER_PRODUCT_ANALYSIS = {
     # 11-52-0 = 11% N, 52% P2O5, 0% K2O
     "11-52-0": {

@@ -78,7 +78,7 @@ table.figure-grid img {
 <figcaption><p>Figure 2. Pistachio shell biochar</p></figcaption>
 </figure>
 <h2 id="irrigation-data-collection">Irrigation data collection</h2>
-<p>Data on the consequences of irrigation in soil – soil moisture, electrical conductivity, and temperature – is collected using Campbell Scientific CS650 probes located 6, 12, and 18 inches below the surface. The process is described in detail in the Technical Details tab.</p>
+<p>Data on the consequences of irrigation in soil – soil moisture, bulk electrical conductivity (bulk EC), and temperature – is collected using Campbell Scientific CS650 probes located 6, 12, and 18 inches below the surface. The process is described in detail in the Technical Details tab.</p>
 <figure>
 <img alt="CS650 probes in place" src="/static/images/generated/experimentdesign/image-03.webp" style="width:2.47925in;height:3.27261in" title="CS650 probes in place"/>
 <figcaption><p>Figure 3. CS650 probes in place</p></figcaption>

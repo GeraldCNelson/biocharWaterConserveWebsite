@@ -320,7 +320,7 @@ def build_logger_units_section(unit_system: str = "us") -> str:
     if unit_system == "metric":
         rows = [
             ("Volumetric Water Content (VWC)", "percent volumetric water content (%)"),
-            ("Electrical Conductivity (EC)", "standardized logger EC units"),
+            ("Bulk Electrical Conductivity (EC)", "dS/m; uncorrected bulk EC as reported by the CS650 sensors"),
             ("Soil Temperature (T)", "degrees Celsius (°C)"),
             ("Soil Water Content (SWC)", "liters (L) where present"),
             ("SWC difference", "liters (L) where shown in the column name"),
@@ -332,7 +332,7 @@ def build_logger_units_section(unit_system: str = "us") -> str:
     else:
         rows = [
             ("Volumetric Water Content (VWC)", "percent volumetric water content (%)"),
-            ("Electrical Conductivity (EC)", "standardized logger EC units"),
+            ("Bulk Electrical Conductivity (EC)", "dS/m; uncorrected bulk EC as reported by the CS650 sensors"),
             ("Soil Temperature (T)", "degrees Fahrenheit (°F)"),
             ("Soil Water Content (SWC)", "gallons (gal) where present"),
             ("SWC difference", "gallons (gal) where shown in the column name"),
@@ -377,11 +377,13 @@ def build_management_units_section(dataset: str, unit_system: str = "us") -> str
             ("Start and end time", "local timestamp fields as stored in the standardized CSV"),
         ]
     elif dataset == "fertilizer":
-        amount_unit = "metric units where available" if unit_system == "metric" else "US units where available"
         rows = [
-            ("Fertilizer amount or rate", amount_unit),
-            ("Application date", "date or timestamp field as stored in the standardized CSV"),
-            ("Material or product", "text field, where available"),
+            ("Recommended product rate", "pounds per acre (lb/acre)"),
+            ("Recommended product total", "pounds (lb), estimated from strip area"),
+            ("Estimated nutrient rate", "elemental pounds per acre (lb/acre)"),
+            ("Estimated nutrient total", "elemental pounds (lb)"),
+            ("Date", "recorded date for field-level fertilization activity rows; blank for recommendation rows"),
+            ("Material or product", "canonical text name plus the source-sheet label"),
         ]
     else:
         rows = [
@@ -431,7 +433,7 @@ def build_logger_column_naming_section(unit_system: str = "us") -> str:
         "",
         "Examples:",
         "- VWC_1_raw_S1_T = volumetric water content, depth 1, raw value, Strip 1, top logger location",
-        "- EC_2_raw_S3_M = electrical conductivity, depth 2, raw value, Strip 3, middle logger location",
+        "- EC_2_raw_S3_M = bulk electrical conductivity, depth 2, raw value, Strip 3, middle logger location",
         "- T_3_raw_S4_B = soil temperature, depth 3, raw value, Strip 4, bottom logger location",
         "- Tdiff_1_S1_S2_T = soil temperature difference, depth 1, comparing S1 to S2, top logger location",
         f"- {swc_example}",
@@ -531,10 +533,11 @@ def build_logger_variable_section(df: pd.DataFrame, unit_system: str = "us") -> 
         [c for c in raw if c.startswith("VWC")],
         "percent volumetric water content (%)",
     ))
-    raw_lines.extend(_variable_line(
-        "Electrical Conductivity (EC)",
+    raw_lines.extend(_variable_line_from_glossary(
+        "Bulk Electrical Conductivity (EC)",
         [c for c in raw if c.startswith("EC")],
-        "standardized logger EC units",
+        "bulk_ec",
+        "dS/m; uncorrected unless a derived column is explicitly identified as temperature-corrected",
     ))
     raw_lines.extend(_variable_line(
         "Soil Temperature (T)",
@@ -749,8 +752,13 @@ def build_management_readme(
         description = "\n".join([
             f"{FERTILIZER_DESCRIPTION} This download covers {years_text}.",
             "",
-            "Records should be interpreted alongside crop management, irrigation practices, "
-            "and harvest timing.",
+            "Use `record_type` and `scope` to distinguish strip-level recommendations "
+            "from field-level dated activity records. Do not treat a recommendation row "
+            "as a confirmed application amount.",
+            "",
+            "Phosphorus and potassium nutrient columns use elemental mass; source recommendations "
+            "and product grades use label-basis P2O5 and K2O. The 2024-2026 source row labelled "
+            "11-52-1 states 11, 52, 0% in the analysis cell and is provisionally normalized to 11-52-0.",
         ])
     else:
         description = f"This file contains standardized management records for {dataset_label} for {years_text}."

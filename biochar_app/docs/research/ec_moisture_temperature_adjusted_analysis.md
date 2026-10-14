@@ -1,3 +1,8 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
 # Six-inch soil electrical-conductivity patterns and shallow laboratory chemistry
 
 ## What an EC ratio means

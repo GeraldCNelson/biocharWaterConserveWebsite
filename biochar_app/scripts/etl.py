@@ -129,6 +129,9 @@ from biochar_app.scripts.get_weather_data import fetch_weather_data
 from biochar_app.scripts.management.build_irrigation_from_master import (
     build_and_install_irrigation,
 )
+from biochar_app.scripts.management.generate_fertilizer_clean import (
+    build_and_install_fertilizer,
+)
 from biochar_app.scripts.management.update_master_workbook_snapshot import (
     download_snapshot,
 )
@@ -1696,7 +1699,7 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "  timestamp                         : America/Denver local civil time (timezone-naive on export)",
                 "  VWC_<depth>_raw_<strip>_<loc>     : volumetric water content (%)",
                 "  T_<depth>_raw_<strip>_<loc>       : soil temperature (°F)",
-                "  EC_<depth>_raw_<strip>_<loc>      : electrical conductivity (dS/m)",
+                "  EC_<depth>_raw_<strip>_<loc>      : bulk electrical conductivity (dS/m; uncorrected CS650 reading)",
                 "  SWC_vol_L_<strip>_<loc>_<depth>   : legacy reference-cylinder water volume (liters)",
                 "  SWC_vol_gal_<strip>_<loc>_<depth> : legacy reference-cylinder water volume (gallons)",
                 "  CS650_water_L_<strip>_<loc>_<depth>   : local water in approximate CS650 sensing volume (liters)",
@@ -1708,6 +1711,8 @@ def write_logger_download_zip(year: int, df_15min: pd.DataFrame) -> None:
                 "  - Manual logger clock corrections may have been applied before seasonal civil-time conversion.",
                 "  - Cross-strip comparison variables (ΔT, ΔSWC, ratio columns, etc.)",
                 "    are not included in these per-logger CSVs.",
+                "  - Logger EC is bulk EC, not pore-water EC or laboratory extract EC; it varies with",
+                "    soil water content and temperature.",
             ]
         )
 
@@ -2330,7 +2335,7 @@ def main() -> None:
         help=(
             "Rebuild logger products from PC400 files plus the accepted "
             "PakBus archive, refresh CoAgMet weather and master-workbook "
-            "irrigation products; skip laboratory and legacy raw-data backup work."
+            "management products; skip laboratory and legacy raw-data backup work."
         ),
     )
     parser.add_argument(
@@ -2353,6 +2358,14 @@ def main() -> None:
         action="store_true",
         help=(
             "Do not rebuild irrigation_clean.csv from the validated master "
+            "workbook snapshot."
+        ),
+    )
+    parser.add_argument(
+        "--skip-fertilizer-build",
+        action="store_true",
+        help=(
+            "Do not rebuild fertilizer_clean.csv from the validated master "
             "workbook snapshot."
         ),
     )
@@ -2383,6 +2396,21 @@ def main() -> None:
             logger.warning("Irrigation refresh failed (%s); retaining last validated data", management["detail"])
         else:
             logger.info("Irrigation refreshed through %s", management["latest_irrigation_start"])
+        if args.skip_fertilizer_build:
+            logger.warning(
+                "Fertilizer build was skipped. Fertilizer recommendations and "
+                "activity dates may be stale."
+            )
+        else:
+            fertilizer_audit = build_and_install_fertilizer()
+            logger.info(
+                "Fertilizer data rebuilt: rows=%s recommendations=%s "
+                "activities=%s latest_activity=%s",
+                fertilizer_audit["rows"],
+                fertilizer_audit["recommendation_rows"],
+                fertilizer_audit["activity_rows"],
+                fertilizer_audit["latest_activity_date"],
+            )
         logger.info(
             "Operational update: refreshing logger and weather products; "
             "skipping laboratory and legacy "
@@ -2416,6 +2444,24 @@ def main() -> None:
             irrigation_audit["production_strip_rows"],
             irrigation_audit["latest_irrigation_start"],
             irrigation_audit["invalid_group_events"],
+        )
+
+    if operational_subset:
+        pass
+    elif args.skip_fertilizer_build:
+        logger.warning(
+            "Fertilizer build was skipped. Fertilizer recommendations and "
+            "activity dates may be stale."
+        )
+    else:
+        fertilizer_audit = build_and_install_fertilizer()
+        logger.info(
+            "Fertilizer data rebuilt: rows=%s recommendations=%s "
+            "activities=%s latest_activity=%s",
+            fertilizer_audit["rows"],
+            fertilizer_audit["recommendation_rows"],
+            fertilizer_audit["activity_rows"],
+            fertilizer_audit["latest_activity_date"],
         )
 
     if operational_subset:

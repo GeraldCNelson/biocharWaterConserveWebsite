@@ -369,7 +369,7 @@ s3_s4_ratio_mean: For VWC, seasonal mean S3 divided by seasonal mean S4, using o
 s3_s4_coverage_pct: Available S3/S4 ratio observations as a percentage of expected observations under the website's seasonal coverage calculation.
 
 UNITS AND INTERPRETATION
-VWC raw means are percent soil volume occupied by water. EC is in dS/m. Temperature and water-volume raw means use the selected website units (US or metric).
+VWC raw means are percent soil volume occupied by water. Logger EC is uncorrected bulk electrical conductivity in dS/m, not pore-water EC or laboratory extract EC; it varies with soil water content and temperature. Temperature and water-volume raw means use the selected website units (US or metric).
 Ratios are dimensionless: 1 means equal values, greater than 1 means the numerator strip has a higher value, and less than 1 means it has a lower value.
 S1/S2 are the approximately monthly irrigation comparison; S3/S4 are the approximately fortnightly comparison. Frequency is not irrigation volume or application rate.
 The raw-strip selection affects raw_mean, not which two paired-strip ratios are included.
