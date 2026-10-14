@@ -81,8 +81,9 @@ IRRIGATION_DESCRIPTION = (
 )
 
 FERTILIZER_DESCRIPTION = (
-    f"This dataset contains standardized fertilizer application records for the {PROJECT_FIELD_DESCRIPTION}. "
-    "Applications are recorded at the strip level and include timing, material, and application amounts where available."
+    f"This dataset contains fertilizer recommendations and field-level fertilization activity dates for the {PROJECT_FIELD_DESCRIPTION}. "
+    "Recommendation records contain product requirements recalculated from annual strip nutrient targets. Activity records contain "
+    "the date recorded in the master workbook but do not establish which products, rates, amounts, or strips were actually treated."
 )
 
 SOIL_CHEMISTRY_DESCRIPTION = (

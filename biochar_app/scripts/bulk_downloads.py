@@ -74,7 +74,11 @@ MANAGEMENT_DATASETS: dict[str, tuple[Path, str, str]] = {
         "Irrigation",
         "biochar_irrigation_all_years.csv",
     ),
-    "fertilizer": (FERTILIZER_CSV_OUT, "Fertilizer use", "biochar_fertilizer_all_years.csv"),
+    "fertilizer": (
+        FERTILIZER_CSV_OUT,
+        "Fertilizer recommendations and activity dates",
+        "biochar_fertilizer_all_years.csv",
+    ),
 }
 
 WORKBOOK_TOKENS: dict[str, str] = {
