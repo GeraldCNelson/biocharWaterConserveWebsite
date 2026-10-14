@@ -608,10 +608,12 @@ export function comparisonChartHeading(heading, context, note, width = 640) {
   const mainLines = wrap(heading, 18);
   const detailLines = [...wrap(context, 14), ...wrap(note, 14)];
   const top = 74 + mainLines.length * 23 + detailLines.length * 17;
+  const detailText = detailLines.length
+    ? `<br><span style="font-size:14px">${detailLines.map(escapeSummaryHTML).join("<br>")}</span>`
+    : "";
   return {
     title: {
-      text: mainLines.map(escapeSummaryHTML).join("<br>") +
-        (detailLines.length ? "<br><sup>" + detailLines.map(escapeSummaryHTML).join("<br>") + "</sup>" : ""),
+      text: mainLines.map(escapeSummaryHTML).join("<br>") + detailText,
       // Keep the first text baseline safely inside the SVG in all browsers.
       x: 0, xref: "paper", xanchor: "left", y: 1, yref: "container", yanchor: "top",
       pad: { t: 28 },
@@ -791,7 +793,10 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
     ...commonLayout,
     ...comparisonChartHeading(`${selectedPeriod.label}: ${variable === "VWC" ? "ratios of seasonal means" : "treatment ratios"} by year`, ratioContext,
       partialTitleNote, ratioChart.clientWidth || 640),
-    yaxis: { title: `${variable} ratio`, rangemode: "tozero" },
+    yaxis: {
+      title: `${variable === "EC" ? "Bulk EC" : variable} ratio`,
+      rangemode: "tozero",
+    },
     shapes: [{
       type: "line",
       xref: "paper",
@@ -1203,7 +1208,7 @@ export async function updateSummaryStatistics() {
       info.className = "alert alert-info";
       info.innerHTML =
         "Ratios are not shown for <strong>Soil Temperature</strong> because temperature ratios are not meaningful in this dashboard " +
-        "(unlike VWC/EC/SWC). See the <strong>Technical Details</strong> tab for an explanation.";
+        "(unlike VWC/bulk EC/SWC). See the <strong>Technical Details</strong> tab for an explanation.";
       container.appendChild(info);
 
       console.log("ℹ️ Temperature variable selected; ratio stats intentionally suppressed.");

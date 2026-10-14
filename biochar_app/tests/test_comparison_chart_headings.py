@@ -26,6 +26,8 @@ assert.equal(narrow.title.xanchor,"left");
 assert.equal(narrow.title.yref,"container");
 assert.equal(narrow.title.yanchor,"top");
 assert.ok(narrow.title.pad.t>=24);
+assert.ok(narrow.title.text.includes('<span style="font-size:14px">'));
+assert.ok(!narrow.title.text.includes("<sup>"));
 assert.ok(context.comparisonChartHeading("A < B",subtitle,"",640).title.text.includes("&lt;"));
 const rows=[{year:2023,status:"Partial"},{year:2024,status:"Partial"},{year:2026,status:"Partial"}];
 const entries=rows.map(r=>({year:r.year,periods:[{code:"G",start:r.year+"-04-01",end:r.year+"-10-31"}]}));

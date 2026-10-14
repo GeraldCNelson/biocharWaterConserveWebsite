@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from biochar_app.config.core import (
     STRIP_NAME_MAPPING,
     VARIABLE_NAME_MAPPING,
+    VARIABLE_NAME_ABBREV,
     SENSOR_DEPTH_LABELS,
     LOGGER_LOCATION_MAPPING,
 )
@@ -32,6 +33,7 @@ from biochar_app.config.units import UNIT_CONVERSIONS, label_name_mapping
 from biochar_app.scripts.type_utils import UnitSystem
 from biochar_app.scripts.data_loading import load_irrigation_data
 from biochar_app.config.irrigation_config import get_irrigation_analysis_options
+from biochar_app.config.paths import FERTILIZER_CSV_OUT
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,8 @@ _IRRIGATION_SHEETS_CACHE: dict[int, pd.DataFrame] = {}
 _IRRIGATION_XLS: Optional[pd.ExcelFile] = None
 _IRRIGATION_CACHE: dict[tuple[int, str], pd.DataFrame] = {}
 _IRRIGATION_CACHE_SOURCE_SIGNATURE: tuple[int, int] | None = None
+_FERTILIZER_CACHE: dict[int, pd.DataFrame] = {}
+_FERTILIZER_CACHE_SOURCE_SIGNATURE: tuple[int, int] | None = None
 
 COLUMN_CATEGORY_RULES = {
     "temp": [
@@ -241,11 +245,11 @@ def common_yaxis_config(
             y_min -= 1.0
             y_max += 1.0
 
-    title_text = (
-        f"{variable} (dimensionless)"
-        if kind == "ratio"
-        else f"{title_base}{f' ({unit})' if unit else ''}"
-    )
+    if kind == "ratio":
+        ratio_name = VARIABLE_NAME_ABBREV.get(variable, variable)
+        title_text = f"{ratio_name} ratio (dimensionless)"
+    else:
+        title_text = f"{title_base}{f' ({unit})' if unit else ''}"
 
     axis_cfg: dict[str, Any] = {
         "title": {"text": title_text, "font": {"size": 12}},
@@ -264,10 +268,13 @@ def common_yaxis_config(
     return axis_cfg
 
 def common_yaxis2_config(unit_system: UnitSystem = "us") -> dict[str, Any]:
+    unit_label = "mm" if unit_system == "metric" else "in"
     return {
-        # Units are included in the precipitation legend entry, so a vertical
-        # secondary-axis title would repeat the same information.
-        "title": {"text": ""},
+        "title": {
+            "text": f"Precipitation ({unit_label})",
+            "font": {"size": 12},
+            "standoff": 8,
+        },
         "overlaying": "y",
         "side": "right",
         "showgrid": False,
@@ -283,8 +290,8 @@ def common_yaxis2_config(unit_system: UnitSystem = "us") -> dict[str, Any]:
         "automargin": False,
     }
 
-def common_legend_config(title: str) -> dict:
-    return dict(
+def common_legend_config(title: str, *, secondary_y: bool = False) -> dict:
+    config = dict(
         title=dict(text=f"<b>{title}</b>", side="top"),
         bgcolor="rgba(255, 255, 255, 0.50)",
         bordercolor="rgba(0, 0, 0, 0.15)",
@@ -299,6 +306,17 @@ def common_legend_config(title: str) -> dict:
         tracegroupgap=0,
         itemwidth=30,
     )
+    if secondary_y:
+        config.update(
+            orientation="h",
+            x=0.0,
+            xanchor="left",
+            # Keep the legend in its own row above irrigation-volume labels,
+            # which are drawn at y=1.02 just above the plotting area.
+            y=1.12,
+            yanchor="bottom",
+        )
+    return config
 
 def get_unit_aware_label(variable: str, unit_system: UnitSystem) -> str:
     label = label_name_mapping.get(variable, variable)
@@ -706,4 +724,65 @@ def load_irrigation_events(strip: str, year: int) -> pd.DataFrame:
     events.reset_index(drop=True, inplace=True)
 
     _IRRIGATION_CACHE[cache_key] = events
+    return events.copy()
+
+
+def load_fertilization_events(year: int) -> pd.DataFrame:
+    """Return dated field-level fertilization events for one year."""
+    global _FERTILIZER_CACHE_SOURCE_SIGNATURE
+
+    try:
+        stat = FERTILIZER_CSV_OUT.stat()
+        source_signature = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        source_signature = None
+
+    if source_signature != _FERTILIZER_CACHE_SOURCE_SIGNATURE:
+        _FERTILIZER_CACHE.clear()
+        _FERTILIZER_CACHE_SOURCE_SIGNATURE = source_signature
+
+    if year in _FERTILIZER_CACHE:
+        return _FERTILIZER_CACHE[year].copy()
+
+    output_cols = ["date", "activity", "scope", "source_sheet", "source_cell"]
+    empty = pd.DataFrame(columns=output_cols)
+
+    if source_signature is None:
+        logger.warning("Fertilizer data not found: %s", FERTILIZER_CSV_OUT)
+        _FERTILIZER_CACHE[year] = empty
+        return empty.copy()
+
+    try:
+        frame = pd.read_csv(FERTILIZER_CSV_OUT)
+    except Exception as exc:
+        logger.warning("Failed to load fertilizer data: %s", exc)
+        _FERTILIZER_CACHE[year] = empty
+        return empty.copy()
+
+    required = {"year", "date", "record_type", "activity", "scope"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        logger.warning("Fertilizer data missing required overlay columns: %s", missing)
+        _FERTILIZER_CACHE[year] = empty
+        return empty.copy()
+
+    year_values = pd.to_numeric(frame["year"], errors="coerce")
+    events = frame.loc[
+        (year_values == int(year))
+        & (frame["record_type"].astype(str) == "fertilization_activity")
+        & (frame["scope"].astype(str) == "field"),
+    ].copy()
+
+    if events.empty:
+        _FERTILIZER_CACHE[year] = empty
+        return empty.copy()
+
+    events["date"] = pd.to_datetime(events["date"], errors="coerce")
+    events = events.loc[events["date"].notna()].copy()
+    for column in output_cols:
+        if column not in events.columns:
+            events[column] = pd.NA
+
+    events = events[output_cols].sort_values("date").reset_index(drop=True)
+    _FERTILIZER_CACHE[year] = events
     return events.copy()

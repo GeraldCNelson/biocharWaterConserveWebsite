@@ -34,8 +34,6 @@ from biochar_app.config.core import TRACE_OPTION_MAP
 if TYPE_CHECKING:
     from biochar_app.scripts.routes import PeriodSpec  # noqa: F401
 
-logger = logging.getLogger(__name__)
-
 from biochar_app.config.core import (
     PLOT_COLORS,
     TITLE_FONT_SIZE,
@@ -57,6 +55,7 @@ from biochar_app.scripts.plot_components import (
     common_yaxis_config,
     convert_units,
     get_unit_aware_label,
+    load_fertilization_events,
     load_irrigation_events,
 )
 
@@ -66,6 +65,8 @@ from biochar_app.config.dataset_metadata import (
 )
 from biochar_app.config.plot_config import DEFAULT_PLOT_HEIGHT
 
+logger = logging.getLogger(__name__)
+
 # TODO:
 # Move remaining plot layout constants (margins, fonts, colors)
 # into config/plot_config.py after plot refactoring stabilizes.
@@ -73,10 +74,10 @@ from biochar_app.config.plot_config import DEFAULT_PLOT_HEIGHT
 PLOT_MARGINS = {
     "standard": {"l": 60, "r": 120, "t": 60, "b": 70},
     "standard_tall": {"l": 60, "r": 120, "t": 70, "b": 70},
-    "dual_axis_us": {"l": 60, "r": 150, "t": 60, "b": 70},
-    "dual_axis_metric": {"l": 60, "r": 165, "t": 60, "b": 70},
-    "dual_axis_tall_us": {"l": 60, "r": 150, "t": 70, "b": 70},
-    "dual_axis_tall_metric": {"l": 60, "r": 165, "t": 70, "b": 70},
+    "dual_axis_us": {"l": 60, "r": 120, "t": 115, "b": 70},
+    "dual_axis_metric": {"l": 60, "r": 135, "t": 115, "b": 70},
+    "dual_axis_tall_us": {"l": 60, "r": 120, "t": 125, "b": 70},
+    "dual_axis_tall_metric": {"l": 60, "r": 135, "t": 125, "b": 70},
 }
 
 # SVG traces remain useful for small figures and static output, but become
@@ -212,7 +213,8 @@ def build_ratio_plot_title(
     prefix = "Growing-season Ratio Plot" if is_gseason else f"{granularity.capitalize()} Ratio Plot"
     if is_gseason and variable == "VWC":
         prefix = "Seasonal Ratio of Means"
-    title_text = f"{prefix} for {variable} in {year} ({logger_label}, {depth_label})"
+    display_variable = VARIABLE_NAME_ABBREV.get(variable, variable)
+    title_text = f"{prefix} for {display_variable} in {year} ({logger_label}, {depth_label})"
 
     if no_data:
         title_text += " — no ratio data available for selected filters"
@@ -360,6 +362,10 @@ def add_irrigation_shapes(
     sum_only: bool = False,
     periods: Optional[Sequence[Any]] = None,
     category_labels: Optional[list[str]] = None,
+    color: Optional[str] = None,
+    legend_name: str = "Irrigation",
+    show_volume_labels: bool = True,
+    granularity: Optional[str] = None,
 ) -> None:
     usys: UnitSystem = coerce_unit_system(unit_system)
 
@@ -369,7 +375,7 @@ def add_irrigation_shapes(
     conv = UNIT_CONVERSIONS["us_to_metric"]["irrigation"]
     unit_lbl = "<br>k L" if usys == "metric" else "<br>k gal"
 
-    irr_color = PLOT_COLORS.get("irrigation", "black")
+    irr_color = color or PLOT_COLORS.get("irrigation", "black")
     irr_anno_color = irr_color
     irr_opacity = 0.7
 
@@ -413,15 +419,16 @@ def add_irrigation_shapes(
                 line=dict(color=irr_color, dash="dot", width=2),
                 opacity=irr_opacity,
             )
-            fig.add_annotation(
-                xref="x",
-                x=cat,
-                yref="paper",
-                y=1.02,
-                text=f"{total / 1000.0:.0f} {unit_lbl}",
-                showarrow=False,
-                font=dict(size=10, color=irr_anno_color),
-            )
+            if show_volume_labels:
+                fig.add_annotation(
+                    xref="x",
+                    x=cat,
+                    yref="paper",
+                    y=1.02,
+                    text=f"{total / 1000.0:.0f} {unit_lbl}",
+                    showarrow=False,
+                    font=dict(size=10, color=irr_anno_color),
+                )
 
     elif not sum_only:
         for ev in recs:
@@ -429,11 +436,22 @@ def add_irrigation_shapes(
             if ts is None:
                 continue
 
+            # A daily value represents the whole calendar day but is stored at
+            # midnight. Put its irrigation marker on that same day boundary so
+            # the daily line does not appear to respond before an event whose
+            # recorded start time was later that day. Finer-resolution plots
+            # retain the recorded event time.
+            marker_ts = (
+                ts.normalize()
+                if str(granularity or "").strip().lower() == "daily"
+                else ts
+            )
+
             fig.add_shape(
                 type="line",
                 xref="x",
-                x0=ts,
-                x1=ts,
+                x0=marker_ts,
+                x1=marker_ts,
                 yref="paper",
                 y0=0,
                 y1=1,
@@ -449,14 +467,15 @@ def add_irrigation_shapes(
             if usys == "metric":
                 vol = float(conv(vol))
 
-            fig.add_annotation(
-                x=ts,
-                y=1.02,
-                yref="paper",
-                text=f"{vol / 1000.0:.0f} {unit_lbl}",
-                showarrow=False,
-                font=dict(size=10, color=irr_anno_color),
-            )
+            if show_volume_labels:
+                fig.add_annotation(
+                    x=marker_ts,
+                    y=1.02,
+                    yref="paper",
+                    text=f"{vol / 1000.0:.0f} {unit_lbl}",
+                    showarrow=False,
+                    font=dict(size=10, color=irr_anno_color),
+                )
 
     fig.add_trace(
         go.Scatter(
@@ -464,7 +483,74 @@ def add_irrigation_shapes(
             y=[None],
             mode="lines",
             line=dict(color=irr_color, dash="dot", width=2),
-            name="Irrig",
+            name=legend_name,
+            showlegend=True,
+            hoverinfo="skip",
+        )
+    )
+
+
+def add_fertilization_shapes(
+    fig: go.Figure,
+    year: int,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    legend_name: str = "Fertilization",
+) -> None:
+    """Add field-level fertilization dates without inferring strip applications."""
+    events = load_fertilization_events(year)
+    if events.empty:
+        return
+
+    start_ts = safe_timestamp(start)
+    end_ts = safe_timestamp(end)
+    fertilizer_color = PLOT_COLORS.get("fertilizer", "#CC79A7")
+    plotted = 0
+
+    for event in events.to_dict(orient="records"):
+        timestamp = safe_timestamp(event.get("date"))
+        if timestamp is None:
+            continue
+        if start_ts is not None and timestamp < start_ts:
+            continue
+        if end_ts is not None and timestamp > end_ts:
+            continue
+
+        fig.add_shape(
+            type="line",
+            xref="x",
+            x0=timestamp,
+            x1=timestamp,
+            yref="paper",
+            y0=0,
+            y1=1,
+            line=dict(color=fertilizer_color, dash="dash", width=2),
+            opacity=0.85,
+        )
+        fig.add_annotation(
+            xref="x",
+            x=timestamp,
+            yref="paper",
+            y=0.98,
+            text="Fert.",
+            textangle=-90,
+            xshift=7,
+            showarrow=False,
+            font=dict(size=9, color=fertilizer_color),
+            bgcolor="rgba(255,255,255,0.70)",
+        )
+        plotted += 1
+
+    if plotted == 0:
+        return
+
+    fig.add_trace(
+        go.Scatter(
+            x=[None],
+            y=[None],
+            mode="lines",
+            line=dict(color=fertilizer_color, dash="dash", width=2),
+            name=legend_name,
             showlegend=True,
             hoverinfo="skip",
         )
@@ -622,7 +708,7 @@ def make_raw_figure(
             ),
         )
 
-    if display_variable in ("VWC", "SWC"):
+    if display_variable in ("VWC", "SWC", "EC"):
         add_precipitation_bars(fig, df_plot, usys, granularity)
         use_secondary_y = True
 
@@ -652,8 +738,15 @@ def make_raw_figure(
     if use_secondary_y:
         fig.update_layout(yaxis2=common_yaxis2_config(usys))
 
-    if display_variable in ("VWC", "SWC"):
-        add_irrigation_shapes(fig, strip, year, usys)
+    if display_variable in ("VWC", "SWC", "EC"):
+        add_irrigation_shapes(
+            fig,
+            strip,
+            year,
+            usys,
+            legend_name="Irrigation",
+            granularity=granularity,
+        )
 
     title_text = build_raw_plot_title(
         granularity=granularity,
@@ -671,7 +764,7 @@ def make_raw_figure(
         title={"text": title_text, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis=common_xaxis_config(granularity, start, end),
         yaxis={"title": {"text": human_var, "font": {"size": 14}}},
-        legend=common_legend_config("Legend"),
+        legend=common_legend_config("Legend", secondary_y=use_secondary_y),
         template="plotly_white",
         margin=_plot_margin("standard"),
         height=DEFAULT_PLOT_HEIGHT,
@@ -746,10 +839,13 @@ def make_ratio_figure(
                 & (df_plot["timestamp"] <= end_ts)
             ].copy()
 
+    ratio_pairs: list[tuple[str, str]] = []
+
     for idx, col in enumerate(y_cols, start=1):
         x = safe_tolist(df_plot.get("period_code")) if is_gs else _x_time_strings(df_plot)
 
         p1, p2 = col.split("_ratio_")[1].split("_")[:2]
+        ratio_pairs.append((p1, p2))
         y = safe_tolist(to_float_series(df_plot[col]))
         pair_label = f"{p1}/{p2}"
 
@@ -780,6 +876,22 @@ def make_ratio_figure(
                     name=pair_label,
                     line=line_kwargs,
                 )
+            )
+
+    if variable == "EC" and not is_gs:
+        add_precipitation_bars(fig, df_plot, usys, granularity)
+
+        for p1, p2 in ratio_pairs:
+            pair_label = f"{p1}/{p2}"
+            add_irrigation_shapes(
+                fig=fig,
+                strip=p1,
+                year=year,
+                unit_system=usys,
+                color=PLOT_COLORS.get(f"ratio_{p1}_{p2}"),
+                legend_name=f"Irrigation {pair_label}",
+                show_volume_labels=False,
+                granularity=granularity,
             )
 
     title = build_ratio_plot_title(
@@ -819,7 +931,10 @@ def make_ratio_figure(
         bargroupgap=0.1,
         title={"text": title, "x": 0.5, "font": {"size": TITLE_FONT_SIZE}},
         xaxis=xcfg,
-        legend=common_legend_config(f"{abbr} ratio"),
+        legend=common_legend_config(
+            f"{abbr} ratio",
+            secondary_y=(variable == "EC" and not is_gs),
+        ),
         template="plotly_white",
         margin=_plot_margin(
             "standard" if is_gs else ("dual_axis_metric" if usys == "metric" else "dual_axis_us")
@@ -947,7 +1062,7 @@ def make_temperature_delta_figure(
             "linecolor": "black",
             "linewidth": 1,
         },
-        legend=common_legend_config("Legend"),
+        legend=common_legend_config("Legend", secondary_y=have_precip),
         template="plotly_white",
         margin=_plot_margin("standard_tall"),
         height=DEFAULT_PLOT_HEIGHT,
@@ -1036,7 +1151,9 @@ def make_raw_gseason_figure(
 
     precip_col_us = "precip_in"
     precip_col_mm = "precip_mm"
-    have_precip = variable == "VWC" and (precip_col_us in df2.columns or precip_col_mm in df2.columns)
+    have_precip = variable in ("VWC", "EC") and (
+        precip_col_us in df2.columns or precip_col_mm in df2.columns
+    )
 
     precip_vals: Optional[pd.Series] = None
     if have_precip:
@@ -1157,7 +1274,7 @@ def make_raw_gseason_figure(
                     )
                 )
 
-    if variable == "VWC" and norm_periods:
+    if variable in ("VWC", "EC") and norm_periods:
         add_irrigation_shapes(
             fig=fig,
             strip=strip,

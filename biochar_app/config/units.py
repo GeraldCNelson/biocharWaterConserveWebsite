@@ -143,8 +143,8 @@ label_name_mapping: dict[str, dict[UnitSystemKey, str]] = {
         "us": "Volumetric Water Content (%)",
     },
     "EC": {
-        "metric": "Electrical Conductivity (dS/m)",
-        "us": "Electrical Conductivity (dS/m)",
+        "metric": "Bulk Electrical Conductivity (dS/m)",
+        "us": "Bulk Electrical Conductivity (dS/m)",
     },
     "SWC": {
         "metric": "Soil Water Content (cm)",

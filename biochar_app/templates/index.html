@@ -50,7 +50,7 @@
     </script>
 
     <!-- 🚨 SINGLE ES MODULE ENTRYPOINT -->
-    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20261008-seasonal-ratios-export-2"></script>
+    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20261011-bulk-ec-2"></script>
 
     <!-- MathJax -->
     <script>
@@ -302,7 +302,7 @@
 
                             <label for="main-variable" class="form-label">
                                 Variable
-                                <span class="info-icon" data-tippy-content="Choose the variable to plot (e.g., Volumetric Water Content (VWC), Soil Temperature, Electrical Conductivity (EC), Soil Water Content (SWC).">&#9432;</span>
+                                <span class="info-icon" data-tippy-content="Choose the variable to plot (e.g., Volumetric Water Content (VWC), Soil Temperature, Bulk Electrical Conductivity (EC), Soil Water Content (SWC)). Logger EC is a bulk-soil measurement that varies with soil water content and temperature; it is not pore-water or laboratory extract EC.">&#9432;</span>
                             </label>
                             <select id="main-variable" class="variable-dropdown form-select mb-2" data-tab="main"></select>
 
@@ -470,7 +470,7 @@
                             <select id="summary-granularity" class="granularity-dropdown form-select mb-2" data-tab="summary"></select>
 
                             <label for="summary-variable" class="form-label">
-                                Variable <span class="info-icon" data-tippy-content="Pick variable to summarize.">&#9432;</span>
+                                Variable <span class="info-icon" data-tippy-content="Pick the variable to summarize. Logger EC is bulk electrical conductivity: it varies with soil water content and temperature and is not pore-water or laboratory extract EC.">&#9432;</span>
                             </label>
                             <select id="summary-variable" class="variable-dropdown form-select mb-2" data-tab="summary"></select>
 

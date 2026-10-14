@@ -6,8 +6,8 @@ import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
 import { renderBiomassFieldTables } from "./tab_biomass_field.js";
-import { initSummaryTab } from "./tab_summary.js?v=20261008-seasonal-ratios-export-2";
-import { renderGlossary } from "./glossary.js";
+import { initSummaryTab } from "./tab_summary.js?v=20261011-bulk-ec-2";
+import { renderGlossary } from "./glossary.js?v=20261011-bulk-ec-2";
 
 // 2) Downloads (data, plots, summary CSVs, bulk tab)
 import {
@@ -16,7 +16,7 @@ import {
   downloadSummaryData,
   initBulkDownloadTab,
   initSummaryDownloadMenu,
-} from "./downloads.js?v=20261008-seasonal-ratios-export-2";
+} from "./downloads.js?v=20261011-bulk-ec-2";
 
 // 3) Debugging & logging
 import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20261007-apply-seasons";
