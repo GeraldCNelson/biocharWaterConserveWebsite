@@ -259,8 +259,10 @@ itself. Git history is the better archive for superseded code.
    preflight, and stale irrigation-date and JavaScript-module assumptions in
    the test suite were corrected before beginning the historical-code review.
 3. **Review the historical PakBus batch with field-maintenance needs in mind.**
-   Record the small number of still-valid recovery procedures, then remove the
-   experiments that are broken or superseded.
+   The evidence review is recorded in
+   [`pakbus_historical_review.md`](pakbus_historical_review.md). Confirm the
+   remaining direct-serial, HTTP, SPM-session, and packet-capture needs before
+   applying its proposed deletion batches.
 4. **Compare overlapping data builders.** Establish which command owns
    irrigation, fertilizer, TOA5 parsing, and workbook extraction before deleting
    alternate implementations.
