@@ -1,7 +1,7 @@
 {
   "counts": {
-    "total": 1976,
-    "python": 1650,
+    "total": 1974,
+    "python": 1648,
     "javascript": 326,
     "python_parse_errors": 4
   },
@@ -10088,34 +10088,6 @@
       "summary": "Enforce canonical date handling for Ward / biomass / soil CSVs.",
       "docstring": "Enforce canonical date handling for Ward / biomass / soil CSVs.\n\nRules:\n- date_rec MUST exist (hard failure if missing)\n- date_recd is dropped if present\n- date_rept is optional metadata (renamed to date_report)\n- date_rec is parsed to datetime.date",
       "decorators": [],
-      "exported": true
-    },
-    {
-      "language": "Python",
-      "path": "biochar_app/scripts/custom_app.py",
-      "line": 16,
-      "qualified_name": "root",
-      "signature": "()",
-      "kind": "async function",
-      "summary": "No docstring.",
-      "docstring": "",
-      "decorators": [
-        "app.get('/', include_in_schema=False)"
-      ],
-      "exported": true
-    },
-    {
-      "language": "Python",
-      "path": "biochar_app/scripts/custom_app.py",
-      "line": 21,
-      "qualified_name": "announce",
-      "signature": "()",
-      "kind": "async function",
-      "summary": "No docstring.",
-      "docstring": "",
-      "decorators": [
-        "app.on_event('startup')"
-      ],
       "exported": true
     },
     {

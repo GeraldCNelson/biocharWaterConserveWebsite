@@ -171,6 +171,12 @@ package-lock.json
 ~$*.docx
 
 ############################
+# LaTeX build artifacts
+############################
+*.aux
+*.synctex.gz
+
+############################
 # Compressed bundles / scratch exports
 ############################
 *.zip

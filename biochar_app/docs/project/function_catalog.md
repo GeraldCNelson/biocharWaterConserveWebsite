@@ -7,7 +7,7 @@ Regenerate both the Markdown and JSON catalogs with:
 python biochar_app/scripts/dev-tools/build_function_catalog.py
 ```
 
-- Python functions and methods: **1650**
+- Python functions and methods: **1648**
 - JavaScript functions: **326**
 - Files with Python parse errors: **4**
 
@@ -744,11 +744,6 @@ and some class/object method syntaxes may require manual review.
 ### `biochar_app/scripts/csv_validation.py`
 
 - **`normalize_dates(df: pd.DataFrame, *, source: str='') -> pd.DataFrame`** — line 5; function; public/exported. Enforce canonical date handling for Ward / biomass / soil CSVs.
-
-### `biochar_app/scripts/custom_app.py`
-
-- **`root()`** — line 16; async function; public/exported. No docstring.
-- **`announce()`** — line 21; async function; public/exported. No docstring.
 
 ### `biochar_app/scripts/data_loading.py`
 
