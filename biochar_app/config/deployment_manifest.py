@@ -21,6 +21,7 @@ from biochar_app.config.biochar_lab_reports import (
     biochar_lab_report_path,
 )
 from biochar_app.config.paths import (
+    BASE_DIR,
     DOWNLOADS_BASE_DIR,
     MARKDOWN_OUTPUTS_DIR,
     PARQUET_SUMMARY_DIR,
@@ -68,6 +69,13 @@ def build_deployment_requirements() -> tuple[DeploymentRequirement, ...]:
 
     requirements.extend(
         [
+            {
+                "key": "website-runtime:wsgi-entrypoint",
+                "path": str(BASE_DIR / "scripts" / "wsgi.py"),
+                "delivery": "git",
+                "kind": "file",
+                "description": "Production Gunicorn application entry point",
+            },
             {
                 "key": "generated-data:parquet-summary",
                 "path": str(PARQUET_SUMMARY_DIR),

@@ -25,11 +25,14 @@ Biochar Water Conservation project (Gerald Nelson).
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from biochar_app.scripts.management.build_irrigation_from_master import (
     build_candidate_from_events,
+    retained_event_ids,
     stable_event_id,
 )
 
@@ -219,6 +222,68 @@ class BuildIrrigationFromMasterTests(unittest.TestCase):
         self.assertRegex(
             first,
             r"^2026-07-24_S1_S2_[0-9a-f]{8}$",
+        )
+
+    def test_production_ids_survive_when_candidate_is_missing(self) -> None:
+        columns = [
+            "date",
+            "start_timestamp",
+            "strip_group",
+            "event_id",
+        ]
+        legacy_id = "2023-05-23_S1_S2_176caf9a"
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            production_path = root / "irrigation_clean.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2023-05-23",
+                        "start_timestamp": "2023-05-23 15:25:00",
+                        "strip_group": "S1_S2",
+                        "event_id": legacy_id,
+                    }
+                ],
+                columns=columns,
+            ).to_csv(production_path, index=False)
+
+            ids = retained_event_ids(
+                candidate_path=root / "missing_candidate.csv",
+                production_path=production_path,
+            )
+
+        self.assertEqual(
+            ids[("2023-05-23", "2023-05-23 15:25:00", "S1_S2")],
+            legacy_id,
+        )
+
+    def test_production_ids_override_candidate_ids(self) -> None:
+        row = {
+            "date": "2023-05-23",
+            "start_timestamp": "2023-05-23 15:25:00",
+            "strip_group": "S1_S2",
+        }
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate_path = root / "irrigation_clean_candidate.csv"
+            production_path = root / "irrigation_clean.csv"
+            pd.DataFrame(
+                [{**row, "event_id": "2023-05-23_S1_S2_86efb8a0"}]
+            ).to_csv(candidate_path, index=False)
+            pd.DataFrame(
+                [{**row, "event_id": "2023-05-23_S1_S2_176caf9a"}]
+            ).to_csv(production_path, index=False)
+
+            ids = retained_event_ids(
+                candidate_path=candidate_path,
+                production_path=production_path,
+            )
+
+        self.assertEqual(
+            ids[("2023-05-23", "2023-05-23 15:25:00", "S1_S2")],
+            "2023-05-23_S1_S2_176caf9a",
         )
 
 
