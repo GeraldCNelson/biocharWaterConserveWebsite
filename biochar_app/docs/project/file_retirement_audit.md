@@ -254,8 +254,10 @@ itself. Git history is the better archive for superseded code.
 1. **Completed: approve and apply the high-confidence cleanup batch.** The
    removals were kept in one reviewable commit containing no functional
    refactor.
-2. **Run existing application, ETL, publishing, and PakBus tests.** Also run the
-   deployment-manifest and documentation-link checks.
+2. **Completed 2026-10-16: run existing application, ETL, publishing, and
+   PakBus tests.** The deployment incident led to an explicit WSGI-entry-point
+   preflight, and stale irrigation-date and JavaScript-module assumptions in
+   the test suite were corrected before beginning the historical-code review.
 3. **Review the historical PakBus batch with field-maintenance needs in mind.**
    Record the small number of still-valid recovery procedures, then remove the
    experiments that are broken or superseded.
