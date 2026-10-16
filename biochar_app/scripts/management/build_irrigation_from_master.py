@@ -189,6 +189,22 @@ def existing_event_ids(path: Path) -> dict[tuple[str, str, str], str]:
     return result
 
 
+def retained_event_ids(
+    *,
+    candidate_path: Path,
+    production_path: Path,
+) -> dict[tuple[str, str, str], str]:
+    """Retain IDs from prior products, with production as the authority.
+
+    Candidate files are intentionally not deployed to production. Reading the
+    tracked production file as the final source prevents a refresh on a clean
+    server from assigning new IDs to unchanged historical events.
+    """
+    result = existing_event_ids(candidate_path)
+    result.update(existing_event_ids(production_path))
+    return result
+
+
 def concurrent_group_counts(events: pd.DataFrame) -> pd.Series:
     """Count strip groups sharing one physical meter interval."""
     keys = [
@@ -525,7 +541,10 @@ def build_and_install_irrigation(
 ) -> dict[str, Any]:
     """Build, validate, and optionally install all irrigation products."""
     events = load_master_irrigation_events(workbook_path)
-    ids = existing_event_ids(candidate_path)
+    ids = retained_event_ids(
+        candidate_path=candidate_path,
+        production_path=production_path,
+    )
     candidate, invalid = build_candidate_from_events(
         events,
         prior_event_ids=ids,

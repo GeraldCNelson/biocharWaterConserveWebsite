@@ -69,17 +69,24 @@ imports.
 
 ## High-confidence cleanup batch — completed 2026-10-16
 
-The approved first cleanup removed 24 obsolete, empty, or generated files from
+The approved first cleanup removed 23 obsolete, empty, or generated files from
 the current branch. Git retains their histories. No files from the review or
 relocation categories were removed. LaTeX build-artifact patterns were also
 added to `.gitignore` to prevent the deleted compiler outputs from returning.
+
+The batch initially also removed `scripts/wsgi.py`. The production restart
+revealed that the live systemd unit imports
+`biochar_app.scripts.wsgi:app`, even though the tracked deployment references
+reviewed during the audit did not identify that dependency. The file was
+restored immediately, and it is now an explicit Git-delivered requirement in
+the deployment manifest. This incident is evidence that a deployment preflight
+must validate the live process entry point, not only website content and data.
 
 ### Obsolete or broken application files
 
 | Candidate | Evidence | Proposed action |
 |---|---|---|
 | `scripts/custom_app.py` | Defined a second FastAPI application on port 8001, duplicated a route already present in the main application, had no external references, and imported `biochar_app.scripts.routes_custom_gseason`, which does not exist. | Deleted. The custom-season interface remains in the main application. |
-| `scripts/wsgi.py` | Used the old Flask-style `app.run()` pattern. The current application is FastAPI and the documented start command uses Uvicorn. Current deployment files did not use this file. | Deleted. Old Flask deployment notes remain a separate review item. |
 | `scripts/convert_json.py` | A hard-coded one-off conversion from `data.json` to `purple_air.csv`; no imports, commands, tests, or documentation referred to it. | Deleted. A future PurpleAir workflow should use a documented, parameterized acquisition tool. |
 | `data-processed/management/initial_conditions.py` | Zero-byte Python file in a processed-data directory; no references found. | Deleted. |
 | `config/initial_conditions_metadata.py` | Zero-byte configuration module; no imports or other references found. | Deleted. |

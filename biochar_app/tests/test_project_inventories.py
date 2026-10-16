@@ -22,6 +22,7 @@ def test_deployment_requirement_keys_are_unique() -> None:
     keys = [requirement["key"] for requirement in DEPLOYMENT_REQUIREMENTS]
     assert len(keys) == len(set(keys))
     assert any(key.startswith("biochar-report:") for key in keys)
+    assert "website-runtime:wsgi-entrypoint" in keys
 
 
 def test_git_deployment_requirements_pass_preflight() -> None:
