@@ -286,9 +286,11 @@ the output.
 6. Apply the agreed public-content boundary: operational documents containing
    server details remain repository-only and are not exposed through the public
    documentation tab.
-7. Classify `.env` and `.env.txt` at the repository root. Credential values must
-   not be tracked; example configuration should use an explicit `.example`
-   filename with placeholders only.
+7. Apply the classifications recorded in
+   [`data_and_research_output_manifest.md`](data_and_research_output_manifest.md):
+   `.env.txt` is a reproducible CoAgMET download and a deletion candidate;
+   `.env` remains tracked as shared development configuration while it contains
+   only safe, non-secret defaults. Credential values must not be tracked.
 8. Decide whether maintainers still use `scripts/archive_dataset.py`; document
    its archives and restoration purpose if retained, or retire it if not.
 9. Implement the tested TOA5 consolidation only after agreeing to the

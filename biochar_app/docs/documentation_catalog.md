@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **65**
+Documents indexed: **66**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -267,6 +267,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/docs/project/app_structure.md`
 - **Status:** current
 - **Summary:** The Biochar Water Conservation website is a FastAPI application with Jinja2 templates and a JavaScript browser interface.
+
+### Data and research-output manifest
+
+- **Path:** `biochar_app/docs/project/data_and_research_output_manifest.md`
+- **Status:** current
+- **Summary:** This inventory distinguishes source evidence, application data, deployment products, and research records so later cleanup decisions can be made safely.
 
 ### File retirement audit
 
