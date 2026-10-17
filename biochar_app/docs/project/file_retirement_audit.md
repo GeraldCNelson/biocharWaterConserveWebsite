@@ -4,8 +4,8 @@
 
 **Branch reviewed:** `etl-refactor`
 
-**Status:** Initial audit and historical PakBus cleanup complete. Other
-recommendations remain pending.
+**Status:** Initial audit, historical PakBus cleanup, and combined
+management-extractor review complete. Other recommendations remain pending.
 
 ## Purpose
 
@@ -159,8 +159,8 @@ The largest concentration of probable legacy code is separate from the current
 
 The thirteen capture, decode, resample, and trust-check experiments formerly in
 the root `tools/` directory were also deleted. The supported
-`tools/pakbus-download` and `tools/sync-published-data` wrappers remain, as does
-`tools/extract_management_data.py` pending the separate builder comparison.
+`tools/pakbus-download` and `tools/sync-published-data` wrappers remain. The
+unrelated management extractor was subsequently retired in its own review.
 
 The packet-forensics history is now recorded in
 [`pakbus_packet_forensics_history.md`](../reference_notes/pakbus_packet_forensics_history.md).
@@ -174,7 +174,7 @@ tree without performing a directory refactor.
 | [`etf.py`](../../etf.py) and the export in [`biochar_app/__init__.py`](../../__init__.py) | Provides a binary Table1 decoder and is exported as a public package symbol, but no current application, test, or supported command calls it. An archived PakBus note contains the only substantive usage found. | Decide whether binary ETF decoding is a supported reusable capability. If yes, move it into the current PakBus parsing layer and test it. If no, delete both the module and public export. |
 | [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its documentation says it is canonical for ETL and diagnostics, but no current caller imports it. | Compare its parsing behavior with the actual ETL and diagnostic readers. Consolidate only after equivalence tests; otherwise retire it. |
 | [`scripts/archive_dataset.py`](../../scripts/archive_dataset.py) | Standalone utility that copies Ward datasets into timestamped archive folders; no documented workflow calls it. | Confirm whether maintainers still run it manually. If not, delete it; if yes, document when restoration is needed and where archives are stored. |
-| [`tools/extract_management_data.py`](../../../tools/extract_management_data.py) | Extracts irrigation and fertilizer data from the master workbook, but newer dedicated builders now handle those datasets and have tests. | Compare its outputs with `build_irrigation_from_master.py` and `generate_fertilizer_clean.py`. Retire it only after confirming no unique transformation remains. |
+| `tools/extract_management_data.py` | The combined extractor no longer imports because its output-path constants were removed. Its reduced schemas are superseded by dedicated builders called by ETL and covered by focused tests. | Deleted after the comparison recorded in [`management_builder_review.md`](management_builder_review.md). |
 
 ### Reference and planning documents
 
@@ -259,9 +259,11 @@ itself. Git history is the better archive for superseded code.
    and SPM-session inspection are not current workflows. The evidence and exact
    boundary are recorded in
    [`pakbus_historical_review.md`](pakbus_historical_review.md).
-4. **Compare overlapping data builders.** Establish which command owns
-   irrigation, fertilizer, TOA5 parsing, and workbook extraction before deleting
-   alternate implementations.
+4. **Partially completed 2026-10-16: compare overlapping data builders.** The
+   obsolete combined irrigation/fertilizer extractor was retired after the
+   comparison in [`management_builder_review.md`](management_builder_review.md).
+   TOA5 parsing and the remaining isolated utilities still require separate
+   review.
 5. **Create a data and research-output manifest.** The code audit alone is not a
    safe basis for deleting CSV, HTML report, image, or scientific-output files.
 6. **Begin directory refactoring only after cleanup decisions are merged.** The

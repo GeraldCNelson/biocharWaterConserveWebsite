@@ -43,7 +43,7 @@ and Git history retains the exact retired source.
 | `pakbus/examples` | 6 | Four Python files were 2009 GPL example code written for Python 2 and an external `pakbus` module; `pakbus.conf` belonged to those examples. The sixth file imported a module that moved and was not runnable as written. | Deleted after recording provenance. |
 | `pakbus/scripts_zsh` | 4 | The three commands called missing `spm_*` modules or a missing `spm_pyhelper.py`; one was tied to a named 2025 monitoring session. | Deleted. |
 | `pakbus/utils` | 4 | `crc.py`, `frame.py`, and `hex.py` were empty, but four historical scripts imported functions from them. | Deleted with their dependents. |
-| Root `tools/` | 16 | Two wrappers are supported. Thirteen PakBus-era tools formed an older fetch/decode/resample/trust pipeline. `extract_management_data.py` belongs to the separate management-builder review. | Kept the supported wrappers and management extractor; deleted the older chain. |
+| Root `tools/` | 16 | Two wrappers are supported. Thirteen PakBus-era tools formed an older fetch/decode/resample/trust pipeline. The unrelated management extractor belonged to a separate review. | Kept the supported wrappers and deleted the older PakBus chain. The management extractor was later retired separately. |
 
 Function-catalog references are generated inventory entries, not evidence that a
 command is supported. Archived chat summaries are also historical evidence, not
@@ -202,11 +202,12 @@ The cleanup removed 60 tracked files: the four historical PakBus directories,
 thirteen old root-level PakBus tools, three obsolete application-side command
 files, the old site configuration, and a generated request-map stub. It did
 not remove the maintained core, supported wrappers, scheduled service, tests,
-network-discovery note, ignored raw captures, or
-`tools/extract_management_data.py`.
+network-discovery note, or ignored raw captures. The unrelated management
+extractor was decided separately.
 
-The management-data builder comparison remains a separate audit item. No
-directory refactor was performed in this cleanup.
+The management-data builder comparison was completed separately in
+[`management_builder_review.md`](management_builder_review.md). No directory
+refactor was performed in this cleanup.
 
 No directory refactor is needed to make these decisions. Removing or retaining
 capabilities first will leave a much smaller, clearer PakBus structure to move.
