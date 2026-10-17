@@ -9,6 +9,7 @@ Run from the repository root::
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +18,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from biochar_app.config.paths import BASE_DIR
+from biochar_app.config.paths import BASE_DIR  # noqa: E402
 
 
 OUTPUT_PATH = BASE_DIR / "docs" / "documentation_catalog.md"
@@ -62,7 +63,14 @@ def document_description(text: str) -> str:
             continue
         if line.startswith(("#", "---", "|", "- [", "* [")):
             continue
-        if re.match(r"^(Document Status|Last Updated):", line, re.IGNORECASE):
+        metadata_line = clean_markdown(line)
+        if re.match(
+            r"^(Document Status|Last Updated|Status|Version|Project|"
+            r"GitHub repository|Project website|Repository location|"
+            r"Reviewed branch|Review date|Scope):",
+            metadata_line,
+            re.IGNORECASE,
+        ):
             continue
         paragraph.append(line)
         if len(" ".join(paragraph)) >= 180:
@@ -84,10 +92,19 @@ def classify(path: Path) -> tuple[str, str]:
         return "Generated website content", "generated"
     if "data-processed" in parts or "diagnostics/reports" in path_text:
         return "Generated analyses and reports", "generated"
+    if relative == Path("docs/application_architecture_status.md"):
+        return "Project development", "current"
     if parts[:2] == ("docs", "operations"):
         return "Operations and workflows", "current"
     if parts[:2] == ("docs", "project") or path == OUTPUT_PATH:
         return "Project development", "current"
+    if parts[:2] == ("docs", "research"):
+        return "Research and scientific methods", "current"
+    if parts[:2] in {
+        ("docs", "reference_manuals"),
+        ("docs", "reference_notes"),
+    }:
+        return "Technical reference", "reference"
     if "geospatial" in parts:
         return "Geospatial workflows", "current"
     if "readmes" in parts or path.name.lower() == "readme.md":
@@ -99,9 +116,40 @@ def classify(path: Path) -> tuple[str, str]:
     return "Other project documentation", "reference"
 
 
+def tracked_markdown_paths() -> list[Path]:
+    """Return Markdown files represented in the repository index.
+
+    The catalog describes repository documentation, not local drafts or
+    generated reports that have not been selected for version control. New
+    documents appear as soon as they are staged, so the catalog can be rebuilt
+    in the same commit that introduces them.
+    """
+    result = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "-z",
+            "--",
+            str(BASE_DIR.relative_to(REPOSITORY_ROOT)),
+        ],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        check=True,
+    )
+    paths = []
+    for raw_path in result.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        path = REPOSITORY_ROOT / raw_path.decode("utf-8", errors="surrogateescape")
+        if path.suffix.lower() == ".md" and path.is_file():
+            paths.append(path)
+    return sorted(paths)
+
+
 def collect_documents() -> list[DocumentEntry]:
     entries: list[DocumentEntry] = []
-    for path in sorted(BASE_DIR.rglob("*.md")):
+    for path in tracked_markdown_paths():
         if any(part in SKIP_PARTS for part in path.parts):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")

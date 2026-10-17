@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **58**
+Documents indexed: **64**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -118,12 +118,6 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** Plot Download Notes - Raw
 
-### Readme
-
-- **Path:** `biochar_app/scripts/experimental/README.md`
-- **Status:** current
-- **Summary:** Purpose
-
 ### Summary Download Notes
 
 - **Path:** `biochar_app/markdown/readmes/summary_download_notes.md`
@@ -137,24 +131,6 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/data-processed/management/irrigation/photos/README.md`
 - **Status:** generated
 - **Summary:** This directory contains the canonical photo archive and supporting files used to extract, review, and maintain irrigation meter readings.
-
-### Post-Irrigation Retention Statistical Summary
-
-- **Path:** `biochar_app/data-processed/management/irrigation/analysis/reports/post_irrigation_retention_statistical_summary.md`
-- **Status:** generated
-- **Summary:** All reported differences are calculated as biochar strip minus non-biochar control strip. A positive difference in soil-water depth means the biochar strip contained more water. It does not merely mean that the measur...
-
-### Weekly Logger Health Report
-
-- **Path:** `biochar_app/diagnostics/reports/weekly_health_2026-02-28.md`
-- **Status:** generated
-- **Summary:** - Report date: 2026-02-28 - Battery rule (BattVMin): flag outside [11.0, 13.0] V
-
-### Weekly Logger Health Report
-
-- **Path:** `biochar_app/diagnostics/reports/weekly_health_2026-06-10.md`
-- **Status:** generated
-- **Summary:** - Report date: 2026-06-10 - Battery rule (BattVMin): flag outside [11.0, 13.0] V
 
 ## Generated website content
 
@@ -208,12 +184,6 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** This directory contains the permanent geospatial reference layers for the CSU Fruita Biochar Irrigation Experiment.
 
-### Fruita Field Topography Analysis
-
-- **Path:** `biochar_app/geospatial/lidar/analysis/fruita_2016_lidar_topography_report.md`
-- **Status:** current
-- **Summary:** Generated: 2026-07-04
-
 ### Fruita LiDAR Data
 
 - **Path:** `biochar_app/geospatial/lidar/README.md`
@@ -227,6 +197,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Summary:** fruitagrounddem20162ft.json
 
 ## Operations and workflows
+
+### Automatic irrigation refresh
+
+- **Path:** `biochar_app/docs/operations/automatic_irrigation_refresh.md`
+- **Status:** current
+- **Summary:** The daily --operational-update now refreshes irrigation as well as logger and weather products. No Microsoft account or OneDrive desktop application is needed.
 
 ### Deploying Updates to the Biochar Website
 
@@ -244,7 +220,13 @@ background; **generated** is produced by code; **historical** is archived contex
 
 - **Path:** `biochar_app/docs/operations/lab_data_pipeline.md`
 - **Status:** current
-- **Summary:** This document describes how laboratory and field-biomass data move from new source files into the Lab-Based Results tab. The preferred operational entry point is biocharapp/scripts/etl.py.
+- **Summary:** This document describes how laboratory and field-biomass data move from their respective source files into the Lab-Based Results tab. The project master workbook is one source, not a container for all laboratory data.
+
+### Logger Power and Missing-Data Troubleshooting
+
+- **Path:** `biochar_app/docs/operations/logger_power_troubleshooting.md`
+- **Status:** current
+- **Summary:** Use this procedure when a field logger stops recording, becomes unreachable, records low BattVMin, or appears to operate only during daylight. It separates faults in the solar panel, charge controller, battery, wiring...
 
 ### 🛠️ Irrigation Overlay Update Notes
 
@@ -254,36 +236,6 @@ background; **generated** is produced by code; **historical** is archived contex
 
 ## Other project documentation
 
-### Biochar Impact: Microbial, Nutrient, and System Insights
-
-- **Path:** `biochar_app/results/biochar_microbe_nutrient_summary.md`
-- **Status:** reference
-- **Summary:** Result: Biochar → higher microbial biomass
-
-### Colleague Quick Start — PC400/PC100 via Lightsail + SSH (no IPv6 on Windows needed)
-
-- **Path:** `biochar_app/data-raw/lab-tests/spreadsheet names and worksheet type/Colleague_Quick_Start_PC400_PC100_Lightsail_SSH.md`
-- **Status:** reference
-- **Summary:** Last updated: Jan 2026
-
-### Soil Biology Phase 1 – Ingestion Notes (v2)
-
-- **Path:** `biochar_app/data-raw/lab-tests/spreadsheet names and worksheet type/soil_bio_notes_phase1_v2.md`
-- **Status:** reference
-- **Summary:** - Biological2023-04-04.csv - Biological2023-10-11.csv - Biological2024-03-22.csv - Biological2024-11-05.csv - Biological2025-04-02.csv - Biological2025-11-03.csv
-
-### Soil Biology Phase 1 – Master Build Notes (v3)
-
-- **Path:** `biochar_app/data-raw/lab-tests/spreadsheet names and worksheet type/soil_bio_notes_phase1_v3.md`
-- **Status:** reference
-- **Summary:** - Biological2023-04-04.csv: row-based (4 rows) - Biological2023-10-11.csv: row-based (4 rows) - Biological2024-03-22.csv: row-based (3 rows) - Biological2024-11-05.csv: row-based (4 rows)
-
-### Soil Biology Phase 1 – master rebuild vs v7
-
-- **Path:** `biochar_app/data-raw/lab-tests/spreadsheet names and worksheet type/soil_bio_phase1_master_rebuild_notes.md`
-- **Status:** reference
-- **Summary:** - Included (wide Ward CSVs): Biological2023-03-31.csv, Biological2023-10-09.csv, Biological2024-11-05.csv (after dropping 995 empty rows), Biological2025-03-31.csv. - Included (long/transposed → converted to wide): Bi...
-
 ### Thresholds and Range Checks: ETL vs Diagnostics
 
 - **Path:** `biochar_app/diagnostics/THRESHOLDS_NOTE.md`
@@ -292,11 +244,35 @@ background; **generated** is produced by code; **historical** is archived contex
 
 ## Project development
 
-### App Structure Overview
+### Architecture, Documentation, and Website Harmonization Proposal
+
+- **Path:** `biochar_app/docs/project/architecture_harmonization_proposal.md`
+- **Status:** current
+- **Summary:** The architecture document, repository, and website should use the same core vocabulary, but they should not be forced into identical structures.
+
+### Binary Table1 decoder review
+
+- **Path:** `biochar_app/docs/project/etf_decoder_review.md`
+- **Status:** current
+- **Summary:** Branch: etl-refactor
+
+### Biochar Application Architecture and Development Status
+
+- **Path:** `biochar_app/docs/application_architecture_status.md`
+- **Status:** current
+- **Summary:** Document path: biocharapp/docs/applicationarchitecturestatus.md
+
+### Current Application Structure
 
 - **Path:** `biochar_app/docs/project/app_structure.md`
 - **Status:** current
-- **Summary:** This markdown document outlines the high-level structure of the Biochar Water Conservation web application, including the frontend and backend components.
+- **Summary:** The Biochar Water Conservation website is a FastAPI application with Jinja2 templates and a JavaScript browser interface.
+
+### File retirement audit
+
+- **Path:** `biochar_app/docs/project/file_retirement_audit.md`
+- **Status:** current
+- **Summary:** Audit date: 2026-10-16
 
 ### Function Catalog
 
@@ -304,17 +280,73 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** This file is generated from Python AST metadata and JavaScript source patterns. Regenerate both the Markdown and JSON catalogs with:
 
+### Historical PakBus code review
+
+- **Path:** `biochar_app/docs/project/pakbus_historical_review.md`
+- **Status:** current
+- **Summary:** Branch: etl-refactor
+
+### Management-data builder review
+
+- **Path:** `biochar_app/docs/project/management_builder_review.md`
+- **Status:** current
+- **Summary:** Branch: etl-refactor
+
 ### Smoke Tests
 
 - **Path:** `biochar_app/docs/project/testing.md`
 - **Status:** current
 - **Summary:** Verify that major website functions still work after code changes.
 
+### TOA5 reader consolidation review
+
+- **Path:** `biochar_app/docs/project/toa5_reader_review.md`
+- **Status:** current
+- **Summary:** Branch: etl-refactor
+
+### Website, pipeline, research, and development inventory
+
+- **Path:** `biochar_app/docs/project/refactor_inventory.md`
+- **Status:** current
+- **Summary:** No directory migration has begun. Reviewed obsolete files were retired in the preceding cleanup commits, so this inventory now describes the smaller active tree rather than the historical experiments preserved in Git...
+
 ### 🛠 Developer Notes
 
 - **Path:** `biochar_app/docs/project/developer_notes.md`
 - **Status:** current
 - **Summary:** This file collects hard-won solutions and best practices for maintaining and extending the Biochar Water Conservation App frontend and backend.
+
+## Research and scientific methods
+
+### CS650 bulk-EC temperature-normalization assessment
+
+- **Path:** `biochar_app/docs/research/ec25_temperature_sensitivity_assessment.md`
+- **Status:** current
+- **Summary:** Do not replace, relabel, or rewrite the measured CS650 electrical-conductivity series. If EC25 is offered, offer it only as a separate, optional research series named “Bulk EC normalized to 25 °C (generic manufacturer
+
+### Flow rate, wetting-front advance, and the unresolved water balance
+
+- **Path:** `biochar_app/docs/research/irrigation_flow_water_balance/irrigation_flow_water_balance_report.md`
+- **Status:** current
+- **Summary:** This analysis uses the corrected 2023–2026 logger timestamps and treats Top→Bottom travel as the primary horizontal-advance outcome. Middle timing is retained as a separate spatial-coverage diagnostic; strict Top→Midd...
+
+### Irrigation flow and water-balance research outputs
+
+- **Path:** `biochar_app/docs/research/irrigation_flow_water_balance/README.md`
+- **Status:** current
+- **Summary:** The complete analysis report is irrigationflowwaterbalancereport.md.
+
+### Six-inch EC behavior between irrigation events
+
+- **Path:** `biochar_app/docs/research/ec_irrigation_interval_analysis.md`
+- **Status:** current
+- **Summary:** output: worddocument: default htmldocument: default
+
+### Six-inch soil electrical-conductivity patterns and shallow laboratory chemistry
+
+- **Path:** `biochar_app/docs/research/ec_moisture_temperature_adjusted_analysis.md`
+- **Status:** current
+- **Summary:** output: worddocument: default htmldocument: default
 
 ## Research and working notes
 
@@ -329,6 +361,14 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/markdown/chat_summaries/deep-research_carbon-report.md`
 - **Status:** reference
 - **Summary:** The attached dataset reports soil organic matter by loss-on-ignition (LOI) as a percent (organicmatterloipct) at six sampling events from 2023-03-31 (baseline) through 2025-11-03 for all four strips. Because the file’...
+
+## Technical reference
+
+### PakBus packet-forensics history
+
+- **Path:** `biochar_app/docs/reference_notes/pakbus_packet_forensics_history.md`
+- **Status:** reference
+- **Summary:** Recorded: 2026-10-16
 
 ## Website and technical reference
 
