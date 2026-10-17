@@ -4,7 +4,8 @@
 
 **Branch:** `etl-refactor`
 
-**Status:** Evidence review complete; no second-round deletions have been made.
+**Status:** Review complete; the approved historical-code cleanup was applied
+on 2026-10-16.
 
 ## Decision summary
 
@@ -25,23 +26,24 @@ files cannot run because their dependencies are empty or missing. Others encode
 useful historical observations but duplicate capabilities that are now tested
 in `pakbus/core`.
 
-The safest next cleanup is therefore two-stage:
-
-1. remove the mechanically broken packages and commands after confirming that
-   no maintainer still invokes them from an external notebook or shell alias;
-2. preserve a short packet-forensics note before retiring the remaining capture
-   and replay experiments.
+The maintainer subsequently confirmed that PC400 downloading,
+Wireshark/PC400 capture work, HTTP retrieval experiments, and SPM-session
+inspection are not current workflows. The mechanically broken and superseded
+implementations were therefore removed as one reviewable batch. The durable
+findings are preserved in
+[`pakbus_packet_forensics_history.md`](../reference_notes/pakbus_packet_forensics_history.md),
+and Git history retains the exact retired source.
 
 ## Inventory and evidence
 
 | Area | Tracked files | Evidence | Disposition |
 |---|---:|---|---|
 | `pakbus/core` | 9 | Used by the supported wrapper, scheduled service, ETL, and tests. | Keep active. |
-| `pakbus/scripts` | 28 | Mostly one-off 2025 packet probes, replay variants, decoders, and partially reconstructed downloaders. No scheduled service or supported command imports them. | Retire in reviewed batches. |
-| `pakbus/examples` | 6 | Four Python files are 2009 GPL example code written for Python 2 and an external `pakbus` module; `pakbus.conf` belongs to those examples. The sixth file imports a module that moved and is not runnable as written. | Delete after recording provenance in this review. |
-| `pakbus/scripts_zsh` | 4 | The three commands call missing `spm_*` modules or a missing `spm_pyhelper.py`; one is tied to a named 2025 monitoring session. | Delete as a mechanically broken batch. |
-| `pakbus/utils` | 4 | `crc.py`, `frame.py`, and `hex.py` are empty, but four historical scripts import functions from them. | Delete together with those dependents. |
-| Root `tools/` | 16 | Two wrappers are supported. Thirteen PakBus-era tools form an older fetch/decode/resample/trust pipeline. `extract_management_data.py` belongs to the separate management-builder review. | Keep the two supported wrappers; review or retire the older chain. |
+| `pakbus/scripts` | 28 | Mostly one-off 2025 packet probes, replay variants, decoders, and partially reconstructed downloaders. No scheduled service or supported command imported them. | Deleted. |
+| `pakbus/examples` | 6 | Four Python files were 2009 GPL example code written for Python 2 and an external `pakbus` module; `pakbus.conf` belonged to those examples. The sixth file imported a module that moved and was not runnable as written. | Deleted after recording provenance. |
+| `pakbus/scripts_zsh` | 4 | The three commands called missing `spm_*` modules or a missing `spm_pyhelper.py`; one was tied to a named 2025 monitoring session. | Deleted. |
+| `pakbus/utils` | 4 | `crc.py`, `frame.py`, and `hex.py` were empty, but four historical scripts imported functions from them. | Deleted with their dependents. |
+| Root `tools/` | 16 | Two wrappers are supported. Thirteen PakBus-era tools formed an older fetch/decode/resample/trust pipeline. `extract_management_data.py` belongs to the separate management-builder review. | Kept the supported wrappers and management extractor; deleted the older chain. |
 
 Function-catalog references are generated inventory entries, not evidence that a
 command is supported. Archived chat summaries are also historical evidence, not
@@ -147,14 +149,9 @@ and ten big-endian float fields. The maintained client now implements the fixed
 Table1 decoder directly, and `tools/pakbus-download compare` performs the
 supported comparison with Campbell Scientific `.dat` files.
 
-Before deleting this group, preserve one concise engineering note containing:
-
-- the provenance and purpose of the packet capture;
-- the frame delimiter and record-layout observations that were confirmed;
-- the command needed to inspect a future capture, if packet capture remains a
-  supported diagnostic; and
-- a warning that heuristic magnitude matching is diagnostic evidence, not an
-  authoritative data-recovery method.
+The durable frame, timestamp, schema, and provenance findings have been
+preserved in the packet-forensics history note. No capture command was retained
+because packet capture is not a supported diagnostic workflow.
 
 There are local ignored `.pcapng`, `.raw`, and `.hex` files under
 `pakbus/pakbus_data/bdFiles`. They were not modified by this review. Raw capture
@@ -181,12 +178,10 @@ directories and accepted archives. The current archive comparison supersedes
 the old trust-check role. `fetch_all_leaves.zsh` also calls its Python fetcher
 through an incorrect relative path when run from the repository root.
 
-The HTTP fetcher is the one possible exception: it represents a transport
-fallback different from PakBus/TCP. Retain it only if the Campbell base station
-still exposes the documented HTTP data-query endpoint and maintainers want that
-fallback supported. If so, it should be moved behind `tools/pakbus-download`,
-given a normalized output contract, and tested. Otherwise the entire older
-root-tool chain can be retired after the packet-forensics note is written.
+The HTTP fetcher represented an experimental transport path through the base
+station's built-in web interface. It was never part of the supported workflow,
+and the maintainer did not recognize it as an operating procedure. The older
+root-tool chain was therefore retired with the capture experiments.
 
 ## Configuration and operational notes
 
@@ -201,20 +196,17 @@ gateway address changes and the network checks used by current gateway
 discovery. Its durable content should move into the maintained operations
 documentation, after which the standalone text file can be retired.
 
-## Recommended next decisions
+## Applied decision
 
-1. Confirm whether direct-serial collection, HTTP retrieval, or SPM-session
-   inspection is still performed manually in the field.
-2. Confirm whether future Wireshark/PC400 packet capture should remain a
-   supported diagnostic. If yes, retain one tested offline inspection command;
-   if no, preserve only the engineering note.
-3. Approve deletion of the mechanically broken package, examples, shell
-   scripts, and missing-module callers as one reviewable commit.
-4. Approve retirement of the superseded live-download experiments as a second
-   commit after the packet-forensics note exists.
-5. Review the older root-tool pipeline separately from
-   `tools/extract_management_data.py`, which belongs to the management-data
-   builder comparison.
+The cleanup removed 60 tracked files: the four historical PakBus directories,
+thirteen old root-level PakBus tools, three obsolete application-side command
+files, the old site configuration, and a generated request-map stub. It did
+not remove the maintained core, supported wrappers, scheduled service, tests,
+network-discovery note, ignored raw captures, or
+`tools/extract_management_data.py`.
+
+The management-data builder comparison remains a separate audit item. No
+directory refactor was performed in this cleanup.
 
 No directory refactor is needed to make these decisions. Removing or retaining
 capabilities first will leave a much smaller, clearer PakBus structure to move.

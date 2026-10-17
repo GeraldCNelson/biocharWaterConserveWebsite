@@ -4,8 +4,8 @@
 
 **Branch reviewed:** `etl-refactor`
 
-**Status:** Initial audit complete; the approved high-confidence cleanup batch
-was applied on 2026-10-16. All other recommendations remain pending.
+**Status:** Initial audit and historical PakBus cleanup complete. Other
+recommendations remain pending.
 
 ## Purpose
 
@@ -142,32 +142,30 @@ scripts still import them. That is evidence that those experimental commands
 are incomplete; the modules and their dependents belong in the later historical
 PakBus review.
 
-## Review before retirement
+## Historical PakBus cleanup — completed 2026-10-16
 
-### Historical PakBus experimentation
+### Retired experimentation
 
 The largest concentration of probable legacy code is separate from the current
 `pakbus/core` implementation:
 
 | Area | Tracked files | Findings | Recommendation |
 |---|---:|---|---|
-| `pakbus/scripts` | 28 remaining (34 audited) | Mostly packet replay, protocol probing, capture decoding, and reconstructed download experiments from 2025-2026. Several depend on the empty `pakbus/utils` modules. No current deployment invokes them. | Review once for unique hardware knowledge, then delete superseded executables from the main branch. Preserve a concise engineering note, not every experiment. |
-| `pakbus/examples` | 6 | Older example programs and configuration, partly derived from an external PakBus implementation. They are not used by the current core. | Confirm licensing/provenance and delete if the installed dependency and current core fully replace them. |
-| `pakbus/scripts_zsh` | 4 | Session-analysis shell scripts tied to specific 2025 `.spm` files and local paths. | Convert any reusable recovery procedure into operations documentation; otherwise delete. |
-| `pakbus/utils` | 4 | `crc.py`, `frame.py`, and `hex.py` are empty, although historical scripts import functions from them. | Delete together with the dependent historical scripts. Do not present those commands as usable. |
-| [`scripts/CLIscripts.txt`](../../scripts/CLIscripts.txt) | 1 | An unstructured command notebook with duplicated or malformed commands, specific network addresses, commands targeting empty files, and references to a nonexistent `loop_27b_tx_pull` module. | Extract any still-valid troubleshooting knowledge into a PakBus operations page, then delete. |
+| `pakbus/scripts` | 28 remaining (34 audited) | Mostly packet replay, protocol probing, capture decoding, and reconstructed download experiments from 2025-2026. Several depended on empty utility modules. No current deployment invoked them. | Deleted; durable protocol findings were retained in a historical note. |
+| `pakbus/examples` | 6 | Python 2 examples and configuration from an external PakBus implementation; not used by the current core. | Deleted; provenance remains in the review and Git history. |
+| `pakbus/scripts_zsh` | 4 | Session-analysis commands tied to specific 2025 `.spm` files and missing helpers. | Deleted after the maintainer confirmed SPM inspection is not a current workflow. |
+| `pakbus/utils` | 4 | Three modules were empty although historical scripts imported functions from them. | Deleted with their dependents. |
+| `scripts/CLIscripts.txt` | 1 | An unstructured command notebook containing obsolete, malformed, and missing-module commands. | Deleted after the supported interface was confirmed. |
 
-The root [`tools/`](../../../tools/) directory contains a second historical
-PakBus toolchain from August-September 2025. Thirteen scripts form capture,
-decode, resample, and trust-check experiments. They have no current README or
-deployment entry point and are superseded operationally by `tools/pakbus-download`
-and `pakbus/core`. Treat them as one review batch rather than deciding file by
-file. If an old protocol-decoding technique remains valuable, describe it in a
-historical engineering note or turn it into a tested current diagnostic.
+The thirteen capture, decode, resample, and trust-check experiments formerly in
+the root `tools/` directory were also deleted. The supported
+`tools/pakbus-download` and `tools/sync-published-data` wrappers remain, as does
+`tools/extract_management_data.py` pending the separate builder comparison.
 
-This review should be completed before reorganizing `pakbus/`. Moving all of
-these files into a new directory would make the new structure look more
-complicated without increasing capability.
+The packet-forensics history is now recorded in
+[`pakbus_packet_forensics_history.md`](../reference_notes/pakbus_packet_forensics_history.md).
+Local ignored capture files were not modified. This cleanup reduced the active
+tree without performing a directory refactor.
 
 ### Isolated utilities with plausible manual value
 
@@ -176,8 +174,6 @@ complicated without increasing capability.
 | [`etf.py`](../../etf.py) and the export in [`biochar_app/__init__.py`](../../__init__.py) | Provides a binary Table1 decoder and is exported as a public package symbol, but no current application, test, or supported command calls it. An archived PakBus note contains the only substantive usage found. | Decide whether binary ETF decoding is a supported reusable capability. If yes, move it into the current PakBus parsing layer and test it. If no, delete both the module and public export. |
 | [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its documentation says it is canonical for ETL and diagnostics, but no current caller imports it. | Compare its parsing behavior with the actual ETL and diagnostic readers. Consolidate only after equivalence tests; otherwise retire it. |
 | [`scripts/archive_dataset.py`](../../scripts/archive_dataset.py) | Standalone utility that copies Ward datasets into timestamped archive folders; no documented workflow calls it. | Confirm whether maintainers still run it manually. If not, delete it; if yes, document when restoration is needed and where archives are stored. |
-| [`scripts/pull_leaves.py`](../../scripts/pull_leaves.py) | Older incremental collection path that calls `pakbus/scripts/fetch_leaf_records`; its own usage example points to the wrong module location. Current scheduled acquisition uses `pakbus/core/daily_download`. | Retire with the historical PakBus batch unless it supports a field workflow unavailable in `tools/pakbus-download`. |
-| [`scripts/replay_collect.py`](../../scripts/replay_collect.py) | Standalone packet-replay experiment with no current references. | Preserve only if still needed for a specific logger-recovery procedure; otherwise delete. |
 | [`tools/extract_management_data.py`](../../../tools/extract_management_data.py) | Extracts irrigation and fertilizer data from the master workbook, but newer dedicated builders now handle those datasets and have tests. | Compare its outputs with `build_irrigation_from_master.py` and `generate_fertilizer_clean.py`. Retire it only after confirming no unique transformation remains. |
 
 ### Reference and planning documents
@@ -258,11 +254,11 @@ itself. Git history is the better archive for superseded code.
    PakBus tests.** The deployment incident led to an explicit WSGI-entry-point
    preflight, and stale irrigation-date and JavaScript-module assumptions in
    the test suite were corrected before beginning the historical-code review.
-3. **Review the historical PakBus batch with field-maintenance needs in mind.**
-   The evidence review is recorded in
-   [`pakbus_historical_review.md`](pakbus_historical_review.md). Confirm the
-   remaining direct-serial, HTTP, SPM-session, and packet-capture needs before
-   applying its proposed deletion batches.
+3. **Completed 2026-10-16: retire the historical PakBus batch.** The maintainer
+   confirmed that PC400 downloading, packet-capture analysis, HTTP experiments,
+   and SPM-session inspection are not current workflows. The evidence and exact
+   boundary are recorded in
+   [`pakbus_historical_review.md`](pakbus_historical_review.md).
 4. **Compare overlapping data builders.** Establish which command owns
    irrigation, fertilizer, TOA5 parsing, and workbook extraction before deleting
    alternate implementations.
