@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **64**
+Documents indexed: **65**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -335,6 +335,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/docs/research/irrigation_flow_water_balance/README.md`
 - **Status:** current
 - **Summary:** The complete analysis report is irrigationflowwaterbalancereport.md.
+
+### Persistent deep-over-shallow VWC at S3 and S4: diagnostic audit
+
+- **Path:** `biochar_app/docs/research/s3_s4_multiyear_water_audit/s3_s4_multiyear_water_audit.md`
+- **Status:** current
+- **Summary:** This audit addresses a persistent and unexplained pattern in the soil-moisture record: volumetric water content (VWC) at 18 inches is almost always higher than the corresponding 6- and 12-inch measurements at S3—most...
 
 ### Six-inch EC behavior between irrigation events
 
