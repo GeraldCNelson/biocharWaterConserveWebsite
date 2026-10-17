@@ -1,7 +1,7 @@
 {
   "counts": {
-    "total": 1761,
-    "python": 1435,
+    "total": 1759,
+    "python": 1433,
     "javascript": 326,
     "python_parse_errors": 0
   },
@@ -6042,30 +6042,6 @@
       "kind": "function",
       "summary": "No docstring.",
       "docstring": "",
-      "decorators": [],
-      "exported": true
-    },
-    {
-      "language": "Python",
-      "path": "biochar_app/etf.py",
-      "line": 11,
-      "qualified_name": "campbell_seconds_to_datetime",
-      "signature": "(seconds: int) -> dt.datetime",
-      "kind": "function",
-      "summary": "Convert Campbell 'seconds since 1990-01-01' to a naive datetime.",
-      "docstring": "Convert Campbell 'seconds since 1990-01-01' to a naive datetime.\n\nExample:\n  0                -> 1990-01-01 00:00:00\n  550000000        -> ~2007-06-06 17:46:40",
-      "decorators": [],
-      "exported": true
-    },
-    {
-      "language": "Python",
-      "path": "biochar_app/etf.py",
-      "line": 22,
-      "qualified_name": "decode_row",
-      "signature": "(raw_bytes: bytes) -> Dict[str, Any]",
-      "kind": "function",
-      "summary": "Decode one ETF record from Table1.",
-      "docstring": "Decode one ETF record from Table1.\n\nTable1 layout (per TDF / CR206 program):\n\n  \u2022 4-byte big-endian unsigned int:\n      Campbell timestamp = seconds since 1990-01-01 00:00:00\n  \u2022 1\u00d7BattV (Minimum)\n  \u2022 3\u00d7(VWC, EC, T) for sensor 1\n  \u2022 3\u00d7(VWC, EC, T) for sensor 2\n  \u2022 3\u00d7(VWC, EC, T) for sensor 3\n\nAll floats are 4-byte big-endian.",
       "decorators": [],
       "exported": true
     },

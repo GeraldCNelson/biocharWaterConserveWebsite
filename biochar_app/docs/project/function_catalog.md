@@ -7,7 +7,7 @@ Regenerate both the Markdown and JSON catalogs with:
 python biochar_app/scripts/dev-tools/build_function_catalog.py
 ```
 
-- Python functions and methods: **1435**
+- Python functions and methods: **1433**
 - JavaScript functions: **326**
 - Files with Python parse errors: **0**
 
@@ -273,11 +273,6 @@ and some class/object method syntaxes may require manual review.
 - **`battery_health(df: pd.DataFrame, vmin_ok: float=11.0, vmax_ok: float=13.0, top_n: int=50) -> Tuple[List[BatterySummary], pd.DataFrame]`** — line 206; function; public/exported. Returns: - per-column battery summaries - a "violations" dataframe with timestamp/column/value for out-of-range rows (capped to top_n per column)
 - **`write_report(report_path: Path, year_blocks: List[Tuple[int, TimeHealth, List[MissingnessRow], List[BatterySummary]]], batt_vmin_ok: float, batt_vmax_ok: float) -> None`** — line 280; function; public/exported. No docstring.
 - **`main() -> int`** — line 347; function; public/exported. No docstring.
-
-### `biochar_app/etf.py`
-
-- **`campbell_seconds_to_datetime(seconds: int) -> dt.datetime`** — line 11; function; public/exported. Convert Campbell 'seconds since 1990-01-01' to a naive datetime.
-- **`decode_row(raw_bytes: bytes) -> Dict[str, Any]`** — line 22; function; public/exported. Decode one ETF record from Table1.
 
 ### `biochar_app/geospatial/analyze_fruita_dem_profiles.py`
 

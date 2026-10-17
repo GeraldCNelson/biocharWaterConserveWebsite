@@ -1,7 +1,3 @@
-# biochar_app/__init__.py
-from .etf import decode_row
+"""Biochar Water Conservation application package."""
 
-__all__ = [
-    'decode_row',
-    # …any other public symbols…
-]
+__all__: list[str] = []
