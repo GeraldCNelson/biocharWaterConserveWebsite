@@ -45,7 +45,11 @@ class BulkDownloadCurrentDataTests(unittest.TestCase):
     def test_plot_irrigation_source_includes_august_14_event(self) -> None:
         for strip in ("S1", "S2", "S3", "S4"):
             events = load_irrigation_events(strip, 2026)
-            self.assertEqual(events["start"].max().date().isoformat(), "2026-08-14")
+            event_dates = {
+                timestamp.date().isoformat()
+                for timestamp in events["start"]
+            }
+            self.assertIn("2026-08-14", event_dates)
 
 
 class LoggerRatioBulkDownloadTests(unittest.IsolatedAsyncioTestCase):

@@ -21,7 +21,10 @@ const document = {
   createElement() {return {attributes: {}, setAttribute(key, value) {this.attributes[key] = value;}};}
 };
 const context = vm.createContext({window: {}, document, console: {error() {}}});
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8").replace(/^export /gm, ""), context);
+const sourceCode = fs.readFileSync(process.argv[1], "utf8")
+  .replace(/^import .*$/gm, "")
+  .replace(/^export /gm, "");
+vm.runInContext(sourceCode, context);
 const run = vm.runInContext("runBulkDownloadWithFeedback", context);
 const btn = {id: "bulk-download-weather", dataset: {}, textContent: "Download weather data", disabled: false,
   attributes: {}, setAttribute(key, value) {this.attributes[key] = value;},

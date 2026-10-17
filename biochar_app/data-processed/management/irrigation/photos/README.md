@@ -157,6 +157,19 @@ Utility scripts:
 These scripts together provide the workflow for importing, validating,
 deduplicating, reviewing, and maintaining irrigation meter photographs.
 
+## Automatic meter-reading evaluation
+
+EasyOCR was evaluated as a way to read meter values automatically from field
+photographs. It was not accurate enough for production use because lighting,
+reflections, camera angle, and dial appearance vary substantially. The
+supported workflow therefore uses human review with reproducible inventories,
+correction records, and audit outputs.
+
+A future phone-based collection tool can improve image consistency and retain
+capture metadata, but an OCR result should remain a suggestion requiring
+confirmation unless a new evaluation demonstrates adequate accuracy across
+representative field conditions.
+
 `compare_meter_photos_to_irrigation.py` reads the canonical
 `photo_inventory_unique.csv` directly. The former
 `clean_meter_photo_readings.py` step belonged to the archived
