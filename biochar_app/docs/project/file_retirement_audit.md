@@ -214,19 +214,18 @@ content:
 This is a naming and source-control hygiene issue, not evidence that the weather
 data are disposable.
 
-### Empty `pyproject.toml`
+### Empty `pyproject.toml` — completed 2026-10-16
 
-The root `pyproject.toml` is empty. It is not operationally active, but the
-architecture proposal identifies packaging reusable tools as a future goal.
-Either populate it when a supported package boundary is designed, or remove it
-until that work begins. Leaving an empty packaging file suggests an installation
-interface that does not exist.
+The root `pyproject.toml` was empty and not operationally active. It was
+deleted because it suggested an installation interface that did not exist.
+When a supported reusable package boundary is designed, create a populated
+project file together with public API tests and installation documentation.
 
-### Empty `scripts/experimental` directory
+### Empty `scripts/experimental` directory — completed 2026-10-16
 
-The directory contains only `README.md` and `__init__.py`. The README's record of
-the EasyOCR meter-reading evaluation is useful. Move that short decision record
-to the irrigation photo workflow documentation, then remove the empty package.
+The directory contained only `README.md` and `__init__.py`; no tracked
+experimental implementation remained. The EasyOCR decision record was moved
+to the canonical irrigation-photo README, and the empty package was deleted.
 
 ## Recommended retirement policy
 
