@@ -172,7 +172,7 @@ tree without performing a directory refactor.
 | Candidate | Evidence | Decision needed |
 |---|---|---|
 | [`etf.py`](../../etf.py) and the export in [`biochar_app/__init__.py`](../../__init__.py) | Provides a binary Table1 decoder and is exported as a public package symbol, but no current application, test, or supported command calls it. An archived PakBus note contains the only substantive usage found. | Decide whether binary ETF decoding is a supported reusable capability. If yes, move it into the current PakBus parsing layer and test it. If no, delete both the module and public export. |
-| [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its documentation says it is canonical for ETL and diagnostics, but no current caller imports it. | Compare its parsing behavior with the actual ETL and diagnostic readers. Consolidate only after equivalence tests; otherwise retire it. |
+| [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its output matched the active ETL reader on eight 2026 Table1 files and more than 800,000 rows, but no current caller imports it. Diagnostic readers have additional input contracts. | Keep and make it genuinely canonical through the tested, staged consolidation described in [`toa5_reader_review.md`](toa5_reader_review.md). |
 | [`scripts/archive_dataset.py`](../../scripts/archive_dataset.py) | Standalone utility that copies Ward datasets into timestamped archive folders; no documented workflow calls it. | Confirm whether maintainers still run it manually. If not, delete it; if yes, document when restoration is needed and where archives are stored. |
 | `tools/extract_management_data.py` | The combined extractor no longer imports because its output-path constants were removed. Its reduced schemas are superseded by dedicated builders called by ETL and covered by focused tests. | Deleted after the comparison recorded in [`management_builder_review.md`](management_builder_review.md). |
 
@@ -262,8 +262,10 @@ itself. Git history is the better archive for superseded code.
 4. **Partially completed 2026-10-16: compare overlapping data builders.** The
    obsolete combined irrigation/fertilizer extractor was retired after the
    comparison in [`management_builder_review.md`](management_builder_review.md).
-   TOA5 parsing and the remaining isolated utilities still require separate
-   review.
+   The TOA5 evidence review is complete in
+   [`toa5_reader_review.md`](toa5_reader_review.md); its recommended
+   consolidation is a functional refactor and remains pending agreement. Other
+   isolated utilities still require separate review.
 5. **Create a data and research-output manifest.** The code audit alone is not a
    safe basis for deleting CSV, HTML report, image, or scientific-output files.
 6. **Begin directory refactoring only after cleanup decisions are merged.** The
