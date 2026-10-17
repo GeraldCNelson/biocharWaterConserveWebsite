@@ -238,3 +238,9 @@ biochar_app/data-processed/management/irrigation/photos/photo_inventory_unique_a
 biochar_app/data-raw/pakbus_daily/
 biochar_app/data-processed/pakbus_daily.lock
 biochar_app/data-processed/management/irrigation/irrigation_refresh_status.json
+
+# Local inspection and operating-system artifacts. These rules follow the
+# management-data negations above so nested files remain ignored.
+**/Thumbs.db
+*.inspect.ndjson
+/SHA256SUMS.txt
