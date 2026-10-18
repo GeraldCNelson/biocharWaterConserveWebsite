@@ -845,10 +845,16 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
 
 }
 
+export function defaultComparisonPeriod(periods) {
+  return periods.find((period) => period.code === "Q2_Growing")
+    || periods.find((period) => /growing|irrigation/i.test(period.label || ""))
+    || periods[0];
+}
+
 function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
   if (!Array.isArray(yearEntries) || !yearEntries.length || !Array.isArray(periods) || !periods.length) return;
 
-  const defaultPeriod = periods.find((period) => /growing/i.test(period.label || "")) || periods[0];
+  const defaultPeriod = defaultComparisonPeriod(periods);
   const section = document.createElement("section");
   section.id = "seasonal-comparison";
   section.className = "multi-year-summary mt-4";

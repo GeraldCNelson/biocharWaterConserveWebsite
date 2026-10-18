@@ -29,6 +29,15 @@ assert.ok(narrow.title.pad.t>=24);
 assert.ok(narrow.title.text.includes('<span style="font-size:14px">'));
 assert.ok(!narrow.title.text.includes("<sup>"));
 assert.ok(context.comparisonChartHeading("A < B",subtitle,"",640).title.text.includes("&lt;"));
+const renamedPeriods=[
+  {code:"Q1_Winter",label:"Winter"},
+  {code:"Q2_Growing",label:"Irrigation Season"},
+];
+assert.equal(context.defaultComparisonPeriod(renamedPeriods).code,"Q2_Growing");
+assert.equal(context.defaultComparisonPeriod([
+  {code:"WINTER",label:"Winter"},
+  {code:"SUMMER",label:"Irrigation Season"},
+]).code,"SUMMER");
 const rows=[{year:2023,status:"Partial"},{year:2024,status:"Partial"},{year:2026,status:"Partial"}];
 const entries=rows.map(r=>({year:r.year,periods:[{code:"G",start:r.year+"-04-01",end:r.year+"-10-31"}]}));
 let text=context.comparisonPartialNote(rows,entries,"G",new Date(2026,9,7));
