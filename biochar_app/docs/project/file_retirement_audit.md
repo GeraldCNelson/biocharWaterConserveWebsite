@@ -207,16 +207,14 @@ content:
   non-secret defaults. A separate `.env.example` becomes necessary only if the
   active `.env` later needs machine-specific values or credentials and must be
   ignored.
-- `.env.txt` is not an environment file. It is a roughly 1.9 MB weather-data CSV
-  whose header begins with station, date/time, air temperature, humidity,
-  precipitation, wind, and soil-temperature fields. It should be renamed and
-  placed under the weather source-data workflow, or removed after its provenance
-  and replacement are confirmed.
+- `.env.txt` was not an environment file. It was a roughly 1.9 MB weather-data
+  CSV whose header began with station, date/time, air temperature, humidity,
+  precipitation, wind, and soil-temperature fields.
 
   The maintainer confirmed on 2026-10-17 that repeated CoAgMET retrieval is
-  equivalent to the earlier download. The inventory-only review therefore
-  classifies `.env.txt` as a high-confidence deletion candidate; no file was
-  removed during that review.
+  equivalent to the earlier download. The 24,229-line `.env.txt` snapshot was
+  then deleted from the active tree; its prior content remains recoverable
+  through Git history.
 
 This is a naming and source-control hygiene issue, not evidence that the weather
 data are disposable.

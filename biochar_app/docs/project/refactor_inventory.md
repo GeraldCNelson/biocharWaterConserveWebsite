@@ -91,7 +91,7 @@ The classification labels used below are:
 | `references/` | Setup notes, plans, and source/reference documents | Archive/reference | Generated LaTeX build artifacts were removed; remaining documents require individual retention decisions. |
 | `biochar_app/data-raw/` | Source observations and daily logger acquisition | Data | Data placement and server synchronization are separate from the code refactor. |
 | `biochar_app/data-processed/` | Parquet, downloads, diagnostics, and analysis outputs | Generated output/data | Runtime reads some of these files; deployment requirements must remain explicit. |
-| `biochar_app/results/` | Derived research tables and summaries | Generated research output | Decide which outputs are reproducible and which should be regenerated. |
+| `biochar_app/results/` | One ignored narrative and 13 small CSVs about 2023–2025 soil stocks, nutrient flows, phosphorus turnover, and treatment effects | Soil-health research working output | Review sources and causal language, separate final records from first-pass/rounded/rebuilt intermediates, and move the accepted family to `docs/research/soil_health/`. |
 | `biochar_app/archive/` | Superseded code and historical files | Archive/reference | Keep outside import and deployment paths. |
 
 ## Detailed classification of `biochar_app/scripts`
@@ -288,7 +288,8 @@ the output.
    documentation tab.
 7. Apply the classifications recorded in
    [`data_and_research_output_manifest.md`](data_and_research_output_manifest.md):
-   `.env.txt` is a reproducible CoAgMET download and a deletion candidate;
+   `.env.txt` was a reproducible CoAgMET download and was removed on
+   2026-10-17;
    `.env` remains tracked as shared development configuration while it contains
    only safe, non-secret defaults. Credential values must not be tracked.
 8. Decide whether maintainers still use `scripts/archive_dataset.py`; document

@@ -55,7 +55,7 @@ CSV in an analysis directory can be a reproducible intermediate.
 
 | Tracked family | Files | Approximate size | Inventory conclusion |
 |---|---:|---:|---|
-| Root `.env.txt` weather CSV | 1 | 1.90 MB | Reproducible, misnamed cleanup candidate |
+| Root `.env.txt` weather CSV | 0 current; 1 initially | 0 current; 1.90 MB initially | Removed from the active tree on 2026-10-17 |
 | Tracked raw laboratory reports | 2 | 0.09 MB | Published source evidence; retain |
 | Processed laboratory datasets | 16 | 0.08 MB | Canonical files plus versioned intermediates; separate before cleanup |
 | Processed management datasets | 19 | 0.24 MB | Mixed canonical, historical, and diagnostic files; review by workflow |
@@ -67,15 +67,27 @@ CSV in an analysis directory can be a reproducible intermediate.
 | Published static laboratory/generated media | 55 | 8.41 MB | Website runtime content; retain pending publishing redesign |
 | Permanent geospatial data and figures | 4 | 0.42 MB | Field-layout source/product family; retain |
 | NIR research notes | 4 | less than 0.01 MB | Research documentation; retain provisionally |
+| Ignored soil-health results under `biochar_app/results/` | 14 substantive files | 0.03 MB | Review and move selected research records to `docs/research/soil_health/` |
 
-The repository currently tracks no files under `biochar_app/results/`. Results
-files can be too large for Git, so they remain outside repository history and
-are copied to the test and main servers with a separate `rsync` step when
-needed. The current `deploy.sh` does not include `results/`; it separately
-syncs Parquet, download, seasonal-cache, and selected irrigation products.
+The repository currently tracks no files under `biochar_app/results/`. The
+directory contains one narrative summary and 13 small CSV files concerning
+soil stocks, nutrient flows, phosphorus turnover, and treatment effects for
+2023–2025. Together the substantive files are only about 0.03 MB; they are not
+large deployment data and are not included in the documented `rsync` commands.
+Their current location results from the blanket Git-ignore rule for
+`biochar_app/results/`, not from a clear publication decision.
+
+These soil-health materials should be reviewed as one research family. Move
+the accepted narrative and final supporting tables to
+`biochar_app/docs/research/soil_health/`, where they can later be considered
+for the Technical Analyses tab. Keep first-pass, rounded, rebuilt, or otherwise
+superseded intermediates outside the published research directory. The summary
+currently makes causal statements, so scientific review and source/provenance
+documentation should precede publication.
+
 Parquet summaries, bulk-download ZIPs, seasonal caches, and most raw
-acquisition files are likewise kept outside Git and are not repository-cleanup
-candidates merely because they exist in a working copy.
+acquisition files are different: they can be large, are intentionally kept
+outside Git, and are regenerated or transferred separately with `rsync`.
 
 ## Acquisition and source evidence
 
@@ -83,7 +95,7 @@ candidates merely because they exist in a working copy.
 |---|---|---|---|---|
 | Project master workbook: `biochar_app/data-raw/biochar-data-master.xlsx` | The shared OneDrive workbook is downloaded and validated by `scripts/management/update_master_workbook_snapshot.py`; ETL can deliberately use an installed snapshot. | Irrigation, fertilizer, and field-biomass builders | Ignored | Preserve the validated local snapshot and provenance outside Git. Do not treat the workbook as the source of independent laboratory datasets. |
 | Logger `.dat` files and accepted PakBus archives under `biochar_app/data-raw/` | CR-series dataloggers through historical TOA5 downloads or the current PakBus acquisition and acceptance workflow | ETL, diagnostics, and scientific analyses | Ignored | Preserve as source evidence with archive validation and checksums. Do not add routine raw archives to Git. |
-| CoAgMET Fruita station (FRT3) observations | Retrieved from CoAgMET by `scripts/get_weather_data.py`; ETL produces aligned weather products | Website plots, summaries, downloads, and water analyses | Normal retrieval output is excluded from Git; one misplaced tracked snapshot exists as `.env.txt` | The maintainer confirms historical CoAgMET downloads are reproducible. The tracked `.env.txt` snapshot is therefore a high-confidence deletion candidate, not unique source evidence. |
+| CoAgMET Fruita station (FRT3) observations | Retrieved from CoAgMET by `scripts/get_weather_data.py`; ETL produces aligned weather products | Website plots, summaries, downloads, and water analyses | Normal retrieval output is excluded from Git; the misplaced tracked `.env.txt` snapshot was removed on 2026-10-17 | The maintainer confirms historical CoAgMET downloads are reproducible. The deleted snapshot was not unique source evidence and remains recoverable through Git history. |
 | Raw Ward and other laboratory exports under `biochar_app/data-raw/lab-tests/` | Laboratory CSV, DOCX, or PDF deliveries registered by the laboratory update scripts | Canonical laboratory builders and manual review | Excluded by the `biochar_app/data-raw/` Git-ignore rule and retained locally or in external source storage | Preserve the original deliveries outside Git or in an explicitly documented evidence store. Record sampling date and source before replacing a file. |
 | Biochar material reports under `biochar_app/data-raw/labs_biochar/` | Control Laboratories and Wyoming Laboratory reports | Public Technical Details content through configured report routes | 2 PDFs tracked and required by the deployment manifest | Retain in Git unless publication is redesigned. These are source reports, not generated project output. |
 | Irrigation meter photographs and review workbooks under `data-processed/management/irrigation/photos/` | Field photographs, metadata, manual counter review, and correction files | Canonical photo inventory, irrigation boundary review, and research audits | Originals and review workbooks ignored; selected correction/audit files tracked | Preserve reviewed source material outside Git. Keep only the small canonical correction and audit records needed to reproduce accepted decisions. |
@@ -91,16 +103,16 @@ candidates merely because they exist in a working copy.
 
 ### Root `.env.txt` finding
 
-The tracked `.env.txt` file is not environment configuration. It is a
+The deleted `.env.txt` file was not environment configuration. It was a
 1,896,610-byte CoAgMET CSV with 24,229 lines. Its first row contains weather
 field names and its final observation is for station `frt03` at
 `2025-03-25T22:55`. No operational code reads this path.
 
 Because the current retriever requests a complete year from CoAgMET and the
-maintainer has confirmed that a repeated download is equivalent to the earlier
-download, `.env.txt` does not need to be retained as a unique historical
-source. The next cleanup batch may delete it and rely on Git history for the
-old snapshot. This inventory deliberately leaves it unchanged.
+maintainer confirmed that a repeated download is equivalent to the earlier
+download, `.env.txt` did not need to be retained as a unique historical
+source. It was removed from the active tree on 2026-10-17 and remains
+recoverable through Git history.
 
 ## Canonical and generated application data
 
@@ -148,11 +160,18 @@ No file action below was performed by this inventory.
 
 | Priority | File or review | Evidence | Proposed next decision |
 |---:|---|---|---|
-| 1 | Delete root `.env.txt` | Misnamed reproducible CoAgMET download; no references; maintainer confirms repeat retrieval is equivalent | Include in the next small housekeeping commit. |
+| 1 | Root `.env.txt` | Misnamed reproducible CoAgMET download; no operational references; maintainer confirms repeat retrieval is equivalent | **Completed 2026-10-17:** deleted from the active tree; retained in Git history. |
 | 2 | Keep the tracked root `.env` as shared development configuration | It contains only safe shared defaults, application startup reads it, and production uses a separate environment file | Update `.env` directly when shared defaults change. Never add credentials or machine-specific values. |
-| 3 | Review version-suffixed Ward clean/merge CSVs | Canonical filenames exist, while several older versions have no current references; one standalone soil-biology table script still names versions 5 and 6 | Confirm the standalone script's status and preserve only required source evidence plus the canonical output. |
-| 4 | Review `docs/research/ec_irrigation_interval_analysis.html` and `docs/research/ec_moisture_temperature_adjusted_analysis.html` | Markdown reports and generation scripts exist; no runtime reference was found | Confirm whether the HTML files are used for offline review; otherwise remove them from Git. |
-| 5 | Split the 85 tracked irrigation-analysis files by generating command and current use | The directory mixes reviewed summaries with reproducible diagnostics and per-event products | Create a sub-manifest before untracking any files; preserve inputs to current research reports. |
+| 3 | Review and relocate the soil-health family currently under `biochar_app/results/` | One narrative and 13 CSVs are small, topically related, ignored by Git, and not documented as deployed output | Create `soil_health_results_inventory_2026-10-17.md`; identify final versus superseded files, document sources and methods, then move the accepted research record to `docs/research/soil_health/`. |
+| 4 | Review version-suffixed Ward clean/merge CSVs | Canonical filenames exist, while several older versions have no current references; one standalone soil-biology table script still names versions 5 and 6 | Confirm the standalone script's status and preserve only required source evidence plus the canonical output. |
+| 5 | Review `docs/research/ec_irrigation_interval_analysis.html` and `docs/research/ec_moisture_temperature_adjusted_analysis.html` | Markdown reports and generation scripts exist; no runtime reference was found | Preserve them until the Technical Analyses publishing format is agreed; then retain Markdown as the maintained source if the application can render it directly. |
+| 6 | Split the 85 tracked irrigation-analysis files by generating command and current use | The directory mixes reviewed summaries with reproducible diagnostics and per-event products | Create a dated sub-manifest before untracking any files; preserve report-ready analyses for possible inclusion in Technical Analyses. |
+
+## Cleanup history
+
+| Date | File family | Action | Verification |
+|---|---|---|---|
+| 2026-10-17 | Misplaced CoAgMET snapshot `.env.txt` | Removed the reproducible 24,229-line download from the active Git tree | Confirmed no operational references; current CoAgMET retriever requests complete annual data; prior version remains in Git history |
 
 ## How this manifest supports the cleanup process
 
@@ -184,5 +203,6 @@ After each approved cleanup batch:
   versioning those products.
 - Treat current canonical clean CSVs as reviewed application datasets even when
   their builders are reproducible.
-- Make the next cleanup commit small: remove root `.env.txt`, then review the
-  version-suffixed laboratory files as a separate decision.
+- Keep the Technical Analyses tab as the destination for reviewed research
+  records, but finish classifying and relocating the soil-health, EC, and
+  irrigation-analysis families before implementing the website feature.
