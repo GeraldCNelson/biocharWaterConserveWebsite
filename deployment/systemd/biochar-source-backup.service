@@ -10,6 +10,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/biocharWaterConserveWebsite
 ExecStart=/home/ubuntu/biocharWaterConserveWebsite/tools/backup-source-data --upload
 Environment=AWS_PAGER=
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 TimeoutStartSec=2h
 Nice=10
 IOSchedulingClass=best-effort
