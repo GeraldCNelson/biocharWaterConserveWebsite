@@ -9,8 +9,8 @@ products, and research records so later cleanup decisions can be made safely.
 
 **Branch:** `etl-refactor`
 
-**Status:** Active cleanup working document. The initial inventory pass did not
-move or delete any files or remove them from Git tracking.
+**Status:** Active cleanup working document. Approved actions are recorded in
+the cleanup history; unreviewed families remain inventory-only.
 
 ## Purpose
 
@@ -61,29 +61,26 @@ CSV in an analysis directory can be a reproducible intermediate.
 | Processed management datasets | 19 | 0.24 MB | Mixed canonical, historical, and diagnostic files; review by workflow |
 | Irrigation-analysis outputs | 85 | 2.79 MB | Generated family; retain pending generator/current-use review |
 | Generated Ward HTML | 5 | 0.70 MB | Website runtime requirement; retain |
-| Research documents and report bundles | 33 | 6.43 MB | Reviewed or interpretable research record; retain as coherent families |
+| Other research documents and report bundles | 33 | 6.43 MB | Reviewed or interpretable research record; retain as coherent families |
+| Historical soil-health research family | 15 | 0.03 MB | Preserved in a visible, tracked research directory with limitations documented |
 | Website Word sources | 6 | 1.05 MB | Editable sources for existing narrative pages; retain |
 | Generated website Markdown | 6 | 0.03 MB | Website runtime requirement; retain |
 | Published static laboratory/generated media | 55 | 8.41 MB | Website runtime content; retain pending publishing redesign |
 | Permanent geospatial data and figures | 4 | 0.42 MB | Field-layout source/product family; retain |
 | NIR research notes | 4 | less than 0.01 MB | Research documentation; retain provisionally |
-| Ignored soil-health results under `biochar_app/results/` | 14 substantive files | 0.03 MB | Review and move selected research records to `docs/research/soil_health/` |
 
-The repository currently tracks no files under `biochar_app/results/`. The
-directory contains one narrative summary and 13 small CSV files concerning
-soil stocks, nutrient flows, phosphorus turnover, and treatment effects for
-2023–2025. Together the substantive files are only about 0.03 MB; they are not
-large deployment data and are not included in the documented `rsync` commands.
-Their current location results from the blanket Git-ignore rule for
-`biochar_app/results/`, not from a clear publication decision.
+The former ignored `biochar_app/results/` directory contained one narrative
+summary and 13 small CSV files concerning soil stocks, nutrient flows,
+phosphorus turnover, and treatment effects for 2023–2025. On 2026-10-17 all 14
+files were preserved under `biochar_app/docs/research/soil_health/`, together
+with a dated inventory. The family is now visible and can be versioned in Git.
 
-These soil-health materials should be reviewed as one research family. Move
-the accepted narrative and final supporting tables to
-`biochar_app/docs/research/soil_health/`, where they can later be considered
-for the Technical Analyses tab. Keep first-pass, rounded, rebuilt, or otherwise
-superseded intermediates outside the published research directory. The summary
-currently makes causal statements, so scientific review and source/provenance
-documentation should precede publication.
+First-pass, rounded, rebuilt, and updated tables were retained because no
+generation code or complete provenance record was found that would make a
+supersession decision safe. The narrative now distinguishes descriptive
+patterns and hypotheses from established causal conclusions. Scientific review
+and a reproducible builder are still required before any part of the family is
+published in the proposed Technical Analyses section.
 
 Parquet summaries, bulk-download ZIPs, seasonal caches, and most raw
 acquisition files are different: they can be large, are intentionally kept
@@ -149,6 +146,7 @@ example instead.
 |---|---|---|---|
 | Persistent deep-over-shallow S3/S4 VWC audit | `scripts/research/analyze_s3_s4_multiyear_water.py`; canonical logger, irrigation, weather, and photo-QC inputs | 18 report, table, and figure files under `docs/research/s3_s4_multiyear_water_audit/` | Retain as one reproducible diagnostic record. It documents an unresolved measurement pattern rather than a causal conclusion. |
 | Irrigation flow and water-balance analysis | `scripts/management/irrigation_analysis/analyze_flow_infiltration.py` and `plot_zone_capacity_field_layout.py` | 9 report, table, JSON, and figure files under `docs/research/irrigation_flow_water_balance/` | Retain as one report bundle. Its README names the regeneration commands and supporting outputs. |
+| Historical soil-health and nutrient analysis | Original generator not identified; tables appear to combine laboratory, biomass, fertilizer, area, and bulk-density inputs | One qualified narrative, one dated inventory, and 13 supporting CSV tables under `docs/research/soil_health/` | Retain as a historical preliminary record and starting point for a reproducible current analysis. Do not publish its causal interpretations without scientific review. |
 | EC temperature-sensitivity assessment | `scripts/research/analyze_ec25_temperature_sensitivity.py`; canonical Parquet and EC measurements | Markdown assessment tracked; machine-readable tables and figures ignored under `data-processed/research/ec25_temperature_sensitivity/` | Retain the interpretive report; keep reproducible machine outputs outside Git unless selected for publication. |
 | EC irrigation-interval and moisture/temperature-adjusted analyses | `scripts/research/analyze_ec_irrigation_intervals.py` and `analyze_ec_adjustment.py` | Markdown reports plus `docs/research/ec_irrigation_interval_analysis.html` and `docs/research/ec_moisture_temperature_adjusted_analysis.html`; machine-readable outputs excluded from Git under `data-processed/research/` | Retain Markdown reports. The two unreferenced Pandoc HTML exports are medium-confidence cleanup candidates after confirming they are not the preferred review copies. |
 | NIR topic notes under `biochar_app/markdown/nir_set*.md` | Historical explanatory research notes; current website NIR tables are built from canonical CSV by `scripts/tables/tables_nir.py` | 4 Markdown files | Retain provisionally as research documentation. Decide later whether to incorporate their useful interpretation into public data documentation. |
@@ -156,13 +154,14 @@ example instead.
 
 ## Cleanup decisions produced by this pass
 
-No file action below was performed by this inventory.
+Completed actions and pending reviews are listed together so the sequence of
+cleanup decisions remains visible.
 
 | Priority | File or review | Evidence | Proposed next decision |
 |---:|---|---|---|
 | 1 | Root `.env.txt` | Misnamed reproducible CoAgMET download; no operational references; maintainer confirms repeat retrieval is equivalent | **Completed 2026-10-17:** deleted from the active tree; retained in Git history. |
 | 2 | Keep the tracked root `.env` as shared development configuration | It contains only safe shared defaults, application startup reads it, and production uses a separate environment file | Update `.env` directly when shared defaults change. Never add credentials or machine-specific values. |
-| 3 | Review and relocate the soil-health family currently under `biochar_app/results/` | One narrative and 13 CSVs are small, topically related, ignored by Git, and not documented as deployed output | Create `soil_health_results_inventory_2026-10-17.md`; identify final versus superseded files, document sources and methods, then move the accepted research record to `docs/research/soil_health/`. |
+| 3 | Review and relocate the soil-health family formerly under `biochar_app/results/` | One narrative and 13 CSVs are small, topically related, and scientifically useful despite their age | **Completed 2026-10-17:** preserved the entire compact family under `docs/research/soil_health/`, added a dated inventory, and qualified the narrative. Reproducibility and scientific review remain future work. |
 | 4 | Review version-suffixed Ward clean/merge CSVs | Canonical filenames exist, while several older versions have no current references; one standalone soil-biology table script still names versions 5 and 6 | Confirm the standalone script's status and preserve only required source evidence plus the canonical output. |
 | 5 | Review `docs/research/ec_irrigation_interval_analysis.html` and `docs/research/ec_moisture_temperature_adjusted_analysis.html` | Markdown reports and generation scripts exist; no runtime reference was found | Preserve them until the Technical Analyses publishing format is agreed; then retain Markdown as the maintained source if the application can render it directly. |
 | 6 | Split the 85 tracked irrigation-analysis files by generating command and current use | The directory mixes reviewed summaries with reproducible diagnostics and per-event products | Create a dated sub-manifest before untracking any files; preserve report-ready analyses for possible inclusion in Technical Analyses. |
@@ -172,6 +171,7 @@ No file action below was performed by this inventory.
 | Date | File family | Action | Verification |
 |---|---|---|---|
 | 2026-10-17 | Misplaced CoAgMET snapshot `.env.txt` | Removed the reproducible 24,229-line download from the active Git tree | Confirmed no operational references; current CoAgMET retriever requests complete annual data; prior version remains in Git history |
+| 2026-10-17 | Historical soil-health results | Moved one narrative and 13 CSVs from ignored `biochar_app/results/` to tracked `docs/research/soil_health/`; added a dated inventory and interpretation cautions | Confirmed all 14 substantive files were retained; documented that the generator and complete provenance are not yet known |
 
 ## How this manifest supports the cleanup process
 

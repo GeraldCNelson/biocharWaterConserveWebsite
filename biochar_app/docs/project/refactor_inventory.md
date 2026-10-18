@@ -91,7 +91,7 @@ The classification labels used below are:
 | `references/` | Setup notes, plans, and source/reference documents | Archive/reference | Generated LaTeX build artifacts were removed; remaining documents require individual retention decisions. |
 | `biochar_app/data-raw/` | Source observations and daily logger acquisition | Data | Data placement and server synchronization are separate from the code refactor. |
 | `biochar_app/data-processed/` | Parquet, downloads, diagnostics, and analysis outputs | Generated output/data | Runtime reads some of these files; deployment requirements must remain explicit. |
-| `biochar_app/results/` | One ignored narrative and 13 small CSVs about 2023–2025 soil stocks, nutrient flows, phosphorus turnover, and treatment effects | Soil-health research working output | Review sources and causal language, separate final records from first-pass/rounded/rebuilt intermediates, and move the accepted family to `docs/research/soil_health/`. |
+| `biochar_app/docs/research/soil_health/` | Preserved 2023–2025 narrative, dated inventory, and 13 supporting tables about soil stocks, nutrient flows, phosphorus turnover, and treatment effects | Historical soil-health research record | Retain as a compact family. Reconstruct its canonical inputs and generator before updating it or selecting content for the Technical Analyses section. |
 | `biochar_app/archive/` | Superseded code and historical files | Archive/reference | Keep outside import and deployment paths. |
 
 ## Detailed classification of `biochar_app/scripts`
@@ -225,9 +225,10 @@ The following should eventually join operations documentation:
 - `markdown/nir_set3_minerals_ash.md`
 - `markdown/nir_set4_digestibility_metrics.md`
 - `markdown/chat_summaries/deep-research_carbon-report.md`
-- `results/biochar_microbe_nutrient_summary.md`
+- `docs/research/soil_health/biochar_microbe_nutrient_summary_2023-2025.md`
+- `docs/research/soil_health/soil_health_results_inventory_2026-10-17.md`
 
-An initial reference search found no runtime code loading these four Markdown
+An initial reference search found no runtime code loading the four NIR Markdown
 files. The website's NIR tables are built from CSV data by
 `scripts/tables/tables_nir.py`, so the Markdown files are provisionally
 classified as research documentation.

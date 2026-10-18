@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **66**
+Documents indexed: **68**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -336,6 +336,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** This analysis uses the corrected 2023–2026 logger timestamps and treats Top→Bottom travel as the primary horizontal-advance outcome. Middle timing is retained as a separate spatial-coverage diagnostic; strict Top→Midd...
 
+### Historical preliminary analysis: biochar, microbes, and nutrients, 2023–2025
+
+- **Path:** `biochar_app/docs/research/soil_health/biochar_microbe_nutrient_summary_2023-2025.md`
+- **Status:** current
+- **Summary:** This analysis was moved from the ignored biocharapp/results/ directory so that its observations and supporting tables would not be lost. It is useful as a starting point for renewed soil-health, nutrient-needs, and fe...
+
 ### Irrigation flow and water-balance research outputs
 
 - **Path:** `biochar_app/docs/research/irrigation_flow_water_balance/README.md`
@@ -359,6 +365,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/docs/research/ec_moisture_temperature_adjusted_analysis.md`
 - **Status:** current
 - **Summary:** output: worddocument: default htmldocument: default
+
+### Soil-health results inventory, 2026-10-17
+
+- **Path:** `biochar_app/docs/research/soil_health/soil_health_results_inventory_2026-10-17.md`
+- **Status:** current
+- **Summary:** This dated inventory records the preservation and initial classification of a small set of historical soil-health analysis files. The files had been stored under the ignored biocharapp/results/ directory, which meant...
 
 ## Research and working notes
 
