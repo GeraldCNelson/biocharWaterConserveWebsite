@@ -19,7 +19,7 @@ import {
 } from "./downloads.js?v=20261011-bulk-ec-2";
 
 // 3) Debugging & logging
-import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20261007-apply-seasons";
+import { renderMainPlots, waitForAllDropdowns } from "./plots.js?v=20261018-trace-layout";
 import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader
