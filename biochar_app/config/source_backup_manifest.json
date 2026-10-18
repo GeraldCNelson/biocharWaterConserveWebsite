@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "bucket": "biochar-research-backup-gcn2026",
+  "region": "us-east-2",
+  "destination_prefix": "biocharWaterConserveWebsite",
+  "global_excludes": [
+    ".DS_Store",
+    "*/.DS_Store",
+    "__pycache__/*",
+    "*/__pycache__/*",
+    "*.pyc",
+    ".env",
+    ".env.*",
+    "*/.env",
+    "*/.env.*",
+    "*.pem",
+    "*.key"
+  ],
+  "sources": [
+    {
+      "path": "biochar_app/data-raw",
+      "required_on_acquisition_server": true,
+      "excludes": [
+        "spm_sessions/*",
+        "temp holder/*"
+      ],
+      "description": "Workbook, logger, PakBus, laboratory, field-mapping, and related source evidence"
+    },
+    {
+      "path": "biochar_app/data-processed/management/irrigation/photos",
+      "required_on_acquisition_server": false,
+      "excludes": [],
+      "description": "Original irrigation meter photographs and their review records"
+    },
+    {
+      "path": "biochar_app/geospatial/drone",
+      "required_on_acquisition_server": false,
+      "excludes": [],
+      "description": "Drone imagery, video, flight data, and capture metadata"
+    },
+    {
+      "path": "biochar_app/geospatial/qgis",
+      "required_on_acquisition_server": false,
+      "excludes": [],
+      "description": "Manually developed QGIS project material"
+    }
+  ]
+}

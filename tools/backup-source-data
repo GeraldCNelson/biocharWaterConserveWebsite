@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python_bin="${repo_root}/.venv/bin/python"
+
+if [[ ! -x "${python_bin}" ]]; then
+  python_bin="${repo_root}/.biochar_py313/bin/python"
+fi
+
+if [[ ! -x "${python_bin}" ]]; then
+  python_bin="$(command -v python3 || true)"
+fi
+
+if [[ -z "${python_bin}" ]]; then
+  printf '%s\n' 'Python 3 is required but was not found.' >&2
+  exit 1
+fi
+
+cd "${repo_root}"
+exec "${python_bin}" -m biochar_app.scripts.backup_source_data "$@"

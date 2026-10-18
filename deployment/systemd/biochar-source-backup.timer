@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Biochar source-evidence backup after nightly acquisition
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 America/Denver
+Persistent=true
+RandomizedDelaySec=300
+Unit=biochar-source-backup.service
+
+[Install]
+WantedBy=timers.target
