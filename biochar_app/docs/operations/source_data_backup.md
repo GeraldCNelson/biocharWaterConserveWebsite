@@ -27,9 +27,14 @@ currently includes:
 - manually developed QGIS project material.
 
 Credential-bearing files, private keys, macOS metadata, Python caches, and
-symbolic links are excluded. CoAgMET downloads, Parquet files, public-download
-bundles, LiDAR-derived products, and Git-tracked application files are not part
-of this source-evidence backup.
+symbolic links are excluded. The raw-data directory also contains obsolete
+PC400/SPM communication logs, application backups, manuals, helper scripts,
+and network-setting notes; these are operational history rather than
+scientific source evidence and are explicitly excluded. Logger `.dat` files,
+original data archives, logger programs and table definitions, PakBus records,
+and workbook evidence remain included. CoAgMET downloads, Parquet files,
+public-download bundles, LiDAR-derived products, and Git-tracked application
+files are not part of this source-evidence backup.
 
 Optional sources can be absent from the acquisition server. Their absence is
 reported in the inventory but does not fail the operational backup. The

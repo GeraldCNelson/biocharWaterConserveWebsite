@@ -21,6 +21,16 @@
       "path": "biochar_app/data-raw",
       "required_on_acquisition_server": true,
       "excludes": [
+        "datfiles_2026/COM3 Monitoring Session.spm",
+        "datfiles_2026/Fruita router.txt",
+        "datfiles_2026/IL vpn.txt",
+        "datfiles_2026/netgearInfo.txt",
+        "datfiles_2026/PC400.bkp",
+        "datfiles_2026/PC400.zip.txt",
+        "datfiles_2026/logs/*",
+        "datfiles_2026/manuals/*",
+        "datfiles_2026/python3/*",
+        "datfiles_2026/sys/inifiles/*",
         "spm_sessions/*",
         "temp holder/*"
       ],
