@@ -210,6 +210,102 @@ def inventory_source(
     )
 
 
+def approved_source_files(
+    project_root: Path,
+    source: SourceSpec,
+    global_excludes: Sequence[str],
+) -> list[tuple[Path, PurePosixPath]]:
+    """Return approved regular files and their source-relative paths."""
+
+    absolute_source = project_root / source.path
+    if not absolute_source.exists():
+        return []
+    if not absolute_source.is_dir() or absolute_source.is_symlink():
+        raise ValueError(f"Backup source is not a normal directory: {source.path}")
+
+    patterns = tuple(global_excludes) + source.excludes
+    approved: list[tuple[Path, PurePosixPath]] = []
+    for directory, directory_names, file_names in os.walk(
+        absolute_source, followlinks=False
+    ):
+        directory_path = Path(directory)
+        kept_directories: list[str] = []
+        for name in directory_names:
+            candidate = directory_path / name
+            relative = PurePosixPath(candidate.relative_to(absolute_source).as_posix())
+            if candidate.is_symlink() or is_excluded(relative, patterns) or is_excluded(
+                PurePosixPath(f"{relative.as_posix()}/placeholder"), patterns
+            ):
+                continue
+            kept_directories.append(name)
+        directory_names[:] = kept_directories
+
+        for name in file_names:
+            candidate = directory_path / name
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            relative = PurePosixPath(candidate.relative_to(absolute_source).as_posix())
+            if not is_excluded(relative, patterns):
+                approved.append((candidate, relative))
+    return approved
+
+
+def object_key(
+    config: BackupConfig,
+    source: SourceSpec,
+    relative_path: PurePosixPath,
+) -> str:
+    """Return the destination object key for one approved source file."""
+
+    return (
+        f"{config.destination_prefix}/{source.path.as_posix()}/"
+        f"{relative_path.as_posix()}"
+    )
+
+
+def missing_source_files(
+    config: BackupConfig,
+    source: SourceSpec,
+    remote_keys: set[str],
+    *,
+    project_root: Path = PROJECT_ROOT,
+) -> list[tuple[Path, str]]:
+    """Return approved local files whose exact object keys are absent."""
+
+    return [
+        (local_path, key)
+        for local_path, relative_path in approved_source_files(
+            project_root, source, config.global_excludes
+        )
+        if (key := object_key(config, source, relative_path)) not in remote_keys
+    ]
+
+
+def build_conditional_put_command(
+    config: BackupConfig,
+    local_path: Path,
+    key: str,
+) -> list[str]:
+    """Build an upload command that cannot replace an existing object key."""
+
+    return [
+        "aws",
+        "s3api",
+        "put-object",
+        "--bucket",
+        config.bucket,
+        "--key",
+        key,
+        "--body",
+        str(local_path),
+        "--if-none-match",
+        "*",
+        "--region",
+        config.region,
+        "--no-cli-pager",
+    ]
+
+
 def build_sync_command(
     config: BackupConfig,
     source: SourceSpec,
@@ -275,7 +371,7 @@ def _collect_inventory(config: BackupConfig) -> list[InventoryRecord]:
     return records
 
 
-def _run_aws(command: Sequence[str]) -> None:
+def _run_aws(command: Sequence[str], *, quiet: bool = False) -> None:
     environment = os.environ.copy()
     environment["AWS_PAGER"] = ""
     subprocess.run(
@@ -283,7 +379,49 @@ def _run_aws(command: Sequence[str]) -> None:
         cwd=PROJECT_ROOT,
         env=environment,
         check=True,
+        stdout=subprocess.DEVNULL if quiet else None,
     )
+
+
+def _run_aws_json(command: Sequence[str]) -> Any:
+    environment = os.environ.copy()
+    environment["AWS_PAGER"] = ""
+    completed = subprocess.run(
+        list(command),
+        cwd=PROJECT_ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
+def _list_remote_keys(config: BackupConfig) -> set[str]:
+    payload = _run_aws_json(
+        [
+            "aws",
+            "s3api",
+            "list-objects-v2",
+            "--bucket",
+            config.bucket,
+            "--prefix",
+            f"{config.destination_prefix}/",
+            "--region",
+            config.region,
+            "--output",
+            "json",
+            "--no-cli-pager",
+        ]
+    )
+    contents = payload.get("Contents", [])
+    if not isinstance(contents, list):
+        raise ValueError("Unexpected object-list response from S3")
+    return {
+        item["Key"]
+        for item in contents
+        if isinstance(item, dict) and isinstance(item.get("Key"), str)
+    }
 
 
 def _write_run_manifest(
@@ -307,7 +445,12 @@ def _write_run_manifest(
     return destination
 
 
-def run_backup(config: BackupConfig, *, dry_run: bool) -> int:
+def run_backup(
+    config: BackupConfig,
+    *,
+    dry_run: bool,
+    missing_only: bool = False,
+) -> int:
     """Inventory configured sources and run deletion-free sync operations."""
 
     records = _collect_inventory(config)
@@ -336,6 +479,65 @@ def run_backup(config: BackupConfig, *, dry_run: bool) -> int:
             config.region,
         ]
     )
+
+    if missing_only:
+        remote_keys = _list_remote_keys(config)
+        missing_by_source = {
+            source.path.as_posix(): missing_source_files(config, source, remote_keys)
+            for source in config.sources
+        }
+        missing_count = sum(len(files) for files in missing_by_source.values())
+        missing_bytes = sum(
+            local_path.stat().st_size
+            for files in missing_by_source.values()
+            for local_path, _key in files
+        )
+        print(
+            f"Missing-only selection: {missing_count:,} files, "
+            f"{_format_bytes(missing_bytes)}"
+        )
+        for source in config.sources:
+            files = missing_by_source[source.path.as_posix()]
+            print(
+                f"{'Previewing' if dry_run else 'Uploading'} missing objects from "
+                f"{source.path.as_posix()}: {len(files):,}"
+            )
+            for local_path, key in files:
+                destination = f"s3://{config.bucket}/{key}"
+                if dry_run:
+                    print(f"(dryrun) upload: {local_path} to {destination}")
+                else:
+                    _run_aws(
+                        build_conditional_put_command(config, local_path, key),
+                        quiet=True,
+                    )
+
+        if dry_run:
+            print("Missing-only dry run complete; the bucket was not changed.")
+            return 0
+
+        run_manifest = _write_run_manifest(config, records)
+        manifest_key = (
+            f"{config.destination_prefix}/backup-manifests/{run_manifest.name}"
+        )
+        _run_aws(
+            [
+                "aws",
+                "s3",
+                "cp",
+                str(run_manifest),
+                f"s3://{config.bucket}/{manifest_key}",
+                "--region",
+                config.region,
+                "--only-show-errors",
+            ]
+        )
+        print(
+            "Missing-only backup complete; "
+            f"{missing_count:,} objects added and run manifest uploaded as "
+            f"{manifest_key}"
+        )
+        return 0
 
     records_by_path = {record.path: record for record in records}
     for source in config.sources:
@@ -389,11 +591,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MANIFEST,
         help="Alternative JSON manifest (primarily for testing)",
     )
+    parser.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="Add absent object keys without replacing any existing object",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.inventory and args.missing_only:
+        parser.error("--missing-only requires --dry-run or --upload")
     try:
         config = load_config(args.manifest)
         if args.inventory:
@@ -401,7 +611,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1 if any(
                 record.required and not record.exists for record in records
             ) else 0
-        return run_backup(config, dry_run=args.dry_run)
+        return run_backup(
+            config,
+            dry_run=args.dry_run,
+            missing_only=args.missing_only,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Backup configuration error: {exc}", file=sys.stderr)
         return 2

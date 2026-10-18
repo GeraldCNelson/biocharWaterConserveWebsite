@@ -60,6 +60,24 @@ Upload new or changed files:
 tools/backup-source-data --upload
 ```
 
+When seeding historical material from a second computer, first preview only
+object keys that are absent from the bucket:
+
+```bash
+tools/backup-source-data --dry-run --missing-only
+```
+
+After reviewing the selection, add those absent keys with:
+
+```bash
+tools/backup-source-data --upload --missing-only
+```
+
+Missing-only mode lists the existing bucket keys and uses a conditional S3
+write for every selected file. The write succeeds only when the destination
+key does not already exist, so a Mac-held copy cannot replace a server-sourced
+object even if their sizes, contents, or timestamps differ.
+
 Each successful upload stores a small dated run manifest under
 `biocharWaterConserveWebsite/backup-manifests/`. The manifest records the host,
 source presence, file counts, and byte totals. It contains no credentials.
@@ -101,7 +119,9 @@ The acquisition server contains the active 2026 logger, PakBus, and workbook
 sources but not all older laboratory, field-photo, field-mapping, and drone
 material held on the Mac. Do not copy all of that material temporarily onto the
 server: its system disk has limited free space. Inventory the differences and
-seed Mac-only files separately before treating the bucket as complete.
+seed Mac-only files separately with `--missing-only` before treating the bucket
+as complete. Use a named AWS CLI profile backed by a temporary bucket access
+key, then delete that key after upload and restore verification.
 
 ## Verification and recovery
 

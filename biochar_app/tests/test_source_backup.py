@@ -8,10 +8,13 @@ from biochar_app.scripts.backup_source_data import (
     DEFAULT_MANIFEST,
     PROJECT_ROOT,
     SourceSpec,
+    approved_source_files,
+    build_conditional_put_command,
     build_sync_command,
     inventory_source,
     is_excluded,
     load_config,
+    missing_source_files,
 )
 
 
@@ -98,6 +101,51 @@ def test_inventory_skips_excluded_files_and_symlinks(tmp_path: Path) -> None:
 
     assert record.file_count == 1
     assert record.byte_count == len(b"accepted")
+
+
+def test_missing_only_selection_never_includes_existing_keys(tmp_path: Path) -> None:
+    config = load_config(DEFAULT_MANIFEST)
+    source = SourceSpec(
+        path=Path("biochar_app/data-raw"),
+        required_on_acquisition_server=True,
+        excludes=(),
+        description="test source",
+    )
+    source_root = tmp_path / source.path
+    source_root.mkdir(parents=True)
+    existing = source_root / "existing.dat"
+    missing = source_root / "missing.dat"
+    existing.write_bytes(b"server version may differ")
+    missing.write_bytes(b"historical evidence")
+    existing_key = (
+        f"{config.destination_prefix}/{source.path.as_posix()}/existing.dat"
+    )
+
+    selected = missing_source_files(
+        config,
+        source,
+        {existing_key},
+        project_root=tmp_path,
+    )
+
+    assert selected == [
+        (
+            missing,
+            f"{config.destination_prefix}/{source.path.as_posix()}/missing.dat",
+        )
+    ]
+    assert len(approved_source_files(tmp_path, source, config.global_excludes)) == 2
+
+
+def test_conditional_put_cannot_replace_an_existing_object(tmp_path: Path) -> None:
+    config = load_config(DEFAULT_MANIFEST)
+    local_path = tmp_path / "historical.dat"
+    local_path.write_bytes(b"evidence")
+    command = build_conditional_put_command(config, local_path, "prefix/file.dat")
+
+    assert command[:3] == ["aws", "s3api", "put-object"]
+    assert command[command.index("--if-none-match") + 1] == "*"
+    assert command[command.index("--key") + 1] == "prefix/file.dat"
 
 
 def test_default_manifest_project_root_matches_repository() -> None:
