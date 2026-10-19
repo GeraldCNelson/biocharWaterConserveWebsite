@@ -4,8 +4,9 @@
 
 **Branch reviewed:** `etl-refactor`
 
-**Status:** Initial audit, historical PakBus cleanup, and combined
-management-extractor review complete. Other recommendations remain pending.
+**Status:** Initial audit, historical PakBus cleanup, combined
+management-extractor review, and isolated Ward archive-utility decision
+complete. Other recommendations remain pending.
 
 ## Purpose
 
@@ -173,7 +174,7 @@ tree without performing a directory refactor.
 |---|---|---|
 | `etf.py` and the former export in [`biochar_app/__init__.py`](../../__init__.py) | The untested single-record decoder had no caller and duplicated the maintained, tested Table1 decoder with a less complete and inconsistent schema. | Deleted after the comparison recorded in [`etf_decoder_review.md`](etf_decoder_review.md). Future reusable packaging should expose the maintained decoder through an explicit, tested API. |
 | [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its output matched the active ETL reader on eight 2026 Table1 files and more than 800,000 rows, but no current caller imports it. Diagnostic readers have additional input contracts. | Keep and make it genuinely canonical through the tested, staged consolidation described in [`toa5_reader_review.md`](toa5_reader_review.md). |
-| [`scripts/archive_dataset.py`](../../scripts/archive_dataset.py) | Standalone utility that copies Ward datasets into timestamped archive folders; no documented workflow calls it. | Confirm whether maintainers still run it manually. If not, delete it; if yes, document when restoration is needed and where archives are stored. |
+| `scripts/archive_dataset.py` | Standalone utility copied three processed Ward datasets into timestamped sibling archive folders. No code or documented workflow called it, and the maintainer confirmed it is no longer used. It did not download current data or provide an independent backup. | **Deleted 2026-10-18.** A real acquisition-data backup workflow will be designed separately. Git history preserves the utility if its narrow behavior is ever needed for reference. |
 | `tools/extract_management_data.py` | The combined extractor no longer imports because its output-path constants were removed. Its reduced schemas are superseded by dedicated builders called by ETL and covered by focused tests. | Deleted after the comparison recorded in [`management_builder_review.md`](management_builder_review.md). |
 
 ### Reference and planning documents

@@ -7,7 +7,7 @@ Regenerate both the Markdown and JSON catalogs with:
 python biochar_app/scripts/dev-tools/build_function_catalog.py
 ```
 
-- Python functions and methods: **1433**
+- Python functions and methods: **1432**
 - JavaScript functions: **326**
 - Files with Python parse errors: **0**
 
@@ -416,10 +416,6 @@ and some class/object method syntaxes may require manual review.
 
 - **`_cached_load_logger_data(year: int, granularity: str) -> pd.DataFrame`** — line 44; function; internal. Thin wrapper around routes_utils.load_logger_year to cache (year, granularity) in memory so all routes benefit.
 - **`serve_spa(request: Request) -> HTMLResponse`** — line 82; async function; public/exported. No docstring.
-
-### `biochar_app/scripts/archive_dataset.py`
-
-- **`archive_dataset(path: Path) -> None`** — line 9; function; public/exported. No docstring.
 
 ### `biochar_app/scripts/bulk_download_utils.py`
 

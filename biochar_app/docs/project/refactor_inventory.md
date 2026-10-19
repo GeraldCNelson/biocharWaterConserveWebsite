@@ -172,7 +172,6 @@ documented with the irrigation operations workflow.
 - `lab/ward_find_image_context.py`
 - `lab/ward_search_reference_terms.py`
 - `routes_smoke_check.py`
-- `archive_dataset.py`, pending a maintainer-use decision
 
 These classifications describe intent, not code quality. Some developer tools
 are important and should remain supported commands even though the website does
@@ -293,8 +292,9 @@ the output.
    2026-10-17;
    `.env` remains tracked as shared development configuration while it contains
    only safe, non-secret defaults. Credential values must not be tracked.
-8. Decide whether maintainers still use `scripts/archive_dataset.py`; document
-   its archives and restoration purpose if retained, or retire it if not.
+8. **Completed 2026-10-18:** retire the unused `scripts/archive_dataset.py`.
+   It copied three processed Ward files locally and was not the project's raw
+   acquisition-data backup process.
 9. Implement the tested TOA5 consolidation only after agreeing to the
    functional change described in `toa5_reader_review.md`.
 
