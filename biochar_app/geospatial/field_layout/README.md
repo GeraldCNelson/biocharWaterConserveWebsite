@@ -133,6 +133,29 @@ fruita_field_layout.png
 ../../static/images/experiment_design/field_layout.webp
 ```
 
-The PNG is the high-resolution audit image. The WebP is the website asset and
-is generated from the same figure during the same run. QGIS is not required to
-regenerate the website diagram.
+The PNG is the high-resolution source image. The WebP is a directly generated
+copy for uses that do not pass through the narrative-document workflow. Both
+come from the same figure, and QGIS is not required to regenerate them.
+
+### Publishing the layout on the Experiment Design page
+
+The public Experiment Design page is generated from
+`biochar_app/markdown/docx/experimentDesign.docx`. Its first embedded image is
+the field-layout figure. After changing the control points or the plotting
+code:
+
+1. Run `biochar_app/geospatial/build_fruita_field_layout.py`.
+2. Replace the first image in `experimentDesign.docx` with
+   `fruita_field_layout.png`, preserving its caption and placement.
+3. Regenerate only the Experiment Design website content:
+
+   ```bash
+   python -m biochar_app.markdown.tools.convert_word_to_html \
+     experimentDesign.docx
+   ```
+
+The conversion step extracts the updated embedded image to
+`biochar_app/static/images/generated/experimentdesign/image-01.webp`, which is
+the file currently displayed by the website. This extra step explains why the
+website can otherwise retain an older diagram even when the geospatial PNG and
+WebP have already been regenerated.
