@@ -218,7 +218,6 @@ The following should eventually join operations documentation:
 ### Research documentation
 
 - `docs/research/water_balance/`
-- `markdown/waterbalance_code.md`
 - `markdown/nir_set1_pasture_quality_metrics.md`
 - `markdown/nir_set2_carbohydrates_energy_partitioning.md`
 - `markdown/nir_set3_minerals_ash.md`
@@ -295,7 +294,10 @@ the output.
 8. **Completed 2026-10-18:** retire the unused `scripts/archive_dataset.py`.
    It copied three processed Ward files locally and was not the project's raw
    acquisition-data backup process.
-9. Implement the tested TOA5 consolidation only after agreeing to the
+9. **Completed 2026-10-19:** approve the canonical water-balance Markdown,
+   retain the dated comparison record, and retire the four superseded
+   representations together.
+10. Implement the tested TOA5 consolidation only after agreeing to the
    functional change described in `toa5_reader_review.md`.
 
 ## Proposed next step

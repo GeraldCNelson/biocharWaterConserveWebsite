@@ -5,8 +5,9 @@
 **Branch reviewed:** `etl-refactor`
 
 **Status:** Initial audit, historical PakBus cleanup, combined
-management-extractor review, and isolated Ward archive-utility decision
-complete. Other recommendations remain pending.
+management-extractor review, isolated Ward archive-utility decision, and
+water-balance document consolidation complete. Other recommendations remain
+pending.
 
 ## Purpose
 
@@ -118,12 +119,21 @@ from `data-processed/ward-html` and `static/lab_reference_media`, so these old
 intermediate files were deleted after confirming that the live publication path
 does not use them.
 
-### Generated LaTeX build files
+### Water-balance source documents
 
-[`references/waterbalance_code.tex`](../../../references/waterbalance_code.tex)
-was retained as the editable source. The generated `waterbalance_code.aux` and
-`waterbalance_code.synctex.gz` compiler by-products were deleted, and matching
-patterns were added to `.gitignore`.
+`references/waterbalance_code.tex` was initially retained as the editable
+source. The generated
+`waterbalance_code.aux` and `waterbalance_code.synctex.gz` compiler by-products
+were deleted, and matching patterns were added to `.gitignore`.
+
+The subsequent comparison in
+[`water_balance_document_review_2026-10-18.md`](water_balance_document_review_2026-10-18.md)
+found four overlapping LaTeX, generated HTML, and Word representations. Their
+useful content has been consolidated and corrected in
+[`water_balance_equations.md`](../research/water_balance/water_balance_equations.md).
+The maintainer approved the canonical source, and the four older
+representations were retired together on 2026-10-19. Git history and the dated
+comparison record preserve their provenance.
 
 ### Empty historical PakBus placeholders
 
@@ -192,8 +202,9 @@ removed immediately. The remaining files require content decisions:
 - `recovery_notes_2026-02-summary-performance.md` is historical operational
   evidence; retain or summarize it according to an explicit recovery-record
   policy.
-- `waterbalance_code.tex` is a possible source document and should not be
-  removed merely because the current website does not load it.
+- `waterbalance_code.tex` was incorporated into the reviewed canonical
+  Markdown source. The four superseded representations were retired together
+  on 2026-10-19, with the dated comparison record retained as evidence.
 
 ## Files that need correction rather than retirement
 

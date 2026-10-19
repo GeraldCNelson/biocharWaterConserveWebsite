@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **68**
+Documents indexed: **70**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -228,6 +228,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** Use this procedure when a field logger stops recording, becomes unreachable, records low BattVMin, or appears to operate only during daylight. It separates faults in the solar panel, charge controller, battery, wiring...
 
+### Source-data backup to Lightsail object storage
+
+- **Path:** `biochar_app/docs/operations/source_data_backup.md`
+- **Status:** current
+- **Summary:** Last reviewed: 2026-10-18
+
 ### 🛠️ Irrigation Overlay Update Notes
 
 - **Path:** `biochar_app/docs/operations/irrigation_overlay_update_notes.md`
@@ -310,6 +316,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Status:** current
 - **Summary:** Branch: etl-refactor
 
+### Water-balance document review, 2026-10-18
+
+- **Path:** `biochar_app/docs/project/water_balance_document_review_2026-10-18.md`
+- **Status:** current
+- **Summary:** This review explains how the project's overlapping water-balance documents were compared and how their useful content was incorporated into one maintained Markdown source.
+
 ### Website, pipeline, research, and development inventory
 
 - **Path:** `biochar_app/docs/project/refactor_inventory.md`
@@ -371,6 +383,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/docs/research/soil_health/soil_health_results_inventory_2026-10-17.md`
 - **Status:** current
 - **Summary:** This dated inventory records the preservation and initial classification of a small set of historical soil-health analysis files. The files had been stored under the ignored biocharapp/results/ directory, which meant...
+
+### Soil-water storage and irrigation water-balance equations
+
+- **Path:** `biochar_app/docs/research/water_balance/water_balance_equations.md`
+- **Status:** current
+- **Summary:** This document is the maintained technical reference for the soil-water storage and irrigation water-balance quantities used by the project. It is intended to replace a small family of LaTeX, generated HTML, and Word c...
 
 ## Research and working notes
 
@@ -437,9 +455,3 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/markdown/nir_set1_pasture_quality_metrics.md`
 - **Status:** reference
 - **Summary:** Set 1 is a compact, interpretable snapshot of forage quality. It emphasizes variables that are: - widely used in forage science, - comparable across dates and years, - and directly useful for comparing treatment effec...
-
-### Waterbalance Code
-
-- **Path:** `biochar_app/markdown/waterbalance_code.md`
-- **Status:** reference
-- **Summary:** <!-- Auto-generated from waterbalancecode.tex -- <!-- math via MathJax --
