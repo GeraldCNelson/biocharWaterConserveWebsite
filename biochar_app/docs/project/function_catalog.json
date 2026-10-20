@@ -1,7 +1,7 @@
 {
   "counts": {
-    "total": 1759,
-    "python": 1433,
+    "total": 1758,
+    "python": 1432,
     "javascript": 326,
     "python_parse_errors": 0
   },
@@ -7367,18 +7367,6 @@
       "decorators": [
         "app.get('/', response_class=HTMLResponse)"
       ],
-      "exported": true
-    },
-    {
-      "language": "Python",
-      "path": "biochar_app/scripts/archive_dataset.py",
-      "line": 9,
-      "qualified_name": "archive_dataset",
-      "signature": "(path: Path) -> None",
-      "kind": "function",
-      "summary": "No docstring.",
-      "docstring": "",
-      "decorators": [],
       "exported": true
     },
     {

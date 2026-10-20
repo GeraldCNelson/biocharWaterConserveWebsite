@@ -1,0 +1,22 @@
+[Unit]
+Description=Back up Biochar source evidence to private object storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/biocharWaterConserveWebsite
+ExecStart=/home/ubuntu/biocharWaterConserveWebsite/tools/backup-source-data --upload
+Environment=AWS_PAGER=
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

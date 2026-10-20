@@ -607,7 +607,10 @@ export function comparisonChartHeading(heading, context, note, width = 640) {
   };
   const mainLines = wrap(heading, 18);
   const detailLines = [...wrap(context, 14), ...wrap(note, 14)];
-  const top = 74 + mainLines.length * 23 + detailLines.length * 17;
+  // The horizontal legend sits just above the plotting paper. Keep a full
+  // legend row between it and the final wrapped title/detail line.
+  const legendClearance = 34;
+  const top = 74 + mainLines.length * 23 + detailLines.length * 17 + legendClearance;
   const detailText = detailLines.length
     ? `<br><span style="font-size:14px">${detailLines.map(escapeSummaryHTML).join("<br>")}</span>`
     : "";
@@ -845,10 +848,16 @@ async function renderMultiYearComparison(section, yearEntries, periods, variable
 
 }
 
+export function defaultComparisonPeriod(periods) {
+  return periods.find((period) => period.code === "Q2_Growing")
+    || periods.find((period) => /growing|irrigation/i.test(period.label || ""))
+    || periods[0];
+}
+
 function appendMultiYearComparison(container, yearEntries, periods, variable, unitSystem, metadata = {}) {
   if (!Array.isArray(yearEntries) || !yearEntries.length || !Array.isArray(periods) || !periods.length) return;
 
-  const defaultPeriod = periods.find((period) => /growing/i.test(period.label || "")) || periods[0];
+  const defaultPeriod = defaultComparisonPeriod(periods);
   const section = document.createElement("section");
   section.id = "seasonal-comparison";
   section.className = "multi-year-summary mt-4";

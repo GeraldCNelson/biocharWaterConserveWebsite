@@ -34,6 +34,7 @@ function getPlotly() {
  *   data?: any,
  *   layout?: any,
  *   _biocharBaseHeight?: number,
+ *   _biocharBaseTopMargin?: number,
  *   _biocharBaseBottomMargin?: number,
  *   on?: (eventName: string, handler: (ev: any) => void) => void
  * }} PlotlyGraphDiv
@@ -58,6 +59,10 @@ const plotWindow = /** @type {PlotWindow} */ (window);
 const FALLBACK_PLOT_HEIGHT = 400;
 const DEFAULT_BOTTOM_MARGIN = 50;
 const DEFAULT_RIGHT_LEGEND_MARGIN = 160;
+const SECONDARY_AXIS_RIGHT_LEGEND_MARGIN = 210;
+const SECONDARY_AXIS_RIGHT_LEGEND_X = 1.10;
+const RAW_PLOT_COMPACT_BOTTOM_MARGIN = 55;
+const RATIO_PLOT_COMPACT_TOP_MARGIN = 50;
 
 /**
  * Pause until each of the given dropdown IDs exists in the DOM
@@ -286,22 +291,31 @@ function chooseSharedLegendMode(targetId, rightGutterPx) {
  * @param {any} layout
  * @param {number} rightGutterPx
  * @param {string} targetId
- * @returns {{ extraBottom: number, minRight: number }}
+ * @returns {{ extraBottom: number, minRight: number, mode: "right" | "below" }}
  */
 function applyResponsiveLegend(layout, rightGutterPx, targetId) {
   const base = layout.legend || {};
   const legendMode = chooseSharedLegendMode(targetId, rightGutterPx);
+  const hasSecondaryAxis = Boolean(layout.yaxis2);
 
   if (legendMode === "right") {
     layout.legend = {
       ...base,
-      x: 1.01,
+      // A secondary-axis title occupies the first part of the right margin.
+      // Put the legend beyond that title instead of on top of it.
+      x: hasSecondaryAxis ? SECONDARY_AXIS_RIGHT_LEGEND_X : 1.01,
       xanchor: "left",
       y: 1.0,
       yanchor: "top",
       orientation: "v",
     };
-    return { extraBottom: 0, minRight: 160 };
+    return {
+      extraBottom: 0,
+      minRight: hasSecondaryAxis
+        ? SECONDARY_AXIS_RIGHT_LEGEND_MARGIN
+        : DEFAULT_RIGHT_LEGEND_MARGIN,
+      mode: "right",
+    };
   }
 
   layout.legend = {
@@ -312,7 +326,33 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
     yanchor: "top",
     orientation: "h",
   };
-  return { extraBottom: 25, minRight: 70 };
+  return { extraBottom: 25, minRight: 70, mode: "below" };
+}
+
+/**
+ * Reduce only the facing margins between the paired trace plots. The raw
+ * plot keeps its generous top margin for irrigation labels, while the ratio
+ * plot keeps its normal bottom margin for date labels.
+ *
+ * @param {string} targetId
+ * @param {number} topMargin
+ * @param {number} bottomMargin
+ * @param {"right" | "below"} legendMode
+ * @returns {{ topMargin: number, bottomMargin: number }}
+ */
+function compactTracePairMargins(targetId, topMargin, bottomMargin, legendMode) {
+  if (legendMode !== "right") return { topMargin, bottomMargin };
+
+  return {
+    topMargin:
+      targetId === "plot-2"
+        ? Math.min(topMargin, RATIO_PLOT_COMPACT_TOP_MARGIN)
+        : topMargin,
+    bottomMargin:
+      targetId === "plot-1"
+        ? Math.min(bottomMargin, RAW_PLOT_COMPACT_BOTTOM_MARGIN)
+        : bottomMargin,
+  };
 }
 
 /**
@@ -321,7 +361,7 @@ function applyResponsiveLegend(layout, rightGutterPx, targetId) {
  * from drifting apart.
  *
  * @param {number} rightGutterPx
- * @param {{ extraBottom: number, minRight: number }} legendResponse
+ * @param {{ extraBottom: number, minRight: number, mode: "right" | "below" }} legendResponse
  * @param {number} [baseHeight=FALLBACK_PLOT_HEIGHT]
  * @param {number} [baseBottomMargin=DEFAULT_BOTTOM_MARGIN]
  * @returns {{ height: number, rightMargin: number, bottomMargin: number }}
@@ -378,7 +418,6 @@ async function syncPairGeometryFromRaw() {
     width: srcWidth,
     "margin.l": srcMargin.l ?? 60,
     "margin.r": syncedRightMargin,
-    "margin.b": srcMargin.b ?? 50,
     "xaxis.domain": srcX.domain,
     "yaxis.automargin": false,
   };
@@ -490,15 +529,25 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
       rightGutter = plotWindow._plotRightGutter;
     }
 
-    const legendAdjust = { legend: plotData.layout?.legend || {} };
+    const legendAdjust = {
+      legend: plotData.layout?.legend || {},
+      yaxis2: plotData.layout?.yaxis2 || null,
+    };
     const legendResponse = applyResponsiveLegend(legendAdjust, rightGutter, targetId);
     const baseHeight = plotData.layout?.height ?? FALLBACK_PLOT_HEIGHT;
+    const baseTopMargin = plotData.layout?.margin?.t ?? 50;
     const baseBottomMargin = plotData.layout?.margin?.b ?? DEFAULT_BOTTOM_MARGIN;
     const geometry = computeResponsivePlotGeometry(
       rightGutter,
       legendResponse,
       baseHeight,
       baseBottomMargin
+    );
+    const pairMargins = compactTracePairMargins(
+      targetId,
+      baseTopMargin,
+      geometry.bottomMargin,
+      legendResponse.mode
     );
 
     const layout = {
@@ -509,8 +558,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
       margin: {
         l: leftMargin,
         r: geometry.rightMargin,
-        t: plotData.layout?.margin?.t ?? 50,
-        b: geometry.bottomMargin,
+        t: pairMargins.topMargin,
+        b: pairMargins.bottomMargin,
       },
       legend: legendAdjust.legend,
     };
@@ -531,6 +580,7 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
       await plotly.newPlot(container, plotData.data, layout, plotConfig)
     );
     gd._biocharBaseHeight = baseHeight;
+    gd._biocharBaseTopMargin = baseTopMargin;
     gd._biocharBaseBottomMargin = baseBottomMargin;
 
     if (targetId === "plot-1") rawPlotDiv = gd;
@@ -549,13 +599,22 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
         g = plotWindow._plotRightGutter;
       }
 
-      const tmp = { legend: gd.layout?.legend || {} };
+      const tmp = {
+        legend: gd.layout?.legend || {},
+        yaxis2: gd.layout?.yaxis2 || null,
+      };
       const legendResult = applyResponsiveLegend(tmp, g, targetId);
       const geometryAfterRender = computeResponsivePlotGeometry(
         g,
         legendResult,
         baseHeight,
         baseBottomMargin
+      );
+      const pairMarginsAfterRender = compactTracePairMargins(
+        targetId,
+        baseTopMargin,
+        geometryAfterRender.bottomMargin,
+        legendResult.mode
       );
 
       const sharedWidth =
@@ -569,7 +628,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
         height: geometryAfterRender.height,
         "margin.l": plotWindow._plotLeftMargin ?? 60,
         "margin.r": geometryAfterRender.rightMargin,
-        "margin.b": geometryAfterRender.bottomMargin,
+        "margin.t": pairMarginsAfterRender.topMargin,
+        "margin.b": pairMarginsAfterRender.bottomMargin,
         "yaxis.automargin": false,
         legend: tmp.legend,
       };
@@ -631,13 +691,22 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
           gutter = plotWindow._plotRightGutter;
         }
 
-        const tmp = { legend: el.layout?.legend || {} };
+        const tmp = {
+          legend: el.layout?.legend || {},
+          yaxis2: el.layout?.yaxis2 || null,
+        };
         const legendResult = applyResponsiveLegend(tmp, gutter, targetIdForLegend);
         const geometryOnResize = computeResponsivePlotGeometry(
           gutter,
           legendResult,
           el._biocharBaseHeight,
           el._biocharBaseBottomMargin
+        );
+        const pairMarginsOnResize = compactTracePairMargins(
+          targetIdForLegend,
+          el._biocharBaseTopMargin ?? el.layout?.margin?.t ?? 50,
+          geometryOnResize.bottomMargin,
+          legendResult.mode
         );
 
         /** @type {Record<string, any>} */
@@ -646,7 +715,8 @@ export async function fetchAndRenderPlot(plotType, plotDivId, filterSnapshot = n
           height: geometryOnResize.height,
           "margin.l": plotWindow._plotLeftMargin ?? 60,
           "margin.r": geometryOnResize.rightMargin,
-          "margin.b": geometryOnResize.bottomMargin,
+          "margin.t": pairMarginsOnResize.topMargin,
+          "margin.b": pairMarginsOnResize.bottomMargin,
           "yaxis.automargin": false,
           legend: tmp.legend,
         };

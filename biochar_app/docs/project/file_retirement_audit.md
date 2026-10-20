@@ -4,8 +4,10 @@
 
 **Branch reviewed:** `etl-refactor`
 
-**Status:** Initial audit, historical PakBus cleanup, and combined
-management-extractor review complete. Other recommendations remain pending.
+**Status:** Initial audit, historical PakBus cleanup, combined
+management-extractor review, isolated Ward archive-utility decision, and
+water-balance document consolidation complete. Other recommendations remain
+pending.
 
 ## Purpose
 
@@ -117,12 +119,21 @@ from `data-processed/ward-html` and `static/lab_reference_media`, so these old
 intermediate files were deleted after confirming that the live publication path
 does not use them.
 
-### Generated LaTeX build files
+### Water-balance source documents
 
-[`references/waterbalance_code.tex`](../../../references/waterbalance_code.tex)
-was retained as the editable source. The generated `waterbalance_code.aux` and
-`waterbalance_code.synctex.gz` compiler by-products were deleted, and matching
-patterns were added to `.gitignore`.
+`references/waterbalance_code.tex` was initially retained as the editable
+source. The generated
+`waterbalance_code.aux` and `waterbalance_code.synctex.gz` compiler by-products
+were deleted, and matching patterns were added to `.gitignore`.
+
+The subsequent comparison in
+[`water_balance_document_review_2026-10-18.md`](water_balance_document_review_2026-10-18.md)
+found four overlapping LaTeX, generated HTML, and Word representations. Their
+useful content has been consolidated and corrected in
+[`water_balance_equations.md`](../research/water_balance/water_balance_equations.md).
+The maintainer approved the canonical source, and the four older
+representations were retired together on 2026-10-19. Git history and the dated
+comparison record preserve their provenance.
 
 ### Empty historical PakBus placeholders
 
@@ -173,7 +184,7 @@ tree without performing a directory refactor.
 |---|---|---|
 | `etf.py` and the former export in [`biochar_app/__init__.py`](../../__init__.py) | The untested single-record decoder had no caller and duplicated the maintained, tested Table1 decoder with a less complete and inconsistent schema. | Deleted after the comparison recorded in [`etf_decoder_review.md`](etf_decoder_review.md). Future reusable packaging should expose the maintained decoder through an explicit, tested API. |
 | [`scripts/logger_toa5.py`](../../scripts/logger_toa5.py) | Its output matched the active ETL reader on eight 2026 Table1 files and more than 800,000 rows, but no current caller imports it. Diagnostic readers have additional input contracts. | Keep and make it genuinely canonical through the tested, staged consolidation described in [`toa5_reader_review.md`](toa5_reader_review.md). |
-| [`scripts/archive_dataset.py`](../../scripts/archive_dataset.py) | Standalone utility that copies Ward datasets into timestamped archive folders; no documented workflow calls it. | Confirm whether maintainers still run it manually. If not, delete it; if yes, document when restoration is needed and where archives are stored. |
+| `scripts/archive_dataset.py` | Standalone utility copied three processed Ward datasets into timestamped sibling archive folders. No code or documented workflow called it, and the maintainer confirmed it is no longer used. It did not download current data or provide an independent backup. | **Deleted 2026-10-18.** A real acquisition-data backup workflow will be designed separately. Git history preserves the utility if its narrow behavior is ever needed for reference. |
 | `tools/extract_management_data.py` | The combined extractor no longer imports because its output-path constants were removed. Its reduced schemas are superseded by dedicated builders called by ETL and covered by focused tests. | Deleted after the comparison recorded in [`management_builder_review.md`](management_builder_review.md). |
 
 ### Reference and planning documents
@@ -191,8 +202,9 @@ removed immediately. The remaining files require content decisions:
 - `recovery_notes_2026-02-summary-performance.md` is historical operational
   evidence; retain or summarize it according to an explicit recovery-record
   policy.
-- `waterbalance_code.tex` is a possible source document and should not be
-  removed merely because the current website does not load it.
+- `waterbalance_code.tex` was incorporated into the reviewed canonical
+  Markdown source. The four superseded representations were retired together
+  on 2026-10-19, with the dated comparison record retained as evidence.
 
 ## Files that need correction rather than retirement
 
@@ -201,15 +213,20 @@ removed immediately. The remaining files require content decisions:
 Both files are tracked at the repository root, but they are different kinds of
 content:
 
-- `.env` contains application environment assignments. Values were not included
-  in this audit. A local environment file normally should be ignored, with a
-  documented `.env.example` containing safe placeholders if these variables are
-  still required.
-- `.env.txt` is not an environment file. It is a roughly 1.9 MB weather-data CSV
-  whose header begins with station, date/time, air temperature, humidity,
-  precipitation, wind, and soil-temperature fields. It should be renamed and
-  placed under the weather source-data workflow, or removed after its provenance
-  and replacement are confirmed.
+- `.env` contains the safe shared development settings `FLASK_APP`, `FLASK_ENV`,
+  and `PYTHONUNBUFFERED`, and application startup calls `load_dotenv()`. It can
+  remain tracked and be updated directly while it is deliberately limited to
+  non-secret defaults. A separate `.env.example` becomes necessary only if the
+  active `.env` later needs machine-specific values or credentials and must be
+  ignored.
+- `.env.txt` was not an environment file. It was a roughly 1.9 MB weather-data
+  CSV whose header began with station, date/time, air temperature, humidity,
+  precipitation, wind, and soil-temperature fields.
+
+  The maintainer confirmed on 2026-10-17 that repeated CoAgMET retrieval is
+  equivalent to the earlier download. The 24,229-line `.env.txt` snapshot was
+  then deleted from the active tree; its prior content remains recoverable
+  through Git history.
 
 This is a naming and source-control hygiene issue, not evidence that the weather
 data are disposable.
@@ -265,8 +282,12 @@ itself. Git history is the better archive for superseded code.
    [`toa5_reader_review.md`](toa5_reader_review.md); its recommended
    consolidation is a functional refactor and remains pending agreement. Other
    isolated utilities still require separate review.
-5. **Create a data and research-output manifest.** The code audit alone is not a
-   safe basis for deleting CSV, HTML report, image, or scientific-output files.
+5. **Inventory-only pass completed 2026-10-17: create a data and research-output
+   manifest.** The family-level inventory, current uses, deployment roles,
+   and candidate decisions are recorded in
+   [`data_and_research_output_manifest.md`](data_and_research_output_manifest.md).
+   No CSV, HTML report, image, scientific output, or source dataset was moved or
+   deleted. Retention decisions remain pending as explicit small batches.
 6. **Begin directory refactoring only after cleanup decisions are merged.** The
    new structure should contain current responsibilities, not renamed historical
    clutter.

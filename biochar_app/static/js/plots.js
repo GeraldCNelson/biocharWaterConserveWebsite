@@ -8,7 +8,7 @@ import {
   renderMainPlots,
   wireMainPlotZoomSync,
   waitForAllDropdowns,
-} from "./plot_utils.js?v=20261007-apply-seasons";
+} from "./plot_utils.js?v=20261018-trace-layout";
 
 export {
   fetchAndRenderPlot,

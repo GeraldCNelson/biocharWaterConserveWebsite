@@ -1,33 +1,58 @@
 # Laboratory data update pipeline
 
-This document describes how laboratory and field-biomass data move from new
-source files into the Lab-Based Results tab. The preferred operational entry
-point is `biochar_app/scripts/etl.py`.
+This document describes how laboratory and field-biomass data move from their
+respective source files into the Lab-Based Results tab. The project master
+workbook is one source, not a container for all laboratory data.
+
+The preferred full-pipeline entry point is
+[`biochar_app/scripts/etl.py`](../../scripts/etl.py). Soil-biology and
+soil-chemistry rebuilds currently remain explicit laboratory commands, as
+described below.
+
+## Source overview
+
+| Dataset | Principal source | Normal update path |
+|---|---|---|
+| Field biomass | Annual `BIOMASS` worksheets in the validated project workbook, combined with a reviewed historical CSV | Full ETL |
+| Pasture quality and NIR | Compiled Ward NIR source plus explicitly registered supplemental files | Full ETL |
+| Soil biological health | Compiled Ward PLFA source plus explicitly listed supplemental files | Explicit soil-biology command |
+| Soil chemistry | Compiled Ward soil-chemistry source plus explicitly listed supplemental files | Explicit soil-chemistry command |
+| Biochar material characterization | Configured source laboratory reports | Published as reviewed source reports; not rebuilt from the project workbook |
 
 ## Routine full update
 
-1. Start OneDrive and wait for `Biochar Injection Concept - Master.xlsx` to
-   finish synchronizing.
+1. Confirm that any expected changes to the shared project workbook and any new
+   laboratory results are ready for processing.
 2. Put any new Ward NIR CSV in
    `biochar_app/data-raw/lab-tests/hay-tests/csv-files/`.
 3. Register that file in `SUPPLEMENTAL_NIR_FILES` in
    `biochar_app/scripts/lab/update_ward_master_nir.py`. The filename must use
    `NIR_YYYY-MM-DD.csv`, where the date is the field sampling date.
-4. Run ETL from the repository root. Use `--year YYYY` when appropriate.
-5. Review the ETL log and the changed processed CSVs before committing them.
+4. Run ETL from the repository root. A normal run downloads and validates the
+   shared workbook before installing the repository snapshot. Use `--year YYYY`
+   when appropriate.
+5. Review the ETL log, source audit, and changed processed CSVs before
+   committing or publishing them.
+
+Starting the OneDrive desktop application is not required for the normal
+download workflow. When intentionally installing a locally synchronized or
+otherwise supplied workbook, use the standalone snapshot tool with
+`--source PATH` and review its validation report.
 
 ETL performs these relevant steps in order:
 
 ```text
-OneDrive master workbook
-  -> validate and install biochar_app/data-raw/biochar-data-master.xlsx
+shared project master workbook
+  -> download and validate
+  -> install biochar_app/data-raw/biochar-data-master.xlsx
   -> rebuild irrigation data
+  -> rebuild fertilizer data
   -> rebuild field-biomass data
 
 compiled Ward NIR master + registered supplemental Ward CSVs
   -> rebuild ward_master_nir_clean.csv
 
-then logger and weather processing continues
+then logger, weather, aggregation, metadata, and download processing continues
 ```
 
 Use `--skip-master-workbook-refresh` only when intentionally using the installed
@@ -72,6 +97,49 @@ registered supplemental file taking priority for that sampling event.
 The dashboard-ready output is:
 
 `biochar_app/data-processed/lab-tests/hay-tests/csv-files/ward_master_nir_clean.csv`
+
+## Soil biological health
+
+Soil-biology data do not come from the project master workbook.
+`update_ward_master_soilbio.py` reads the compiled Ward PLFA source, applies the
+canonical strip, date, depth, and variable mappings, merges the explicitly
+listed supplemental files, and writes the cleaned master and header metadata.
+
+Run from the repository root:
+
+```bash
+python -m biochar_app.scripts.lab.update_ward_master_soilbio
+```
+
+The canonical output is:
+
+`biochar_app/data-processed/lab-tests/soil-tests-bio/csv-files/ward_master_soilbio_clean.csv`
+
+Review the source-file list in the script before each update. Supplemental files
+are explicit so an older observation already present in the compiled source is
+not merged twice.
+
+## Soil chemistry
+
+Soil-chemistry data also remain independent of the project master workbook.
+`update_ward_master_soilchem.py` reads the compiled Ward chemistry source,
+normalizes sample identifiers, dates, depths, and variable names, optionally
+merges registered supplemental files, and writes the canonical clean dataset
+and header metadata.
+
+Run from the repository root:
+
+```bash
+python -m biochar_app.scripts.lab.update_ward_master_soilchem
+```
+
+The canonical output is:
+
+`biochar_app/data-processed/lab-tests/soil-tests-chem/csv-files/ward_master_soilchem_clean.csv`
+
+The soil-biology and soil-chemistry commands should eventually be incorporated
+into a reviewed full-pipeline interface. Until then, their separate execution
+must remain visible in release and maintenance checklists.
 
 ## Transitional code marked for deletion
 

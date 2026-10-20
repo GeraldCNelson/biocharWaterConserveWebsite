@@ -1,6 +1,10 @@
 # Website, pipeline, research, and development inventory
 
-Status: classification only. No files have been moved or renamed.
+**Status:** Current-state classification, reviewed October 17, 2026.
+
+No directory migration has begun. Reviewed obsolete files were retired in the
+preceding cleanup commits, so this inventory now describes the smaller active
+tree rather than the historical experiments preserved in Git history.
 
 ## Review decisions
 
@@ -28,7 +32,7 @@ email address should not be required or exposed for routine support.
 
 ### Authoring formats
 
-Markdown will be the authoritative source format for the public **Using the
+Markdown will be the designated editable format for the public **Using the
 Data and Code** section and for developer, research-method, and operational
 documentation. Markdown is preferred for these materials because it supports
 code examples, commands, links, version review, and outside contributions
@@ -38,7 +42,7 @@ The existing narrative website pages will retain their current Word-authored
 workflow. Their selected `.docx` files remain the sources of truth and the
 Markdown files produced from them remain generated website content.
 
-Documentation must have one declared authoritative source. The same document
+Documentation must have one declared editable source. The same document
 should not be maintained independently in both Word and Markdown.
 
 ## Purpose
@@ -58,6 +62,8 @@ The classification labels used below are:
   and publication processes.
 - **Operations** — deployment, monitoring, troubleshooting, and field/server
   procedures.
+- **Data stewardship** — review, correction, provenance, and promotion of field
+  or laboratory evidence into canonical datasets.
 - **Research** — reproducible scientific and geospatial analysis.
 - **Developer tooling** — audits, one-off maintenance, code inspection, and
   build utilities not needed by the running website.
@@ -76,19 +82,16 @@ The classification labels used below are:
 | `biochar_app/config/` | Runtime, pipeline, experiment, and presentation configuration | Shared website/pipeline configuration | Split only after import relationships and deployment requirements are documented. |
 | `biochar_app/markdown/` | Website source documents, generated Markdown, old notes, tools, and reference material | Mixed; must be split | Website-facing documents are only a small subset of this directory. |
 | `biochar_app/docs/` | Operations, project, research, and reference documentation | Documentation | The existing subdirectories are a good foundation for the refactor. |
-| `biochar_app/pakbus/core/` | Supported logger communication and daily acquisition | Production pipeline | `client.py` and `daily_download.py` are operational production code. |
-| `biochar_app/pakbus/scripts/` | Protocol experiments, packet decoding, replay, and old download approaches | Developer tooling / archive | Review for still-useful diagnostic commands before archiving. |
-| `biochar_app/pakbus/examples/` | Protocol examples | Developer tooling / reference | Not needed by the website runtime. |
-| `biochar_app/pakbus/utils/` | PakBus frame, CRC, and hexadecimal helpers | Review needed | Determine whether supported core clients still import these modules. |
+| `biochar_app/pakbus/core/` | Supported logger communication and daily acquisition | Production pipeline | `client.py` and `daily_download.py` are operational production code. Historical experiments, examples, and empty utility scaffolding were retired after review. |
 | `biochar_app/diagnostics/` | Logger health checks, historical investigations, reports, and generated plots | Mixed production diagnostics / developer tooling | `logger_health.py`, `timestamp_health.py`, and `weekly_health.py` may belong in the supported pipeline. |
 | `biochar_app/geospatial/` | Field layout, LiDAR, drone, and QGIS analysis | Research | Some generated maps are published by copying them into `static/images/generated/`. |
 | `biochar_app/tests/` | Automated tests and browser smoke checks | Tests | Tests should mirror the eventual package boundaries. |
 | `deployment/` | systemd service and timer definitions | Operations | Required on the test acquisition server, not by the web process itself. |
-| `tools/` | Older standalone data and PakBus tools | Developer tooling / archive | Check for duplication with `biochar_app/scripts/dev-tools/` and `biochar_app/pakbus/`. |
-| `references/` | Setup notes, plans, and LaTeX build artifacts | Archive/reference | `.aux` and `.synctex.gz` are generated LaTeX artifacts and should not be source documents. |
+| `tools/` | Supported command wrappers | Operations | `pakbus-download` and `sync-published-data` are the two retained user-facing wrappers. Historical protocol and data experiments were retired. |
+| `references/` | Setup notes, plans, and source/reference documents | Archive/reference | Generated LaTeX build artifacts were removed; remaining documents require individual retention decisions. |
 | `biochar_app/data-raw/` | Source observations and daily logger acquisition | Data | Data placement and server synchronization are separate from the code refactor. |
 | `biochar_app/data-processed/` | Parquet, downloads, diagnostics, and analysis outputs | Generated output/data | Runtime reads some of these files; deployment requirements must remain explicit. |
-| `biochar_app/results/` | Derived research tables and summaries | Generated research output | Decide which outputs are reproducible and which should be regenerated. |
+| `biochar_app/docs/research/soil_health/` | Preserved 2023–2025 narrative, dated inventory, and 13 supporting tables about soil stocks, nutrient flows, phosphorus turnover, and treatment effects | Historical soil-health research record | Retain as a compact family. Reconstruct its canonical inputs and generator before updating it or selecting content for the Technical Analyses section. |
 | `biochar_app/archive/` | Superseded code and historical files | Archive/reference | Keep outside import and deployment paths. |
 
 ## Detailed classification of `biochar_app/scripts`
@@ -99,7 +102,7 @@ These modules participate directly in serving pages, APIs, plots, tables, or
 downloads:
 
 - `app.py`, `wsgi.py`, `routes.py`, `routes_utils.py`
-- `custom_app.py`, `state.py`, `cache.py`, `errors.py`
+- `state.py`, `cache.py`, `errors.py`
 - `aggregation.py`, `data_loading.py`, `date_ranges.py`
 - `plot_builder.py`, `plot_components.py`
 - `gseason.py`, `gseason_utils.py`, `glossary.py`
@@ -117,8 +120,7 @@ consumed by the website:
 
 - `etl.py`
 - `get_weather_data.py`, `weather_runtime.py`
-- `csv_validation.py`, `archive_dataset.py`, `convert_json.py`
-- `logger_toa5.py`, `pull_leaves.py`, `replay_collect.py`
+- `csv_validation.py`
 - `lab/build_field_biomass_from_master.py`
 - `lab/clean_ward_master_common.py`
 - `lab/merge_nir_into_master_v2.py`
@@ -130,6 +132,11 @@ consumed by the website:
 - `management/generate_fertilizer_clean.py`
 - `management/update_master_workbook_snapshot.py`
 
+`logger_toa5.py` is a tested consolidation candidate rather than the current
+ETL owner. Its output matches the active ETL reader on the reviewed standard
+files, but the ETL still contains the production implementation. The staged
+plan is recorded in [`toa5_reader_review.md`](toa5_reader_review.md).
+
 ### Research analysis
 
 - `management/analyze_precipitation_retention.py`
@@ -139,22 +146,32 @@ consumed by the website:
 The `irrigation_analysis/diagnostics/` subdirectory is development support for
 the research analysis rather than part of the published website.
 
-### Developer tooling
+### Operations and data stewardship
 
-- Everything under `scripts/dev-tools/`
-- `lab/suggest_glossary_aliases.py`
-- `lab/ward_find_image_context.py`
-- `lab/ward_search_reference_terms.py`
+These modules support review and promotion of irrigation evidence. They are
+not generic developer utilities merely because they are run from a command
+line:
+
 - `management/apply_duplicate_actions.py`
 - `management/audit_irrigation_event_ids.py`
 - `management/build_irrigation_qc_candidate.py`
 - `management/build_meter_photo_inventory.py`
 - `management/build_meter_review_workbook.py`
 - `management/compare_meter_photos_to_irrigation.py`
+- `management/consolidate_meter_photo_review.py`
 - `management/extract_irrigation_photo_events.py`
 - `management/finalize_meter_photo_inventory.py`
+
+Their commands, inputs, review states, and promotion rules should remain
+documented with the irrigation operations workflow.
+
+### Developer tooling
+
+- Everything under `scripts/dev-tools/`
+- `lab/suggest_glossary_aliases.py`
+- `lab/ward_find_image_context.py`
+- `lab/ward_search_reference_terms.py`
 - `routes_smoke_check.py`
-- `CLIscripts.txt`
 
 These classifications describe intent, not code quality. Some developer tools
 are important and should remain supported commands even though the website does
@@ -165,7 +182,7 @@ not import them.
 ### Current published website sources
 
 The website document mapping in `markdown/tools/markdown_config.py` identifies
-these Word files as the authoritative sources for page and help content:
+these Word files as the designated editable sources for page and help content:
 
 - `markdown/docx/intro.docx`
 - `markdown/docx/experimentDesign.docx`
@@ -201,15 +218,15 @@ The following should eventually join operations documentation:
 ### Research documentation
 
 - `docs/research/water_balance/`
-- `markdown/waterbalance_code.md`
 - `markdown/nir_set1_pasture_quality_metrics.md`
 - `markdown/nir_set2_carbohydrates_energy_partitioning.md`
 - `markdown/nir_set3_minerals_ash.md`
 - `markdown/nir_set4_digestibility_metrics.md`
 - `markdown/chat_summaries/deep-research_carbon-report.md`
-- `results/biochar_microbe_nutrient_summary.md`
+- `docs/research/soil_health/biochar_microbe_nutrient_summary_2023-2025.md`
+- `docs/research/soil_health/soil_health_results_inventory_2026-10-17.md`
 
-An initial reference search found no runtime code loading these four Markdown
+An initial reference search found no runtime code loading the four NIR Markdown
 files. The website's NIR tables are built from CSV data by
 `scripts/tables/tables_nir.py`, so the Markdown files are provisionally
 classified as research documentation.
@@ -221,7 +238,6 @@ classified as research documentation.
 - `docs/project/testing.md`
 - `docs/project/function_catalog.md` and `.json` (generated catalogs)
 - `docs/documentation_catalog.md` (generated catalog)
-- `scripts/experimental/README.md`
 - `geospatial/field_layout/README.md`
 - `geospatial/lidar/README.md`
 - `geospatial/lidar/pipelines/README.md`
@@ -247,47 +263,62 @@ The refactor should explicitly preserve these source-to-output relationships:
 | Source modules and docstrings | Project function/documentation catalogs | Developers |
 
 A generated artifact should not silently become the editable source. Each build
-process should state where its authoritative input lives and how to regenerate
+process should state where its designated input lives and how to regenerate
 the output.
 
 ## Items requiring review before movement
 
-1. Determine whether `biochar_app/etf.py` is active, obsolete, or a misspelled
-   historical entry point.
-2. Trace imports of `biochar_app/config/` before splitting website and pipeline
+1. Trace imports of `biochar_app/config/` before splitting website and pipeline
    configuration.
-3. Confirm which `biochar_app/diagnostics/` modules are invoked by routine ETL
+2. Confirm which `biochar_app/diagnostics/` modules are invoked by routine ETL
    or scheduled health checks.
-4. Confirm the provisional finding that the four NIR Markdown files are
+3. Confirm the provisional finding that the four NIR Markdown files are
    research documentation. No direct runtime references were found in the
    initial inventory.
-5. Identify any still-used commands under `biochar_app/pakbus/scripts/`,
-   `biochar_app/pakbus/scripts_zsh/`, and top-level `tools/`.
-6. Confirm that `markdown/converted_html/` and `markdown/outputs_html/` are
+4. Confirm that `markdown/converted_html/` and `markdown/outputs_html/` are
    obsolete or reference outputs. The initial inventory found no route that
    serves either directory.
-7. Apply the agreed authoring boundary: Markdown is authoritative for public
-   code-use and technical documentation; Word remains authoritative for the
+5. Apply the agreed authoring boundary: Markdown is the designated editable
+   format for public code-use and technical documentation; Word remains the
+   designated editable format for the
    existing narrative website pages.
-8. Apply the agreed public-content boundary: operational documents containing
+6. Apply the agreed public-content boundary: operational documents containing
    server details remain repository-only and are not exposed through the public
    documentation tab.
-9. Classify `.env` and `.env.txt` at the repository root. Credential values must
-   not be tracked; example configuration should use an explicit `.example`
-   filename with placeholders only.
+7. Apply the classifications recorded in
+   [`data_and_research_output_manifest.md`](data_and_research_output_manifest.md):
+   `.env.txt` was a reproducible CoAgMET download and was removed on
+   2026-10-17;
+   `.env` remains tracked as shared development configuration while it contains
+   only safe, non-secret defaults. Credential values must not be tracked.
+8. **Completed 2026-10-18:** retire the unused `scripts/archive_dataset.py`.
+   It copied three processed Ward files locally and was not the project's raw
+   acquisition-data backup process.
+9. **Completed 2026-10-19:** approve the canonical water-balance Markdown,
+   retain the dated comparison record, and retire the four superseded
+   representations together.
+10. Implement the tested TOA5 consolidation only after agreeing to the
+   functional change described in `toa5_reader_review.md`.
 
 ## Proposed next step
 
-Create the new documentation directory boundaries without moving content:
+Use the maintained documentation families already present under `docs/`:
 
 ```text
 biochar_app/docs/
-├── website/
+├── application_architecture_status.md
 ├── operations/
+├── project/
 ├── research/
-├── developer/
-└── reference/
+├── reference_manuals/
+└── reference_notes/
 ```
 
-Before step 2, resolve items 4, 6, and 9 because they affect what is public,
-what is generated, and what is safe to deploy.
+Add a `website/` documentation family only when the public **Use the Data and
+Code** content is ready to be authored. Do not move code merely to make it
+resemble the documentation tree.
+
+Before code movement, resolve the remaining content, environment-file, and
+manual-utility decisions because they affect what is public, what is generated,
+and what is safe to deploy. Then assign each code area an owner, interface,
+deployment role, and regression check.

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+from zipfile import ZipFile
+
 import geopandas as gpd
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from biochar_app.geospatial.build_fruita_field_layout import (
     INPUT_GEOJSON,
     LOGGER_FEATURES,
+    OUTPUT_LAYOUT_PNG,
+    PROJECT_ROOT,
     WORKING_CRS,
     build_field_boundary,
     build_logger_influence_zones,
@@ -16,6 +21,19 @@ from biochar_app.geospatial.build_fruita_field_layout import (
     get_named_points,
     load_control_points,
     render_field_layout,
+)
+
+
+EXPERIMENT_DESIGN_DOCX = (
+    PROJECT_ROOT / "markdown" / "docx" / "experimentDesign.docx"
+)
+PUBLISHED_LAYOUT_WEBP = (
+    PROJECT_ROOT
+    / "static"
+    / "images"
+    / "generated"
+    / "experimentdesign"
+    / "image-01.webp"
 )
 
 
@@ -64,3 +82,38 @@ def test_render_field_layout_writes_png_and_webp(tmp_path) -> None:
         assert png.size == webp.size
         assert png.width > 1000
         assert png.height > png.width
+
+
+def test_experiment_design_uses_current_field_layout() -> None:
+    """Keep the Word source and published page synchronized with the map."""
+    with ZipFile(EXPERIMENT_DESIGN_DOCX) as archive:
+        embedded_bytes = archive.read("word/media/image1.png")
+
+    with (
+        Image.open(OUTPUT_LAYOUT_PNG) as source,
+        Image.open(BytesIO(embedded_bytes)) as embedded,
+        Image.open(PUBLISHED_LAYOUT_WEBP) as published,
+    ):
+        source_rgb = source.convert("RGB")
+        embedded_rgb = embedded.convert("RGB")
+        published_rgb = published.convert("RGB")
+
+        assert embedded_rgb.width >= 900
+        assert abs(
+            source_rgb.width / source_rgb.height
+            - embedded_rgb.width / embedded_rgb.height
+        ) < 0.001
+
+        # Word may resample an embedded image when the document is saved. The
+        # resampled copy must remain visually equivalent to the source map.
+        resized_source = source_rgb.resize(
+            embedded_rgb.size,
+            Image.Resampling.LANCZOS,
+        )
+        source_difference = ImageChops.difference(resized_source, embedded_rgb)
+        assert max(ImageStat.Stat(source_difference).mean) < 1.0
+
+        # The website conversion is lossless for PNG input, so its generated
+        # WebP must match the image that Word actually contains pixel for pixel.
+        assert published_rgb.size == embedded_rgb.size
+        assert ImageChops.difference(embedded_rgb, published_rgb).getbbox() is None

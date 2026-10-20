@@ -596,11 +596,12 @@ The adoption classifications are `supported` for at least four warm events,
 all such gaps easy to filter regardless of event count. The percentage gap
 uses the observed maximum as its denominator.
 
-## Multi-year S3/S4 water-source audit
+## Persistent deep-over-shallow S3/S4 VWC audit
 
-Use the research audit when evaluating S3/S4 timestamp concerns, persistent
-18-inch-over-shallow VWC ordering, possible lateral water entry from the east,
-or paired event water balances:
+Use this unresolved research diagnostic when evaluating the persistent
+18-inch-over-shallow VWC pattern—especially at S3 Top and also at S4 Top—and
+when reviewing whether timestamp, directional-wetting, or event-water-balance
+evidence helps explain it:
 
 ```bash
 MPLBACKEND=Agg python -m biochar_app.scripts.research.analyze_s3_s4_multiyear_water
@@ -612,6 +613,9 @@ depth profiles, screens dry non-irrigation days for disproportionate 18-inch
 wetting, checks whether screened eastern events also occur in the western
 S1/S2 strips, records the 2026 photo-anchor decisions, and constructs matched
 S1/S2 and S3/S4 event water-balance tables.
+
+The audit documents a mystery; it does not identify a cause or establish a
+biochar treatment effect.
 
 Interpret the daily deep-rise screen as a source-location diagnostic, not as
 proof of a ditch or pipe leak. It deliberately requires complete current and

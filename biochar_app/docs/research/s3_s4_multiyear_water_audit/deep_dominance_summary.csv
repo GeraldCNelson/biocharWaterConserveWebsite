@@ -17,9 +17,9 @@ year,strip,logger_position,valid_daily_profiles,mean_vwc_6,mean_vwc_12,mean_vwc_
 2025,S4,B,184,33.7623,35.384,37.6121,1.7275,1.1442,111,0.6033,True,2025-05-01,2025-05-10,present_at_or_before_first_available_date
 2025,S4,M,184,21.7791,22.2487,29.3911,6.2166,5.9316,158,0.8587,False,2025-05-01,2025-05-19,first_detected_during_observed_period
 2025,S4,T,184,21.664,27.428,32.7666,4.7908,5.3339,159,0.8641,False,2025-05-01,2025-05-18,first_detected_during_observed_period
-2026,S3,B,147,17.9353,19.5305,16.2653,-2.4647,-3.4515,12,0.0816,False,2026-05-01,,not_persistent
-2026,S3,M,147,19.9187,23.0276,30.0803,7.4947,6.7169,134,0.9116,False,2026-05-01,2026-05-16,first_detected_during_observed_period
-2026,S3,T,146,27.4315,34.0268,51.0057,16.7413,16.063,146,1.0,True,2026-05-01,2026-05-10,present_at_or_before_first_available_date
-2026,S4,B,147,29.9239,32.6548,32.4674,0.1337,-0.6103,60,0.4082,False,2026-05-01,2026-05-21,first_detected_during_observed_period
-2026,S4,M,147,18.5604,18.8525,23.3826,2.8321,3.4946,91,0.619,True,2026-05-01,2026-05-14,present_at_or_before_first_available_date
-2026,S4,T,147,19.285,24.2249,31.9643,7.332,7.7381,142,0.966,True,2026-05-01,2026-05-12,present_at_or_before_first_available_date
+2026,S3,B,160,18.0999,19.4938,16.0605,-2.5195,-3.694,12,0.075,False,2026-05-01,,not_persistent
+2026,S3,M,160,20.0519,22.9391,29.7246,7.3113,6.3895,142,0.8875,False,2026-05-01,2026-05-16,first_detected_during_observed_period
+2026,S3,T,160,27.2885,34.2826,51.2555,16.799,16.1371,160,1.0,True,2026-05-01,2026-05-10,present_at_or_before_first_available_date
+2026,S4,B,160,29.4036,32.0851,31.5731,-0.6282,-0.9005,60,0.375,False,2026-05-01,2026-05-21,first_detected_during_observed_period
+2026,S4,M,160,18.6241,18.7793,23.0246,2.64,3.1543,95,0.5938,True,2026-05-01,2026-05-14,present_at_or_before_first_available_date
+2026,S4,T,160,19.3544,24.1636,31.606,7.0301,7.4412,152,0.95,True,2026-05-01,2026-05-12,present_at_or_before_first_available_date

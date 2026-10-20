@@ -64,7 +64,7 @@ table.figure-grid img {
 <h2 id="experiment-design">Experiment design</h2>
 <p>The image below shows the layout of the experimental field. It had previously been an unused plot planted to mixed pasture grasses. The field was divided into four strips, numbered 1 to 4 from left (west) to right (east). Each strip is about 46 ft wide and 280 ft long.</p>
 <figure>
-<img alt="Experiment layout" src="/static/images/generated/experimentdesign/image-01.webp" style="width:2.15759in;height:3.38598in" title="Experiment layout"/>
+<img alt="Experiment layout" src="/static/images/generated/experimentdesign/image-01.webp" style="width:4.375in;height:7in" title="Experiment layout"/>
 <figcaption><p>Figure 1. Experiment layout</p></figcaption>
 </figure>
 <p>In spring 2023, biochar was injected into strips 1 and 3 every 6 inches to an approximate depth of 6 to 8 inches. Strips 2 and 4 had no biochar amendment. No further biochar applications were made.</p>

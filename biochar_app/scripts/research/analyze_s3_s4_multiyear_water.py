@@ -1,8 +1,9 @@
-"""Audit S3/S4 timing, deep wetting, and event water balances across years.
+"""Audit the persistent deep-over-shallow VWC pattern at S3 and S4.
 
-The analysis is diagnostic rather than causal.  Absolute VWC differences among
-depths can include sensor and soil-profile effects, so the deep-over-shallow
-metric is used to identify persistence and changes, not to prove a water source.
+The analysis is diagnostic rather than causal. Absolute VWC differences among
+depths can include sensor, installation, and soil-profile effects, so the
+deep-over-shallow metric is used to document persistence and change, not to
+identify a water source or establish a treatment effect.
 """
 
 from __future__ import annotations
@@ -69,8 +70,7 @@ def build_daily_profiles() -> pd.DataFrame:
         daily = data.resample("D").mean(numeric_only=True)
 
         weather_path = (
-            APP
-            / f"data-processed/parquet/summary/weather/daily/{year}_daily.parquet"
+            APP / f"data-processed/parquet/summary/weather/daily/{year}_daily.parquet"
         )
         weather = pd.read_parquet(weather_path, columns=["timestamp", "precip_in"])
         weather["date"] = pd.to_datetime(weather["timestamp"]).dt.normalize()
@@ -81,7 +81,9 @@ def build_daily_profiles() -> pd.DataFrame:
                     irrigation["year"].eq(year)
                     & irrigation["strip_group"].eq(strip_group),
                     "start_timestamp",
-                ].dropna().dt.normalize()
+                ]
+                .dropna()
+                .dt.normalize()
             )
             for strip_group in ("S1_S2", "S3_S4")
         }
@@ -121,7 +123,9 @@ def summarize_deep_dominance(daily: pd.DataFrame) -> pd.DataFrame:
         delta = group["deep_minus_shallow_max"]
         flag = delta > 1.0
         persistent = flag.rolling(14, min_periods=10).sum() >= 10
-        first_window = group.loc[persistent, "date"].min() if persistent.any() else pd.NaT
+        first_window = (
+            group.loc[persistent, "date"].min() if persistent.any() else pd.NaT
+        )
         first_date = group["date"].min() if not group.empty else pd.NaT
         present_at_start = bool(
             not group.empty and len(flag.iloc[:14]) >= 10 and flag.iloc[:14].sum() >= 10
@@ -164,7 +168,9 @@ def identify_unexplained_deep_rises(daily: pd.DataFrame) -> pd.DataFrame:
     ):
         group = group.sort_values("date").copy()
         group["deep_daily_change"] = group["vwc_18"].diff()
-        group["largest_shallow_daily_change"] = group[["vwc_6", "vwc_12"]].diff().max(axis=1)
+        group["largest_shallow_daily_change"] = (
+            group[["vwc_6", "vwc_12"]].diff().max(axis=1)
+        )
         group["deep_change_beyond_shallow"] = (
             group["deep_daily_change"] - group["largest_shallow_daily_change"]
         )
@@ -187,12 +193,18 @@ def identify_unexplained_deep_rises(daily: pd.DataFrame) -> pd.DataFrame:
         ].copy()
         rows.append(selected)
     result = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
-    west = result.loc[result["strip"].isin(("S1", "S2"))].groupby(
-        ["year", "date", "position"], sort=False
-    ).agg(
-        west_comparable_deep_rise=("strip", "size"),
-        west_candidate_strips=("strip", lambda values: ",".join(sorted(set(values)))),
-    ).reset_index()
+    west = (
+        result.loc[result["strip"].isin(("S1", "S2"))]
+        .groupby(["year", "date", "position"], sort=False)
+        .agg(
+            west_comparable_deep_rise=("strip", "size"),
+            west_candidate_strips=(
+                "strip",
+                lambda values: ",".join(sorted(set(values))),
+            ),
+        )
+        .reset_index()
+    )
     result = result.loc[result["strip"].isin(STRIPS)].merge(
         west, on=["year", "date", "position"], how="left"
     )
@@ -201,10 +213,19 @@ def identify_unexplained_deep_rises(daily: pd.DataFrame) -> pd.DataFrame:
     )
     result["west_candidate_strips"] = result["west_candidate_strips"].fillna("")
     keep = [
-        "year", "date", "strip", "position", "vwc_6", "vwc_12", "vwc_18",
-        "deep_daily_change", "largest_shallow_daily_change",
-        "deep_change_beyond_shallow", "precip_current_and_previous_day_in",
-        "west_comparable_deep_rise", "west_candidate_strips",
+        "year",
+        "date",
+        "strip",
+        "position",
+        "vwc_6",
+        "vwc_12",
+        "vwc_18",
+        "deep_daily_change",
+        "largest_shallow_daily_change",
+        "deep_change_beyond_shallow",
+        "precip_current_and_previous_day_in",
+        "west_comparable_deep_rise",
+        "west_candidate_strips",
     ]
     result = result[keep].sort_values(["year", "date", "strip", "position"])
     numeric = result.select_dtypes(include="number").columns
@@ -252,7 +273,8 @@ def group_deep_wetting_episodes(rises: pd.DataFrame) -> pd.DataFrame:
                     "reaches_s3_later": reaches_s3_later,
                     "days_s4_to_s3": (
                         int((s3_dates.min() - s4_dates.min()).days)
-                        if reaches_s3_later else np.nan
+                        if reaches_s3_later
+                        else np.nan
                     ),
                     "maximum_deep_daily_change": episode["deep_daily_change"].max(),
                     "maximum_deep_change_beyond_shallow": episode[
@@ -328,16 +350,30 @@ def build_2026_event_audit() -> pd.DataFrame:
         default="usable_no_clock_flag",
     )
     keep = [
-        "event_id", "irrigation_start", "start_photo_available",
-        "start_photo_filename", "photo_start", "start_photo_counter",
-        "photo_minus_workbook_min", "end_photo_available", "end_photo_filename",
-        "end_photo_datetime", "end_photo_counter", "end_qc_status",
-        "photo_start_qc", "absolute_start_anchor", "classification",
-        "timing_reliability", "possible_lateral_entry",
+        "event_id",
+        "irrigation_start",
+        "start_photo_available",
+        "start_photo_filename",
+        "photo_start",
+        "start_photo_counter",
+        "photo_minus_workbook_min",
+        "end_photo_available",
+        "end_photo_filename",
+        "end_photo_datetime",
+        "end_photo_counter",
+        "end_qc_status",
+        "photo_start_qc",
+        "absolute_start_anchor",
+        "classification",
+        "timing_reliability",
+        "possible_lateral_entry",
         "field_wide_pre_start_drift",
-        "s3m_standard_arrival_depth_count", "s3m_missing_standard_depth_count",
-        "s3m_median_standard_delay_min", "s3_reference_median_top_bottom_delay_min",
-        "timestamp_correction_recommendation", "field_notes",
+        "s3m_standard_arrival_depth_count",
+        "s3m_missing_standard_depth_count",
+        "s3m_median_standard_delay_min",
+        "s3_reference_median_top_bottom_delay_min",
+        "timestamp_correction_recommendation",
+        "field_notes",
     ]
     return classified[keep].sort_values("irrigation_start")
 
@@ -370,7 +406,9 @@ def summarize_photo_source(event_audit: pd.DataFrame) -> dict[str, object]:
                 & reviewed_counters.notna()
                 & counters.notna()
                 & np.isclose(counters, reviewed_counters)
-            ).loc[referenced].tolist()
+            )
+            .loc[referenced]
+            .tolist()
         )
         qc_photo_datetimes.append(
             pd.to_datetime(qc[f"{boundary}_photo_datetime"], errors="coerce")
@@ -389,7 +427,9 @@ def summarize_photo_source(event_audit: pd.DataFrame) -> dict[str, object]:
         "reviewed_2026_photos": int(len(inventory_2026)),
         "latest_reviewed_2026_photo": inventory_2026["effective_datetime_parsed"].max(),
         "s3_s4_events": int(len(event_audit)),
-        "s3_s4_events_with_start_photo": int(event_audit["start_photo_available"].sum()),
+        "s3_s4_events_with_start_photo": int(
+            event_audit["start_photo_available"].sum()
+        ),
         "s3_s4_events_with_end_photo": int(event_audit["end_photo_available"].sum()),
         "s3_s4_events_with_exact_start_agreement": int(
             event_audit["absolute_start_anchor"].eq("photo_verified").sum()
@@ -408,7 +448,9 @@ def build_paired_water_balance() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     pairs = {"S1_S2": ("S1", "S2"), "S3_S4": ("S3", "S4")}
     rows: list[dict[str, object]] = []
-    for (event_id, strip_group), group in source.groupby(["event_id", "strip_group"], sort=True):
+    for (event_id, strip_group), group in source.groupby(
+        ["event_id", "strip_group"], sort=True
+    ):
         if strip_group not in pairs:
             continue
         biochar, control = pairs[strip_group]
@@ -430,7 +472,11 @@ def build_paired_water_balance() -> tuple[pd.DataFrame, pd.DataFrame]:
             "biochar_applied_gal": b["gallons_strip"],
             "control_applied_gal": c["gallons_strip"],
             "equal_strip_allocation_assumed": bool(
-                np.isclose(float(b["gallons_strip"]), float(c["gallons_strip"]), equal_nan=False)
+                np.isclose(
+                    float(b["gallons_strip"]),
+                    float(c["gallons_strip"]),
+                    equal_nan=False,
+                )
             ),
             "paired_water_balance_eligible": eligible,
             "biochar_eligibility_reason": b["unretained_reason"],
@@ -458,24 +504,32 @@ def build_paired_water_balance() -> tuple[pd.DataFrame, pd.DataFrame]:
     paired[numeric] = paired[numeric].round(4)
 
     eligible = paired.loc[paired["paired_water_balance_eligible"]].copy()
-    summary = eligible.groupby(["year", "strip_group"], sort=True).agg(
-        eligible_matched_events=("event_id", "size"),
-        median_applied_gal=("biochar_applied_gal", "median"),
-        median_biochar_storage_gal=("biochar_storage_gal", "median"),
-        median_control_storage_gal=("control_storage_gal", "median"),
-        median_biochar_minus_control_storage_gal=(
-            "biochar_minus_control_storage_gal", "median"
-        ),
-        median_biochar_minus_control_nonnegative_unretained_proxy_gal=(
-            "biochar_minus_control_nonnegative_unretained_proxy_gal", "median"
-        ),
-        median_biochar_minus_control_stored_fraction=(
-            "biochar_minus_control_stored_fraction", "median"
-        ),
-        median_biochar_minus_control_post_bottom_applied_gal=(
-            "biochar_minus_control_post_bottom_applied_gal", "median"
-        ),
-    ).reset_index()
+    summary = (
+        eligible.groupby(["year", "strip_group"], sort=True)
+        .agg(
+            eligible_matched_events=("event_id", "size"),
+            median_applied_gal=("biochar_applied_gal", "median"),
+            median_biochar_storage_gal=("biochar_storage_gal", "median"),
+            median_control_storage_gal=("control_storage_gal", "median"),
+            median_biochar_minus_control_storage_gal=(
+                "biochar_minus_control_storage_gal",
+                "median",
+            ),
+            median_biochar_minus_control_nonnegative_unretained_proxy_gal=(
+                "biochar_minus_control_nonnegative_unretained_proxy_gal",
+                "median",
+            ),
+            median_biochar_minus_control_stored_fraction=(
+                "biochar_minus_control_stored_fraction",
+                "median",
+            ),
+            median_biochar_minus_control_post_bottom_applied_gal=(
+                "biochar_minus_control_post_bottom_applied_gal",
+                "median",
+            ),
+        )
+        .reset_index()
+    )
     summary[summary.select_dtypes(include="number").columns] = summary.select_dtypes(
         include="number"
     ).round(4)
@@ -549,9 +603,7 @@ def plot_directional_episode_multilocation(episodes: pd.DataFrame) -> list[str]:
         data = data.loc[data["timestamp"].between(start, stop)].copy()
         figure, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
         for axis, strip in zip(axes, STRIPS):
-            for position, color in zip(
-                POSITIONS, ("#2b6cb0", "#dd8a00", "#159a73")
-            ):
+            for position, color in zip(POSITIONS, ("#2b6cb0", "#dd8a00", "#159a73")):
                 axis.plot(
                     data["timestamp"],
                     data[f"VWC_3_raw_{strip}_{position}"],
@@ -606,20 +658,40 @@ def plot_multiyear_top_profiles(daily: pd.DataFrame, path: Path) -> None:
             ].sort_values("date")
             for depth in (6, 12, 18):
                 axis.plot(
-                    data["date"], data[f"vwc_{depth}"],
-                    color=DEPTH_COLORS[depth], linewidth=1.8, label=f"{depth} in",
+                    data["date"],
+                    data[f"vwc_{depth}"],
+                    color=DEPTH_COLORS[depth],
+                    linewidth=1.8,
+                    label=f"{depth} in",
                 )
             dominant = data["deep_minus_shallow_max"].gt(1.0)
             axis.fill_between(
-                data["date"], 0, 1, where=dominant,
-                transform=axis.get_xaxis_transform(), color="#7d3c98", alpha=0.08,
-                label="18 in > both shallow depths by >1 point",
+                data["date"],
+                0,
+                1,
+                where=dominant,
+                transform=axis.get_xaxis_transform(),
+                color="#7d3c98",
+                alpha=0.08,
+                label="18 in > both shallow depths by >1 VWC percentage point",
             )
             for event_date in data.loc[data["irrigation_day"], "date"]:
-                axis.axvline(event_date, color="#555555", linewidth=0.7, linestyle=":", alpha=0.55)
+                axis.axvline(
+                    event_date,
+                    color="#555555",
+                    linewidth=0.7,
+                    linestyle=":",
+                    alpha=0.55,
+                )
             rain = data.loc[data["precip_in"].gt(0.05)]
-            axis.scatter(rain["date"], np.full(len(rain), 1.5), marker="|", s=70,
-                         color="#78c4ee", label="Rain >0.05 in")
+            axis.scatter(
+                rain["date"],
+                np.full(len(rain), 1.5),
+                marker="|",
+                s=70,
+                color="#78c4ee",
+                label="Rain >0.05 in",
+            )
             axis.set_ylim(0, 65)
             axis.set_title(f"{year} · {strip} Top", fontsize=13, weight="bold")
             axis.grid(axis="y", alpha=0.22)
@@ -630,14 +702,25 @@ def plot_multiyear_top_profiles(daily: pd.DataFrame, path: Path) -> None:
     handles, labels = axes[0, 0].get_legend_handles_labels()
     unique = dict(zip(labels, handles))
     figure.legend(
-        unique.values(), unique.keys(), loc="upper center", ncol=5,
-        frameon=False, bbox_to_anchor=(0.5, 0.969),
+        unique.values(),
+        unique.keys(),
+        loc="upper center",
+        ncol=5,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.969),
     )
     figure.suptitle(
         "S3 and S4 Top loggers: multi-year depth profiles",
-        fontsize=20, weight="bold", y=0.995,
+        fontsize=20,
+        weight="bold",
+        y=0.995,
     )
-    figure.text(0.5, 0.006, "Dotted vertical lines are recorded S3/S4 irrigation starts", ha="center")
+    figure.text(
+        0.5,
+        0.006,
+        "Dotted vertical lines are recorded S3/S4 irrigation starts",
+        ha="center",
+    )
     figure.tight_layout(rect=(0.02, 0.025, 1, 0.925))
     figure.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(figure)
@@ -650,17 +733,24 @@ def plot_multiyear_deep_dominance(daily: pd.DataFrame, path: Path) -> None:
         for column, strip in enumerate(STRIPS):
             axis = axes[row, column]
             for year in YEARS:
-                data = daily.loc[
-                    daily["year"].eq(year)
-                    & daily["strip"].eq(strip)
-                    & daily["position"].eq(position)
-                ].sort_values("date").copy()
+                data = (
+                    daily.loc[
+                        daily["year"].eq(year)
+                        & daily["strip"].eq(strip)
+                        & daily["position"].eq(position)
+                    ]
+                    .sort_values("date")
+                    .copy()
+                )
                 data["aligned_date"] = data["date"].map(
                     lambda value: pd.Timestamp(anchor_year, value.month, value.day)
                 )
                 axis.plot(
-                    data["aligned_date"], data["deep_minus_shallow_max"],
-                    color=YEAR_COLORS[year], linewidth=1.6, label=str(year),
+                    data["aligned_date"],
+                    data["deep_minus_shallow_max"],
+                    color=YEAR_COLORS[year],
+                    linewidth=1.6,
+                    label=str(year),
                 )
             axis.axhline(0, color="#333333", linewidth=1)
             axis.axhline(1, color="#7d3c98", linewidth=0.9, linestyle="--")
@@ -669,19 +759,27 @@ def plot_multiyear_deep_dominance(daily: pd.DataFrame, path: Path) -> None:
             axis.xaxis.set_major_locator(mdates.MonthLocator())
             axis.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
             if column == 0:
-                axis.set_ylabel("18 in − max(6 in, 12 in)\nVWC points")
+                axis.set_ylabel("18 in − max(6 in, 12 in)\nVWC percentage points")
     handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.legend(
-        handles, labels, loc="upper center", ncol=4, frameon=False,
+        handles,
+        labels,
+        loc="upper center",
+        ncol=4,
+        frameon=False,
         bbox_to_anchor=(0.5, 0.966),
     )
     figure.suptitle(
         "Deep-over-shallow VWC ordering across years",
-        fontsize=20, weight="bold", y=0.995,
+        fontsize=20,
+        weight="bold",
+        y=0.995,
     )
     figure.text(
-        0.5, 0.005,
-        "Positive values mean the 18-inch sensor exceeds both shallower sensors; dashed line = +1 VWC point",
+        0.5,
+        0.005,
+        "Positive values mean the 18-inch sensor exceeds both shallower sensors; "
+        "dashed line = +1 VWC percentage point",
         ha="center",
     )
     figure.tight_layout(rect=(0.02, 0.035, 1, 0.92))
@@ -709,7 +807,8 @@ def plot_lateral_episode_comparison(
                     & daily["position"].eq(position)
                 ].sort_values("date")
                 axis.plot(
-                    data["date"], data["vwc_18"],
+                    data["date"],
+                    data["vwc_18"],
                     color=STRIP_COLORS[strip],
                     linewidth=2.0 if strip in STRIPS else 1.2,
                     alpha=1.0 if strip in STRIPS else 0.75,
@@ -719,7 +818,8 @@ def plot_lateral_episode_comparison(
                 axis.axvspan(
                     pd.Timestamp(episode.start_date) - pd.Timedelta(hours=12),
                     pd.Timestamp(episode.end_date) + pd.Timedelta(hours=36),
-                    color="#f3c969", alpha=0.22,
+                    color="#f3c969",
+                    alpha=0.22,
                 )
             axis.set_title(f"{year} · {position} position", fontsize=13, weight="bold")
             axis.set_ylabel("18-inch daily mean VWC (%)")
@@ -728,15 +828,22 @@ def plot_lateral_episode_comparison(
             axis.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
     handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.legend(
-        handles, labels, loc="upper center", ncol=4, frameon=False,
+        handles,
+        labels,
+        loc="upper center",
+        ncol=4,
+        frameon=False,
         bbox_to_anchor=(0.5, 0.95),
     )
     figure.suptitle(
         "18-inch VWC during S4-first, S3-later wetting episodes",
-        fontsize=20, weight="bold", y=0.995,
+        fontsize=20,
+        weight="bold",
+        y=0.995,
     )
     figure.text(
-        0.5, 0.008,
+        0.5,
+        0.008,
         "Gold shading marks screened episodes; S1/S2 are western comparisons and S3/S4 are eastern strips",
         ha="center",
     )
@@ -764,11 +871,16 @@ def write_report(
             f"{int(row.year)}: {row.median_deep_minus_shallow_max:.2f}"
             for row in values.itertuples()
         )
-        top_lines.append(f"- {strip} Top median deep-over-shallow difference (VWC points): {rendered}.")
+        top_lines.append(
+            f"- {strip} Top median deep-over-shallow difference "
+            f"(VWC percentage points): {rendered}."
+        )
     verified = int(event_audit["absolute_start_anchor"].eq("photo_verified").sum())
     starts_available = int(event_audit["start_photo_available"].sum())
     ends_available = int(event_audit["end_photo_available"].sum())
-    review = int(event_audit["timing_reliability"].eq("review_irrigation_boundary").sum())
+    review = int(
+        event_audit["timing_reliability"].eq("review_irrigation_boundary").sum()
+    )
     lateral = int(event_audit["possible_lateral_entry"].sum())
     field_wide = int(event_audit["field_wide_pre_start_drift"].sum())
     usable = int(event_audit["timing_reliability"].eq("usable_no_clock_flag").sum())
@@ -781,7 +893,8 @@ def write_report(
     ]
     for row in event_audit.itertuples():
         offset = (
-            "—" if pd.isna(row.photo_minus_workbook_min)
+            "—"
+            if pd.isna(row.photo_minus_workbook_min)
             else f"{row.photo_minus_workbook_min:.1f}"
         )
         timing_rows.append(
@@ -817,10 +930,14 @@ def write_report(
 
     questionable_images: list[str] = []
     for name in questionable_plot_names:
-        questionable_images.extend(["", f"![Questionable irrigation event plots]({name})"])
+        questionable_images.extend(
+            ["", f"![Questionable irrigation event plots]({name})"]
+        )
     directional_images: list[str] = []
     for name in directional_plot_names:
-        directional_images.extend(["", f"![Directional deep-rise multilocation plot]({name})"])
+        directional_images.extend(
+            ["", f"![Directional deep-rise multilocation plot]({name})"]
+        )
     if photo_source["all_2026_referenced_photos_match_review"]:
         photo_alignment_text = (
             "A content-alignment check found that every 2026 photo referenced by the derived QC "
@@ -834,9 +951,31 @@ def write_report(
         )
 
     lines = [
-        "# Multi-year S3/S4 water-source and event water-balance audit",
+        "# Persistent deep-over-shallow VWC at S3 and S4: diagnostic audit",
         "",
-        "## Bottom line",
+        "**Status:** Unresolved research diagnostic; not a causal finding",
+        "",
+        "## Introduction",
+        "",
+        "This audit addresses a persistent and unexplained pattern in the soil-moisture "
+        "record: volumetric water content (VWC) at 18 inches is almost always higher "
+        "than the corresponding 6- and 12-inch measurements at S3—most conspicuously "
+        "at S3 Top—and also at S4 Top. The deep-over-shallow difference at S3 Top has "
+        "generally become larger over time.",
+        "",
+        "The pattern matters because it can influence estimates of profile water storage, "
+        "irrigation response, and biochar-versus-control differences. The available data do "
+        "not provide a satisfactory explanation. Actual subsurface water distribution, "
+        "soil-profile differences, sensor calibration, installation contact, and other site "
+        "effects remain plausible and may act together.",
+        "",
+        "The purpose of this document is therefore to define the mystery, document its "
+        "history, examine whether irrigation timing or other recorded events clarify it, "
+        "and identify evidence that could distinguish among explanations. It does not claim "
+        "that the pattern is caused by biochar, a ditch, a pipe leak, or any other single "
+        "mechanism.",
+        "",
+        "## What the evidence currently supports",
         "",
         "The 18-inch sensor exceeds both shallower sensors at the Top positions of S3 and S4 "
         "from the first available 2023 growing-season observations. The ordering therefore did "
@@ -854,19 +993,40 @@ def write_report(
         "",
         "![Deep-over-shallow VWC ordering across years](multiyear_deep_dominance.png)",
         "",
+        "## Possible explanations and current evidence",
+        "",
+        "The audit retains several non-exclusive explanations:",
+        "",
+        "- **Actual soil-profile or site differences.** Texture, layering, compaction, and "
+        "local water-holding properties could produce wetter conditions at 18 inches.",
+        "- **Lateral or subsurface water input.** Irrigation redistribution, unrecorded water "
+        "entering from the east or north, or a buried-pipe leak could add deep water, but "
+        "no independent source record currently confirms any of these mechanisms.",
+        "- **Sensor or installation effects.** Calibration offsets, soil contact, disturbed "
+        "soil around installation, or sensor-specific behavior could affect absolute depth "
+        "comparisons.",
+        "- **Event definition and water accounting.** Shared irrigation boundaries, assumed "
+        "equal strip allocation, and incomplete knowledge of runoff, drainage, and advance "
+        "timing can affect event-scale interpretations without explaining the persistent "
+        "baseline ordering by themselves.",
+        "",
+        "None of the available checks distinguishes decisively among these explanations. The "
+        "persistent pattern is therefore retained as an unresolved research question.",
+        "",
         "## Definitions used in this audit",
         "",
         "- **Shared canonical irrigation boundary:** one recorded start and end time applies to "
         "both S3 and S4 because they are irrigated as one metered pair. It is the workbook/photo "
         "reference time, not a claim that water reached every logger simultaneously.",
         "- **Sensor arrival:** the first sustained VWC increase after the recorded boundary that "
-        "meets the standard +0.25 VWC-point response rule. Arrival delay is sensor arrival minus "
-        "the shared boundary.",
+        "meets the standard response threshold of +0.25 VWC percentage point. Arrival delay is "
+        "sensor arrival minus the shared boundary.",
         "- **Deep-over-shallow difference:** 18-inch VWC minus the larger of the simultaneous "
         "6- and 12-inch VWC values. A positive value describes sensor ordering; it does not by "
         "itself demonstrate upward or lateral water movement.",
         "- **Deep-rise candidate:** an exploratory daily observation outside recorded irrigation "
-        "and material rain when 18-inch mean VWC rose by at least 1 point and at least 0.75 point "
+        "and material rain when 18-inch mean VWC rose by at least 1 percentage point and at least "
+        "0.75 percentage point "
         "more than either shallower depth. It is a screening flag, not a confirmed leak.",
         "- **Directional episode:** deep-rise candidates no more than two days apart, grouped as "
         "one episode, where the screen fires in S4 first and subsequently in S3. The term describes "
@@ -875,7 +1035,7 @@ def write_report(
         "quality-control checks for the reported calculation. Failed events remain in the detailed "
         "table as an audit trail but are omitted from eligible-event summaries.",
         "",
-        "## 2026 timing audit",
+        "## Supporting investigation 1: 2026 irrigation timing",
         "",
         f"There are {len(event_audit)} S3/S4 irrigation events in 2026. {starts_available} have a "
         f"reviewed start photograph, {ends_available} have a reviewed end photograph, and {verified} "
@@ -904,7 +1064,7 @@ def write_report(
         f"The latest date also has {photo_source['latest_unmatched_2026_photo_count']} reviewed photos "
         f"({', '.join(photo_source['latest_unmatched_2026_filenames'])}) dated "
         f"{pd.Timestamp(photo_source['latest_unmatched_2026_photo_date']):%B %-d, %Y}. They are retained "
-        "as unmatched evidence because the irrigation event table does not yet provide an authoritative "
+        "as unmatched evidence because the irrigation event table does not yet provide a confirmed "
         "strip assignment for them. They are not assigned to S3/S4 or used in event calculations.",
         "",
         *timing_rows,
@@ -921,18 +1081,20 @@ def write_report(
         "",
         "**April 21:** the workbook boundary (14:54) and photograph (14:54:55) agree. At S3 Top, "
         "the main response is after that boundary and progresses from 6 to 12 to 18 inches. The "
-        "automated pre-start screen nevertheless found a smaller six-hour rise at S3 Top (6 inch, "
-        "+0.586 VWC point) and S4 Bottom (6 inch, +1.692). Crucially, S1 Bottom (+0.625) and S2 "
-        "Bottom (+0.623) also rose before the same start. The corrected interpretation is therefore "
+        "automated pre-start screen nevertheless found a smaller six-hour rise at S3 Top (6-inch "
+        "VWC, +0.586 percentage point) and S4 Bottom (6-inch VWC, +1.692 percentage points). "
+        "Crucially, S1 Bottom (+0.625) and S2 Bottom (+0.623) also rose before the same start. "
+        "The corrected interpretation is therefore "
         "field-wide pre-start drift or an event-boundary/field-condition issue, not evidence of a "
         "particular external source.",
         "",
-        "## Unexplained daily deep rises",
+        "## Supporting investigation 2: unexplained daily deep rises",
         "",
         f"The exploratory screen found {len(rises)} daily deep-rise candidates across all S3/S4 "
         "positions and years after excluding recorded irrigation on the current/previous day and "
         "precipitation above 0.05 inch. A candidate requires the 18-inch daily mean to rise by at "
-        "least 1 VWC point and by at least 0.75 point more than the larger shallow-depth change. "
+        "least 1 VWC percentage point and by at least 0.75 percentage point more than the larger "
+        "shallow-depth change. "
         "No ditch-use, north-boundary inflow, or pipe-leak record is currently available. These "
         "candidates identify dates on which such external records or field observations would be useful.",
         "",
@@ -950,7 +1112,7 @@ def write_report(
         "![East-versus-west 18-inch VWC during directional episodes](lateral_episode_comparison.png)",
         *directional_images,
         "",
-        "## Event water balance",
+        "## Supporting investigation 3: event water balance",
         "",
         "### Why calculate it?",
         "",
@@ -998,14 +1160,16 @@ def write_report(
         lines.append("- None.")
     else:
         for row in pair_2026.itertuples():
-            lines.append(f"- {row.strip_group}: {int(row.eligible_matched_events)} events.")
+            lines.append(
+                f"- {row.strip_group}: {int(row.eligible_matched_events)} events."
+            )
     lines.extend(
         [
             "",
             "The small matched-event counts—especially for 2026 S3/S4—mean the present residual "
             "differences are diagnostics, not defensible runoff or deep-drainage treatment effects.",
             "",
-            "## Consolidated checks still needed",
+            "## What remains unknown and how to investigate it",
             "",
             "Historical ditch-use dates and pipe-pressure, shutoff, repair, or leak-observation "
             "records are not available. The ditch and buried-pipe explanations therefore cannot be "
@@ -1029,7 +1193,14 @@ def write_report(
             "7. Recalculate treatment effects after excluding unresolved boundary and directional-pattern "
             "episodes, then compare the result with the full-data estimate as a sensitivity analysis.",
             "",
-            "## Files",
+            "## Generated files and reproducibility",
+            "",
+            "Regenerate this report, its tables, and its figures from the current reviewed "
+            "inputs with:",
+            "",
+            "```bash",
+            "MPLBACKEND=Agg python -m biochar_app.scripts.research.analyze_s3_s4_multiyear_water",
+            "```",
             "",
             "- `multiyear_top_depth_profiles.png`: four years of S3/S4 Top depth traces.",
             "- `multiyear_deep_dominance.png`: the depth-order metric for all positions and years.",
@@ -1065,7 +1236,9 @@ def main() -> None:
     pair_summary.to_csv(OUTPUT / "paired_event_water_balance_summary.csv", index=False)
     plot_multiyear_top_profiles(daily, OUTPUT / "multiyear_top_depth_profiles.png")
     plot_multiyear_deep_dominance(daily, OUTPUT / "multiyear_deep_dominance.png")
-    plot_lateral_episode_comparison(daily, episodes, OUTPUT / "lateral_episode_comparison.png")
+    plot_lateral_episode_comparison(
+        daily, episodes, OUTPUT / "lateral_episode_comparison.png"
+    )
     questionable_plot_names = build_questionable_event_contact_sheets(event_audit)
     directional_plot_names = plot_directional_episode_multilocation(episodes)
     write_report(

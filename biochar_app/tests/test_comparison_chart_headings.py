@@ -29,6 +29,22 @@ assert.ok(narrow.title.pad.t>=24);
 assert.ok(narrow.title.text.includes('<span style="font-size:14px">'));
 assert.ok(!narrow.title.text.includes("<sup>"));
 assert.ok(context.comparisonChartHeading("A < B",subtitle,"",640).title.text.includes("&lt;"));
+const coverageNote="* Some observations missing: 2024, 2025, 2026. Means use available valid observations. See the comparison data download and its README for coverage details.";
+const titleWithLegend=context.comparisonChartHeading(
+  "Irrigation Season: ratios of seasonal means by year",subtitle,coverageNote,1400
+);
+assert.ok(titleWithLegend.title.text.split("<br>").length>=3);
+assert.ok(titleWithLegend.margin.t>=160);
+assert.equal(titleWithLegend.height-titleWithLegend.margin.t-titleWithLegend.margin.b,290);
+const renamedPeriods=[
+  {code:"Q1_Winter",label:"Winter"},
+  {code:"Q2_Growing",label:"Irrigation Season"},
+];
+assert.equal(context.defaultComparisonPeriod(renamedPeriods).code,"Q2_Growing");
+assert.equal(context.defaultComparisonPeriod([
+  {code:"WINTER",label:"Winter"},
+  {code:"SUMMER",label:"Irrigation Season"},
+]).code,"SUMMER");
 const rows=[{year:2023,status:"Partial"},{year:2024,status:"Partial"},{year:2026,status:"Partial"}];
 const entries=rows.map(r=>({year:r.year,periods:[{code:"G",start:r.year+"-04-01",end:r.year+"-10-31"}]}));
 let text=context.comparisonPartialNote(rows,entries,"G",new Date(2026,9,7));

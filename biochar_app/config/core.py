@@ -119,7 +119,7 @@ DEFAULT_GSEASON_PERIODS = {
         "end": "03-31",
     },
     "Q2_Growing": {
-        "label": "Growing Season",
+        "label": "Irrigation Season",
         "start": "04-01",
         "end": "10-31",
     },
