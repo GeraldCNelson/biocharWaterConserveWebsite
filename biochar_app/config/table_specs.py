@@ -137,7 +137,7 @@ SOILCHEM_SETS: list[TableSetSpec] = [
 
 BIOMASS_FIELD_SETS: list[TableSetSpec] = [
     # For already-wide tables, variables_key can be None (builder will treat it as one “Value” variable).
-    TableSetSpec("set1", "Set 1: Biomass (Field Samples)", variables_key=None),
+    TableSetSpec("set1", "Set 1: Biomass Samples", variables_key=None),
 ]
 
 
@@ -165,7 +165,7 @@ WIDE_TABLES: dict[str, WideTableSpec] = {
     ),
     "biomass_field": WideTableSpec(
         key="biomass_field",
-        label="Biomass (Field Samples)",
+        label="Biomass Samples and Fertilizer Recommendations",
         source_key="biomass_field_master",
         sets=BIOMASS_FIELD_SETS,
     ),

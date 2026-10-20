@@ -5,7 +5,7 @@
 import { fetchMarkdownFiles } from "./config.js";
 import { renderNirTables } from "./tab_nir.js";
 import { renderSoilChemTable, renderSoilBioTable } from "./tab_soil.js";
-import { renderBiomassFieldTables } from "./tab_biomass_field.js";
+import { renderBiomassFieldTables } from "./tab_biomass_field.js?v=20261019-biomass-1";
 import { initSummaryTab } from "./tab_summary.js?v=20261011-bulk-ec-2";
 import { renderGlossary } from "./glossary.js?v=20261011-bulk-ec-2";
 
@@ -306,7 +306,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       tabId: "biomass-field-tab",
       paneId: "biomass-field",
       renderFn: renderBiomassFieldTables,
-      label: "Biomass (Field Samples)",
+      label: "Biomass Samples and Fertilizer Recommendations",
     });
 
     wireTabRender({

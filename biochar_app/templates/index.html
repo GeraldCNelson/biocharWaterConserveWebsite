@@ -50,7 +50,7 @@
     </script>
 
     <!-- 🚨 SINGLE ES MODULE ENTRYPOINT -->
-    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20261011-bulk-ec-2"></script>
+    <script type="module" src="{{ url_for('static', path='js/main.js') }}?v=20261019-biomass-1"></script>
 
     <!-- MathJax -->
     <script>
@@ -167,7 +167,7 @@
                         <li>
                             <button id="biomass-field-tab" class="dropdown-item" type="button" data-bs-toggle="tab"
                                     data-bs-target="#biomass-field" role="tab" aria-controls="biomass-field" aria-selected="false">
-                                Biomass (Field Samples)
+                                Biomass Samples and Fertilizer Recommendations
                             </button>
                         </li>
                         <li>
@@ -633,12 +633,14 @@
                 </div>
             </div>
 
-            <!-- Biomass (Field Samples) Pane -->
+            <!-- Biomass Samples and Fertilizer Recommendations Pane -->
             <div class="tab-pane fade" id="biomass-field" role="tabpanel" aria-labelledby="biomass-field-tab">
                 <div class="container-fluid mt-2">
-                    <h4 class="mb-2">Biomass (Field Samples)</h4>
+                    <h4 class="mb-2">Biomass Samples and Fertilizer Recommendations</h4>
                     <p class="text-muted mb-2">
-                        Rows: field locations (e.g., S1M, S1B). Columns: sampling dates.
+                        Annual strip totals summarize the dry field-sample weights. Sample-level
+                        measurements and fertilizer context are shown below. Fertilizer rates are
+                        recommendations unless explicitly identified as observed applications.
                     </p>
                     <div class="nir-scroll">
                         <div id="biomass-field-content" class="nir-content"></div>
