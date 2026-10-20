@@ -1,9 +1,9 @@
 // static/js/tab_biomass_field.js
 //
-// Biomass (Field Samples) tab renderer.
+// Biomass Samples and Fertilizer Recommendations tab renderer.
 
 import { fetchJson } from "./api_requests.js";
-import { normalizePayload, renderOneSetFromPayload } from "./tables.js";
+import { normalizePayload, renderOneSetFromPayload } from "./tables.js?v=20261019-biomass-1";
 import { makeSetSectionTitle } from "./tab_ui.js";
 
 export async function renderBiomassFieldTables() {
@@ -41,11 +41,13 @@ export async function renderBiomassFieldTables() {
     }
 
     for (const setPayload of payload.sets) {
-      const label = setPayload.label || "Biomass (Field Samples)";
+      const label = setPayload.label || "Biomass Samples and Fertilizer Recommendations";
+      const description = setPayload.note ||
+        "Rows: field locations (e.g., S1T/S1M/S1B). Columns: sampling dates. Values are dry biomass (g).";
 
       const section = makeSetSectionTitle(
         label,
-        "Rows: field locations (e.g., S1T/S1M/S1B). Columns: sampling dates. Values are dry biomass (g).",
+        description,
         "nir"
       );
       container.appendChild(section);

@@ -103,7 +103,8 @@ TAB_LINKS = {
     "Summary Statistics": "summary-tab",
     "Custom Season": "gseason-tab",
     "Pasture Quality Metrics": "nir-tab",
-    "Biomass (Field Samples)": "biomass-field-tab",
+    "Biomass Samples and Fertilizer Recommendations": "biomass-field-tab",
+    "Biomass (Field Samples)": "biomass-field-tab",  # Legacy narrative-page label.
     "Biological Health": "soilbio-tab",
     "Soil Chemistry": "soilchem-tab",
     "Biochar Material Characterization": "biochar-analysis-tab"

@@ -527,6 +527,12 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
         )
       : null;
 
+  const requestedDecimalPlaces = variable?.["decimal_places"];
+  const decimalPlaces = Number.isInteger(requestedDecimalPlaces) &&
+    requestedDecimalPlaces >= 0 && requestedDecimalPlaces <= 10
+    ? requestedDecimalPlaces
+    : null;
+
   console.log("TABLE VARIABLE DEBUG:", variableKey, variable);
 
   /**
@@ -588,6 +594,10 @@ export function buildTableForVariable(setPayload, variableKey, variableLabel, va
 
     const num = typeof v === "number" ? v : Number(v);
     if (!Number.isFinite(num)) return "";
+
+    if (decimalPlaces !== null) {
+      return num.toFixed(decimalPlaces);
+    }
 
     if (isRatioRowKey(rowKey)) {
       return num.toFixed(3);

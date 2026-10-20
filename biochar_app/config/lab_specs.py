@@ -89,7 +89,7 @@ SOILCHEM_DATASET = LabDatasetSpec(
 
 BIOMASS_FIELD_DATASET = LabDatasetSpec(
     key="biomass_field",
-    label="Biomass (Field Samples)",
+    label="Biomass Samples and Fertilizer Recommendations",
     source_csv=BIOMASS_FIELD_CSV,
     shape="wide",
     row_id_col="location",
