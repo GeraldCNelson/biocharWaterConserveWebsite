@@ -67,7 +67,7 @@ def test_warmer_materializes_each_requested_filter_and_unit(monkeypatch) -> None
             },
             {
                 "code": "Q2_Growing",
-                "label": "Growing Season",
+                "label": "Irrigation Season",
                 "start": "2026-04-01",
                 "end": "2026-10-31",
             },
