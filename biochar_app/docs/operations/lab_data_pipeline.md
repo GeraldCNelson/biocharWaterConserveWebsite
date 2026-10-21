@@ -63,14 +63,22 @@ NIR products unchanged.
 
 Source worksheets are `2023 BIOMASS` through `2026 BIOMASS` in the master
 workbook. `build_field_biomass_from_master.py` finds the location header and
-pairs sampling dates with columns labeled `Dry` or `Dry (g)`. It ignores wet
-weights, formulas, averages, ratios, and worksheet statistics.
+pairs columns labeled `Dry` or `Dry (g)` with the authoritative `Hay Sample`
+dates in the workbook's `FIELD ACTIVITY DATES` worksheet. Dates printed in the
+annual biomass worksheets are validation labels, not authorities. If one of
+those labels disagrees with the corresponding field-activity date, the builder
+reports the discrepancy and uses the field-activity date. If dry-weight values
+exist while the corresponding field-activity date is missing or `TBD`, the
+builder stops rather than publishing the observations under an inferred date.
+Empty unresolved dry-weight columns are skipped with a warning. Wet weights,
+formulas, averages, ratios, and worksheet statistics are ignored.
 
-The reviewed `field_biomass_dry_g_2023_2025.csv` is the historical authority.
-This is intentional because some current workbook values differ from the values
-previously reviewed and published. Workbook observations fill historical gaps
-and add dates newer than the historical file; they do not overwrite reviewed
-2023-2025 values.
+The reviewed `field_biomass_dry_g_2023_2025.csv` is the historical authority
+for measured dry-weight values. Its date headings are also reconciled to
+`FIELD ACTIVITY DATES`; this preserves the reviewed measurements without
+allowing stale historical headings to override the definitive event calendar.
+Workbook observations fill historical gaps and add dates newer than the
+historical file; they do not overwrite reviewed 2023-2025 values.
 
 The dashboard-ready output is:
 
