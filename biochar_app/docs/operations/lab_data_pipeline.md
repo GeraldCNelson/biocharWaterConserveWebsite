@@ -27,7 +27,8 @@ described below.
    `biochar_app/data-raw/lab-tests/hay-tests/csv-files/`.
 3. Register that file in `SUPPLEMENTAL_NIR_FILES` in
    `biochar_app/scripts/lab/update_ward_master_nir.py`. The filename must use
-   `NIR_YYYY-MM-DD.csv`, where the date is the field sampling date.
+   either `NIR_YYYY-MM-DD.csv` or Ward's `NIR-Results-YYYYMMDD.csv` convention,
+   where the date is the field sampling date.
 4. Run ETL from the repository root. A normal run downloads and validates the
    shared workbook before installing the repository snapshot. Use `--year YYYY`
    when appropriate.

@@ -201,14 +201,42 @@ class LabEtlBuilderTests(unittest.TestCase):
             self.assertEqual(result["nir_date"].unique().tolist(), ["2026-07-28"])
             self.assertTrue(pd.to_numeric(result["crude_protein_pct_db"]).notna().all())
 
+    def test_ward_results_filename_uses_compact_sampling_date(self) -> None:
+        header_map = {
+            "sample_id": "Sample ID 1",
+            "crude_protein_pct_db": "Crude Protein Dry Basis",
+        }
+        with tempfile.TemporaryDirectory() as directory_name:
+            source = Path(directory_name) / "NIR-Results-20261016.csv"
+            pd.DataFrame(
+                {
+                    "Sample ID 1": ["S1HAY", "S2HAY", "S3HAY", "S4HAY"],
+                    "Crude Protein Dry Basis": [15.9, 16.1, 15.4, 17.0],
+                    "Date Received": ["10/22/2026"] * 4,
+                }
+            ).to_csv(source, index=False)
+
+            result = _read_supplemental_nir_csv(source, header_map)
+
+            self.assertEqual(result["nir_date"].unique().tolist(), ["2026-10-16"])
+            self.assertEqual(
+                result["strip"].tolist(),
+                ["strip_1", "strip_2", "strip_3", "strip_4"],
+            )
+
     def test_nir_table_includes_latest_year_from_clean_master(self) -> None:
         payload = build_nir_set1_table(WARD_MASTER_NIR_CSV)
 
         period_keys = [period["key"] for period in payload["periods"]]
         self.assertIn("2026-07-28", period_keys)
+        self.assertIn("2026-10-16", period_keys)
         self.assertEqual(
             payload["data"]["crude_protein_pct_db"]["STRIP 1"]["2026-07-28"],
             10.6,
+        )
+        self.assertEqual(
+            payload["data"]["crude_protein_pct_db"]["STRIP 1"]["2026-10-16"],
+            15.9,
         )
 
 
