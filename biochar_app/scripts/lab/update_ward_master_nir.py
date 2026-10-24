@@ -90,6 +90,7 @@ OUT_CLEAN_CSV = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_clean.csv"
 OUT_HEADERS_JSON = HAY_TESTS_PROCESSED_DIR / "ward_master_nir_headers_machine_to_human.json"
 SUPPLEMENTAL_NIR_FILES: list[Path] = [
     HAY_TESTS_RAW_DIR / "NIR_2026-07-28.csv",
+    HAY_TESTS_RAW_DIR / "NIR-Results-20261016.csv",
 ]
 
 MINERAL_COLUMNS = [
@@ -169,10 +170,25 @@ def _read_supplemental_nir_csv(
     if "sample_id" not in raw.columns:
         raise ValueError(f"Expected Sample ID 1 column in supplemental NIR file: {path}")
 
-    match = re.fullmatch(r"NIR_(\d{4}-\d{2}-\d{2})\.csv", path.name, flags=re.IGNORECASE)
-    if match is None:
+    dated_name_patterns = (
+        (r"NIR_(\d{4}-\d{2}-\d{2})\.csv", lambda value: value),
+        (
+            r"NIR-Results-(\d{4})(\d{2})(\d{2})\.csv",
+            lambda value: "-".join(value),
+        ),
+    )
+    sampling_date = None
+    for pattern, formatter in dated_name_patterns:
+        match = re.fullmatch(pattern, path.name, flags=re.IGNORECASE)
+        if match is not None:
+            sampling_date = (
+                formatter(match.groups())
+                if len(match.groups()) > 1
+                else formatter(match.group(1))
+            )
+            break
+    if sampling_date is None:
         raise ValueError(f"Supplemental NIR filename must contain the sampling date: {path.name}")
-    sampling_date = match.group(1)
 
     cleaned = standardize_ward_dataframe(
         raw,
