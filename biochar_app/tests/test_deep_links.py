@@ -22,9 +22,27 @@ def test_every_deep_link_button_exists_in_page_template() -> None:
 
 def test_deep_links_are_initialized_after_tab_renderers_are_wired() -> None:
     source = MAIN_JS.read_text(encoding="utf-8")
+    template = TEMPLATE.read_text(encoding="utf-8")
 
     assert 'from "./deep_links.js?v=20261104-deep-links-1"' in source
+    assert "main.js') }}?v=20261104-filter-links-2" in template
     assert source.index("wireTabRender({") < source.index("initializeDeepLinks();")
+
+
+def test_monitoring_links_apply_all_supported_filter_parameters() -> None:
+    source = MAIN_JS.read_text(encoding="utf-8")
+    documentation = (
+        REPO_ROOT / "biochar_app/docs/operations/website_deep_links.md"
+    ).read_text(encoding="utf-8")
+
+    for parameter in ("year", "granularity", "variable", "strip", "depth"):
+        assert f'{parameter}: "{parameter}"' in source
+
+    assert 'applyFilterLinkParameters("main", true)' in source
+    assert source.index("applyMonitoringLinkParameters();") < source.index(
+        "initializeDeepLinks();"
+    )
+    assert "?tab=monitoring&variable=EC" in documentation
 
 
 def test_soil_biology_report_anchor_is_stable_and_documented() -> None:
