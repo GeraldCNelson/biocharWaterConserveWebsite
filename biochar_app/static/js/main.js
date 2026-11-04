@@ -80,38 +80,73 @@ function hideBootLoading() {
   }
 }
 
+const FILTER_LINK_PARAMETERS = {
+  year: "year",
+  granularity: "granularity",
+  variable: "variable",
+  strip: "strip",
+  depth: "depth",
+};
+
 /**
- * Apply supported Summary Statistics query parameters after the dropdowns
- * have been populated. Example:
- * ?tab=summary&year=2026&granularity=gseason
+ * Apply supported filter query parameters after a tab's dropdowns have been
+ * populated.
  *
+ * @param {string} controlPrefix
+ * @param {boolean} dispatchChanges
  * @returns {void}
  */
-function applySummaryLinkParameters() {
+function applyFilterLinkParameters(controlPrefix, dispatchChanges = false) {
   const params = new URLSearchParams(window.location.search);
-  if (!["summary", "summary-statistics"].includes(params.get("tab") || "")) return;
+  const changedControls = [];
 
-  const parameterControls = {
-    year: "summary-year",
-    granularity: "summary-granularity",
-    variable: "summary-variable",
-    strip: "summary-strip",
-    depth: "summary-depth",
-  };
-
-  for (const [parameter, controlId] of Object.entries(parameterControls)) {
+  for (const [parameter, controlName] of Object.entries(FILTER_LINK_PARAMETERS)) {
     const requestedValue = params.get(parameter);
     const control = /** @type {HTMLSelectElement | null} */ (
-      document.getElementById(controlId)
+      document.getElementById(`${controlPrefix}-${controlName}`)
     );
     if (!requestedValue || !control) continue;
 
     const available = Array.from(control.options).some(
       (option) => option.value === requestedValue
     );
-    if (available) control.value = requestedValue;
+    if (available) {
+      control.value = requestedValue;
+      changedControls.push(control);
+    }
   }
 
+  if (dispatchChanges) {
+    changedControls.forEach((control) => {
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+}
+
+/**
+ * Apply supported Continuous Monitoring query parameters. Change events keep
+ * the date range and other dependent controls synchronized with the linked
+ * year and time resolution.
+ *
+ * @returns {void}
+ */
+function applyMonitoringLinkParameters() {
+  const params = new URLSearchParams(window.location.search);
+  if (!["monitoring", "main", "interactive-plots"].includes(params.get("tab") || "")) {
+    return;
+  }
+  applyFilterLinkParameters("main", true);
+}
+
+/**
+ * Apply supported Summary Statistics query parameters.
+ *
+ * @returns {void}
+ */
+function applySummaryLinkParameters() {
+  const params = new URLSearchParams(window.location.search);
+  if (!["summary", "summary-statistics"].includes(params.get("tab") || "")) return;
+  applyFilterLinkParameters("summary");
 }
 
 /**
@@ -345,6 +380,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     initSummaryTab();
+    applyMonitoringLinkParameters();
     applySummaryLinkParameters();
 
     try {
