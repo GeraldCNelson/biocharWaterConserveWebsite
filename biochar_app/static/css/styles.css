@@ -931,3 +931,8 @@ input[type="submit"]:hover,
         text-align: left;
     }
 }
+
+/* Keep report deep links visible below the sticky site navigation. */
+.deep-link-anchor {
+    scroll-margin-top: 6rem;
+}

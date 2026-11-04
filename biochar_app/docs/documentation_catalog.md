@@ -7,7 +7,7 @@ Paths are relative to the repository root. Regenerate it with:
 python biochar_app/scripts/dev-tools/build_documentation_catalog.py
 ```
 
-Documents indexed: **70**
+Documents indexed: **71**
 
 Status meanings: **current** is maintained guidance; **reference** is useful
 background; **generated** is produced by code; **historical** is archived context.
@@ -233,6 +233,12 @@ background; **generated** is produced by code; **historical** is archived contex
 - **Path:** `biochar_app/docs/operations/source_data_backup.md`
 - **Status:** current
 - **Summary:** Last reviewed: 2026-10-18
+
+### Website links for reports and other documents
+
+- **Path:** `biochar_app/docs/operations/website_deep_links.md`
+- **Status:** current
+- **Summary:** Updated: 2026-11-04
 
 ### 🛠️ Irrigation Overlay Update Notes
 
