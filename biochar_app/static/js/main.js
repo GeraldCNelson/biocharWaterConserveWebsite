@@ -24,6 +24,7 @@ import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader
 import { loadMarkdownContent } from "./markdown.js";
+import { initializeDeepLinks } from "./deep_links.js?v=20261104-deep-links-1";
 
 // 5) UI controls (dropdowns, unit toggle, etc.)
 import {
@@ -84,11 +85,11 @@ function hideBootLoading() {
  * have been populated. Example:
  * ?tab=summary&year=2026&granularity=gseason
  *
- * @returns {boolean} true when the Summary Statistics tab was requested
+ * @returns {void}
  */
 function applySummaryLinkParameters() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("tab") !== "summary") return false;
+  if (!["summary", "summary-statistics"].includes(params.get("tab") || "")) return;
 
   const parameterControls = {
     year: "summary-year",
@@ -111,7 +112,6 @@ function applySummaryLinkParameters() {
     if (available) control.value = requestedValue;
   }
 
-  return true;
 }
 
 /**
@@ -345,10 +345,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     initSummaryTab();
-
-    if (applySummaryLinkParameters()) {
-      document.getElementById("summary-tab")?.click();
-    }
+    applySummaryLinkParameters();
 
     try {
       await initBulkDownloadTab();
@@ -397,6 +394,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       }
     });
+
+    initializeDeepLinks();
 
     debugLog("✅ Application initialized.");
   } catch (err) {
