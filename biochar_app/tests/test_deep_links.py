@@ -24,8 +24,8 @@ def test_deep_links_are_initialized_after_tab_renderers_are_wired() -> None:
     source = MAIN_JS.read_text(encoding="utf-8")
     template = TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'from "./deep_links.js?v=20261104-deep-links-1"' in source
-    assert "main.js') }}?v=20261104-filter-links-2" in template
+    assert 'from "./deep_links.js?v=20261105-dropdown-close-2"' in source
+    assert "main.js') }}?v=20261105-dropdown-close-3" in template
     assert source.index("wireTabRender({") < source.index("initializeDeepLinks();")
 
 
@@ -54,3 +54,11 @@ def test_soil_biology_report_anchor_is_stable_and_documented() -> None:
     assert 'paneId: "soilbio"' in source
     assert "#soilbio-total-living-microbial-biomass" in documentation
     assert "MutationObserver" in source
+
+
+def test_deep_linked_dropdown_tab_closes_its_navigation_menu() -> None:
+    source = DEEP_LINKS.read_text(encoding="utf-8")
+
+    assert 'button.closest(".dropdown-menu")' in source
+    assert 'menu.classList.remove("show")' in source
+    assert "closeContainingDropdown(button);" in source
