@@ -204,6 +204,36 @@ function scrollToAnchorWhenAvailable(hash) {
 }
 
 /**
+ * Bootstrap's tab handling marks the dropdown menu containing an active tab
+ * as shown. That is useful for some tab layouts, but leaves the website's
+ * navigation menu covering the newly opened page. Explicitly dismiss the
+ * containing navigation dropdown after its child tab becomes active.
+ *
+ * @param {HTMLElement} button
+ * @returns {void}
+ */
+function closeContainingDropdown(button) {
+  const menu = button.closest(".dropdown-menu");
+  if (!(menu instanceof HTMLElement)) return;
+
+  const dropdown = menu.closest(".dropdown");
+  const toggle = dropdown?.querySelector('[data-bs-toggle="dropdown"]');
+  const bootstrapApi = /** @type {any} */ (window).bootstrap;
+
+  if (toggle instanceof HTMLElement && bootstrapApi?.Dropdown?.getOrCreateInstance) {
+    bootstrapApi.Dropdown.getOrCreateInstance(toggle).hide();
+  }
+
+  // Keep this deterministic even when Bootstrap sees the toggle as already
+  // closed but has left the menu's `show` class behind.
+  menu.classList.remove("show");
+  if (toggle instanceof HTMLElement) {
+    toggle.classList.remove("show");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+}
+
+/**
  * @param {{slug: string, buttonId: string, paneId: string}} config
  * @returns {void}
  */
@@ -250,6 +280,7 @@ export function initializeDeepLinks() {
     if (!button) continue;
 
     button.addEventListener("shown.bs.tab", (event) => {
+      closeContainingDropdown(button);
       if (suppressInitialUpdateFor === event.target.id) {
         suppressInitialUpdateFor = null;
         scrollToAnchorWhenAvailable(initialHash);
@@ -275,6 +306,7 @@ export function initializeDeepLinks() {
 
   if (requestedButton.classList.contains("active")) {
     suppressInitialUpdateFor = null;
+    closeContainingDropdown(requestedButton);
     scrollToAnchorWhenAvailable(initialHash);
   } else {
     requestedButton.click();
