@@ -61,6 +61,7 @@ def test_empty_initial_pass_reaches_recovery_and_never_publishes_incomplete_data
         return SimpleNamespace(returncode=0 if recovered else 1)
 
     monkeypatch.setattr(daily, "quick_port_check_ipv6", lambda *args: (True, "ok"))
+    monkeypatch.setattr(daily, "ping_router", lambda *args: (True, "router ok"))
     monkeypatch.setattr(daily, "_run_client", run)
     monkeypatch.setattr(daily.time, "sleep", waits.append)
     monkeypatch.setattr(daily, "_finish_report", lambda report, *args: reports.append(report.copy()))
@@ -393,6 +394,25 @@ def test_report_marks_missing_station_gap_coverage_unavailable() -> None:
 
     assert "none detected in responding stations" in body
     assert "not assessable for S4T because no records were returned" in body
+
+
+def test_router_preflight_failure_points_to_network_evidence() -> None:
+    body = _build_report_email_body(
+        {
+            "status": "failed_preflight",
+            "stations": {},
+            "findings": [
+                {
+                    "severity": "critical",
+                    "code": "router_unreachable",
+                    "message": "No ICMP reply after authorized reboot",
+                }
+            ],
+        }
+    )
+
+    assert "Review the router ping and reboot evidence in network_preflight" in body
+    assert "do not test individual loggers" in body
 
 
 def test_communication_history_flags_repeated_initial_failures(tmp_path) -> None:

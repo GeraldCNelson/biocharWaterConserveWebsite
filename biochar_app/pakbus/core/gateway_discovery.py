@@ -27,34 +27,71 @@ CLIENT_ENDPOINTS = (
     "/appGet.cgi?hook=networkmapd_clientlist()",
     "/update_clients.asp",
 )
+REBOOT_ENDPOINT = "/start_apply.htm"
 
 
-def _opener(verify_tls: bool) -> urllib.request.OpenerDirector:
-    context = ssl.create_default_context() if verify_tls else ssl._create_unverified_context()
+def _opener(
+    verify_tls: bool,
+    ca_bundle: str | Path | None = None,
+) -> urllib.request.OpenerDirector:
+    context = (
+        ssl.create_default_context(cafile=str(ca_bundle) if ca_bundle else None)
+        if verify_tls
+        else ssl._create_unverified_context()
+    )
     return urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(CookieJar()),
         urllib.request.HTTPSHandler(context=context),
     )
 
 
-def _read(opener: urllib.request.OpenerDirector, url: str, data: bytes | None = None) -> str:
-    request = urllib.request.Request(url, data=data, headers={"User-Agent": "biochar-pakbus-discovery/1"})
+def _read(
+    opener: urllib.request.OpenerDirector,
+    url: str,
+    data: bytes | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+) -> str:
+    request_headers = {"User-Agent": "biochar-pakbus-discovery/1"}
+    request_headers.update(headers or {})
+    request = urllib.request.Request(url, data=data, headers=request_headers)
     with opener.open(request, timeout=30) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
-def discover_address(
-    router_url: str, username: str, password: str, client_mac: str, suffix: str, verify_tls: bool
-) -> str:
-    opener = _opener(verify_tls)
+def login_router(
+    router_url: str,
+    username: str,
+    password: str,
+    *,
+    verify_tls: bool,
+    ca_bundle: str | Path | None = None,
+) -> urllib.request.OpenerDirector:
+    """Return an authenticated ASUS session without persisting credentials."""
+    parsed = urllib.parse.urlsplit(router_url)
+    if parsed.scheme.lower() != "https" or not parsed.netloc:
+        raise RuntimeError("ASUS router URL must be an absolute HTTPS URL")
+    if not username or not password:
+        raise RuntimeError("ASUS router credentials are not configured")
+
+    opener = _opener(verify_tls, ca_bundle)
     authorization = base64.b64encode(f"{username}:{password}".encode()).decode()
     payload = urllib.parse.urlencode(
         {"login_authorization": authorization, "action_mode": "login", "next_page": "index.asp"}
     ).encode()
     login = _read(opener, f"{router_url.rstrip('/')}/login.cgi", payload)
     if "Main_Login.asp" in login:
-        raise RuntimeError("ASUS login failed; check the username and password")
+        raise RuntimeError("ASUS login failed; check the configured credentials")
+    return opener
 
+
+def discover_address_from_session(
+    opener: urllib.request.OpenerDirector,
+    router_url: str,
+    client_mac: str,
+    suffix: str,
+) -> str:
+    """Find the Campbell global IPv6 address in an authenticated ASUS session."""
     bodies: list[str] = []
     for endpoint in CLIENT_ENDPOINTS:
         try:
@@ -78,6 +115,48 @@ def discover_address(
     if len(matches) != 1:
         raise RuntimeError(f"Expected one Campbell IPv6 address, found {len(matches)}")
     return matches[0]
+
+
+def discover_address(
+    router_url: str,
+    username: str,
+    password: str,
+    client_mac: str,
+    suffix: str,
+    verify_tls: bool,
+    ca_bundle: str | Path | None = None,
+) -> str:
+    opener = login_router(
+        router_url,
+        username,
+        password,
+        verify_tls=verify_tls,
+        ca_bundle=ca_bundle,
+    )
+    return discover_address_from_session(opener, router_url, client_mac, suffix)
+
+
+def request_router_reboot(
+    opener: urllib.request.OpenerDirector,
+    router_url: str,
+) -> None:
+    """Submit one ASUSWRT reboot request through an authenticated session."""
+    base_url = router_url.rstrip("/")
+    payload = urllib.parse.urlencode(
+        {
+            "action_mode": "apply",
+            "action_script": "reboot",
+            "action_wait": "5",
+            "current_page": "Advanced_System_Content.asp",
+            "next_page": "index.asp",
+        }
+    ).encode()
+    _read(
+        opener,
+        f"{base_url}{REBOOT_ENDPOINT}",
+        payload,
+        headers={"Origin": base_url, "Referer": f"{base_url}/Advanced_System_Content.asp"},
+    )
 
 
 def update_settings_host(path: Path, host: str) -> None:
@@ -105,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         discovery["client_mac"],
         discovery["client_ipv6_suffix"],
         bool(discovery["verify_tls"]),
+        os.getenv("ASUS_ROUTER_CA_BUNDLE"),
     )
     reachable, reason = quick_port_check_ipv6(host, int(SETTINGS["connection"]["port"]), timeout=5)
     if not reachable:
