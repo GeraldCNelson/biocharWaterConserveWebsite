@@ -26,13 +26,20 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from biochar_app.config.pakbus import DAILY_SETTINGS, DOWNLOAD_SETTINGS, ID_BY_STATION, PAKBUS
+from biochar_app.config.pakbus import (
+    DAILY_SETTINGS,
+    DOWNLOAD_SETTINGS,
+    ID_BY_STATION,
+    PAKBUS,
+    SETTINGS,
+)
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
 from biochar_app.pakbus.core.archive import (
     DEFAULT_ARCHIVE_ROOT,
     audit_archive_continuity,
     promote_accepted_frame,
 )
+from biochar_app.pakbus.core.network_preflight import ping_router, run_network_preflight
 from biochar_app.scripts.gseason_cache_warmer import warm_standard_gseason_caches
 from biochar_app.scripts.management.refresh_irrigation import REFRESH_STATUS_PATH
 
@@ -41,6 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RUN_ROOT = REPO_ROOT / "biochar_app" / "data-raw" / "pakbus_daily"
 DEFAULT_LOCK = REPO_ROOT / "biochar_app" / "data-processed" / "pakbus_daily.lock"
 DEFAULT_ALERT_CONFIG = REPO_ROOT / "biochar_app" / "config" / "pipeline_alerts.json"
+DEFAULT_NETWORK_STATE = REPO_ROOT / "biochar_app" / "data-raw" / "pakbus_network" / "router_recovery_state.json"
 DEFAULT_TIMEZONE = str(DOWNLOAD_SETTINGS["timezone"])
 CSV_FLOAT_FORMAT = f"%.{int(DOWNLOAD_SETTINGS['csv_decimal_places'])}f"
 EXPECTED_STATIONS = tuple(name for name in ID_BY_STATION if name != "CR800")
@@ -399,7 +407,13 @@ def _build_report_email_body(report: dict) -> str:
         battery_stations = sorted({item.get("station") for item in battery_findings if item.get("station")})
         next_steps.append(f"Inspect the power system at {_station_names(battery_stations)}.")
     if report.get("status") == "failed_preflight":
-        next_steps.append("Check the gateway/network endpoint before testing individual stations.")
+        if any(item.get("code") == "router_unreachable" for item in findings):
+            next_steps.append(
+                "Review the router ping and reboot evidence in network_preflight; "
+                "do not test individual loggers until router reachability returns."
+            )
+        else:
+            next_steps.append("Check the gateway/network endpoint before testing individual stations.")
     if report.get("status") == "failed_download":
         next_steps.append("Review the downloader service log and retry after correcting the reported process error.")
     if production.get("status") == "failed":
@@ -845,6 +859,7 @@ def _run_client(
     stations: Iterable[str] | None = None,
     timing_output: Path | None = None,
     response_timeout: float = PAKBUS.response_timeout_seconds,
+    host: str | None = None,
 ) -> subprocess.CompletedProcess:
     command = [
         sys.executable,
@@ -870,10 +885,14 @@ def _run_client(
     if timing_output is not None:
         command.extend(["--timing-output", str(timing_output)])
     command.extend(["--output", str(output)])
-    return subprocess.run(command, check=False)
+    environment = os.environ.copy()
+    if host:
+        environment["PAKBUS_HOST"] = host
+    return subprocess.run(command, check=False, env=environment)
 
 
 def main(argv: list[str] | None = None) -> int:
+    discovery = SETTINGS["discovery"]
     parser = argparse.ArgumentParser(description="Diagnose, download, and validate all PakBus logger data")
     parser.add_argument("--hours", type=int, default=int(DAILY_SETTINGS["hours"]))
     parser.add_argument("--attempts", type=int, default=int(DAILY_SETTINGS["attempts"]))
@@ -892,6 +911,76 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--recovery-attempts", type=int, default=int(DAILY_SETTINGS["recovery_attempts"]))
     parser.add_argument("--recovery-pause", type=float, default=float(DAILY_SETTINGS["recovery_pause_seconds"]))
     parser.add_argument("--recovery-wait", type=float, default=float(DAILY_SETTINGS["recovery_wait_seconds"]))
+    parser.add_argument(
+        "--preflight-attempts",
+        type=int,
+        default=int(DAILY_SETTINGS["preflight_attempts"]),
+    )
+    parser.add_argument(
+        "--preflight-timeout",
+        type=float,
+        default=float(DAILY_SETTINGS["preflight_timeout_seconds"]),
+    )
+    parser.add_argument(
+        "--preflight-retry",
+        type=float,
+        default=float(DAILY_SETTINGS["preflight_retry_seconds"]),
+    )
+    parser.add_argument(
+        "--asus-recovery",
+        action=argparse.BooleanOptionalAction,
+        default=_environment_flag("BIOCHAR_ASUS_RECOVERY_ENABLED"),
+        help=(
+            "After PakBus endpoint failure, authenticate to the ASUS router and "
+            "rediscover the Campbell IPv6 address (default disabled)."
+        ),
+    )
+    parser.add_argument(
+        "--allow-router-reboot",
+        action=argparse.BooleanOptionalAction,
+        default=_environment_flag("BIOCHAR_ASUS_REBOOT_ENABLED"),
+        help=(
+            "Explicitly authorize at most one ASUS reboot when the initial and "
+            "final router ICMP checks fail (default disabled)."
+        ),
+    )
+    parser.add_argument("--router-url", default=str(discovery["router_url"]))
+    parser.add_argument(
+        "--router-ping-host",
+        default=str(discovery["router_ping_host"]),
+        help="DDNS name or IP address checked before any PakBus work.",
+    )
+    parser.add_argument(
+        "--router-ping-count",
+        type=int,
+        default=int(DAILY_SETTINGS["router_ping_count"]),
+    )
+    parser.add_argument(
+        "--router-ping-timeout",
+        type=float,
+        default=float(DAILY_SETTINGS["router_ping_timeout_seconds"]),
+    )
+    parser.add_argument("--network-state", type=Path, default=DEFAULT_NETWORK_STATE)
+    parser.add_argument(
+        "--router-reboot-cooldown",
+        type=float,
+        default=float(DAILY_SETTINGS["router_reboot_cooldown_seconds"]),
+    )
+    parser.add_argument(
+        "--router-reboot-wait",
+        type=float,
+        default=float(DAILY_SETTINGS["router_reboot_wait_seconds"]),
+    )
+    parser.add_argument(
+        "--post-reboot-attempts",
+        type=int,
+        default=int(DAILY_SETTINGS["post_reboot_attempts"]),
+    )
+    parser.add_argument(
+        "--post-reboot-retry",
+        type=float,
+        default=float(DAILY_SETTINGS["post_reboot_retry_seconds"]),
+    )
     parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE_ROOT)
     parser.add_argument(
         "--archive-lookback-days",
@@ -943,16 +1032,58 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
-        reachable, reason = quick_port_check_ipv6(PAKBUS.host, PAKBUS.port)
-        report["preflight"] = {"reachable": reachable, "detail": reason}
-        if not reachable:
+        preflight = run_network_preflight(
+            PAKBUS.host,
+            PAKBUS.port,
+            router_url=args.router_url,
+            router_ping_host=args.router_ping_host,
+            router_ping_timeout=args.router_ping_timeout,
+            router_ping_count=args.router_ping_count,
+            client_mac=str(discovery["client_mac"]),
+            client_ipv6_suffix=str(discovery["client_ipv6_suffix"]),
+            recovery_enabled=args.asus_recovery or args.allow_router_reboot,
+            reboot_authorized=args.allow_router_reboot,
+            username=os.getenv("ASUS_ROUTER_USERNAME"),
+            password=os.getenv("ASUS_ROUTER_PASSWORD"),
+            verify_tls=bool(discovery["verify_tls"]),
+            ca_bundle=os.getenv("ASUS_ROUTER_CA_BUNDLE"),
+            state_path=args.network_state,
+            attempts=args.preflight_attempts,
+            timeout=args.preflight_timeout,
+            retry_seconds=args.preflight_retry,
+            reboot_cooldown_seconds=args.router_reboot_cooldown,
+            reboot_wait_seconds=args.router_reboot_wait,
+            post_reboot_attempts=args.post_reboot_attempts,
+            post_reboot_retry_seconds=args.post_reboot_retry,
+            port_check=quick_port_check_ipv6,
+            ping_check=ping_router,
+        )
+        report["network_preflight"] = preflight.report
+        report["host"] = preflight.host
+        report["preflight"] = {
+            "reachable": preflight.reachable,
+            "detail": preflight.detail,
+            "host": preflight.host,
+        }
+        if not preflight.reachable:
             report["status"] = "failed_preflight"
-            report["findings"] = [asdict(Finding("critical", "endpoint_unreachable", reason))]
+            report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
+            router_failed = (
+                not preflight.report.get("router_initial_ping", {}).get("reachable", True)
+                and not preflight.report.get("endpoint_checks")
+            )
+            finding_code = "router_unreachable" if router_failed else "endpoint_unreachable"
+            report["findings"] = [
+                asdict(Finding("critical", finding_code, preflight.detail))
+            ]
             _finish_report(report, report_path, args.alert_config)
-            print(f"CRITICAL: PakBus endpoint unavailable: {reason}", file=sys.stderr)
+            print(
+                f"CRITICAL: Network preflight failed: {preflight.detail}",
+                file=sys.stderr,
+            )
             return 1
 
-        print(f"Preflight passed: [{PAKBUS.host}]:{PAKBUS.port}")
+        print(f"Preflight passed: [{preflight.host}]:{PAKBUS.port}")
         result = _run_client(
             raw_csv,
             hours=args.hours,
@@ -961,6 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
             timezone=args.timezone,
             timing_output=run_dir / "station_timings.json",
             response_timeout=args.response_timeout,
+            host=preflight.host,
         )
         timing_path = run_dir / "station_timings.json"
         if timing_path.exists():
@@ -1005,6 +1137,7 @@ def main(argv: list[str] | None = None) -> int:
                     stations=remaining,
                     timing_output=recovery_timing_path,
                     response_timeout=args.response_timeout,
+                    host=preflight.host,
                 )
                 pass_report = {
                     "pass": pass_number,

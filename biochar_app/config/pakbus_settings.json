@@ -9,9 +9,10 @@
   },
   "discovery": {
     "router_url": "https://Biochar-Fruita.asuscomm.com:8443",
+    "router_ping_host": "Biochar-Fruita.asuscomm.com",
     "client_mac": "00:D0:2C:02:1D:DD",
     "client_ipv6_suffix": "2d0:2cff:fe02:1ddd",
-    "verify_tls": false
+    "verify_tls": true
   },
   "download": {
     "table": "Table1",
@@ -36,7 +37,16 @@
     "recovery_passes": 2,
     "recovery_attempts": 3,
     "recovery_pause_seconds": 30.0,
-    "recovery_wait_seconds": 300.0
+    "recovery_wait_seconds": 300.0,
+    "preflight_attempts": 3,
+    "preflight_timeout_seconds": 5.0,
+    "preflight_retry_seconds": 10.0,
+    "router_ping_count": 3,
+    "router_ping_timeout_seconds": 3.0,
+    "router_reboot_cooldown_seconds": 21600.0,
+    "router_reboot_wait_seconds": 180.0,
+    "post_reboot_attempts": 12,
+    "post_reboot_retry_seconds": 15.0
   },
   "archive": {
     "root": "biochar_app/data-raw/pakbus_archive",

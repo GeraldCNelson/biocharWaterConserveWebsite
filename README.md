@@ -33,6 +33,20 @@ writes the records and a JSON timing report under
 the complete nightly acquisition and strict acceptance checks locally;
 incomplete downloads remain rejected.
 
+On the acquisition server, manually repeat the exact scheduled workflow with:
+
+```bash
+sudo systemctl start biochar-pakbus-daily.service
+sudo systemctl status biochar-pakbus-daily.service
+sudo journalctl -u biochar-pakbus-daily.service -n 200 --no-pager
+```
+
+Starting the service is preferred to invoking Python directly there: it uses
+the protected environment file, the same process lock, full-frame validation,
+accepted-data archive promotion, continuity audit, operational ETL, website
+restart, and optional production publication as the timer. A failed or partial
+download is retained for diagnosis but cannot pass those gates.
+
 The daily strategy makes one attempt per station, completes the full initial
 pass, then waits five minutes before each of up to two recovery passes over
 only the stations still missing. This avoids repeatedly hammering one stale
@@ -48,6 +62,14 @@ Operational defaults are in
 `biochar_app/config/pakbus_settings.json`. CLI arguments override those defaults
 for one run. Set `BIOCHAR_PAKBUS_CONFIG` to use a different JSON configuration
 file without changing the repository copy.
+
+The daily command first pings the ASUS router DDNS address. It does not attempt
+PakBus or logger communication while the router is unreachable. With separately
+configured reboot authorization, two failed router checks trigger one
+cooldown-protected reboot through the verified HTTPS administration interface;
+the existing download starts only after router reachability returns. See
+`biochar_app/docs/operations/pakbus_network_recovery.md` for deployment
+prerequisites, credentials, safeguards, and the exact sequence.
 
 Accepted daily downloads beginning in 2026 are atomically merged into
 `biochar_app/data-raw/pakbus_archive/<year>/logger_data.csv`. Rejected runs

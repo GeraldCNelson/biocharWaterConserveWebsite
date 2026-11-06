@@ -138,8 +138,12 @@ successful attempts send leaf Bye then router Bye before closing the socket.
 Offline regression tests replay the October 6 Finished frame and check cleanup
 ordering. Field confirmation still requires a successful server download.
 
-The command first checks the PakBus TCP endpoint and downloads 26 hours from all
-12 stations using isolated station processes. It uses a hybrid retry policy:
+Before this logger workflow begins, the daily job checks and, when explicitly
+authorized, recovers the ASUS router as described in
+[`pakbus_network_recovery.md`](pakbus_network_recovery.md). After that router
+gate passes, the command makes bounded PakBus TCP endpoint checks and downloads
+26 hours from all 12 stations using isolated station processes. It uses a
+hybrid retry policy:
 stations returning no records are deferred after their first unsuccessful
 connection attempt; interrupted transfers that have received records can resume
 on a fresh connection, with up to three attempts per station per pass. Missing
@@ -170,7 +174,18 @@ BIOCHAR_SMTP_PASSWORD=the-ses-smtp-password
 BIOCHAR_PUBLISH_PRODUCTION=true
 ```
 
-Restrict that file to root and the service account. Do not paste its contents into an issue, log, email, or Git commit.
+Restrict that file to root; systemd reads it before starting the unprivileged
+service:
+
+```bash
+sudo chown root:root /etc/biochar/pipeline.env
+sudo chmod 600 /etc/biochar/pipeline.env
+```
+
+Do not paste its contents into an issue, log, email, or Git commit. ASUS router
+credentials and reboot authorization are documented separately in
+[`pakbus_network_recovery.md`](pakbus_network_recovery.md), because a router
+reachability failure is not evidence of logger power trouble.
 
 ### Installing the midnight schedule on the test server
 
@@ -191,6 +206,11 @@ sudo systemctl start biochar-pakbus-daily.service
 sudo systemctl status biochar-pakbus-daily.service
 sudo journalctl -u biochar-pakbus-daily.service -n 200 --no-pager
 ```
+
+Those same three commands are the supported manual retry after a failed nightly
+run. They preserve all validation, archive, continuity, ETL, restart, and
+publication safeguards. Do not promote the failed run directory or call the
+underlying station client as a substitute for this complete retry.
 
 The service invokes `sudo -n systemctl restart biochar` after verified ETL.
 Install a narrowly scoped sudoers rule with `sudo visudo -f
