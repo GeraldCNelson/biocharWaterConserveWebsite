@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Iterable
@@ -28,6 +28,7 @@ import pandas as pd
 
 from biochar_app.config.pakbus import (
     DAILY_SETTINGS,
+    DEFAULT_LAG_MINUTES,
     DOWNLOAD_SETTINGS,
     ID_BY_STATION,
     PAKBUS,
@@ -36,7 +37,9 @@ from biochar_app.config.pakbus import (
 from biochar_app.pakbus.core.client import quick_port_check_ipv6
 from biochar_app.pakbus.core.archive import (
     DEFAULT_ARCHIVE_ROOT,
+    audit_archive_candidate,
     audit_archive_continuity,
+    plan_archive_download_window,
     promote_accepted_frame,
 )
 from biochar_app.pakbus.core.network_preflight import ping_router, run_network_preflight
@@ -253,9 +256,21 @@ def _build_report_email_body(report: dict) -> str:
         f"Failed initial attempts ({len(attempted)}): {_station_names(attempted)}",
         f"Recovered stations ({len(recovered)}): {_station_names(recovered)}",
         f"Unresolved stations ({len(still_missing)}): {_station_names(still_missing)}",
-        "",
-        "Station download timing:",
     ]
+    download_window = report.get("download_window", {})
+    if download_window:
+        lines.extend([
+            "",
+            "Download window:",
+            (
+                f"- {download_window.get('start', 'unavailable')} through "
+                f"{download_window.get('stop', 'unavailable')} "
+                f"({download_window.get('hours', 'unknown')} hours; "
+                f"{download_window.get('status', 'unknown')})"
+            ),
+            f"- {download_window.get('reason', 'no planning detail available')}",
+        ])
+    lines.extend(["", "Station download timing:"])
     if all_timings:
         for pass_name, item in all_timings:
             if pass_name == "recovery" and item.get("recovery_pass"):
@@ -860,6 +875,8 @@ def _run_client(
     timing_output: Path | None = None,
     response_timeout: float = PAKBUS.response_timeout_seconds,
     host: str | None = None,
+    window_start: str | None = None,
+    window_stop: str | None = None,
 ) -> subprocess.CompletedProcess:
     command = [
         sys.executable,
@@ -884,6 +901,10 @@ def _run_client(
         command.extend(["--stations", *selected])
     if timing_output is not None:
         command.extend(["--timing-output", str(timing_output)])
+    if window_start is not None and window_stop is not None:
+        command.extend(
+            ["--window-start", window_start, "--window-stop", window_stop]
+        )
     command.extend(["--output", str(output)])
     environment = os.environ.copy()
     if host:
@@ -895,6 +916,18 @@ def main(argv: list[str] | None = None) -> int:
     discovery = SETTINGS["discovery"]
     parser = argparse.ArgumentParser(description="Diagnose, download, and validate all PakBus logger data")
     parser.add_argument("--hours", type=int, default=int(DAILY_SETTINGS["hours"]))
+    parser.add_argument(
+        "--maximum-hours",
+        type=int,
+        default=int(DAILY_SETTINGS.get("maximum_dynamic_hours", 96)),
+        help="Maximum automatic archive-driven lookback before failing closed.",
+    )
+    parser.add_argument(
+        "--archive-overlap-hours",
+        type=int,
+        default=int(DAILY_SETTINGS.get("archive_overlap_hours", 1)),
+        help="Overlap before the oldest continuous archive timestamp.",
+    )
     parser.add_argument("--attempts", type=int, default=int(DAILY_SETTINGS["attempts"]))
     parser.add_argument("--station-pause", type=float, default=float(DAILY_SETTINGS["station_pause_seconds"]))
     parser.add_argument("--response-timeout", type=float, default=PAKBUS.response_timeout_seconds)
@@ -1084,15 +1117,70 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         print(f"Preflight passed: [{preflight.host}]:{PAKBUS.port}")
+        try:
+            planned_stop = started.astimezone(timezone.utc) - timedelta(
+                minutes=DEFAULT_LAG_MINUTES
+            )
+            download_window = plan_archive_download_window(
+                archive_root=args.archive_root,
+                expected_stations=EXPECTED_STATIONS,
+                stop=planned_stop,
+                minimum_hours=args.hours,
+                overlap_hours=args.archive_overlap_hours,
+                maximum_hours=args.maximum_hours,
+                lookback_days=args.archive_lookback_days,
+            )
+        except Exception as exc:
+            download_window = {
+                "status": "failed",
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+        report["download_window"] = download_window
+        if download_window.get("status") in {"failed", "blocked"}:
+            report["status"] = "failed_window_plan"
+            report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
+            window_findings = [Finding(
+                "critical",
+                "download_window_unavailable",
+                download_window.get("reason", "Could not plan a safe download window"),
+            )]
+            if download_window.get("gaps"):
+                apply_archive_continuity(
+                    report,
+                    window_findings,
+                    {
+                        "status": "gaps_found",
+                        "lookback_days": download_window.get("lookback_days"),
+                        "gap_count": download_window.get("gap_count"),
+                        "gaps": download_window["gaps"],
+                        "scope": "download_window_plan",
+                    },
+                )
+                report["status"] = "failed_window_plan"
+            else:
+                report["findings"] = [asdict(item) for item in window_findings]
+            _finish_report(report, report_path, args.alert_config)
+            print(
+                f"CRITICAL: Download window unavailable: {download_window.get('reason')}",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            "Download window: "
+            f"{download_window['start']} to {download_window['stop']} "
+            f"({download_window['hours']} hours; {download_window['status']})"
+        )
         result = _run_client(
             raw_csv,
-            hours=args.hours,
+            hours=int(download_window["hours"]),
             attempts=args.attempts,
             station_pause=args.station_pause,
             timezone=args.timezone,
             timing_output=run_dir / "station_timings.json",
             response_timeout=args.response_timeout,
             host=preflight.host,
+            window_start=str(download_window["start"]),
+            window_stop=str(download_window["stop"]),
         )
         timing_path = run_dir / "station_timings.json"
         if timing_path.exists():
@@ -1130,7 +1218,7 @@ def main(argv: list[str] | None = None) -> int:
                 recovery_timing_path = run_dir / f"recovery_{pass_number}_station_timings.json"
                 recovery_result = _run_client(
                     recovery_csv,
-                    hours=args.hours,
+                    hours=int(download_window["hours"]),
                     attempts=args.recovery_attempts,
                     station_pause=args.recovery_pause,
                     timezone=args.timezone,
@@ -1138,6 +1226,8 @@ def main(argv: list[str] | None = None) -> int:
                     timing_output=recovery_timing_path,
                     response_timeout=args.response_timeout,
                     host=preflight.host,
+                    window_start=str(download_window["start"]),
+                    window_stop=str(download_window["stop"]),
                 )
                 pass_report = {
                     "pass": pass_number,
@@ -1195,6 +1285,23 @@ def main(argv: list[str] | None = None) -> int:
         report["findings"] = [asdict(item) for item in findings]
         report["completed_at"] = datetime.now(ZoneInfo(args.timezone)).isoformat()
         report["status"] = "rejected" if any(item.severity == "critical" for item in findings) else "accepted_with_warnings" if findings else "accepted"
+        if report["status"] in {"accepted", "accepted_with_warnings"}:
+            try:
+                candidate_continuity = audit_archive_candidate(
+                    frame,
+                    archive_root=args.archive_root,
+                    lookback_days=args.archive_lookback_days,
+                )
+            except Exception as exc:
+                candidate_continuity = {
+                    "status": "failed",
+                    "lookback_days": args.archive_lookback_days,
+                    "gap_count": 0,
+                    "gaps": [],
+                    "scope": "candidate_before_promotion",
+                    "detail": f"{type(exc).__name__}: {exc}",
+                }
+            apply_archive_continuity(report, findings, candidate_continuity)
         if report["status"] in {"accepted", "accepted_with_warnings"}:
             try:
                 report["archive"] = promote_accepted_frame(

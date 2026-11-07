@@ -8,6 +8,7 @@ import csv
 from dataclasses import asdict
 from datetime import datetime, timezone
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -39,6 +40,85 @@ VALUE_COLUMNS = (
 REQUIRED_COLUMNS = {"station", "logger_id", "Datetime", "RecNbr", *VALUE_COLUMNS}
 ARCHIVE_KEY = ["station", "logger_id", "Datetime", "RecNbr"]
 DEFAULT_MANUAL_ROOT = REPO_ROOT / "biochar_app/data-raw/pakbus_manual"
+
+
+def _load_archive_data(archive_root: Path) -> pd.DataFrame | None:
+    """Return the normalized annual archive, or ``None`` before the first run."""
+    archive_files = sorted(archive_root.glob("*/logger_data.csv"))
+    if not archive_files:
+        return None
+    return normalize_download_frame(
+        pd.concat(
+            [pd.read_csv(path) for path in archive_files],
+            ignore_index=True,
+        )
+    )
+
+
+def _audit_continuity_frame(frame: pd.DataFrame, *, lookback_days: int) -> dict:
+    """Audit one normalized archive-shaped frame for recent internal gaps."""
+    if lookback_days < 1:
+        raise ValueError("lookback_days must be at least 1")
+    data = normalize_download_frame(frame)
+    if data.empty:
+        return {
+            "status": "failed",
+            "lookback_days": lookback_days,
+            "gap_count": 0,
+            "gaps": [],
+            "detail": "Archive candidate contains no records",
+        }
+    data["_timestamp"] = pd.to_datetime(data["Datetime"], utc=True)
+    gaps: list[dict] = []
+    for station, station_data in data.groupby("station", sort=True):
+        station_data = station_data.sort_values("_timestamp").reset_index(drop=True)
+        latest = station_data["_timestamp"].max()
+        recent = station_data.loc[
+            station_data["_timestamp"] >= latest - pd.Timedelta(days=lookback_days)
+        ].reset_index(drop=True)
+        for index in range(1, len(recent)):
+            previous = recent.iloc[index - 1]
+            current = recent.iloc[index]
+            elapsed = current["_timestamp"] - previous["_timestamp"]
+            if elapsed <= pd.Timedelta(minutes=15):
+                continue
+            missing_intervals = int(
+                elapsed / pd.Timedelta(minutes=15)
+            ) - 1
+            record_start = int(previous["RecNbr"]) + 1
+            record_end = int(current["RecNbr"]) - 1
+            missing_records = max(0, record_end - record_start + 1)
+            exact_range = missing_records == missing_intervals and missing_records > 0
+            gap = {
+                "station": station,
+                "after": previous["_timestamp"].isoformat(),
+                "before": current["_timestamp"].isoformat(),
+                "previous_record": int(previous["RecNbr"]),
+                "next_record": int(current["RecNbr"]),
+                "missing_intervals": missing_intervals,
+                "missing_records": missing_records,
+                "record_start": record_start if exact_range else None,
+                "record_end": record_end if exact_range else None,
+            }
+            if exact_range:
+                gap["recovery_command"] = (
+                    f"tools/pakbus-download station {station} "
+                    f"--record-start {record_start} --record-end {record_end} "
+                    "--attempts 5 --response-timeout 30 --log-level INFO"
+                )
+            else:
+                gap["recovery_command"] = None
+                gap["detail"] = (
+                    "Timestamp and record-number gaps disagree; inspect for a "
+                    "logger reset or clock discontinuity before recovery."
+                )
+            gaps.append(gap)
+    return {
+        "status": "gaps_found" if gaps else "continuous",
+        "lookback_days": lookback_days,
+        "gap_count": len(gaps),
+        "gaps": gaps,
+    }
 
 
 def _atomic_write_csv(frame: pd.DataFrame, destination: Path) -> None:
@@ -132,8 +212,8 @@ def audit_archive_continuity(
     """Find recent internal 15-minute gaps and emit exact recovery ranges."""
     if lookback_days < 1:
         raise ValueError("lookback_days must be at least 1")
-    archive_files = sorted(archive_root.glob("*/logger_data.csv"))
-    if not archive_files:
+    data = _load_archive_data(archive_root)
+    if data is None:
         return {
             "status": "failed",
             "lookback_days": lookback_days,
@@ -141,62 +221,166 @@ def audit_archive_continuity(
             "gaps": [],
             "detail": f"No annual archives found under {archive_root}",
         }
-    data = normalize_download_frame(
-        pd.concat(
-            [pd.read_csv(path) for path in archive_files],
-            ignore_index=True,
-        )
+    return _audit_continuity_frame(data, lookback_days=lookback_days)
+
+
+def audit_archive_candidate(
+    frame: pd.DataFrame,
+    *,
+    archive_root: Path = DEFAULT_ARCHIVE_ROOT,
+    lookback_days: int = 7,
+) -> dict:
+    """Audit the archive as it would look after adding ``frame``, without writing."""
+    incoming = normalize_download_frame(frame)
+    existing = _load_archive_data(archive_root)
+    candidate = incoming if existing is None else pd.concat(
+        [existing, incoming], ignore_index=True
     )
+    candidate = normalize_download_frame(candidate).drop_duplicates(
+        subset=ARCHIVE_KEY, keep="last"
+    )
+    result = _audit_continuity_frame(candidate, lookback_days=lookback_days)
+    result["scope"] = "candidate_before_promotion"
+    return result
+
+
+def plan_archive_download_window(
+    *,
+    archive_root: Path,
+    expected_stations: list[str] | tuple[str, ...],
+    stop: datetime | pd.Timestamp,
+    minimum_hours: int = 26,
+    overlap_hours: int = 1,
+    maximum_hours: int = 96,
+    lookback_days: int = 7,
+) -> dict:
+    """Choose a bounded window from the oldest continuous archive watermark.
+
+    A recent internal gap takes precedence over a station's newest timestamp.
+    This matters after a rejected run has added a recent tail beyond an older
+    gap. The oldest station anchor is used so one fixed window safely covers
+    all stations.
+    """
+    if minimum_hours < 1:
+        raise ValueError("minimum_hours must be at least 1")
+    if overlap_hours < 0:
+        raise ValueError("overlap_hours cannot be negative")
+    if maximum_hours < minimum_hours:
+        raise ValueError("maximum_hours must be at least minimum_hours")
+    if lookback_days < 1:
+        raise ValueError("lookback_days must be at least 1")
+
+    stop_timestamp = pd.Timestamp(stop)
+    if stop_timestamp.tzinfo is None:
+        stop_timestamp = stop_timestamp.tz_localize("UTC")
+    else:
+        stop_timestamp = stop_timestamp.tz_convert("UTC")
+    minimum_start = stop_timestamp - pd.Timedelta(hours=minimum_hours)
+    data = _load_archive_data(archive_root)
+    if data is None:
+        return {
+            "status": "initial",
+            "reason": "No accepted archive exists; using the configured minimum window.",
+            "start": minimum_start.isoformat(),
+            "stop": stop_timestamp.isoformat(),
+            "hours": minimum_hours,
+            "minimum_hours": minimum_hours,
+            "maximum_hours": maximum_hours,
+            "overlap_hours": overlap_hours,
+            "lookback_days": lookback_days,
+            "gap_count": 0,
+            "gaps": [],
+            "station_anchors": {},
+        }
+
+    data = data.copy()
     data["_timestamp"] = pd.to_datetime(data["Datetime"], utc=True)
-    gaps: list[dict] = []
-    for station, station_data in data.groupby("station", sort=True):
-        station_data = station_data.sort_values("_timestamp").reset_index(drop=True)
-        latest = station_data["_timestamp"].max()
-        recent = station_data.loc[
-            station_data["_timestamp"] >= latest - pd.Timedelta(days=lookback_days)
-        ].reset_index(drop=True)
-        for index in range(1, len(recent)):
-            previous = recent.iloc[index - 1]
-            current = recent.iloc[index]
-            elapsed = current["_timestamp"] - previous["_timestamp"]
-            if elapsed <= pd.Timedelta(minutes=15):
-                continue
-            missing_intervals = int(
-                elapsed / pd.Timedelta(minutes=15)
-            ) - 1
-            record_start = int(previous["RecNbr"]) + 1
-            record_end = int(current["RecNbr"]) - 1
-            missing_records = max(0, record_end - record_start + 1)
-            exact_range = missing_records == missing_intervals and missing_records > 0
-            gap = {
-                "station": station,
-                "after": previous["_timestamp"].isoformat(),
-                "before": current["_timestamp"].isoformat(),
-                "previous_record": int(previous["RecNbr"]),
-                "next_record": int(current["RecNbr"]),
-                "missing_intervals": missing_intervals,
-                "missing_records": missing_records,
-                "record_start": record_start if exact_range else None,
-                "record_end": record_end if exact_range else None,
-            }
-            if exact_range:
-                gap["recovery_command"] = (
-                    f"tools/pakbus-download station {station} "
-                    f"--record-start {record_start} --record-end {record_end} "
-                    "--attempts 5 --response-timeout 30 --log-level INFO"
-                )
-            else:
-                gap["recovery_command"] = None
-                gap["detail"] = (
-                    "Timestamp and record-number gaps disagree; inspect for a "
-                    "logger reset or clock discontinuity before recovery."
-                )
-            gaps.append(gap)
+    archive_stations = set(data["station"])
+    missing_stations = sorted(set(expected_stations).difference(archive_stations))
+    if missing_stations:
+        return {
+            "status": "failed",
+            "reason": (
+                "Accepted archive is missing expected stations: "
+                + ", ".join(missing_stations)
+            ),
+            "start": minimum_start.isoformat(),
+            "stop": stop_timestamp.isoformat(),
+            "hours": minimum_hours,
+            "minimum_hours": minimum_hours,
+            "maximum_hours": maximum_hours,
+            "overlap_hours": overlap_hours,
+            "lookback_days": lookback_days,
+            "gap_count": 0,
+            "gaps": [],
+            "station_anchors": {},
+        }
+
+    continuity = _audit_continuity_frame(
+        data.drop(columns="_timestamp"), lookback_days=lookback_days
+    )
+    gaps_by_station: dict[str, list[dict]] = {}
+    for gap in continuity.get("gaps", []):
+        gaps_by_station.setdefault(str(gap["station"]), []).append(gap)
+
+    anchors: dict[str, dict] = {}
+    for station in expected_stations:
+        station_rows = data.loc[data["station"] == station]
+        station_gaps = gaps_by_station.get(station, [])
+        if station_gaps:
+            anchor = min(pd.Timestamp(gap["after"]) for gap in station_gaps)
+            basis = "before_earliest_gap"
+        else:
+            anchor = station_rows["_timestamp"].max()
+            basis = "latest_archived_timestamp"
+        anchors[station] = {
+            "timestamp": anchor.isoformat(),
+            "basis": basis,
+        }
+
+    oldest_anchor = min(
+        pd.Timestamp(item["timestamp"]) for item in anchors.values()
+    )
+    requested_start = oldest_anchor - pd.Timedelta(hours=overlap_hours)
+    start_timestamp = min(requested_start, minimum_start)
+    required_hours = max(
+        minimum_hours,
+        math.ceil((stop_timestamp - start_timestamp).total_seconds() / 3600),
+    )
+    gap_count = int(continuity.get("gap_count", 0))
+    reason = (
+        "Recent archive gap found; extending from the record before the earliest gap."
+        if gap_count
+        else "Using the oldest station archive watermark with overlap."
+    )
+    status = "extended" if required_hours > minimum_hours else "minimum"
+    if required_hours > maximum_hours:
+        status = "blocked"
+        if gap_count:
+            reason = (
+                f"Required {required_hours} hours exceeds the automatic "
+                f"{maximum_hours}-hour limit; use the reported record-range "
+                "recovery plan."
+            )
+        else:
+            reason = (
+                f"Required {required_hours} hours exceeds the automatic "
+                f"{maximum_hours}-hour limit; review logger retention before "
+                "authorizing a larger manual window."
+            )
     return {
-        "status": "gaps_found" if gaps else "continuous",
+        "status": status,
+        "reason": reason,
+        "start": start_timestamp.isoformat(),
+        "stop": stop_timestamp.isoformat(),
+        "hours": required_hours,
+        "minimum_hours": minimum_hours,
+        "maximum_hours": maximum_hours,
+        "overlap_hours": overlap_hours,
         "lookback_days": lookback_days,
-        "gap_count": len(gaps),
-        "gaps": gaps,
+        "gap_count": gap_count,
+        "gaps": continuity.get("gaps", []),
+        "station_anchors": anchors,
     }
 
 

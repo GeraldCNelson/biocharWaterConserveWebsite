@@ -10,8 +10,10 @@ import pytest
 
 from biochar_app.pakbus.core.archive import (
     VALUE_COLUMNS,
+    audit_archive_candidate,
     audit_archive_continuity,
     compare_with_pc400,
+    plan_archive_download_window,
     promote_accepted_frame,
     repair_rejected_run,
     promote_run_directory,
@@ -210,6 +212,103 @@ def test_archive_continuity_audit_emits_exact_recovery_plan(
     repaired = audit_archive_continuity(archive_root=tmp_path, lookback_days=7)
     assert repaired["status"] == "continuous"
     assert repaired["gap_count"] == 0
+
+
+def test_candidate_continuity_is_checked_without_promoting(tmp_path: Path) -> None:
+    rows = _download_rows().loc[lambda frame: frame["station"] == "S3B"].copy()
+    first = rows.iloc[[0]].copy()
+    last = rows.iloc[[1]].copy()
+    last["Datetime"] = "2026-09-12T17:00:00Z"
+    last["RecNbr"] = 104
+    promote_accepted_frame(pd.concat([first, last]), archive_root=tmp_path)
+
+    recovered = []
+    for record, timestamp in zip(
+        (101, 102, 103),
+        pd.date_range("2026-09-12T16:15:00Z", periods=3, freq="15min"),
+    ):
+        row = first.iloc[0].copy()
+        row["RecNbr"] = record
+        row["Datetime"] = timestamp.isoformat()
+        recovered.append(row)
+
+    result = audit_archive_candidate(
+        pd.DataFrame(recovered), archive_root=tmp_path, lookback_days=7
+    )
+
+    assert result["status"] == "continuous"
+    assert result["scope"] == "candidate_before_promotion"
+    archived = pd.read_csv(tmp_path / "2026/logger_data.csv")
+    assert len(archived) == 2
+
+
+def test_window_plan_uses_record_before_recent_gap(tmp_path: Path) -> None:
+    template = _download_rows().iloc[0].copy()
+    rows = []
+    first = template.copy()
+    first["Datetime"] = "2026-11-05T07:00:00Z"
+    first["RecNbr"] = 100
+    rows.append(first)
+    for record, timestamp in enumerate(
+        pd.date_range("2026-11-05T23:45:00Z", "2026-11-07T01:00:00Z", freq="15min"),
+        start=167,
+    ):
+        row = template.copy()
+        row["Datetime"] = timestamp.isoformat()
+        row["RecNbr"] = record
+        rows.append(row)
+    promote_accepted_frame(pd.DataFrame(rows), archive_root=tmp_path)
+
+    plan = plan_archive_download_window(
+        archive_root=tmp_path,
+        expected_stations=["S3B"],
+        stop=pd.Timestamp("2026-11-07T01:00:00Z"),
+        minimum_hours=26,
+        overlap_hours=1,
+        maximum_hours=96,
+        lookback_days=7,
+    )
+
+    assert plan["status"] == "extended"
+    assert plan["start"] == "2026-11-05T06:00:00+00:00"
+    assert plan["hours"] == 43
+    assert plan["gap_count"] == 1
+    assert plan["station_anchors"]["S3B"] == {
+        "timestamp": "2026-11-05T07:00:00+00:00",
+        "basis": "before_earliest_gap",
+    }
+
+
+def test_window_plan_keeps_minimum_and_blocks_unbounded_lookback(
+    tmp_path: Path,
+) -> None:
+    row = _download_rows().iloc[[0]].copy()
+    row["Datetime"] = "2026-11-02T00:00:00Z"
+    promote_accepted_frame(row, archive_root=tmp_path)
+
+    blocked = plan_archive_download_window(
+        archive_root=tmp_path,
+        expected_stations=["S3B"],
+        stop=pd.Timestamp("2026-11-07T01:00:00Z"),
+        minimum_hours=26,
+        overlap_hours=1,
+        maximum_hours=96,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert blocked["hours"] == 122
+    assert "96-hour limit" in blocked["reason"]
+
+    initial = plan_archive_download_window(
+        archive_root=tmp_path / "empty",
+        expected_stations=["S3B"],
+        stop=pd.Timestamp("2026-11-07T01:00:00Z"),
+        minimum_hours=26,
+        overlap_hours=1,
+        maximum_hours=96,
+    )
+    assert initial["status"] == "initial"
+    assert initial["hours"] == 26
 
 
 def test_compare_matches_pc400_with_rounding_tolerance(tmp_path: Path) -> None:

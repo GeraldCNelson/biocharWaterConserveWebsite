@@ -26,6 +26,8 @@
   },
   "daily": {
     "hours": 26,
+    "archive_overlap_hours": 1,
+    "maximum_dynamic_hours": 96,
     "attempts": 3,
     "station_pause_seconds": 15.0,
     "minimum_rows": 90,
