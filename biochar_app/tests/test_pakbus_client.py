@@ -20,6 +20,7 @@ from biochar_app.pakbus.core.client import (
     _compute_window,
     _fetch_window,
     _new_table1_record_range_state,
+    _resolve_window,
     decode_table1_response,
     fetch_batch,
     fetch_isolated_stations,
@@ -48,6 +49,26 @@ def test_compute_window_uses_requested_duration_and_timezone() -> None:
     start, stop = _compute_window(3, "America/Denver")
     assert stop - start == timedelta(hours=3)
     assert stop.tzinfo == ZoneInfo("America/Denver")
+
+
+def test_resolve_window_preserves_fixed_utc_boundaries() -> None:
+    start, stop = _resolve_window(
+        26,
+        "America/Denver",
+        window_start="2026-11-05T06:00:00+00:00",
+        window_stop="2026-11-07T01:00:00+00:00",
+    )
+
+    assert start.isoformat() == "2026-11-04T23:00:00-07:00"
+    assert stop.isoformat() == "2026-11-06T18:00:00-07:00"
+    assert stop - start == timedelta(hours=43)
+
+    with pytest.raises(ValueError, match="supplied together"):
+        _resolve_window(
+            26,
+            "America/Denver",
+            window_start="2026-11-05T06:00:00+00:00",
+        )
 
 
 def test_preflight_does_not_load_legacy_transport(monkeypatch, capsys) -> None:
@@ -890,12 +911,21 @@ def test_fetch_isolated_stations_uses_new_process_and_pause(monkeypatch, tmp_pat
         record_start=100244,
         record_end=100338,
         defer_no_data=True,
+        window_start="2026-11-05T06:00:00+00:00",
+        window_stop="2026-11-07T01:00:00+00:00",
     )
 
     assert [row["station"] for row in rows] == ["S1T", "S2T", "S2M"]
     assert len(commands) == 3
     assert all("--direct" in command for command in commands)
     assert all("--defer-no-data" in command for command in commands)
+    assert all(
+        command[command.index("--window-start") + 1]
+        == "2026-11-05T06:00:00+00:00"
+        and command[command.index("--window-stop") + 1]
+        == "2026-11-07T01:00:00+00:00"
+        for command in commands
+    )
     assert all(
         command[command.index("--record-start") + 1] == "100244"
         and command[command.index("--record-end") + 1] == "100338"

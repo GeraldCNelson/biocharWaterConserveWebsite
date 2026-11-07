@@ -260,6 +260,36 @@ def _compute_window(hours: int, tz_name: str) -> tuple[datetime, datetime]:
         raise ValueError(f"Bad time window: start {start} >= stop {stop}")
     return start, stop
 
+
+def _resolve_window(
+    hours: int,
+    tz_name: str | ZoneInfo,
+    *,
+    window_start: str | datetime | None = None,
+    window_stop: str | datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Return either the requested fixed window or the normal relative window."""
+    if (window_start is None) != (window_stop is None):
+        raise ValueError("window_start and window_stop must be supplied together")
+    if window_start is None:
+        return _compute_window(hours, str(tz_name))
+
+    timezone = tz_name if isinstance(tz_name, ZoneInfo) else ZoneInfo(tz_name)
+
+    def parse(value: str | datetime) -> datetime:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
+        if parsed.tzinfo is None:
+            raise ValueError("Fixed download-window timestamps must include a timezone")
+        return parsed.astimezone(timezone)
+
+    start = parse(window_start)
+    stop = parse(window_stop)
+    if start >= stop:
+        raise ValueError(f"Bad time window: start {start} >= stop {stop}")
+    return start, stop
+
 def decode_table1_response(raw: bytes) -> pd.DataFrame:
     """Decode CR206 Table1 fragments without downloading the live TDF."""
     import pandas as pd
@@ -556,6 +586,8 @@ def fetch_batch(
     record_start: int | None = None,
     record_end: int | None = None,
     defer_no_data: bool = False,
+    window_start: str | datetime | None = None,
+    window_stop: str | datetime | None = None,
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """
     Walk the logger IDs using an isolated IPv6/TCP connection per attempt.
@@ -578,7 +610,12 @@ def fetch_batch(
 
     if (record_start is None) != (record_end is None):
         raise ValueError("record_start and record_end must be supplied together")
-    start, stop = _compute_window(hours, tz_name)
+    start, stop = _resolve_window(
+        hours,
+        tz_name,
+        window_start=window_start,
+        window_stop=window_stop,
+    )
     if record_start is None:
         logging.info(
             "Fetching window %s → %s (table=%s)",
@@ -747,6 +784,8 @@ def fetch_isolated_stations(
     record_start: int | None = None,
     record_end: int | None = None,
     defer_no_data: bool = False,
+    window_start: str | datetime | None = None,
+    window_stop: str | datetime | None = None,
 ) -> list[dict]:
     """Fetch each station in a new Python interpreter and combine its rows."""
     import pandas as pd
@@ -790,6 +829,20 @@ def fetch_isolated_stations(
                         "--record-end",
                         str(record_end),
                     ]
+                )
+            if window_start is not None and window_stop is not None:
+                start_value = (
+                    window_start.isoformat()
+                    if isinstance(window_start, datetime)
+                    else window_start
+                )
+                stop_value = (
+                    window_stop.isoformat()
+                    if isinstance(window_stop, datetime)
+                    else window_stop
+                )
+                command.extend(
+                    ["--window-start", start_value, "--window-stop", stop_value]
                 )
             if defer_no_data:
                 command.append("--defer-no-data")
@@ -849,6 +902,14 @@ def main() -> None:
     )
     parser.add_argument("--table", default=DEFAULT_TABLE, help="Table to fetch")
     parser.add_argument("--hours", type=int, default=DEFAULT_HOURS, help="Hours back")
+    parser.add_argument(
+        "--window-start",
+        help="Fixed inclusive window start with timezone; requires --window-stop.",
+    )
+    parser.add_argument(
+        "--window-stop",
+        help="Fixed inclusive window stop with timezone; requires --window-start.",
+    )
     parser.add_argument(
         "--record-start",
         type=int,
@@ -926,6 +987,8 @@ def main() -> None:
         parser.error("--record-start and --record-end must be supplied together")
     if args.record_start is not None and args.record_end < args.record_start:
         parser.error("--record-end must be greater than or equal to --record-start")
+    if (args.window_start is None) != (args.window_stop is None):
+        parser.error("--window-start and --window-stop must be supplied together")
 
     ok, why = quick_port_check_ipv6(PAKBUS.host, PAKBUS.port)
     if args.preflight_only:
@@ -959,6 +1022,8 @@ def main() -> None:
             record_start=args.record_start,
             record_end=args.record_end,
             defer_no_data=args.defer_no_data,
+            window_start=args.window_start,
+            window_stop=args.window_stop,
         )
         if args.output is not None and output_rows:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -986,6 +1051,8 @@ def main() -> None:
         record_start=args.record_start,
         record_end=args.record_end,
         defer_no_data=args.defer_no_data,
+        window_start=args.window_start,
+        window_stop=args.window_stop,
     ):
         logging.info(f"Received page from logger {logger_id}: {len(df)} rows")
         for row in df.to_dict(orient="records"):

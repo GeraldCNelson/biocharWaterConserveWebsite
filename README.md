@@ -71,6 +71,14 @@ the existing download starts only after router reachability returns. See
 `biochar_app/docs/operations/pakbus_network_recovery.md` for deployment
 prerequisites, credentials, safeguards, and the exact sequence.
 
+Before downloading, the daily command inspects every station's accepted archive
+watermark and any recent internal gaps. It uses a fixed 26-hour minimum window,
+but automatically extends the start to one hour before the oldest contiguous
+station timestamp. A recent gap takes precedence over a newer archive tail.
+Automatic lookback is capped at 96 hours; a larger requirement fails closed and
+retains the exact record-range recovery plan. Every station receives the same
+fixed start and stop timestamps even though stations are contacted sequentially.
+
 Accepted daily downloads beginning in 2026 are atomically merged into
 `biochar_app/data-raw/pakbus_archive/<year>/logger_data.csv`. Rejected runs
 remain in their dated diagnostic directory and are never promoted. The archive
@@ -103,10 +111,10 @@ when timestamp and record counters agree. Run the same check manually with:
 tools/pakbus-download audit --lookback-days 7
 ```
 
-The daily download requests 26 hours of data so consecutive runs overlap by
-about two hours. Archive promotion deduplicates those overlapping rows. This
-prevents a small change in the scheduler or logger response time around a
-15-minute boundary from leaving one or two records between daily windows.
+The daily download requests at least 26 hours. Archive promotion deduplicates
+the overlap. The candidate archive must pass the continuity audit before any
+new rows are written, and the durable archive is audited again before ETL or
+publication.
 
 Explicit record requests that predate the logger's retained ring buffer are
 reported immediately as unavailable, together with the oldest record number

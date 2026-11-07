@@ -32,6 +32,12 @@ a.m. Mountain time. The daily process now runs in this order:
 7. Run the existing PakBus endpoint checks. Optional authenticated address
    rediscovery may select a changed Campbell IPv6 address, but a PakBus-only
    failure does not cause another router reboot.
+8. Inspect the accepted archive for each station. Use at least 26 hours, or
+   extend the fixed all-station window to one hour before the oldest timestamp
+   preceding a recent gap. Refuse automatic windows beyond 96 hours and report
+   the exact record ranges for manual recovery.
+9. Validate the downloaded frame and the candidate merged archive before
+   promotion. Audit the durable archive again before ETL or publication.
 
 The download, full-frame validation, archive promotion, continuity audit, ETL,
 website restart, and production-publication gates are unchanged. A failed or

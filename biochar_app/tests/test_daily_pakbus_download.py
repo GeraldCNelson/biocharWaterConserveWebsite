@@ -23,7 +23,7 @@ from biochar_app.pakbus.core.daily_download import (
 
 def _station_rows(station: str, logger_id: int, *, periods: int = 96, battery: float = 12.4) -> pd.DataFrame:
     timestamps = pd.date_range("2026-09-08T07:45:00Z", periods=periods, freq="15min")
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "station": station,
             "logger_id": logger_id,
@@ -32,6 +32,13 @@ def _station_rows(station: str, logger_id: int, *, periods: int = 96, battery: f
             "BattV_Min": battery,
         }
     )
+    for column in (
+        "VWC_1_Avg", "EC_1_Avg", "T_1_Avg",
+        "VWC_2_Avg", "EC_2_Avg", "T_2_Avg",
+        "VWC_3_Avg", "EC_3_Avg", "T_3_Avg",
+    ):
+        frame[column] = 1.0
+    return frame
 
 
 @pytest.mark.parametrize("recover", [True, False])
@@ -83,6 +90,78 @@ def test_empty_initial_pass_reaches_recovery_and_never_publishes_incomplete_data
     assert reports[-1]["completed_at"]
 
 
+def test_candidate_gap_is_rejected_before_archive_promotion(
+    monkeypatch, tmp_path
+) -> None:
+    from biochar_app.pakbus.core import daily_download as daily
+
+    archive_root = tmp_path / "archive"
+    archive_path = archive_root / "2026" / "logger_data.csv"
+    archive_path.parent.mkdir(parents=True)
+    old_timestamp = pd.Timestamp.now(tz="UTC").floor("15min") - pd.Timedelta(
+        hours=48
+    )
+    old_rows = []
+    for number, station in enumerate(daily.EXPECTED_STATIONS, 2):
+        row = _station_rows(station, number, periods=1).iloc[0].copy()
+        row["Datetime"] = old_timestamp.isoformat()
+        row["RecNbr"] = 1000
+        old_rows.append(row)
+    pd.DataFrame(old_rows).to_csv(archive_path, index=False)
+
+    reports = []
+
+    def run(output, **kwargs):
+        frames = []
+        latest = pd.Timestamp.now(tz="UTC").floor("15min")
+        for number, station in enumerate(daily.EXPECTED_STATIONS, 2):
+            frame = _station_rows(station, number)
+            frame["Datetime"] = pd.date_range(
+                end=latest, periods=96, freq="15min"
+            )
+            frame["RecNbr"] = range(1100, 1196)
+            frames.append(frame)
+        pd.concat(frames).to_csv(output, index=False)
+        timings = [
+            {
+                "station": station,
+                "exit_code": 0,
+                "rows": 96,
+                "completed_at": latest.isoformat(),
+            }
+            for station in daily.EXPECTED_STATIONS
+        ]
+        kwargs["timing_output"].write_text(json.dumps(timings))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(daily, "quick_port_check_ipv6", lambda *args: (True, "ok"))
+    monkeypatch.setattr(daily, "ping_router", lambda *args: (True, "router ok"))
+    monkeypatch.setattr(daily, "_run_client", run)
+    monkeypatch.setattr(
+        daily,
+        "promote_accepted_frame",
+        lambda *args, **kwargs: pytest.fail("candidate gap was promoted"),
+    )
+    monkeypatch.setattr(
+        daily, "_finish_report", lambda report, *args: reports.append(report.copy())
+    )
+
+    result = daily.main([
+        "--run-root", str(tmp_path / "runs"),
+        "--lock", str(tmp_path / "lock"),
+        "--archive-root", str(archive_root),
+        "--skip-publication",
+    ])
+
+    assert result == 1
+    assert reports[-1]["status"] == "rejected"
+    assert reports[-1]["archive_continuity"]["scope"] == (
+        "candidate_before_promotion"
+    )
+    assert reports[-1]["archive_continuity"]["gap_count"] == 12
+    assert "archive" not in reports[-1]
+
+
 def test_daily_client_command_enables_hybrid_policy(monkeypatch, tmp_path):
     from biochar_app.pakbus.core import daily_download as daily
 
@@ -90,9 +169,14 @@ def test_daily_client_command_enables_hybrid_policy(monkeypatch, tmp_path):
     monkeypatch.setattr(daily.subprocess, "run",
                         lambda command, **kwargs: commands.append(command) or SimpleNamespace(returncode=0))
     daily._run_client(tmp_path / "data.csv", hours=26, attempts=3,
-                      station_pause=15, timezone="America/Denver")
+                      station_pause=15, timezone="America/Denver",
+                      window_start="2026-11-05T06:00:00+00:00",
+                      window_stop="2026-11-07T01:00:00+00:00")
     assert "--defer-no-data" in commands[0]
     assert commands[0][commands[0].index("--attempts") + 1] == "3"
+    assert commands[0][commands[0].index("--window-start") + 1] == (
+        "2026-11-05T06:00:00+00:00"
+    )
 
 
 def test_healthy_download_is_accepted() -> None:
