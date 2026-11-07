@@ -42,6 +42,69 @@ def test_ping_router_resolves_ddns_and_uses_bounded_icmp(monkeypatch):
     assert observed["kwargs"]["timeout"] == 9
 
 
+def test_ping_router_prefers_reachable_ipv6_when_ddns_also_has_ipv4(monkeypatch):
+    import biochar_app.pakbus.core.network_preflight as preflight
+
+    commands = []
+    monkeypatch.setattr(
+        preflight.socket,
+        "getaddrinfo",
+        lambda *_args: [
+            (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("153.67.217.72", 0)),
+            (socket.AF_INET6, socket.SOCK_DGRAM, 17, "", ("2605:59ca:2200:bff1::1", 0, 0, 0)),
+        ],
+    )
+    monkeypatch.setattr(
+        preflight.shutil,
+        "which",
+        lambda name: f"/sbin/{name}",
+    )
+    monkeypatch.setattr(
+        preflight.subprocess,
+        "run",
+        lambda command, **_kwargs: commands.append(command) or SimpleNamespace(returncode=0),
+    )
+
+    reachable, detail = preflight.ping_router("router.example")
+
+    assert reachable is True
+    assert detail == "ICMP reply from router.example (2605:59ca:2200:bff1::1)"
+    assert len(commands) == 1
+    assert commands[0][0] == "/sbin/ping6"
+    assert commands[0][-1] == "2605:59ca:2200:bff1::1"
+    assert commands[0][commands[0].index("-c") + 1] == "3"
+
+
+def test_ping_router_tries_another_resolved_address_after_no_reply(monkeypatch):
+    import biochar_app.pakbus.core.network_preflight as preflight
+
+    commands = []
+    monkeypatch.setattr(
+        preflight.socket,
+        "getaddrinfo",
+        lambda *_args: [
+            (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("153.67.217.72", 0)),
+            (socket.AF_INET6, socket.SOCK_DGRAM, 17, "", ("2605:59ca:2200:bff1::1", 0, 0, 0)),
+        ],
+    )
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: f"/sbin/{name}")
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=1 if ":" in command[-1] else 0)
+
+    monkeypatch.setattr(preflight.subprocess, "run", run)
+
+    reachable, detail = preflight.ping_router("router.example")
+
+    assert reachable is True
+    assert detail == "ICMP reply from router.example (153.67.217.72)"
+    assert [command[-1] for command in commands] == [
+        "2605:59ca:2200:bff1::1",
+        "153.67.217.72",
+    ]
+
+
 def _arguments(tmp_path, port_check, **overrides):
     values = {
         "router_url": "https://router.example:8443",

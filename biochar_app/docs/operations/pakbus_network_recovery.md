@@ -15,8 +15,9 @@ router or routing-state failure, not to an individual logger battery.
 The systemd timer starts `biochar-pakbus-daily.service` at approximately 12:15
 a.m. Mountain time. The daily process now runs in this order:
 
-1. Resolve `Biochar-Fruita.asuscomm.com` and send three bounded ICMP echo
-   requests to its current IP address.
+1. Resolve every current address for `Biochar-Fruita.asuscomm.com`, testing IPv6
+   first, and send three bounded ICMP echo requests to each address until one
+   replies. The router is reachable when any resolved address replies.
 2. If the router replies, continue to the existing PakBus TCP preflight and
    validated all-station download.
 3. If the router does not reply, do not make a PakBus or logger connection
