@@ -44,39 +44,52 @@ def ping_router(host: str, timeout: float = 3.0, count: int = 3) -> tuple[bool, 
     except OSError as exc:
         return False, f"probe error: DNS resolution failed for {host}: {exc}"
 
-    candidates = [(family, sockaddr[0]) for family, *_rest, sockaddr in addresses]
+    candidates = list(dict.fromkeys(
+        (family, sockaddr[0]) for family, *_rest, sockaddr in addresses
+    ))
     if not candidates:
         return False, f"probe error: DNS resolution returned no addresses for {host}"
-    family, address = next(
-        (item for item in candidates if item[0] == socket.AF_INET),
-        candidates[0],
-    )
-    ping_name = "ping6" if family == socket.AF_INET6 and shutil.which("ping6") else "ping"
-    ping_path = shutil.which(ping_name)
-    if ping_path is None:
-        return False, f"probe error: {ping_name} utility is unavailable"
+    candidates.sort(key=lambda item: 0 if item[0] == socket.AF_INET6 else 1)
 
-    bounded_timeout = max(1, round(timeout))
-    wait_value = str(bounded_timeout * 1000 if sys.platform == "darwin" else bounded_timeout)
-    command = [ping_path]
-    if family == socket.AF_INET6 and ping_name == "ping":
-        command.append("-6")
-    command.extend(["-c", str(max(1, count)), "-W", wait_value, address])
-    try:
-        result = subprocess.run(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=max(5.0, max(1, count) * (timeout + 1.0)),
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return False, f"probe error: ICMP check failed for {host} ({address}): {_error_detail(exc)}"
-    if result.returncode == 0:
-        return True, f"ICMP reply from {host} ({address})"
-    if result.returncode == 1:
-        return False, f"no ICMP reply from {host} ({address})"
-    return False, f"probe error: ping exited with status {result.returncode}"
+    no_reply: list[str] = []
+    probe_errors: list[str] = []
+    for family, address in candidates:
+        ping_name = "ping6" if family == socket.AF_INET6 and shutil.which("ping6") else "ping"
+        ping_path = shutil.which(ping_name)
+        if ping_path is None:
+            probe_errors.append(f"{ping_name} utility is unavailable for {address}")
+            continue
+
+        bounded_timeout = max(1, round(timeout))
+        wait_value = str(bounded_timeout * 1000 if sys.platform == "darwin" else bounded_timeout)
+        command = [ping_path]
+        if family == socket.AF_INET6 and ping_name == "ping":
+            command.append("-6")
+        command.extend(["-c", str(max(1, count)), "-W", wait_value, address])
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=max(5.0, max(1, count) * (timeout + 1.0)),
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            probe_errors.append(f"ICMP check failed for {address}: {_error_detail(exc)}")
+            continue
+        if result.returncode == 0:
+            return True, f"ICMP reply from {host} ({address})"
+        if result.returncode == 1:
+            no_reply.append(address)
+        else:
+            probe_errors.append(f"ping exited with status {result.returncode} for {address}")
+
+    if probe_errors:
+        detail = "; ".join(probe_errors)
+        if no_reply:
+            detail += f"; no reply from {', '.join(no_reply)}"
+        return False, f"probe error: {detail}"
+    return False, f"no ICMP reply from {host} ({', '.join(no_reply)})"
 
 
 def _probe_endpoint(
