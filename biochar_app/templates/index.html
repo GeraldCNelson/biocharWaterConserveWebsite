@@ -94,19 +94,28 @@
             <!-- Navigation Tabs -->
             <ul class="nav nav-tabs" role="tablist">
 
+                <!-- Intro -->
+                <li class="nav-item" role="presentation">
+                    <button id="intro-tab" class="nav-link active" type="button" data-bs-toggle="tab"
+                            data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="true">
+                        Introduction
+                    </button>
+                </li>
+
                 <!-- Draft Report -->
                 <li class="nav-item" role="presentation">
-                    <button id="draft-report-tab" class="nav-link active" type="button" data-bs-toggle="tab"
-                            data-bs-target="#draft-report" role="tab" aria-controls="draft-report" aria-selected="true">
+                    <button id="draft-report-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#draft-report" role="tab" aria-controls="draft-report" aria-selected="false">
                         Draft Report
                     </button>
                 </li>
 
-                <!-- Intro -->
+                <!-- What Is Biochar? -->
                 <li class="nav-item" role="presentation">
-                    <button id="intro-tab" class="nav-link" type="button" data-bs-toggle="tab"
-                            data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="false">
-                        Introduction
+                    <button id="what-is-biochar-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#what-is-biochar" role="tab"
+                            aria-controls="what-is-biochar" aria-selected="false">
+                        What Is Biochar?
                     </button>
                 </li>
 
@@ -234,7 +243,7 @@
         <div class="tab-content">
 
             <!-- Draft Report Pane -->
-            <div class="tab-pane fade show active" id="draft-report" role="tabpanel"
+            <div class="tab-pane fade" id="draft-report" role="tabpanel"
                  aria-labelledby="draft-report-tab">
                 <section class="draft-report-page" aria-labelledby="draft-report-heading">
                     <div class="draft-report-header">
@@ -285,9 +294,16 @@
             </div>
 
             <!-- Introduction Pane -->
-            <div class="tab-pane fade" id="intro" role="tabpanel" aria-labelledby="intro-tab">
+            <div class="tab-pane fade show active" id="intro" role="tabpanel" aria-labelledby="intro-tab">
                 <div id="intro-status" class="text-muted mb-2" style="display:none;"></div>
                 <div id="intro-content" class="markdown-content"></div>
+            </div>
+
+            <!-- What Is Biochar? Pane -->
+            <div class="tab-pane fade" id="what-is-biochar" role="tabpanel"
+                 aria-labelledby="what-is-biochar-tab">
+                <div id="what-is-biochar-status" class="text-muted mb-2" style="display:none;"></div>
+                <div id="what-is-biochar-content" class="markdown-content"></div>
             </div>
 
             <!-- Experiment Design Pane -->
@@ -1114,7 +1130,7 @@
             "summary-year", "summary-variable", "summary-strip", "summary-granularity", "summary-depth",
             "plot-1", "plot-2",
             "nir-content", "soilbio-content", "soilchem-content", "biomass-field-content",
-            "intro-content", "experiment-content", "tech-content", "glossary-content", "acknowledgements-content"
+            "intro-content", "what-is-biochar-content", "experiment-content", "tech-content", "glossary-content", "acknowledgements-content"
         ];
         const missing = requiredIds.filter(id => !document.getElementById(id));
         if (missing.length) console.warn("🚨 index.html missing required elements:", missing);

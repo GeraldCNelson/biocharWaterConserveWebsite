@@ -20,6 +20,17 @@ def test_every_deep_link_button_exists_in_page_template() -> None:
         assert f'id="{button_id}"' in template
 
 
+def test_what_is_biochar_tab_has_content_mapping_and_pane() -> None:
+    template = TEMPLATE.read_text(encoding="utf-8")
+    config = (
+        REPO_ROOT / "biochar_app/markdown/tools/markdown_config.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="what-is-biochar-tab"' in template
+    assert 'id="what-is-biochar-content"' in template
+    assert '"what-is-biochar-content": {"source": "what_is_biochar.docx"}' in config
+
+
 def test_deep_links_are_initialized_after_tab_renderers_are_wired() -> None:
     source = MAIN_JS.read_text(encoding="utf-8")
     template = TEMPLATE.read_text(encoding="utf-8")

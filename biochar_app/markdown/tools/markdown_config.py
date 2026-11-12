@@ -23,6 +23,7 @@ class DocumentSpec(TypedDict, total=False):
 # Main page and tab content. Keys are DOM container IDs in index.html.
 DOCUMENT_PAGES: dict[str, DocumentSpec] = {
     "intro-content": {"source": "intro.docx"},
+    "what-is-biochar-content": {"source": "what_is_biochar.docx"},
     "experiment-content": {"source": "experimentDesign.docx"},
     "tech-content": {
         "source": "techDetails_updated.docx",

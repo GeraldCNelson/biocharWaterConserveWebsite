@@ -170,6 +170,9 @@ package-lock.json
 ~$*.xlsx
 ~$*.docx
 
+# Word source for the public "What Is Biochar?" website tab.
+!biochar_app/markdown/docx/what_is_biochar.docx
+
 # Public review copies intentionally served from the Draft Report tab.
 !biochar_app/static/documents/
 !biochar_app/static/documents/VPI_Biochar_Report_Draft_2026-11-11.docx

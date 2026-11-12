@@ -12,6 +12,11 @@ export const DEEP_LINK_TABS = Object.freeze({
     aliases: ["report", "paper"],
   },
   intro: { buttonId: "intro-tab", paneId: "intro", aliases: ["introduction"] },
+  "what-is-biochar": {
+    buttonId: "what-is-biochar-tab",
+    paneId: "what-is-biochar",
+    aliases: ["biochar"],
+  },
   experiment: {
     buttonId: "experiment-tab",
     paneId: "experiment",

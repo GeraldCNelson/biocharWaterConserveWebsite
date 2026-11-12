@@ -53,6 +53,7 @@ function getMarkdownRenderer() {
  */
 function prettyNameFromContainerId(containerId) {
   if (containerId === "intro-content") return "introduction";
+  if (containerId === "what-is-biochar-content") return "what is biochar";
   if (containerId === "experiment-content") return "experiment design";
   if (containerId === "tech-content") return "technical details";
   if (containerId === "acknowledgements-content") return "acknowledgement details";

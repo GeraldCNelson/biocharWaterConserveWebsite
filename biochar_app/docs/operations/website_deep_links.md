@@ -31,6 +31,7 @@ Biomass** within the `soilbio` tab becomes
 | Website content | `tab` value |
 |---|---|
 | Introduction | `intro` |
+| What Is Biochar? | `what-is-biochar` |
 | Experiment Design | `experiment` |
 | Interactive monitoring plots | `monitoring` |
 | Summary Statistics | `summary` |

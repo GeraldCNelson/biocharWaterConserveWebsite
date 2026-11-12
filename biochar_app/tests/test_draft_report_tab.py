@@ -13,14 +13,18 @@ PDF_NAME = "VPI_Biochar_Report_Draft_2026-11-11.pdf"
 DOCX_NAME = "VPI_Biochar_Report_Draft_2026-11-11.docx"
 
 
-def test_draft_report_is_the_first_active_tab() -> None:
+def test_introduction_is_first_and_draft_report_remains_second() -> None:
     source = TEMPLATE.read_text(encoding="utf-8")
     first_tab = re.search(r'<button id="([^"]+)" class="nav-link active"', source)
 
     assert first_tab is not None
-    assert first_tab.group(1) == "draft-report-tab"
+    assert first_tab.group(1) == "intro-tab"
+    assert source.index('id="intro-tab"') < source.index('id="draft-report-tab"')
+    assert source.index('id="draft-report-tab"') < source.index(
+        'id="what-is-biochar-tab"'
+    )
     assert 'id="draft-report" role="tabpanel"' in source
-    assert 'id="intro-tab" class="nav-link"' in source
+    assert 'id="intro" role="tabpanel"' in source
 
 
 def test_draft_report_has_stable_deep_link() -> None:
