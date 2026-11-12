@@ -24,7 +24,7 @@ def test_deep_links_are_initialized_after_tab_renderers_are_wired() -> None:
     source = MAIN_JS.read_text(encoding="utf-8")
     template = TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'from "./deep_links.js?v=20261105-dropdown-close-2"' in source
+    assert 'from "./deep_links.js?v=20261111-draft-report-1"' in source
     assert "main.js') }}?v=20261105-dropdown-close-3" in template
     assert source.index("wireTabRender({") < source.index("initializeDeepLinks();")
 

@@ -24,7 +24,7 @@ import { debugLog, debugGroup } from "./debug_utils.js";
 
 // 4) Markdown loader
 import { loadMarkdownContent } from "./markdown.js";
-import { initializeDeepLinks } from "./deep_links.js?v=20261105-dropdown-close-2";
+import { initializeDeepLinks } from "./deep_links.js?v=20261111-draft-report-1";
 
 // 5) UI controls (dropdowns, unit toggle, etc.)
 import {

@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}"/>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}?v=20261104-deep-links-1"/>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}?v=20261111-draft-report-1"/>
     <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}"/>
 
     <!-- Fonts -->
@@ -94,10 +94,18 @@
             <!-- Navigation Tabs -->
             <ul class="nav nav-tabs" role="tablist">
 
+                <!-- Draft Report -->
+                <li class="nav-item" role="presentation">
+                    <button id="draft-report-tab" class="nav-link active" type="button" data-bs-toggle="tab"
+                            data-bs-target="#draft-report" role="tab" aria-controls="draft-report" aria-selected="true">
+                        Draft Report
+                    </button>
+                </li>
+
                 <!-- Intro -->
                 <li class="nav-item" role="presentation">
-                    <button id="intro-tab" class="nav-link active" type="button" data-bs-toggle="tab"
-                            data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="true">
+                    <button id="intro-tab" class="nav-link" type="button" data-bs-toggle="tab"
+                            data-bs-target="#intro" role="tab" aria-controls="intro" aria-selected="false">
                         Introduction
                     </button>
                 </li>
@@ -225,8 +233,59 @@
     <div class="container-fluid">
         <div class="tab-content">
 
+            <!-- Draft Report Pane -->
+            <div class="tab-pane fade show active" id="draft-report" role="tabpanel"
+                 aria-labelledby="draft-report-tab">
+                <section class="draft-report-page" aria-labelledby="draft-report-heading">
+                    <div class="draft-report-header">
+                        <div>
+                            <span class="draft-report-status">Draft for review</span>
+                            <h1 id="draft-report-heading">VPI Biochar Project Report</h1>
+                            <p class="draft-report-version">Current draft dated November 10, 2026</p>
+                            <p class="draft-report-feedback">
+                                Please send comments and suggestions to
+                                <a href="mailto:info@biocharresearch.org">info@biocharresearch.org</a>.
+                            </p>
+                        </div>
+                        <div class="draft-report-actions" aria-label="Report download options">
+                            <a class="btn btn-primary"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                               target="_blank" rel="noopener">
+                                <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                                Open PDF
+                            </a>
+                            <a class="btn btn-outline-primary"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                               download>
+                                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+                                Download PDF
+                            </a>
+                            <a class="btn btn-outline-secondary"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.docx') }}"
+                               download>
+                                <i class="bi bi-file-earmark-word" aria-hidden="true"></i>
+                                Download Word
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="draft-report-viewer-wrap">
+                        <iframe class="draft-report-viewer"
+                                src="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}#view=FitH"
+                                title="VPI Biochar Project report draft"
+                                loading="eager">
+                        </iframe>
+                        <p class="draft-report-viewer-fallback">
+                            If the report does not appear above,
+                            <a href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                               target="_blank" rel="noopener">open the PDF in a new tab</a>.
+                        </p>
+                    </div>
+                </section>
+            </div>
+
             <!-- Introduction Pane -->
-            <div class="tab-pane fade show active" id="intro" role="tabpanel" aria-labelledby="intro-tab">
+            <div class="tab-pane fade" id="intro" role="tabpanel" aria-labelledby="intro-tab">
                 <div id="intro-status" class="text-muted mb-2" style="display:none;"></div>
                 <div id="intro-content" class="markdown-content"></div>
             </div>

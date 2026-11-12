@@ -936,3 +936,116 @@ input[type="submit"]:hover,
 .deep-link-anchor {
     scroll-margin-top: 6rem;
 }
+
+/* =============================================================================
+   Draft report
+   ============================================================================= */
+
+.draft-report-page {
+    background: #f5f7f4;
+    min-height: calc(100vh - 4.5rem);
+    padding: 1.5rem;
+}
+
+.draft-report-header {
+    align-items: flex-end;
+    background: #ffffff;
+    border: 1px solid #d9e2d6;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.35rem 1rem rgba(34, 62, 42, 0.08);
+    display: flex;
+    gap: 1.5rem;
+    justify-content: space-between;
+    margin: 0 auto 1rem;
+    max-width: 1200px;
+    padding: 1.35rem 1.5rem;
+}
+
+.draft-report-header h1 {
+    color: #23452b;
+    font-size: clamp(1.7rem, 3vw, 2.35rem);
+    font-weight: 600;
+    line-height: 1.1;
+    margin: 0.45rem 0 0.3rem;
+}
+
+.draft-report-status {
+    background: #f2d675;
+    border-radius: 999px;
+    color: #3d3413;
+    display: inline-block;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    padding: 0.35rem 0.7rem;
+    text-transform: uppercase;
+}
+
+.draft-report-version,
+.draft-report-feedback {
+    color: #56645a;
+    margin: 0;
+}
+
+.draft-report-feedback {
+    margin-top: 0.35rem;
+}
+
+.draft-report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    justify-content: flex-end;
+}
+
+.draft-report-actions .btn {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.4rem;
+    white-space: nowrap;
+}
+
+.draft-report-viewer-wrap {
+    margin: 0 auto;
+    max-width: 1200px;
+}
+
+.draft-report-viewer {
+    background: #ffffff;
+    border: 1px solid #cbd5c8;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.35rem 1.25rem rgba(34, 62, 42, 0.1);
+    display: block;
+    height: min(78vh, 920px);
+    min-height: 640px;
+    width: 100%;
+}
+
+.draft-report-viewer-fallback {
+    color: #56645a;
+    font-size: 0.9rem;
+    margin: 0.65rem 0 0;
+    text-align: center;
+}
+
+@media (max-width: 767.98px) {
+    .draft-report-page {
+        padding: 0.85rem;
+    }
+
+    .draft-report-header {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 1rem;
+    }
+
+    .draft-report-actions {
+        justify-content: flex-start;
+    }
+
+    .draft-report-viewer {
+        height: 72vh;
+        min-height: 500px;
+    }
+}

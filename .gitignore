@@ -170,6 +170,11 @@ package-lock.json
 ~$*.xlsx
 ~$*.docx
 
+# Public review copies intentionally served from the Draft Report tab.
+!biochar_app/static/documents/
+!biochar_app/static/documents/VPI_Biochar_Report_Draft_2026-11-11.docx
+!biochar_app/static/documents/VPI_Biochar_Report_Draft_2026-11-11.pdf
+
 ############################
 # LaTeX build artifacts
 ############################

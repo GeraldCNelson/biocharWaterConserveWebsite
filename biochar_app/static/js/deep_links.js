@@ -6,6 +6,11 @@
  * Bootstrap button IDs used by the page template.
  */
 export const DEEP_LINK_TABS = Object.freeze({
+  "draft-report": {
+    buttonId: "draft-report-tab",
+    paneId: "draft-report",
+    aliases: ["report", "paper"],
+  },
   intro: { buttonId: "intro-tab", paneId: "intro", aliases: ["introduction"] },
   experiment: {
     buttonId: "experiment-tab",
