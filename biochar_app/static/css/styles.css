@@ -1011,15 +1011,99 @@ input[type="submit"]:hover,
     max-width: 1200px;
 }
 
-.draft-report-viewer {
+.draft-report-reader {
     background: #ffffff;
     border: 1px solid #cbd5c8;
     border-radius: 0.5rem;
     box-shadow: 0 0.35rem 1.25rem rgba(34, 62, 42, 0.1);
-    display: block;
+    overflow: hidden;
+    width: 100%;
+}
+
+.draft-report-reader-toolbar {
+    align-items: center;
+    background: #f6f8f5;
+    border-bottom: 1px solid #d7ded5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.draft-report-toolbar-spacer {
+    flex: 1 1 auto;
+}
+
+.draft-report-page-control {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.4rem;
+    margin: 0;
+}
+
+.draft-report-page-control input {
+    border: 1px solid #aeb9ac;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.35rem;
+    text-align: center;
+    width: 3.5rem;
+}
+
+.draft-report-canvas-viewport {
+    background: #dfe4df;
     height: min(78vh, 920px);
     min-height: 640px;
-    width: 100%;
+    overflow: auto;
+    padding: 1rem;
+    scroll-behavior: smooth;
+}
+
+.draft-report-reader-status {
+    color: #56645a;
+    margin: 2rem auto;
+    text-align: center;
+}
+
+.draft-report-pages {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 100%;
+    width: max-content;
+}
+
+.draft-report-canvas-page {
+    background: #ffffff;
+    box-shadow: 0 0.2rem 0.8rem rgba(20, 35, 24, 0.22);
+    flex: 0 0 auto;
+    position: relative;
+    scroll-margin-top: 1rem;
+}
+
+.draft-report-canvas-page canvas {
+    display: block;
+}
+
+.draft-report-annotation-layer {
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+
+.draft-report-pdf-link {
+    background: transparent;
+    pointer-events: auto;
+    position: absolute;
+}
+
+.draft-report-pdf-link:focus,
+.draft-report-pdf-link:hover {
+    background: rgba(45, 105, 255, 0.16);
+    outline: 1px solid rgba(45, 105, 255, 0.45);
 }
 
 .draft-report-viewer-fallback {
@@ -1044,8 +1128,12 @@ input[type="submit"]:hover,
         justify-content: flex-start;
     }
 
-    .draft-report-viewer {
+    .draft-report-canvas-viewport {
         height: 72vh;
         min-height: 500px;
+    }
+
+    .draft-report-toolbar-spacer {
+        display: none;
     }
 }

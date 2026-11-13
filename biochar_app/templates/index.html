@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}"/>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"/>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}?v=20261111-draft-report-1"/>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}?v=20261113-pdf-reader-2"/>
     <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}"/>
 
     <!-- Fonts -->
@@ -250,7 +250,7 @@
                         <div>
                             <span class="draft-report-status">Draft for review</span>
                             <h1 id="draft-report-heading">VPI Biochar Project Report</h1>
-                            <p class="draft-report-version">Current draft dated November 10, 2026</p>
+                            <p class="draft-report-version">Current draft dated November 13, 2026</p>
                             <p class="draft-report-feedback">
                                 Please send comments and suggestions to
                                 <a href="mailto:info@biocharresearch.org">info@biocharresearch.org</a>.
@@ -258,19 +258,19 @@
                         </div>
                         <div class="draft-report-actions" aria-label="Report download options">
                             <a class="btn btn-primary"
-                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf') }}"
                                target="_blank" rel="noopener">
                                 <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
                                 Open PDF
                             </a>
                             <a class="btn btn-outline-primary"
-                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf') }}"
                                download>
                                 <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
                                 Download PDF
                             </a>
                             <a class="btn btn-outline-secondary"
-                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.docx') }}"
+                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.docx') }}"
                                download>
                                 <i class="bi bi-file-earmark-word" aria-hidden="true"></i>
                                 Download Word
@@ -279,14 +279,52 @@
                     </div>
 
                     <div class="draft-report-viewer-wrap">
-                        <iframe class="draft-report-viewer"
-                                src="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}#view=FitH"
-                                title="VPI Biochar Project report draft"
-                                loading="eager">
-                        </iframe>
+                        <div class="draft-report-reader"
+                             data-pdf-url="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf') }}">
+                            <div class="draft-report-reader-toolbar"
+                                 role="toolbar" aria-label="PDF page controls">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="button" data-pdf-previous disabled>
+                                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                                    Previous
+                                </button>
+                                <label class="draft-report-page-control">
+                                    <span class="visually-hidden">Page number</span>
+                                    <input type="number" min="1" value="1"
+                                           inputmode="numeric" data-pdf-page>
+                                    <span>of <span data-pdf-page-count>—</span></span>
+                                </label>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="button" data-pdf-next disabled>
+                                    Next
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                                </button>
+                                <span class="draft-report-toolbar-spacer" aria-hidden="true"></span>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="button" data-pdf-zoom-out disabled
+                                        aria-label="Zoom out">
+                                    <i class="bi bi-dash-lg" aria-hidden="true"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="button" data-pdf-fit-width disabled>
+                                    Fit width
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        type="button" data-pdf-zoom-in disabled
+                                        aria-label="Zoom in">
+                                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="draft-report-canvas-viewport" data-pdf-viewport>
+                                <p class="draft-report-reader-status" data-pdf-status>
+                                    Loading report…
+                                </p>
+                                <div class="draft-report-pages" data-pdf-pages hidden></div>
+                            </div>
+                        </div>
                         <p class="draft-report-viewer-fallback">
-                            If the report does not appear above,
-                            <a href="{{ url_for('static', path='documents/VPI_Biochar_Report_Draft_2026-11-11.pdf') }}"
+                            If the report does not appear above or you need text search,
+                            <a href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf') }}"
                                target="_blank" rel="noopener">open the PDF in a new tab</a>.
                         </p>
                     </div>
@@ -1205,6 +1243,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 </script>
+
+<script type="module"
+        src="{{ url_for('static', path='js/report_pdf_viewer.js') }}?v=20261113-pdf-reader-3"></script>
 
 </body>
 </html>
