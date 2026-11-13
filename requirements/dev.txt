@@ -1,6 +1,7 @@
 -r geospatial.txt
 
 pytest==9.0.3
+scipy==1.18.0
 ruff==0.15.1
 mypy==1.19.1
 pyright==1.1.408
