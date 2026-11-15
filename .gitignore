@@ -107,6 +107,7 @@ biochar_app/data-processed/management/**/*.mp4
 ############################
 biochar_app/data-processed/parquet/
 biochar_app/data-processed/downloads/
+biochar_app/data-processed/usage/
 
 ############################
 

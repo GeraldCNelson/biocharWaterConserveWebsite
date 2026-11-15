@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from biochar_app.config.core import GRANULARITY_NAME_MAPPING
 
@@ -54,6 +54,8 @@ from biochar_app.scripts.readme_builders import (
     build_management_readme,
     build_timeseries_yearly_readme,
 )
+from biochar_app.analytics.collector import PendingUsageEvent, mark_usage_event
+from biochar_app.analytics.dimensions import parse_bulk_download_key
 
 bulk_router = APIRouter()
 
@@ -429,13 +431,25 @@ def bulk_download_manifest() -> dict[str, Any]:
     }
 
 @bulk_router.post("/bulk_download")
-async def bulk_download(payload: dict[str, Any]):
+async def bulk_download(request: Request, payload: dict[str, Any]):
     unit_system = str(payload.get("unitSystem") or payload.get("unit_system") or "us").lower()
     keys = payload.get("keys")
     if isinstance(keys, list) and keys:
         key = str(keys[0])
     else:
         key = str(payload.get("key") or "").strip()
+
+    dimensions = parse_bulk_download_key(key)
+    mark_usage_event(
+        request,
+        PendingUsageEvent(
+            event_type="download",
+            event_name="bulk-data",
+            dataset=dimensions.dataset,
+            dataset_year=dimensions.dataset_year,
+            granularity=dimensions.granularity,
+        ),
+    )
 
     if not key:
         raise HTTPException(status_code=400, detail="Missing key (or keys[0])")

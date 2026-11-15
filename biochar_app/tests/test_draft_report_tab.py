@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from zipfile import ZipFile
 
+from biochar_app.analytics.routes import DRAFT_REPORT_FILES
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO_ROOT / "biochar_app/templates/index.html"
@@ -44,13 +46,19 @@ def test_report_assets_and_feedback_address_are_wired() -> None:
     docx_path = DOCUMENTS / DOCX_NAME
 
     assert PDF_NAME in source
-    assert DOCX_NAME in source
+    assert DRAFT_REPORT_FILES["pdf"][0] == pdf_path
+    assert DRAFT_REPORT_FILES["docx"][0] == docx_path
     assert 'class="draft-report-reader"' in source
     assert "data-pdf-url=" in source
     assert "data-pdf-pages" in source
     assert "report_pdf_viewer.js" in source
     assert "Current draft dated November 13, 2026" in source
     assert 'mailto:info@biocharresearch.org' in source
+    assert "url_for('download_draft_paper', file_format='pdf')" in source
+    assert "url_for('download_draft_paper', file_format='docx')" in source
+    assert source.count(
+        "documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf"
+    ) == 3
     assert pdf_path.read_bytes().startswith(b"%PDF-")
     with ZipFile(docx_path) as archive:
         assert "word/document.xml" in archive.namelist()

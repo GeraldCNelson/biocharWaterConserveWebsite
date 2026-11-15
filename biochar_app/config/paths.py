@@ -34,6 +34,11 @@ DOWNLOADS_BASE_DIR = DATA_PROCESSED_DIR / "downloads"
 LOGGER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "loggers"
 WEATHER_DOWNLOADS_DIR = DOWNLOADS_BASE_DIR / "weather"
 
+# Private, anonymous website-usage records. The database is runtime state and
+# is intentionally excluded from Git alongside other generated data.
+USAGE_ANALYTICS_DIR = DATA_PROCESSED_DIR / "usage"
+USAGE_DB_PATH = USAGE_ANALYTICS_DIR / "usage.sqlite3"
+
 # Parquet layout
 PARQUET_DIR = DATA_PROCESSED_DIR / "parquet"
 PARQUET_SUMMARY_DIR = PARQUET_DIR / "summary"

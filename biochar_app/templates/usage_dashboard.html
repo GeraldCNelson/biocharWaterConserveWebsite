@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Biochar Research — Private Usage</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/usage_dashboard.css') }}?v=20261115-usage-1">
+    <link rel="icon" href="{{ url_for('static', path='images/favicon.ico') }}">
+</head>
+<body>
+<main class="usage-shell">
+    <header class="usage-header">
+        <div>
+            <p class="usage-eyebrow">Private dashboard</p>
+            <h1>Biochar Research — Usage</h1>
+            <p class="usage-subtitle">Anonymous public activity · Mountain Time</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/">Open public website</a>
+    </header>
+
+    <section class="usage-controls" aria-label="Report controls">
+        <label>
+            Ending date
+            <input id="usage-end-date" class="form-control" type="date" value="{{ today }}">
+        </label>
+        <label>
+            Trend period
+            <select id="usage-days" class="form-select">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+            </select>
+        </label>
+        <button id="usage-refresh" class="btn btn-primary" type="button">Refresh</button>
+        <a id="usage-export" class="btn btn-outline-primary" href="#">Export daily CSV</a>
+    </section>
+
+    <div id="usage-message" class="usage-message" role="status" aria-live="polite">
+        Loading usage…
+    </div>
+
+    <section aria-labelledby="selected-day-heading">
+        <div class="section-heading">
+            <div>
+                <p class="usage-eyebrow">Daily snapshot</p>
+                <h2 id="selected-day-heading">Selected day</h2>
+            </div>
+            <p id="selected-day-label" class="section-note"></p>
+        </div>
+        <div id="selected-day-cards" class="metric-grid"></div>
+    </section>
+
+    <section aria-labelledby="comparison-heading">
+        <div class="section-heading">
+            <div>
+                <p class="usage-eyebrow">Quick comparison</p>
+                <h2 id="comparison-heading">Selected and previous day</h2>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="usage-table">
+                <thead>
+                <tr>
+                    <th>Date</th><th>Visits</th><th>Page views</th><th>Features</th>
+                    <th>Paper</th><th>Data</th><th>Failed</th><th>Excluded</th>
+                </tr>
+                </thead>
+                <tbody id="daily-comparison-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section aria-labelledby="trend-heading">
+        <div class="section-heading">
+            <div>
+                <p class="usage-eyebrow">Recent activity</p>
+                <h2 id="trend-heading">Public visits trend</h2>
+            </div>
+            <p id="tracking-period" class="section-note"></p>
+        </div>
+        <div id="usage-trend" class="trend-chart" aria-label="Daily public visits"></div>
+    </section>
+
+    <section aria-labelledby="cumulative-heading">
+        <div class="section-heading">
+            <div>
+                <p id="cumulative-period-label" class="usage-eyebrow">Since tracking began</p>
+                <h2 id="cumulative-heading">Cumulative public totals</h2>
+            </div>
+        </div>
+        <div id="cumulative-cards" class="metric-grid metric-grid-compact"></div>
+    </section>
+
+    <div class="dashboard-columns">
+        <section aria-labelledby="features-heading">
+            <div class="section-heading">
+                <h2 id="features-heading">Most-used features</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="usage-table">
+                    <thead><tr><th>Feature</th><th>Uses</th></tr></thead>
+                    <tbody id="feature-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section aria-labelledby="paper-heading">
+            <div class="section-heading">
+                <h2 id="paper-heading">Draft-paper downloads</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="usage-table">
+                    <thead><tr><th>Version</th><th>Format</th><th>Downloads</th></tr></thead>
+                    <tbody id="paper-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <section aria-labelledby="data-heading">
+        <div class="section-heading">
+            <h2 id="data-heading">Bulk research-data downloads</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="usage-table">
+                <thead><tr><th>Dataset</th><th>Year</th><th>Granularity</th><th>Downloads</th></tr></thead>
+                <tbody id="data-table-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="dashboard-columns">
+        <section aria-labelledby="exclusions-heading">
+            <div class="section-heading">
+                <h2 id="exclusions-heading">Excluded activity</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="usage-table">
+                    <thead><tr><th>Reason</th><th>Events</th></tr></thead>
+                    <tbody id="exclusion-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="internal-card" aria-labelledby="internal-heading">
+            <p class="usage-eyebrow">Internal exclusion</p>
+            <h2 id="internal-heading">This browser</h2>
+            <p id="internal-status">Checking browser status…</p>
+            <div class="d-flex flex-wrap gap-2">
+                <button id="mark-internal" class="btn btn-primary" type="button">
+                    Mark this browser internal
+                </button>
+                <button id="unmark-internal" class="btn btn-outline-secondary" type="button">
+                    Count this browser as public
+                </button>
+            </div>
+            <p class="internal-note">
+                The marker contains no name or identity. Future activity from this browser is
+                retained for auditing but excluded from public totals.
+            </p>
+        </section>
+    </div>
+</main>
+<script type="module" src="{{ url_for('static', path='js/usage_dashboard.js') }}?v=20261115-usage-2"></script>
+</body>
+</html>

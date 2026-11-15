@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from starlette.requests import Request
 
 from biochar_app.scripts.bulk_downloads import (
     _build_biomass_hay_files,
@@ -83,7 +84,11 @@ class LoggerRatioBulkDownloadTests(unittest.IsolatedAsyncioTestCase):
                     return_value="Ratios included as separate file: yes",
                 ),
             ):
-                response = await bulk_download({"key": "loggers_2026_daily"})
+                request = Request({"type": "http", "headers": []})
+                response = await bulk_download(
+                    request,
+                    {"key": "loggers_2026_daily"},
+                )
 
             response_chunks = [
                 chunk async for chunk in response.body_iterator

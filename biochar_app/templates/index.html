@@ -264,13 +264,13 @@
                                 Open PDF
                             </a>
                             <a class="btn btn-outline-primary"
-                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf') }}"
+                               href="{{ url_for('download_draft_paper', file_format='pdf') }}"
                                download>
                                 <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
                                 Download PDF
                             </a>
                             <a class="btn btn-outline-secondary"
-                               href="{{ url_for('static', path='documents/VPI_Biochar_Report_US_Units_2026-11-13.docx') }}"
+                               href="{{ url_for('download_draft_paper', file_format='docx') }}"
                                download>
                                 <i class="bi bi-file-earmark-word" aria-hidden="true"></i>
                                 Download Word
@@ -1248,6 +1248,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 <script type="module"
         src="{{ url_for('static', path='js/report_pdf_viewer.js') }}?v=20261113-pdf-reader-3"></script>
+<script type="module"
+        src="{{ url_for('static', path='js/usage_tracking.js') }}?v=20261115-usage-1"></script>
 
 </body>
 </html>

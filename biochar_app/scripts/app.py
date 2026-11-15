@@ -30,6 +30,9 @@ from biochar_app.scripts.date_ranges import build_date_ranges
 from biochar_app.scripts import state
 
 from biochar_app.scripts.management.management_routes import management_router
+from biochar_app.analytics.middleware import UsageTrackingMiddleware
+from biochar_app.analytics.routes import usage_router
+from biochar_app.analytics.admin_routes import admin_usage_router
 
 # ─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -43,6 +46,7 @@ app = FastAPI(
     title="Biochar Water Conserve API",
     description="Plots & data endpoints for biocharresearch.org",
 )
+app.add_middleware(UsageTrackingMiddleware)
 
 base_dir = Path(BASE_DIR)
 static_dir = base_dir / "static"
@@ -54,6 +58,8 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # 2) Include routers
 app.include_router(main_router)
 app.include_router(api_router)
+app.include_router(usage_router)
+app.include_router(admin_usage_router)
 
 app.include_router(management_router)
 
