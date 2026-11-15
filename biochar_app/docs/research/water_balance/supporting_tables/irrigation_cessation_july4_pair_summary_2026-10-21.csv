@@ -1,0 +1,9 @@
+year,stop_date,pair,pair_label,regime,pair_complete,biochar_july4_profile_water_in,control_july4_profile_water_in,biochar_minus_control_july4_water_in,difference_equivalent_days_at_0p23_in_per_day,biochar_days_to_own_empirical_reference_at_0p23,control_days_to_own_empirical_reference_at_0p23,biochar_minus_control_days_to_own_reference_at_0p23
+2023,2023-07-04,S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),True,5.008771,3.885153,1.123618,4.885296,7.227334,6.728401,0.498932
+2023,2023-07-04,S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),False,,,,,,,
+2024,2024-07-04,S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),True,5.628155,3.287994,2.340162,10.174617,11.797297,5.761527,6.035770
+2024,2024-07-04,S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),False,,,,,,,
+2025,2025-07-04,S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),True,6.047730,5.793708,0.254022,1.104445,11.738879,14.441386,-2.702506
+2025,2025-07-04,S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),True,6.027153,6.213353,-0.186199,-0.809563,9.944261,11.023676,-1.079415
+2026,2026-07-04,S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),True,5.556377,5.049117,0.507260,2.205479,9.823803,8.793977,1.029826
+2026,2026-07-04,S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),True,5.183579,5.063680,0.119899,0.521299,6.325454,8.907909,-2.582455

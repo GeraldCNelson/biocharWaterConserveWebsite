@@ -1,0 +1,56 @@
+pair,regime,year,outcome,outcome_label,n_matched_events,biochar_minus_control_mean_in,biochar_minus_control_median_in,biochar_higher_fraction,biochar_minus_control_mean_gal_per_acre
+S1_S2,reduced irrigation (monthly),2023,reference_water_in,"Redistributed water, 24--36 h median",6,-0.053534,-0.044217,0.333333,-1452.799334
+S1_S2,reduced irrigation (monthly),2023,water_24h_in,Water at 24 h,6,-0.085155,-0.090644,0.166667,-2310.922686
+S1_S2,reduced irrigation (monthly),2023,water_72h_in,Water at 72 h,6,0.083103,0.098422,0.833333,2255.238825
+S1_S2,reduced irrigation (monthly),2023,water_7d_in,Water at 7 d,6,0.388116,0.408658,1.000000,10532.646501
+S1_S2,reduced irrigation (monthly),2023,water_half_interval_in,Water halfway to next irrigation,6,0.435124,0.484000,0.833333,11808.353660
+S1_S2,reduced irrigation (monthly),2023,water_pre_next_in,Water before next irrigation,6,0.606051,0.774584,1.000000,16446.942756
+S1_S2,reduced irrigation (monthly),2023,mean_interval_water_in,Mean water over irrigation interval,6,0.276089,0.319720,0.833333,7492.466755
+S1_S2,reduced irrigation (monthly),2024,reference_water_in,"Redistributed water, 24--36 h median",6,0.416310,0.402358,1.000000,11297.766107
+S1_S2,reduced irrigation (monthly),2024,water_24h_in,Water at 24 h,6,0.376198,0.360909,1.000000,10209.223564
+S1_S2,reduced irrigation (monthly),2024,water_72h_in,Water at 72 h,6,0.498935,0.532108,1.000000,13540.035841
+S1_S2,reduced irrigation (monthly),2024,water_7d_in,Water at 7 d,6,0.762165,0.825986,1.000000,20683.551062
+S1_S2,reduced irrigation (monthly),2024,water_half_interval_in,Water halfway to next irrigation,6,0.767805,0.828547,1.000000,20836.598017
+S1_S2,reduced irrigation (monthly),2024,water_pre_next_in,Water before next irrigation,6,0.553100,0.552329,1.000000,15009.972581
+S1_S2,reduced irrigation (monthly),2024,mean_interval_water_in,Mean water over irrigation interval,6,0.659595,0.670289,1.000000,17900.003094
+S1_S2,reduced irrigation (monthly),2025,reference_water_in,"Redistributed water, 24--36 h median",6,0.285934,0.295024,1.000000,7759.644956
+S1_S2,reduced irrigation (monthly),2025,water_24h_in,Water at 24 h,6,0.275931,0.284710,1.000000,7488.181534
+S1_S2,reduced irrigation (monthly),2025,water_72h_in,Water at 72 h,6,0.340532,0.324295,1.000000,9241.317380
+S1_S2,reduced irrigation (monthly),2025,water_7d_in,Water at 7 d,6,0.482858,0.498724,1.000000,13103.749749
+S1_S2,reduced irrigation (monthly),2025,water_half_interval_in,Water halfway to next irrigation,6,0.576904,0.575075,1.000000,15655.947311
+S1_S2,reduced irrigation (monthly),2025,water_pre_next_in,Water before next irrigation,6,0.391599,0.340080,1.000000,10627.163268
+S1_S2,reduced irrigation (monthly),2025,mean_interval_water_in,Mean water over irrigation interval,6,0.441928,0.437765,1.000000,11992.987423
+S1_S2,reduced irrigation (monthly),2026,reference_water_in,"Redistributed water, 24--36 h median",5,0.383932,0.369119,1.000000,10419.092971
+S1_S2,reduced irrigation (monthly),2026,water_24h_in,Water at 24 h,5,0.372754,0.358280,1.000000,10115.747809
+S1_S2,reduced irrigation (monthly),2026,water_72h_in,Water at 72 h,5,0.452177,0.450269,1.000000,12271.129203
+S1_S2,reduced irrigation (monthly),2026,water_7d_in,Water at 7 d,4,0.563717,0.616564,1.000000,15298.088109
+S1_S2,reduced irrigation (monthly),2026,water_half_interval_in,Water halfway to next irrigation,5,0.647588,0.704068,1.000000,17574.174525
+S1_S2,reduced irrigation (monthly),2026,water_pre_next_in,Water before next irrigation,5,0.450636,0.391207,1.000000,12229.315975
+S1_S2,reduced irrigation (monthly),2026,mean_interval_water_in,Mean water over irrigation interval,5,0.522526,0.543143,1.000000,14180.257089
+S3_S4,full irrigation (biweekly),2023,reference_water_in,"Redistributed water, 24--36 h median",6,0.749778,0.664281,1.000000,20347.396992
+S3_S4,full irrigation (biweekly),2023,water_24h_in,Water at 24 h,7,0.613302,0.417713,1.000000,16643.726533
+S3_S4,full irrigation (biweekly),2023,water_72h_in,Water at 72 h,7,0.594075,0.450415,1.000000,16121.927744
+S3_S4,full irrigation (biweekly),2023,water_7d_in,Water at 7 d,8,0.546583,0.513201,1.000000,14833.116886
+S3_S4,full irrigation (biweekly),2023,water_half_interval_in,Water halfway to next irrigation,3,0.468773,0.466755,1.000000,12721.498192
+S3_S4,full irrigation (biweekly),2023,water_pre_next_in,Water before next irrigation,1,0.221883,0.221883,1.000000,6021.428757
+S3_S4,full irrigation (biweekly),2024,reference_water_in,"Redistributed water, 24--36 h median",9,0.228037,0.160255,0.888889,6188.430910
+S3_S4,full irrigation (biweekly),2024,water_24h_in,Water at 24 h,9,0.243294,0.179957,1.000000,6602.492739
+S3_S4,full irrigation (biweekly),2024,water_72h_in,Water at 72 h,9,0.204294,0.152425,0.888889,5544.096703
+S3_S4,full irrigation (biweekly),2024,water_7d_in,Water at 7 d,7,0.151687,0.027153,0.857143,4116.464432
+S3_S4,full irrigation (biweekly),2024,water_half_interval_in,Water halfway to next irrigation,7,0.145551,0.034721,0.714286,3949.948858
+S3_S4,full irrigation (biweekly),2024,water_pre_next_in,Water before next irrigation,8,0.118600,0.095869,0.625000,3218.553214
+S3_S4,full irrigation (biweekly),2024,mean_interval_water_in,Mean water over irrigation interval,7,0.152270,0.093806,1.000000,4132.277129
+S3_S4,full irrigation (biweekly),2025,reference_water_in,"Redistributed water, 24--36 h median",10,0.023601,0.017133,0.500000,640.476417
+S3_S4,full irrigation (biweekly),2025,water_24h_in,Water at 24 h,10,0.018763,0.010362,0.500000,509.175360
+S3_S4,full irrigation (biweekly),2025,water_72h_in,Water at 72 h,10,0.055763,0.058959,0.700000,1513.280179
+S3_S4,full irrigation (biweekly),2025,water_7d_in,Water at 7 d,10,0.122889,0.112750,0.900000,3334.942681
+S3_S4,full irrigation (biweekly),2025,water_half_interval_in,Water halfway to next irrigation,10,0.109552,0.109696,0.900000,2973.017170
+S3_S4,full irrigation (biweekly),2025,water_pre_next_in,Water before next irrigation,10,-0.041447,0.031867,0.600000,-1124.790044
+S3_S4,full irrigation (biweekly),2025,mean_interval_water_in,Mean water over irrigation interval,10,0.060517,0.045501,0.900000,1642.293428
+S3_S4,full irrigation (biweekly),2026,reference_water_in,"Redistributed water, 24--36 h median",9,-0.025865,-0.041672,0.222222,-701.930575
+S3_S4,full irrigation (biweekly),2026,water_24h_in,Water at 24 h,9,-0.040791,-0.057970,0.111111,-1106.990687
+S3_S4,full irrigation (biweekly),2026,water_72h_in,Water at 72 h,9,0.018216,0.014128,0.555556,494.333512
+S3_S4,full irrigation (biweekly),2026,water_7d_in,Water at 7 d,8,-0.043112,-0.012752,0.375000,-1169.959561
+S3_S4,full irrigation (biweekly),2026,water_half_interval_in,Water halfway to next irrigation,8,-0.023898,0.029504,0.625000,-648.549549
+S3_S4,full irrigation (biweekly),2026,water_pre_next_in,Water before next irrigation,9,-0.040942,-0.012836,0.444444,-1111.072674
+S3_S4,full irrigation (biweekly),2026,mean_interval_water_in,Mean water over irrigation interval,7,-0.024279,-0.012764,0.428571,-658.885975

@@ -1,0 +1,9 @@
+pair,pair_label,regime,year,irrigation_season_days_available_in_source,eligible_daily_pairs,eligible_day_fraction,first_eligible_date,last_eligible_date,mean_daily_difference_in,median_daily_difference_in,mean_daily_difference_vwc_percentage_points,mean_daily_difference_gal_per_acre,cumulative_water_inch_days,cumulative_gallon_days_per_acre,biochar_higher_day_fraction
+S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),2023,214,150,0.700935,2023-05-24,2023-10-31,0.291202,0.317129,4.853371,7902.612477,43.680342,1185391.871610,0.886667
+S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),2024,214,214,1.000000,2024-04-01,2024-10-31,0.581579,0.599433,9.692988,15782.829208,124.457970,3377525.450540,1.000000
+S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),2025,214,214,1.000000,2025-04-01,2025-10-31,0.416841,0.421462,6.947355,11312.189437,89.204040,2420808.539498,0.962617
+S1_S2,BC50/CON50 (S1/S2),reduced irrigation (monthly),2026,206,206,1.000000,2026-04-01,2026-10-23,0.463211,0.442275,7.720189,12570.574354,95.421541,2589538.316982,0.990291
+S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),2023,214,0,0.000000,,,,,,,,,
+S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),2024,214,126,0.588785,2024-04-02,2024-10-31,0.181715,0.184093,3.028584,4931.360761,22.896094,621351.455832,0.873016
+S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),2025,214,214,1.000000,2025-04-01,2025-10-31,0.055288,0.064885,0.921471,1500.405726,11.831684,321086.825449,0.691589
+S3_S4,BC100/CON100 (S3/S4),full irrigation (biweekly),2026,206,143,0.694175,2026-04-01,2026-10-23,-0.009156,0.018101,-0.152601,-248.475697,-1.309315,-35532.024602,0.615385

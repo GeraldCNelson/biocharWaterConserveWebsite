@@ -125,6 +125,8 @@ biochar_app/pakbus/pakbus_data/
 biochar_app/data-processed/management/field_management/
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention/
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/post_irrigation_retention_statistics/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/shallow_layer_retention/
+biochar_app/data-processed/management/irrigation/analysis/diagnostics/irrigation_cessation/
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/irrigation_pre_start_response_flags_all_positions_*.csv
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/trustworthy_irrigation_events_all_positions_*.csv
 biochar_app/data-processed/management/irrigation/analysis/diagnostics/water_balance_inspection/
@@ -177,6 +179,8 @@ package-lock.json
 !biochar_app/static/documents/
 !biochar_app/static/documents/VPI_Biochar_Report_Draft_2026-11-11.docx
 !biochar_app/static/documents/VPI_Biochar_Report_Draft_2026-11-11.pdf
+!biochar_app/static/documents/VPI_Biochar_Report_US_Units_2026-11-13.docx
+!biochar_app/static/documents/VPI_Biochar_Report_US_Units_2026-11-13.pdf
 
 ############################
 # LaTeX build artifacts
