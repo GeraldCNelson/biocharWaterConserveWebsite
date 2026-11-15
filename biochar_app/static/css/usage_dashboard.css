@@ -178,6 +178,11 @@ section,
     gap: 8px;
 }
 
+.trend-empty {
+    margin: 0;
+    color: var(--muted);
+}
+
 .trend-row {
     display: grid;
     grid-template-columns: 92px minmax(120px, 1fr) 40px;

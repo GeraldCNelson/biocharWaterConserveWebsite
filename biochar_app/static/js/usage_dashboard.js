@@ -66,6 +66,13 @@ function renderComparison(previous, selected) {
 function renderTrend(rows) {
   const container = document.getElementById("usage-trend");
   container.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "trend-empty";
+    empty.textContent = "No stored activity in this period.";
+    container.appendChild(empty);
+    return;
+  }
   const maxValue = Math.max(1, ...rows.map((row) => Number(row.public_visits || 0)));
   rows.forEach((item) => {
     const row = document.createElement("div");
@@ -181,12 +188,15 @@ async function loadDashboard() {
     renderMetrics("selected-day-cards", data.selected_day);
     renderMetrics("cumulative-cards", data.cumulative);
     renderComparison(data.previous_day, data.selected_day);
-    renderTrend(data.daily);
     renderFeatures(data.features);
     renderDownloads(data.downloads);
     renderExclusions(data.exclusions);
     renderInternalStatus(data);
     const period = data.tracking_period;
+    const trendRows = period.first_date
+      ? data.daily.filter((row) => row.date >= period.first_date)
+      : [];
+    renderTrend(trendRows);
     document.getElementById("cumulative-period-label").textContent = period.first_date
       ? `Since tracking began · ${period.first_date}`
       : "Since tracking began";

@@ -188,3 +188,5 @@ def test_dashboard_template_contains_required_review_sections() -> None:
         / "usage_dashboard.js"
     ).read_text(encoding="utf-8")
     assert "Since tracking began · ${period.first_date}" in script
+    assert "row.date >= period.first_date" in script
+    assert "No stored activity in this period." in script
