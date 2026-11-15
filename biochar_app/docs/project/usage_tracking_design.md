@@ -1,6 +1,6 @@
 # Private usage dashboard design
 
-**Status:** phases 1–3 implemented locally and reviewed; no production deployment
+**Status:** phases 1–3 deployed to test and production on 2026-11-15
 
 ## Purpose
 
@@ -140,18 +140,19 @@ created.
 - Add tests for missing/wrong credentials, CSV contents, and exclusion-cookie
   behavior.
 
-Implemented locally for browser review. Authentication remains fail-closed,
-and local or production credentials must be supplied through environment
-variables before the dashboard can be opened.
+Implemented and deployed after browser review. Authentication remains
+fail-closed, and test and production use separate credentials and signing
+secrets supplied through protected environment files outside Git.
 
 ### Phase 4 — deployment review
 
-- Review the complete local diff and test results.
-- Back up or initialize the production SQLite location with service-account
-  ownership.
-- Add environment credentials and signing secret outside Git.
-- Optionally add Nginx protection for the private route.
-- Deploy during a reviewed maintenance window, verify public downloads, and
-  compare known test events with dashboard totals.
+Completed on 2026-11-15:
 
-No production changes occur before this review.
+- reviewed the complete diff and local test results;
+- deployed and verified the approved branch on `test.biocharresearch.org`;
+- promoted commit `fd226a2` to `main` and deployed it to production;
+- created separate protected test and production credentials and signing
+  secrets outside Git;
+- initialized owner-only SQLite storage on both servers; and
+- verified authentication, public collection, draft-paper and bulk-data
+  downloads, Mountain Time reporting, bot exclusion, and CSV export.
