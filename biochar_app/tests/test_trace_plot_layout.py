@@ -1,8 +1,25 @@
 import shutil
 import subprocess
+import re
 from pathlib import Path
 
 import pytest
+
+
+def test_trace_plots_use_responsive_positioned_cards():
+    app_root = Path(__file__).resolve().parents[1]
+    template = (app_root / "templates/index.html").read_text(encoding="utf-8")
+    styles = (app_root / "static/css/styles.css").read_text(encoding="utf-8")
+
+    assert 'class="plot-card mb-2" data-plot-card="plot-1"' in template
+    assert 'id="plot-1" class="plot-container"' in template
+    assert 'class="plot-card" data-plot-card="plot-2"' in template
+    assert 'id="plot-2" class="plot-container"' in template
+
+    plot_card_rule = re.search(r"\.plot-card\s*\{(?P<body>[^}]*)\}", styles)
+    assert plot_card_rule is not None
+    assert "position: relative" in plot_card_rule.group("body")
+    assert "min-width: 0" in plot_card_rule.group("body")
 
 
 def test_trace_plot_legend_clears_secondary_axis_and_pair_gap_is_compact():
