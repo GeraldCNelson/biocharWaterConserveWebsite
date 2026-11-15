@@ -1,3 +1,8 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
 # Website links for reports and other documents
 
 **Updated:** 2026-11-04
