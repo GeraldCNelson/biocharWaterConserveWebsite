@@ -19,7 +19,9 @@ from biochar_app.analytics.admin_routes import (
 from biochar_app.analytics.auth import (
     ADMIN_PASSWORD_ENV,
     ADMIN_USERNAME_ENV,
+    UsageAdminAuthError,
     require_usage_admin,
+    usage_admin_auth_error_response,
 )
 from biochar_app.analytics.collector import (
     DB_PATH_ENV,
@@ -91,6 +93,42 @@ def test_dashboard_authentication_fails_closed(
     assert require_usage_admin(
         HTTPBasicCredentials(username="reviewer", password="correct-password")
     ) == "reviewer"
+
+
+def test_cancelled_dashboard_login_offers_a_fresh_retry() -> None:
+    error = UsageAdminAuthError(
+        status_code=401,
+        detail="Usage dashboard credentials are required",
+        headers={"WWW-Authenticate": 'Basic realm="Biochar Usage"'},
+    )
+    first = asyncio.run(usage_admin_auth_error_response(_request(), error))
+    second = asyncio.run(usage_admin_auth_error_response(_request(), error))
+
+    first_body = bytes(first.body).decode("utf-8")
+    second_body = bytes(second.body).decode("utf-8")
+    assert first.status_code == 401
+    assert first.media_type == "text/html"
+    assert first.headers["www-authenticate"] == 'Basic realm="Biochar Usage"'
+    assert "Try sign in again" in first_body
+    assert "/admin/usage?retry=" in first_body
+    assert first_body != second_body
+
+
+def test_cancelled_api_login_remains_json() -> None:
+    request = _request()
+    request.scope["path"] = "/api/admin/usage/summary"
+    error = UsageAdminAuthError(
+        status_code=401,
+        detail="Usage dashboard credentials are required",
+        headers={"WWW-Authenticate": 'Basic realm="Biochar Usage"'},
+    )
+    response = asyncio.run(usage_admin_auth_error_response(request, error))
+
+    assert response.status_code == 401
+    assert response.media_type == "application/json"
+    assert bytes(response.body) == (
+        b'{"detail":"Usage dashboard credentials are required"}'
+    )
 
 
 def test_summary_and_csv_use_mountain_dates(admin_environment: Path) -> None:

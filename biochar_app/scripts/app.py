@@ -30,6 +30,10 @@ from biochar_app.scripts.date_ranges import build_date_ranges
 from biochar_app.scripts import state
 
 from biochar_app.scripts.management.management_routes import management_router
+from biochar_app.analytics.auth import (
+    UsageAdminAuthError,
+    usage_admin_auth_error_response,
+)
 from biochar_app.analytics.middleware import UsageTrackingMiddleware
 from biochar_app.analytics.routes import usage_router
 from biochar_app.analytics.admin_routes import admin_usage_router
@@ -45,6 +49,10 @@ load_dotenv()
 app = FastAPI(
     title="Biochar Water Conserve API",
     description="Plots & data endpoints for biocharresearch.org",
+)
+app.add_exception_handler(
+    UsageAdminAuthError,
+    usage_admin_auth_error_response,
 )
 app.add_middleware(UsageTrackingMiddleware)
 
