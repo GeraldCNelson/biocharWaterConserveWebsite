@@ -476,10 +476,25 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
       ? formatGseasonLabel(code, spec, "")
       : (spec?.label || code);
     const unavailable = Object.values(rawStats).every((s) => s?.mean == null);
-    const incompleteNotice = getIncompletePeriodNotice(spec, anchorYear) || (unavailable
-      ? "No data are available for this seasonal period."
-      : (Object.values(rawStats).some((s) => s?.coverage_pct != null && s.coverage_pct < 100)
-        ? "This period has incomplete data coverage. Statistics use available observations only." : ""));
+    const periodNotice = getIncompletePeriodNotice(spec, anchorYear);
+
+    const hasIncompleteCoverage = Object.values(rawStats).some(
+      (s) => s?.coverage_pct != null && s.coverage_pct < 100
+    );
+
+    let noticeHeading = "";
+    let noticeText = "";
+
+    if (periodNotice) {
+      noticeHeading = "Incomplete seasonal period";
+      noticeText = periodNotice;
+    } else if (unavailable) {
+      noticeHeading = "Data unavailable";
+      noticeText = "No data are available for this seasonal period.";
+    } else if (hasIncompleteCoverage) {
+      noticeHeading = "Incomplete data coverage";
+      noticeText = "Some observations are missing. Statistics use available observations only.";
+    }
     const isWinter = periodIndex > 0;
     const winterAttributes = isWinter ? ` data-season-detail="${periodIndex}" hidden` : "";
 
@@ -499,10 +514,13 @@ function buildGseasonSummaryTableHTML(gseasonStats, variable, unitSystem, anchor
         <th colspan="7" class="py-2">${escapeHTML(title)}</th>
       </tr>`;
 
-    if (incompleteNotice) {
+    if (noticeText) {
       html += `
         <tr class="table-warning"${winterAttributes}>
-          <td colspan="7"><strong>Incomplete seasonal period:</strong> ${escapeHTML(incompleteNotice)}</td>
+          <td colspan="7">
+            <strong>${escapeHTML(noticeHeading)}:</strong>
+            ${escapeHTML(noticeText)}
+          </td>
         </tr>`;
     }
 

@@ -72,3 +72,68 @@ if (!html.includes("Min, Max and SD describe individual 15-minute ratios")) thro
 '''
     subprocess.run([node, "--input-type=module", "-e", script, str(source)],
                    capture_output=True, text=True, check=True)
+
+
+def test_detailed_browser_summary_distinguishes_period_and_coverage_warnings():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required")
+    source = Path(__file__).resolve().parents[1] / "static/js/tab_summary.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+const source = fs.readFileSync(process.argv[1], "utf8");
+const noticeStart = source.indexOf("export function getIncompletePeriodNotice(");
+const noticeEnd = source.indexOf("\n/**\n * @param {any} gseasonStats", noticeStart);
+const noticeContext = vm.createContext({});
+vm.runInContext(source.slice(noticeStart, noticeEnd).replace("export ", ""), noticeContext);
+const completedNotice = vm.runInContext(
+  'getIncompletePeriodNotice({start: "04-01", end: "10-31"}, 2026, new Date(2026, 10, 17))',
+  noticeContext
+);
+if (completedNotice !== "") {
+  throw Error("The October 31, 2026 season was still labeled unfinished on November 17");
+}
+const start = source.indexOf("function buildGseasonSummaryTableHTML(");
+const end = source.indexOf("\nfunction escapeSummaryHTML", start);
+const context = vm.createContext({
+  formatGseasonLabel: (code, spec) => spec.label || code,
+  getIncompletePeriodNotice: spec => spec.unfinished ? "Season is still in progress." : "",
+  summaryWindow: {},
+});
+vm.runInContext(source.slice(start, end), context);
+context.rows = [{
+  period_code: "GROWING", strip: "S1", logger_location: "T", raw_min: 1, raw_mean: 2,
+  raw_max: 3, raw_std: 0.5, raw_n: 95, raw_expected_n: 96,
+  raw_coverage_pct: 99,
+}];
+context.completedPeriods = {
+  GROWING: {label: "Growing Season", start: "04-01", end: "10-31"},
+};
+context.unfinishedPeriods = {
+  GROWING: {label: "Growing Season", start: "04-01", end: "12-31", unfinished: true},
+};
+const completed = vm.runInContext(
+  'buildGseasonSummaryTableHTML(rows, "VWC", "us", 2026, completedPeriods)', context
+);
+const unfinished = vm.runInContext(
+  'buildGseasonSummaryTableHTML(rows, "VWC", "us", 2026, unfinishedPeriods)', context
+);
+if (!completed.includes("<strong>Incomplete data coverage:</strong>")) {
+  throw Error("Completed season did not show the data-coverage warning");
+}
+if (completed.includes("<strong>Incomplete seasonal period:</strong>")) {
+  throw Error("Completed season was incorrectly labeled unfinished");
+}
+if (!completed.includes(">99%</td>")) {
+  throw Error("Coverage percentage changed or disappeared");
+}
+if (!unfinished.includes("<strong>Incomplete seasonal period:</strong>")) {
+  throw Error("Unfinished season did not show the seasonal-period warning");
+}
+if (unfinished.includes("<strong>Incomplete data coverage:</strong>")) {
+  throw Error("Coverage warning overrode the unfinished-season warning");
+}
+'''
+    subprocess.run([node, "--input-type=module", "-e", script, str(source)],
+                   capture_output=True, text=True, check=True)
